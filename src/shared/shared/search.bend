@@ -1,7 +1,7 @@
 import Base
 import ./shared/keyset.bend as KeySets
 import ./shared/shared/shared.bend as Shared
-import ./shared/shared/trie.bend as Tries
+import ./shared/shared/crit.bend as Crits
 
 # Machines
 # --------
@@ -60,7 +60,7 @@ type Found<-S: Data, -A: Data> is Data:
 
 # The states to visit later (last first), and the states seen.
 type Front<-S: Data, -A: Data> is Data:
-  Front{back: List<&2, Visit<S, A>>, seen: Tries.Trie<S>}
+  Front{back: List<&2, Visit<S, A>>, seen: Crits.Dict(S)}
 
 # front, with y to visit after rev and d, unless known; k is the key of y
 def Search.push.new(
@@ -68,7 +68,7 @@ def Search.push.new(
   -A: Data,
   known: Bool,
   y: S,
-  k: List<&2, Bool>,
+  k: List<&2, U32>,
   d: A,
   rev: List<&2, A>,
   front: Front<S, A>
@@ -78,7 +78,7 @@ def Search.push.new(
       f
     case False{} Front{back, seen}:
       +y = y
-      Front{Visit{y, d <> rev} <> back, Tries.Trie.set(S, seen, k, y)}
+      Front{Visit{y, d <> rev} <> back, Crits.Dict.set(~S, seen, k, y)}
 
 # front, with each state not seen that x steps to under a symbol of ds; the
 # key of each state is made once, for both the lookup and the put
@@ -87,7 +87,7 @@ def Search.push(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ds: List<&2, A>,
   +x: S,
@@ -114,7 +114,7 @@ def Search.push(
         Search.push.new(
           S,
           A,
-          KeySets.KeySet.has.at(~S, ~same, Tries.Trie.get(S, seen, k), y),
+          KeySets.KeySet.has.at(~S, ~same, Crits.Dict.get(S, seen, k), y),
           y,
           k,
           d,
@@ -131,7 +131,7 @@ def Search.go(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ~ends: V -> S -> Bool,
   ~syms: V -> List<&2, A>,
@@ -144,7 +144,7 @@ def Search.go(
     case 0n _ _:
       Out{}
     case 1n+n Nil{} Front{Nil{}, seen}:
-      Closed{Tries.Trie.values(S, seen)}
+      Closed{Crits.Dict.values(S, seen)}
     case 1n+n Nil{} Front{Con{b, r}, seen}:
       Search.go(
         ~S,
@@ -187,7 +187,7 @@ def Search.run(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ~ends: V -> S -> Bool,
   ~syms: V -> List<&2, A>,
@@ -206,7 +206,7 @@ def Search.run(
     ~syms,
     fuel,
     [Visit{x, []}],
-    Front{[], KeySets.KeySet.put(~S, ~key, Tries.Trie.new(S), x)},
+    Front{[], KeySets.KeySet.put(~S, ~key, Crits.Dict.new(~S), x)},
     g
   )
 
@@ -224,11 +224,11 @@ def Cert.closed(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ds: List<&2, A>,
   +x: S,
-  +t: Tries.Trie<S>,
+  +t: Crits.Dict(S),
   +g: V
 ) -> Bool:
   match ds:
@@ -246,13 +246,13 @@ def Cert.ok(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ~ends: V -> S -> Bool,
   ~covers: V -> S -> Bool,
   ~syms: V -> List<&2, A>,
   +x: S,
-  t: Tries.Trie<S>,
+  t: Crits.Dict(S),
   +g: V
 ) -> Bool:
   List.all.if(
@@ -269,13 +269,13 @@ def Cert.all_ok(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ~ends: V -> S -> Bool,
   ~covers: V -> S -> Bool,
   ~syms: V -> List<&2, A>,
   ys: List<&2, S>,
-  +t: Tries.Trie<S>,
+  +t: Crits.Dict(S),
   +g: V
 ) -> Bool:
   match ys:
@@ -293,13 +293,13 @@ def Cert.proves.at(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ~ends: V -> S -> Bool,
   ~covers: V -> S -> Bool,
   ~syms: V -> List<&2, A>,
   xs: List<&2, S>,
-  +t: Tries.Trie<S>,
+  +t: Crits.Dict(S),
   x: S,
   g: V
 ) -> Bool:
@@ -314,7 +314,7 @@ def Cert.proves(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ~ends: V -> S -> Bool,
   ~covers: V -> S -> Bool,
@@ -334,7 +334,7 @@ def Cert.proves(
     ~covers,
     ~syms,
     xs,
-    KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+    KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
     x,
     g
   )
@@ -345,7 +345,7 @@ def Cert.all_ok_in.at(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ~ends: V -> S -> Bool,
   ~covers: V -> S -> Bool,
@@ -355,7 +355,7 @@ def Cert.all_ok_in.at(
   +z: S,
   r: List<&2, S>,
   y: S,
-  +t: Tries.Trie<S>,
+  +t: Crits.Dict(S),
   +g: V,
   ih: {
     List.contains(~S, ~same, r, y) == True{}: Bool
@@ -406,7 +406,7 @@ def Cert.all_ok_in(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ~ends: V -> S -> Bool,
   ~covers: V -> S -> Bool,
@@ -414,7 +414,7 @@ def Cert.all_ok_in(
   ~laws: Shared.Eq.Laws(S, same),
   ys: List<&2, S>,
   +y: S,
-  +t: Tries.Trie<S>,
+  +t: Crits.Dict(S),
   +g: V
 ) -> {
   List.contains(~S, ~same, ys, y) == True{}: Bool
@@ -458,7 +458,7 @@ def Cert.closed_in.at(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~asame: A -> A -> Bool,
   ~step: V -> S -> A -> S,
   ~alaws: Shared.Eq.Laws(A, asame),
@@ -467,7 +467,7 @@ def Cert.closed_in.at(
   r: List<&2, A>,
   d: A,
   +x: S,
-  +t: Tries.Trie<S>,
+  +t: Crits.Dict(S),
   +g: V,
   ih: {
     List.contains(~A, ~asame, r, d) == True{}: Bool
@@ -514,14 +514,14 @@ def Cert.closed_in(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~asame: A -> A -> Bool,
   ~step: V -> S -> A -> S,
   ~alaws: Shared.Eq.Laws(A, asame),
   ds: List<&2, A>,
   +d: A,
   +x: S,
-  +t: Tries.Trie<S>,
+  +t: Crits.Dict(S),
   +g: V
 ) -> {
   List.contains(~A, ~asame, ds, d) == True{}: Bool
@@ -563,14 +563,14 @@ def Cert.moved(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~asame: A -> A -> Bool,
   ~step: V -> S -> A -> S,
   ~syms: V -> List<&2, A>,
   ~alaws: Shared.Eq.Laws(A, asame),
   x: S,
   c: A,
-  t: Tries.Trie<S>,
+  t: Crits.Dict(S),
   +g: V,
   p: &d: A -> {
     List.contains(~A, ~asame, syms(g), d) == True{}: Bool
@@ -611,7 +611,7 @@ def Cert.held_ok(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~step: V -> S -> A -> S,
   ~ends: V -> S -> Bool,
   ~covers: V -> S -> Bool,
@@ -632,7 +632,7 @@ def Cert.held_ok(
     ~covers,
     ~syms,
     xs,
-    KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+    KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
     g
   )
     == True{}: Bool
@@ -641,7 +641,7 @@ def Cert.held_ok(
     ~S,
     ~same,
     ~key,
-    KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+    KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
     y
   )
     == True{}: Bool
@@ -657,7 +657,7 @@ def Cert.held_ok(
     ~covers,
     ~syms,
     y,
-    KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+    KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
     g
   )
     == True{}: Bool
@@ -675,7 +675,7 @@ def Cert.held_ok(
     ~laws,
     xs,
     y,
-    KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+    KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
     g
   )(KeySets.KeySet.has_put_all(~S, ~same, ~key, xs, y)(hh))(ha)
 
@@ -685,7 +685,7 @@ def Cert.sound.go(
   ~A: Data,
   ~V: Data,
   ~same: S -> S -> Bool,
-  ~key: S -> List<&2, Bool>,
+  ~key: S -> List<&2, U32>,
   ~asame: A -> A -> Bool,
   ~step: V -> S -> A -> S,
   ~ends: V -> S -> Bool,
@@ -717,7 +717,7 @@ def Cert.sound.go(
     ~covers,
     ~syms,
     xs,
-    KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+    KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
     g
   )
     == True{}: Bool
@@ -726,7 +726,7 @@ def Cert.sound.go(
     ~S,
     ~same,
     ~key,
-    KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+    KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
     y
   )
     == True{}: Bool
@@ -748,7 +748,7 @@ def Cert.sound.go(
               ~step,
               syms(g),
               y,
-              KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+              KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
               g
             ),
             covers(g)(y)
@@ -785,7 +785,7 @@ def Cert.sound.go(
               ~step,
               syms(g),
               y,
-              KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+              KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
               g
             ),
             covers(g)(y)
@@ -840,7 +840,7 @@ def Cert.sound.go(
             ~alaws,
             y,
             c,
-            KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+            KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
             g,
             rep(
               g
@@ -860,7 +860,7 @@ def Cert.sound.go(
                   ~step,
                   syms(g),
                   y,
-                  KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+                  KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
                   g
                 )
               )(part)
@@ -877,7 +877,7 @@ def Cert.sound.go(
                 ~step,
                 syms(g),
                 y,
-                KeySets.KeySet.put_all(~S, ~key, xs, Tries.Trie.new(S)),
+                KeySets.KeySet.put_all(~S, ~key, xs, Crits.Dict.new(~S)),
                 g
               )
             )(part)
@@ -890,7 +890,7 @@ law Cert.sound:
   for ~A: Data
   for ~V: Data
   for ~same: S -> S -> Bool
-  for ~key: S -> List<&2, Bool>
+  for ~key: S -> List<&2, U32>
   for ~asame: A -> A -> Bool
   for ~step: V -> S -> A -> S
   for ~ends: V -> S -> Bool
@@ -957,7 +957,7 @@ def Cert.sound(
         ~sty,
         ~same,
         ~key,
-        KeySets.KeySet.put_all(~sty, ~key, xs, Tries.Trie.new(sty)),
+        KeySets.KeySet.put_all(~sty, ~key, xs, Crits.Dict.new(~sty)),
         x
       ),
       u => Cert.all_ok(
@@ -971,7 +971,7 @@ def Cert.sound(
         ~covers,
         ~syms,
         xs,
-        KeySets.KeySet.put_all(~sty, ~key, xs, Tries.Trie.new(sty)),
+        KeySets.KeySet.put_all(~sty, ~key, xs, Crits.Dict.new(~sty)),
         g
       )
     )(h)
@@ -981,7 +981,7 @@ def Cert.sound(
         ~sty,
         ~same,
         ~key,
-        KeySets.KeySet.put_all(~sty, ~key, xs, Tries.Trie.new(sty)),
+        KeySets.KeySet.put_all(~sty, ~key, xs, Crits.Dict.new(~sty)),
         x
       ),
       u => Cert.all_ok(
@@ -995,7 +995,7 @@ def Cert.sound(
         ~covers,
         ~syms,
         xs,
-        KeySets.KeySet.put_all(~sty, ~key, xs, Tries.Trie.new(sty)),
+        KeySets.KeySet.put_all(~sty, ~key, xs, Crits.Dict.new(~sty)),
         g
       )
     )(h)

@@ -1,6 +1,6 @@
 import Base
 import ./shared/shared.bend as Shared
-import ./shared/trie.bend as Tries
+import ./shared/crit.bend as Crits
 
 # Reachability
 # ------------
@@ -1744,50 +1744,50 @@ def Reach.in_through(ty, gt, same, succ, nodes, laws, live, g, x, h, m):
 # they are equal.
 
 # the key of a node: the node itself
-def Reach.key(k: List<&2, Bool>) -> List<&2, Bool>:
+def Reach.key(k: List<&2, U32>) -> List<&2, U32>:
   k
 
 # seen, with each node that a search f levels deep finds from the level ws
 def Reach.fill(
   ~V: Data,
-  ~succ: V -> List<&2, Bool> -> List<&2, List<&2, Bool>>,
+  ~succ: V -> List<&2, U32> -> List<&2, List<&2, U32>>,
   f: Nat,
-  ws: List<&2, List<&2, Bool>>,
+  ws: List<&2, List<&2, U32>>,
   +g: V,
-  +seen: Tries.Trie<Unit>
-) -> Tries.Trie<Unit>:
+  +seen: Crits.Dict(Unit)
+) -> Crits.Dict(Unit):
   match f ws:
     case 0n xs:
-      Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, xs, seen)
+      Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, xs, seen)
     case 1n+e Nil{}:
       seen
     case 1n+e Con{w, r}:
-      +ys = Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, w <> r, seen)
+      +ys = Crits.Dict.unique(~List<&2, U32>, ~Reach.key, w <> r, seen)
       Reach.fill(
         ~V,
         ~succ,
         e,
-        Reach.next(~List<&2, Bool>, ~V, ~succ, ys, g),
+        Reach.next(~List<&2, U32>, ~V, ~succ, ys, g),
         g,
-        Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ys, seen)
+        Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, ys, seen)
       )
 
 # each successor of x, and each successor of one, at any depth: one search
 # answers Reach.in for every m
 def Reach.all(
   ~V: Data,
-  ~succ: V -> List<&2, Bool> -> List<&2, List<&2, Bool>>,
-  ~nodes: V -> List<&2, List<&2, Bool>>,
+  ~succ: V -> List<&2, U32> -> List<&2, List<&2, U32>>,
+  ~nodes: V -> List<&2, List<&2, U32>>,
   +g: V,
-  x: List<&2, Bool>
-) -> Tries.Trie<Unit>:
+  x: List<&2, U32>
+) -> Crits.Dict(Unit):
   Reach.fill(
     ~V,
     ~succ,
-    List.length(&2, List<&2, Bool>, nodes(g)),
+    List.length(&2, List<&2, U32>, nodes(g)),
     succ(g)(x),
     g,
-    Tries.Trie.new(Unit)
+    Crits.Dict.new(~Unit)
   )
 
 # Reach.within_in at the first node q of ps, by whether it is p (hit)
@@ -2437,47 +2437,47 @@ def Reach.next_grown(
 # Reach.has_set, by whether y is a (hit)
 def Reach.has_set.at(
   +hit: Bool,
-  t: Tries.Trie<Unit>,
-  +y: List<&2, Bool>,
-  +a: List<&2, Bool>
+  t: Crits.Dict(Unit),
+  +y: List<&2, U32>,
+  +a: List<&2, U32>
 ) -> {
-  Tries.Trie.same_key(y, a) == hit: Bool
+  Crits.Key.is_eq(y, a) == hit: Bool
 } -> {
-  Tries.Trie.has(
+  Crits.Dict.has(
     Unit,
-    Tries.Trie.set(Unit, t, y, Unit{}),
+    Crits.Dict.set(~Unit, t, y, Unit{}),
     a
   )
-    == List.any.if(u => Tries.Trie.has(Unit, t, a), hit): Bool
+    == List.any.if(u => Crits.Dict.has(Unit, t, a), hit): Bool
 }:
   match hit:
     case True{}:
       +he =>
-        %Tries.Trie.same_key_sound(
+        %Crits.Key.is_eq_sound(
           y,
           a
-        )(he): {Tries.Trie.has(Unit, Tries.Trie.set(Unit, t, y, Unit{}), _) == True{}: Bool}
+        )(he): {Crits.Dict.has(Unit, Crits.Dict.set(~Unit, t, y, Unit{}), _) == True{}: Bool}
         %Equal.sym(
           Maybe<&2, Unit>,
-          Tries.Trie.get(Unit, Tries.Trie.set(Unit, t, y, Unit{}), y),
+          Crits.Dict.get(Unit, Crits.Dict.set(~Unit, t, y, Unit{}), y),
           Bool.pick(
             Maybe<&2, Unit>,
-            Tries.Trie.same_key(y, y),
+            Crits.Key.is_eq(y, y),
             Some{Unit{}},
-            Tries.Trie.get(Unit, t, y)
+            Crits.Dict.get(Unit, t, y)
           ),
-          Tries.Trie.get_set(Unit, t, y, Unit{}, y)
+          Crits.Dict.get_set(~Unit, t, y, Unit{}, y)
         ): {Maybe.is_some(&2, Unit, _) == True{}: Bool}
         %Equal.sym(
           Bool,
-          Tries.Trie.same_key(y, y),
+          Crits.Key.is_eq(y, y),
           True{},
-          Shared.List.is_eq_refl(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), y)
+          Shared.List.is_eq_refl(~Bool, ~U32.is_eq, ~Shared.U32.laws(), y)
         ): {
           Maybe.is_some(
             &2,
             Unit,
-            Bool.pick(Maybe<&2, Unit>, _, Some{Unit{}}, Tries.Trie.get(Unit, t, y))
+            Bool.pick(Maybe<&2, Unit>, _, Some{Unit{}}, Crits.Dict.get(Unit, t, y))
           )
             == True{}: Bool
         }
@@ -2486,23 +2486,23 @@ def Reach.has_set.at(
       +he =>
         %Equal.sym(
           Maybe<&2, Unit>,
-          Tries.Trie.get(Unit, Tries.Trie.set(Unit, t, y, Unit{}), a),
+          Crits.Dict.get(Unit, Crits.Dict.set(~Unit, t, y, Unit{}), a),
           Bool.pick(
             Maybe<&2, Unit>,
-            Tries.Trie.same_key(a, y),
+            Crits.Key.is_eq(a, y),
             Some{Unit{}},
-            Tries.Trie.get(Unit, t, a)
+            Crits.Dict.get(Unit, t, a)
           ),
-          Tries.Trie.get_set(Unit, t, y, Unit{}, a)
-        ): {Maybe.is_some(&2, Unit, _) == Tries.Trie.has(Unit, t, a): Bool}
+          Crits.Dict.get_set(~Unit, t, y, Unit{}, a)
+        ): {Maybe.is_some(&2, Unit, _) == Crits.Dict.has(Unit, t, a): Bool}
         %Equal.sym(
           Bool,
-          Tries.Trie.same_key(a, y),
+          Crits.Key.is_eq(a, y),
           False{},
           Shared.Eq.ne_flip(
-            ~List<&2, Bool>,
-            ~Tries.Trie.same_key,
-            ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+            ~List<&2, U32>,
+            ~Crits.Key.is_eq,
+            ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
             y,
             a,
             he
@@ -2511,27 +2511,27 @@ def Reach.has_set.at(
           Maybe.is_some(
             &2,
             Unit,
-            Bool.pick(Maybe<&2, Unit>, _, Some{Unit{}}, Tries.Trie.get(Unit, t, a))
+            Bool.pick(Maybe<&2, Unit>, _, Some{Unit{}}, Crits.Dict.get(Unit, t, a))
           )
-            == Tries.Trie.has(Unit, t, a): Bool
+            == Crits.Dict.has(Unit, t, a): Bool
         }
         {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # t with the key y holds a exactly when y is a, or t holds a
 def Reach.has_set(
-  t: Tries.Trie<Unit>,
-  +y: List<&2, Bool>,
-  +a: List<&2, Bool>
+  t: Crits.Dict(Unit),
+  +y: List<&2, U32>,
+  +a: List<&2, U32>
 ) -> {
-  Tries.Trie.has(
+  Crits.Dict.has(
     Unit,
-    Tries.Trie.set(Unit, t, y, Unit{}),
+    Crits.Dict.set(~Unit, t, y, Unit{}),
     a
   )
-    == List.any.if(u => Tries.Trie.has(Unit, t, a), Tries.Trie.same_key(y, a)): Bool
+    == List.any.if(u => Crits.Dict.has(Unit, t, a), Crits.Key.is_eq(y, a)): Bool
 }:
-  Reach.has_set.at(Tries.Trie.same_key(y, a), t, y, a)({==})
+  Reach.has_set.at(Crits.Key.is_eq(y, a), t, y, a)({==})
 
 # Reach.has_put at the first key, by whether it is a (s) and the rest holds a
 # (c)
@@ -2551,65 +2551,65 @@ def Reach.has_put.at(
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # t with the keys ys holds a exactly when ys holds a, or t does
 def Reach.has_put(
-  +ys: List<&2, List<&2, Bool>>,
-  +t: Tries.Trie<Unit>,
-  +a: List<&2, Bool>
+  +ys: List<&2, List<&2, U32>>,
+  +t: Crits.Dict(Unit),
+  +a: List<&2, U32>
 ) -> {
-  Tries.Trie.has(
+  Crits.Dict.has(
     Unit,
-    Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ys, t),
+    Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, ys, t),
     a
   )
     == Bool.or(
-      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ys, a),
-      Tries.Trie.has(Unit, t, a)
+      List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ys, a),
+      Crits.Dict.has(Unit, t, a)
     ): Bool
 }:
   match ys:
     case Nil{}:
       {==}
     case Con{+y, +r}:
-      contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a)
-      set1 = Tries.Trie.set(Unit, t, y, Unit{})
+      contains1 = List.contains(~List<&2, U32>, ~Crits.Key.is_eq, r, a)
+      set1 = Crits.Dict.set(~Unit, t, y, Unit{})
       Equal.trans(
         Bool,
-        Tries.Trie.has(Unit, Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, r, set1), a),
-        Bool.or(contains1, Tries.Trie.has(Unit, set1, a)),
-        Bool.or(List.any.if(u => contains1, Tries.Trie.same_key(y, a)), Tries.Trie.has(Unit, t, a)),
+        Crits.Dict.has(Unit, Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, r, set1), a),
+        Bool.or(contains1, Crits.Dict.has(Unit, set1, a)),
+        Bool.or(List.any.if(u => contains1, Crits.Key.is_eq(y, a)), Crits.Dict.has(Unit, t, a)),
         Reach.has_put(r, set1, a),
         (
-          %Equal.sym(Bool, Tries.Trie.has(Unit, set1, a), List.any.if(u => Tries.Trie.has(Unit, t, a), Tries.Trie.same_key(y, a)), Reach.has_set(t, y, a)): {Bool.or(contains1, _) == Bool.or(List.any.if(u => contains1, Tries.Trie.same_key(y, a)), Tries.Trie.has(Unit, t, a)): Bool}
-          Reach.has_put.at(Tries.Trie.same_key(y, a), contains1, Tries.Trie.has(Unit, t, a)))
+          %Equal.sym(Bool, Crits.Dict.has(Unit, set1, a), List.any.if(u => Crits.Dict.has(Unit, t, a), Crits.Key.is_eq(y, a)), Reach.has_set(t, y, a)): {Bool.or(contains1, _) == Bool.or(List.any.if(u => contains1, Crits.Key.is_eq(y, a)), Crits.Dict.has(Unit, t, a)): Bool}
+          Reach.has_put.at(Crits.Key.is_eq(y, a), contains1, Crits.Dict.has(Unit, t, a)))
       )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the trie of the keys ks holds a exactly when ks does
 def Reach.has_keys(
-  +ks: List<&2, List<&2, Bool>>,
-  +a: List<&2, Bool>
+  +ks: List<&2, List<&2, U32>>,
+  +a: List<&2, U32>
 ) -> {
-  Tries.Trie.has(
+  Crits.Dict.has(
     Unit,
-    Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit)),
+    Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, ks, Crits.Dict.new(~Unit)),
     a
   )
-    == List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a): Bool
+    == List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, a): Bool
 }:
   Equal.trans(
     Bool,
-    Tries.Trie.has(
+    Crits.Dict.has(
       Unit,
-      Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit)),
+      Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, ks, Crits.Dict.new(~Unit)),
       a
     ),
-    Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a), False{}),
-    List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a),
-    Reach.has_put(ks, Tries.Trie.new(Unit), a),
+    Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, a), False{}),
+    List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, a),
+    Reach.has_put(ks, Crits.Dict.new(~Unit), a),
     Equal.sym(
       Bool,
-      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a),
-      Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a), False{}),
-      Shared.Bool.or_false(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, a))
+      List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, a),
+      Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, a), False{}),
+      Shared.Bool.or_false(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, a))
     )
   )
 
@@ -2619,77 +2619,77 @@ def Reach.has_keys(
 def Reach.unique_in.at(
   +seen: Bool,
   +hit: Bool,
-  +x: List<&2, Bool>,
-  r: List<&2, List<&2, Bool>>,
-  +t: Tries.Trie<Unit>,
-  +a: List<&2, Bool>,
+  +x: List<&2, U32>,
+  r: List<&2, List<&2, U32>>,
+  +t: Crits.Dict(Unit),
+  +a: List<&2, U32>,
   ih1: {
     List.contains(
-      ~List<&2, Bool>,
-      ~Tries.Trie.same_key,
-      Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+      ~List<&2, U32>,
+      ~Crits.Key.is_eq,
+      Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, t),
       a
     )
       == Bool.and(
-        List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a),
-        Bool.not(Tries.Trie.has(Unit, t, a))
+        List.contains(~List<&2, U32>, ~Crits.Key.is_eq, r, a),
+        Bool.not(Crits.Dict.has(Unit, t, a))
       ): Bool
   },
   ih2: {
     List.contains(
-      ~List<&2, Bool>,
-      ~Tries.Trie.same_key,
-      Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{})),
+      ~List<&2, U32>,
+      ~Crits.Key.is_eq,
+      Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, Crits.Dict.set(~Unit, t, x, Unit{})),
       a
     )
       == Bool.and(
-        List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a),
-        Bool.not(Tries.Trie.has(Unit, Tries.Trie.set(Unit, t, x, Unit{}), a))
+        List.contains(~List<&2, U32>, ~Crits.Key.is_eq, r, a),
+        Bool.not(Crits.Dict.has(Unit, Crits.Dict.set(~Unit, t, x, Unit{}), a))
       ): Bool
   }
 ) -> {
-  Tries.Trie.has(Unit, t, x) == seen: Bool
+  Crits.Dict.has(Unit, t, x) == seen: Bool
 } -> {
-  Tries.Trie.same_key(x, a) == hit: Bool
+  Crits.Key.is_eq(x, a) == hit: Bool
 } -> {
   List.contains(
-    ~List<&2, Bool>,
-    ~Tries.Trie.same_key,
+    ~List<&2, U32>,
+    ~Crits.Key.is_eq,
     Shared.Bool.when(
-      List<&2, List<&2, Bool>>,
+      List<&2, List<&2, U32>>,
       seen,
-      u => Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+      u => Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, t),
       u => x
-        <> Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{}))
+        <> Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, Crits.Dict.set(~Unit, t, x, Unit{}))
     ),
     a
   )
     == Bool.and(
-      List.any.if(u => List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a), hit),
-      Bool.not(Tries.Trie.has(Unit, t, a))
+      List.any.if(u => List.contains(~List<&2, U32>, ~Crits.Key.is_eq, r, a), hit),
+      Bool.not(Crits.Dict.has(Unit, t, a))
     ): Bool
 }:
   match seen hit:
     case True{} True{}:
       +es => +eh =>
-        +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a)
-        %Equal.sym(Bool, Tries.Trie.has(Unit, t, a), True{}, (
-            %Tries.Trie.same_key_sound(x, a)(eh): {Tries.Trie.has(Unit, t, _) == True{}: Bool}
-            es)): {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t), a) == Bool.not(_): Bool}
+        +contains1 = List.contains(~List<&2, U32>, ~Crits.Key.is_eq, r, a)
+        %Equal.sym(Bool, Crits.Dict.has(Unit, t, a), True{}, (
+            %Crits.Key.is_eq_sound(x, a)(eh): {Crits.Dict.has(Unit, t, _) == True{}: Bool}
+            es)): {List.contains(~List<&2, U32>, ~Crits.Key.is_eq, Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, t), a) == Bool.not(_): Bool}
         Equal.trans(
           Bool,
           List.contains(
-            ~List<&2, Bool>,
-            ~Tries.Trie.same_key,
-            Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+            ~List<&2, U32>,
+            ~Crits.Key.is_eq,
+            Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, t),
             a
           ),
-          Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, t, a))),
+          Bool.and(contains1, Bool.not(Crits.Dict.has(Unit, t, a))),
           False{},
           ih1,
           (
-            %Equal.sym(Bool, Tries.Trie.has(Unit, t, a), True{}, (
-              %Tries.Trie.same_key_sound(x, a)(eh): {Tries.Trie.has(Unit, t, _) == True{}: Bool}
+            %Equal.sym(Bool, Crits.Dict.has(Unit, t, a), True{}, (
+              %Crits.Key.is_eq_sound(x, a)(eh): {Crits.Dict.has(Unit, t, _) == True{}: Bool}
               es)): {Bool.and(contains1, Bool.not(_)) == False{}: Bool}
             Shared.Bool.and_false_right(contains1))
         )
@@ -2699,60 +2699,60 @@ def Reach.unique_in.at(
       +es => +eh =>
         %Equal.sym(
           Bool,
-          Tries.Trie.same_key(x, a),
+          Crits.Key.is_eq(x, a),
           True{},
           eh
         ): {
           List.any.if(
             u => List.contains(
-              ~List<&2, Bool>,
-              ~Tries.Trie.same_key,
-              Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{})),
+              ~List<&2, U32>,
+              ~Crits.Key.is_eq,
+              Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, Crits.Dict.set(~Unit, t, x, Unit{})),
               a
             ),
             _
           )
-            == Bool.not(Tries.Trie.has(Unit, t, a)): Bool
+            == Bool.not(Crits.Dict.has(Unit, t, a)): Bool
         }
-        %Equal.sym(Bool, Tries.Trie.has(Unit, t, a), False{}, (
-            %Tries.Trie.same_key_sound(x, a)(eh): {Tries.Trie.has(Unit, t, _) == False{}: Bool}
+        %Equal.sym(Bool, Crits.Dict.has(Unit, t, a), False{}, (
+            %Crits.Key.is_eq_sound(x, a)(eh): {Crits.Dict.has(Unit, t, _) == False{}: Bool}
             es)): {True{} == Bool.not(_): Bool}
         {==}
     case False{} False{}:
       +es => +eh =>
-        +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, a)
-        +set1 = Tries.Trie.set(Unit, t, x, Unit{})
+        +contains1 = List.contains(~List<&2, U32>, ~Crits.Key.is_eq, r, a)
+        +set1 = Crits.Dict.set(~Unit, t, x, Unit{})
         %Equal.sym(
           Bool,
-          Tries.Trie.same_key(x, a),
+          Crits.Key.is_eq(x, a),
           False{},
           eh
         ): {
           List.any.if(
             u => List.contains(
-              ~List<&2, Bool>,
-              ~Tries.Trie.same_key,
-              Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, set1),
+              ~List<&2, U32>,
+              ~Crits.Key.is_eq,
+              Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, set1),
               a
             ),
             _
           )
-            == Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, t, a))): Bool
+            == Bool.and(contains1, Bool.not(Crits.Dict.has(Unit, t, a))): Bool
         }
         Equal.trans(
           Bool,
           List.contains(
-            ~List<&2, Bool>,
-            ~Tries.Trie.same_key,
-            Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, set1),
+            ~List<&2, U32>,
+            ~Crits.Key.is_eq,
+            Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, set1),
             a
           ),
-          Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, set1, a))),
-          Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, t, a))),
+          Bool.and(contains1, Bool.not(Crits.Dict.has(Unit, set1, a))),
+          Bool.and(contains1, Bool.not(Crits.Dict.has(Unit, t, a))),
           ih2,
           (
-            %Equal.sym(Bool, Tries.Trie.has(Unit, set1, a), List.any.if(u => Tries.Trie.has(Unit, t, a), Tries.Trie.same_key(x, a)), Reach.has_set(t, x, a)): {Bool.and(contains1, Bool.not(_)) == Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, t, a))): Bool}
-            %Equal.sym(Bool, Tries.Trie.same_key(x, a), False{}, eh): {Bool.and(contains1, Bool.not(List.any.if(u => Tries.Trie.has(Unit, t, a), _))) == Bool.and(contains1, Bool.not(Tries.Trie.has(Unit, t, a))): Bool}
+            %Equal.sym(Bool, Crits.Dict.has(Unit, set1, a), List.any.if(u => Crits.Dict.has(Unit, t, a), Crits.Key.is_eq(x, a)), Reach.has_set(t, x, a)): {Bool.and(contains1, Bool.not(_)) == Bool.and(contains1, Bool.not(Crits.Dict.has(Unit, t, a))): Bool}
+            %Equal.sym(Bool, Crits.Key.is_eq(x, a), False{}, eh): {Bool.and(contains1, Bool.not(List.any.if(u => Crits.Dict.has(Unit, t, a), _))) == Bool.and(contains1, Bool.not(Crits.Dict.has(Unit, t, a))): Bool}
             {==})
         )
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
@@ -2760,19 +2760,19 @@ def Reach.unique_in.at(
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
 # a is one of the new nodes of xs exactly when it is in xs and t lacks it
 def Reach.unique_in(
-  +xs: List<&2, List<&2, Bool>>,
-  +t: Tries.Trie<Unit>,
-  +a: List<&2, Bool>
+  +xs: List<&2, List<&2, U32>>,
+  +t: Crits.Dict(Unit),
+  +a: List<&2, U32>
 ) -> {
   List.contains(
-    ~List<&2, Bool>,
-    ~Tries.Trie.same_key,
-    Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, xs, t),
+    ~List<&2, U32>,
+    ~Crits.Key.is_eq,
+    Crits.Dict.unique(~List<&2, U32>, ~Reach.key, xs, t),
     a
   )
     == Bool.and(
-      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, xs, a),
-      Bool.not(Tries.Trie.has(Unit, t, a))
+      List.contains(~List<&2, U32>, ~Crits.Key.is_eq, xs, a),
+      Bool.not(Crits.Dict.has(Unit, t, a))
     ): Bool
 }:
   match xs:
@@ -2780,76 +2780,76 @@ def Reach.unique_in(
       {==}
     case Con{+x, +r}:
       Reach.unique_in.at(
-        Tries.Trie.has(Unit, t, x),
-        Tries.Trie.same_key(x, a),
+        Crits.Dict.has(Unit, t, x),
+        Crits.Key.is_eq(x, a),
         x,
         r,
         t,
         a,
         Reach.unique_in(r, t, a),
-        Reach.unique_in(r, Tries.Trie.set(Unit, t, x, Unit{}), a)
+        Reach.unique_in(r, Crits.Dict.set(~Unit, t, x, Unit{}), a)
       )({==})({==})
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # the keys of a and then b, put in t, are those of a put first, then of b
 def Reach.put_append(
-  +a: List<&2, List<&2, Bool>>,
-  b: List<&2, List<&2, Bool>>,
-  t: Tries.Trie<Unit>
+  +a: List<&2, List<&2, U32>>,
+  b: List<&2, List<&2, U32>>,
+  t: Crits.Dict(Unit)
 ) -> {
-  Tries.Trie.put_keys(
-    ~List<&2, Bool>,
+  Crits.Dict.put_keys(
+    ~List<&2, U32>,
     ~Reach.key,
-    List.append(&2, List<&2, Bool>, a, b),
+    List.append(&2, List<&2, U32>, a, b),
     t
   )
-    == Tries.Trie.put_keys(
-      ~List<&2, Bool>,
+    == Crits.Dict.put_keys(
+      ~List<&2, U32>,
       ~Reach.key,
       b,
-      Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, a, t)
-    ): Tries.Trie<Unit>
+      Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, a, t)
+    ): Crits.Dict(Unit)
 }:
   match a:
     case Nil{}:
       {==}
     case Con{x, r}:
-      Reach.put_append(r, b, Tries.Trie.set(Unit, t, x, Unit{}))
+      Reach.put_append(r, b, Crits.Dict.set(~Unit, t, x, Unit{}))
 
 # Reach.unique_within at the first node x, by whether t holds it (seen)
 def Reach.unique_within.at(
   +seen: Bool,
-  +x: List<&2, Bool>,
-  +r: List<&2, List<&2, Bool>>,
-  t: Tries.Trie<Unit>,
+  +x: List<&2, U32>,
+  +r: List<&2, List<&2, U32>>,
+  t: Crits.Dict(Unit),
   ih1: {
     Shared.List.within(
-      ~List<&2, Bool>,
-      ~Tries.Trie.same_key,
-      Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+      ~List<&2, U32>,
+      ~Crits.Key.is_eq,
+      Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, t),
       r
     )
       == True{}: Bool
   },
   ih2: {
     Shared.List.within(
-      ~List<&2, Bool>,
-      ~Tries.Trie.same_key,
-      Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{})),
+      ~List<&2, U32>,
+      ~Crits.Key.is_eq,
+      Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, Crits.Dict.set(~Unit, t, x, Unit{})),
       r
     )
       == True{}: Bool
   }
 ) -> {
   Shared.List.within(
-    ~List<&2, Bool>,
-    ~Tries.Trie.same_key,
+    ~List<&2, U32>,
+    ~Crits.Key.is_eq,
     Shared.Bool.when(
-      List<&2, List<&2, Bool>>,
+      List<&2, List<&2, U32>>,
       seen,
-      u => Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+      u => Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, t),
       u => x
-        <> Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{}))
+        <> Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, Crits.Dict.set(~Unit, t, x, Unit{}))
     ),
     x <> r
   )
@@ -2858,43 +2858,43 @@ def Reach.unique_within.at(
   match seen:
     case True{}:
       Reach.within_right(
-        ~List<&2, Bool>,
-        ~Tries.Trie.same_key,
-        Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
+        ~List<&2, U32>,
+        ~Crits.Key.is_eq,
+        Crits.Dict.unique(~List<&2, U32>, ~Reach.key, r, t),
         [x],
         r
       )(ih1)
     case False{}:
-      unique1 = Tries.Trie.unique(
-        ~List<&2, Bool>,
+      unique1 = Crits.Dict.unique(
+        ~List<&2, U32>,
         ~Reach.key,
         r,
-        Tries.Trie.set(Unit, t, x, Unit{})
+        Crits.Dict.set(~Unit, t, x, Unit{})
       )
       %Equal.sym(
         Bool,
-        Tries.Trie.same_key(x, x),
+        Crits.Key.is_eq(x, x),
         True{},
-        Shared.List.is_eq_refl(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws(), x)
+        Shared.List.is_eq_refl(~Bool, ~U32.is_eq, ~Shared.U32.laws(), x)
       ): {
         Bool.and(
-          List.any.if(u => List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, x), _),
-          Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, unique1, x <> r)
+          List.any.if(u => List.contains(~List<&2, U32>, ~Crits.Key.is_eq, r, x), _),
+          Shared.List.within(~List<&2, U32>, ~Crits.Key.is_eq, unique1, x <> r)
         )
           == True{}: Bool
       }
-      Reach.within_right(~List<&2, Bool>, ~Tries.Trie.same_key, unique1, [x], r)(ih2)
+      Reach.within_right(~List<&2, U32>, ~Crits.Key.is_eq, unique1, [x], r)(ih2)
 
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof: it does not run
 # the new nodes of ws are within ws
 def Reach.unique_within(
-  +ws: List<&2, List<&2, Bool>>,
-  +t: Tries.Trie<Unit>
+  +ws: List<&2, List<&2, U32>>,
+  +t: Crits.Dict(Unit)
 ) -> {
   Shared.List.within(
-    ~List<&2, Bool>,
-    ~Tries.Trie.same_key,
-    Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, t),
+    ~List<&2, U32>,
+    ~Crits.Key.is_eq,
+    Crits.Dict.unique(~List<&2, U32>, ~Reach.key, ws, t),
     ws
   )
     == True{}: Bool
@@ -2904,12 +2904,12 @@ def Reach.unique_within(
       {==}
     case Con{+x, +r}:
       Reach.unique_within.at(
-        Tries.Trie.has(Unit, t, x),
+        Crits.Dict.has(Unit, t, x),
         x,
         r,
         t,
         Reach.unique_within(r, t),
-        Reach.unique_within(r, Tries.Trie.set(Unit, t, x, Unit{}))
+        Reach.unique_within(r, Crits.Dict.set(~Unit, t, x, Unit{}))
       )
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
@@ -2923,24 +2923,24 @@ def Reach.unique_has.at(seen: Bool) -> {Bool.or(seen, Bool.not(seen)) == True{}:
 
 # a node u of ws is one of the nodes seen, ks, or one of the new nodes
 def Reach.unique_has(
-  +ws: List<&2, List<&2, Bool>>,
-  +ks: List<&2, List<&2, Bool>>,
-  +u: List<&2, Bool>
+  +ws: List<&2, List<&2, U32>>,
+  +ks: List<&2, List<&2, U32>>,
+  +u: List<&2, U32>
 ) -> {
-  List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u) == True{}: Bool
+  List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ws, u) == True{}: Bool
 } -> {
   List.contains(
-    ~List<&2, Bool>,
-    ~Tries.Trie.same_key,
+    ~List<&2, U32>,
+    ~Crits.Key.is_eq,
     List.append(
       &2,
-      List<&2, Bool>,
+      List<&2, U32>,
       ks,
-      Tries.Trie.unique(
-        ~List<&2, Bool>,
+      Crits.Dict.unique(
+        ~List<&2, U32>,
         ~Reach.key,
         ws,
-        Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
+        Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, ks, Crits.Dict.new(~Unit))
       )
     ),
     u
@@ -2948,44 +2948,44 @@ def Reach.unique_has(
     == True{}: Bool
 }:
   +h =>
-    +seen1 = Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
-    +unique1 = Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, seen1)
-    +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, u)
+    +seen1 = Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, ks, Crits.Dict.new(~Unit))
+    +unique1 = Crits.Dict.unique(~List<&2, U32>, ~Reach.key, ws, seen1)
+    +contains1 = List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, u)
     %Equal.sym(
       Bool,
       List.contains(
-        ~List<&2, Bool>,
-        ~Tries.Trie.same_key,
-        List.append(&2, List<&2, Bool>, ks, unique1),
+        ~List<&2, U32>,
+        ~Crits.Key.is_eq,
+        List.append(&2, List<&2, U32>, ks, unique1),
         u
       ),
-      Bool.or(contains1, List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, unique1, u)),
-      Shared.List.contains_append(~List<&2, Bool>, ~Tries.Trie.same_key, ks, unique1, u)
+      Bool.or(contains1, List.contains(~List<&2, U32>, ~Crits.Key.is_eq, unique1, u)),
+      Shared.List.contains_append(~List<&2, U32>, ~Crits.Key.is_eq, ks, unique1, u)
     ): {_ == True{}: Bool}
     %Equal.sym(
       Bool,
-      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, unique1, u),
+      List.contains(~List<&2, U32>, ~Crits.Key.is_eq, unique1, u),
       Bool.and(
-        List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u),
-        Bool.not(Tries.Trie.has(Unit, seen1, u))
+        List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ws, u),
+        Bool.not(Crits.Dict.has(Unit, seen1, u))
       ),
       Reach.unique_in(ws, seen1, u)
     ): {Bool.or(contains1, _) == True{}: Bool}
     %Equal.sym(
       Bool,
-      Tries.Trie.has(Unit, seen1, u),
+      Crits.Dict.has(Unit, seen1, u),
       contains1,
       Reach.has_keys(ks, u)
     ): {
       Bool.or(
         contains1,
-        Bool.and(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u), Bool.not(_))
+        Bool.and(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ws, u), Bool.not(_))
       )
         == True{}: Bool
     }
     %Equal.sym(
       Bool,
-      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u),
+      List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ws, u),
       True{},
       h
     ): {Bool.or(contains1, Bool.and(_, Bool.not(contains1))) == True{}: Bool}
@@ -2993,25 +2993,25 @@ def Reach.unique_has(
 
 # the nodes us of ws are within the nodes seen, ks, and then the new nodes
 def Reach.unique_covers(
-  +us: List<&2, List<&2, Bool>>,
-  +ws: List<&2, List<&2, Bool>>,
-  +ks: List<&2, List<&2, Bool>>
+  +us: List<&2, List<&2, U32>>,
+  +ws: List<&2, List<&2, U32>>,
+  +ks: List<&2, List<&2, U32>>
 ) -> {
-  Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, us, ws) == True{}: Bool
+  Shared.List.within(~List<&2, U32>, ~Crits.Key.is_eq, us, ws) == True{}: Bool
 } -> {
   Shared.List.within(
-    ~List<&2, Bool>,
-    ~Tries.Trie.same_key,
+    ~List<&2, U32>,
+    ~Crits.Key.is_eq,
     us,
     List.append(
       &2,
-      List<&2, Bool>,
+      List<&2, U32>,
       ks,
-      Tries.Trie.unique(
-        ~List<&2, Bool>,
+      Crits.Dict.unique(
+        ~List<&2, U32>,
         ~Reach.key,
         ws,
-        Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
+        Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, ks, Crits.Dict.new(~Unit))
       )
     )
   )
@@ -3022,22 +3022,22 @@ def Reach.unique_covers(
       +h => {==}
     case Con{+u, +r}:
       +h =>
-        +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u)
-        +within1 = Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, r, ws)
+        +contains1 = List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ws, u)
+        +within1 = Shared.List.within(~List<&2, U32>, ~Crits.Key.is_eq, r, ws)
         +append1 = List.append(
           &2,
-          List<&2, Bool>,
+          List<&2, U32>,
           ks,
-          Tries.Trie.unique(
-            ~List<&2, Bool>,
+          Crits.Dict.unique(
+            ~List<&2, U32>,
             ~Reach.key,
             ws,
-            Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
+            Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, ks, Crits.Dict.new(~Unit))
           )
         )
         Shared.Bool.and_both(
-          List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, append1, u),
-          Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, r, append1)
+          List.contains(~List<&2, U32>, ~Crits.Key.is_eq, append1, u),
+          Shared.List.within(~List<&2, U32>, ~Crits.Key.is_eq, r, append1)
         )(
           Reach.unique_has(ws, ks, u)(Shared.Bool.and_true_left(contains1, within1)(h))
         )(Reach.unique_covers(r, ws, ks)(Shared.Bool.and_true_right(contains1, within1)(h)))
@@ -3045,11 +3045,11 @@ def Reach.unique_covers(
 # a search one level deeper is a search from the next level of the new nodes
 def Reach.fill_step(
   ~V: Data,
-  ~succ: V -> List<&2, Bool> -> List<&2, List<&2, Bool>>,
+  ~succ: V -> List<&2, U32> -> List<&2, List<&2, U32>>,
   e: Nat,
-  ws: List<&2, List<&2, Bool>>,
+  ws: List<&2, List<&2, U32>>,
   g: V,
-  seen: Tries.Trie<Unit>
+  seen: Crits.Dict(Unit)
 ) -> {
   Reach.fill(
     ~V,
@@ -3064,20 +3064,20 @@ def Reach.fill_step(
       ~succ,
       e,
       Reach.next(
-        ~List<&2, Bool>,
+        ~List<&2, U32>,
         ~V,
         ~succ,
-        Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, seen),
+        Crits.Dict.unique(~List<&2, U32>, ~Reach.key, ws, seen),
         g
       ),
       g,
-      Tries.Trie.put_keys(
-        ~List<&2, Bool>,
+      Crits.Dict.put_keys(
+        ~List<&2, U32>,
         ~Reach.key,
-        Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, seen),
+        Crits.Dict.unique(~List<&2, U32>, ~Reach.key, ws, seen),
         seen
       )
-    ): Tries.Trie<Unit>
+    ): Crits.Dict(Unit)
 }:
   match e ws:
     case 0n Nil{}:
@@ -3093,33 +3093,33 @@ def Reach.fill_step(
 # are within ks and then ws
 def Reach.fill_go(
   ~V: Data,
-  ~succ: V -> List<&2, Bool> -> List<&2, List<&2, Bool>>,
+  ~succ: V -> List<&2, U32> -> List<&2, List<&2, U32>>,
   +f: Nat,
-  +ws: List<&2, List<&2, Bool>>,
-  +zs: List<&2, List<&2, Bool>>,
-  +ks: List<&2, List<&2, Bool>>,
+  +ws: List<&2, List<&2, U32>>,
+  +zs: List<&2, List<&2, U32>>,
+  +ks: List<&2, List<&2, U32>>,
   +g: V,
-  +m: List<&2, Bool>
+  +m: List<&2, U32>
 ) -> {
-  Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, ws, zs) == True{}: Bool
+  Shared.List.within(~List<&2, U32>, ~Crits.Key.is_eq, ws, zs) == True{}: Bool
 } -> {
   Shared.List.within(
-    ~List<&2, Bool>,
-    ~Tries.Trie.same_key,
+    ~List<&2, U32>,
+    ~Crits.Key.is_eq,
     zs,
-    List.append(&2, List<&2, Bool>, ks, ws)
+    List.append(&2, List<&2, U32>, ks, ws)
   )
     == True{}: Bool
 } -> {
   Shared.List.within(
-    ~List<&2, Bool>,
-    ~Tries.Trie.same_key,
-    Reach.next(~List<&2, Bool>, ~V, ~succ, ks, g),
-    List.append(&2, List<&2, Bool>, ks, ws)
+    ~List<&2, U32>,
+    ~Crits.Key.is_eq,
+    Reach.next(~List<&2, U32>, ~V, ~succ, ks, g),
+    List.append(&2, List<&2, U32>, ks, ws)
   )
     == True{}: Bool
 } -> {
-  Tries.Trie.has(
+  Crits.Dict.has(
     Unit,
     Reach.fill(
       ~V,
@@ -3127,13 +3127,13 @@ def Reach.fill_go(
       f,
       ws,
       g,
-      Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
+      Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, ks, Crits.Dict.new(~Unit))
     ),
     m
   )
     == Bool.or(
-      List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
-      Reach.go(~List<&2, Bool>, ~V, ~Tries.Trie.same_key, ~succ, f, zs, g, m)
+      List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m),
+      Reach.go(~List<&2, U32>, ~V, ~Crits.Key.is_eq, ~succ, f, zs, g, m)
     ): Bool
 }:
   match f:
@@ -3142,45 +3142,45 @@ def Reach.fill_go(
         %Reach.put_append(
           ks,
           ws,
-          Tries.Trie.new(Unit)
+          Crits.Dict.new(~Unit)
         ): {
-          Tries.Trie.has(
+          Crits.Dict.has(
             Unit,
             _,
             m
           )
             == Bool.or(
-              List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
-              List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m)
+              List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m),
+              List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m)
             ): Bool
         }
         Equal.trans(
           Bool,
-          Tries.Trie.has(
+          Crits.Dict.has(
             Unit,
-            Tries.Trie.put_keys(
-              ~List<&2, Bool>,
+            Crits.Dict.put_keys(
+              ~List<&2, U32>,
               ~Reach.key,
-              List.append(&2, List<&2, Bool>, ks, ws),
-              Tries.Trie.new(Unit)
+              List.append(&2, List<&2, U32>, ks, ws),
+              Crits.Dict.new(~Unit)
             ),
             m
           ),
           List.contains(
-            ~List<&2, Bool>,
-            ~Tries.Trie.same_key,
-            List.append(&2, List<&2, Bool>, ks, ws),
+            ~List<&2, U32>,
+            ~Crits.Key.is_eq,
+            List.append(&2, List<&2, U32>, ks, ws),
             m
           ),
           Bool.or(
-            List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
-            List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m)
+            List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m),
+            List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m)
           ),
-          Reach.has_keys(List.append(&2, List<&2, Bool>, ks, ws), m),
+          Reach.has_keys(List.append(&2, List<&2, U32>, ks, ws), m),
           Reach.or_within(
-            ~List<&2, Bool>,
-            ~Tries.Trie.same_key,
-            ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+            ~List<&2, U32>,
+            ~Crits.Key.is_eq,
+            ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
             ks,
             ws,
             zs,
@@ -3189,30 +3189,30 @@ def Reach.fill_go(
         )
     case 1n+e:
       +h1 => +h2 => h3 =>
-        +seen1 = Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, ks, Tries.Trie.new(Unit))
-        +unique1 = Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, seen1)
-        +append1 = List.append(&2, List<&2, Bool>, ks, unique1)
-        +next1 = Reach.next(~List<&2, Bool>, ~V, ~succ, unique1, g)
-        +next2 = Reach.next(~List<&2, Bool>, ~V, ~succ, zs, g)
-        +go1 = Reach.go(~List<&2, Bool>, ~V, ~Tries.Trie.same_key, ~succ, e, next2, g, m)
+        +seen1 = Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, ks, Crits.Dict.new(~Unit))
+        +unique1 = Crits.Dict.unique(~List<&2, U32>, ~Reach.key, ws, seen1)
+        +append1 = List.append(&2, List<&2, U32>, ks, unique1)
+        +next1 = Reach.next(~List<&2, U32>, ~V, ~succ, unique1, g)
+        +next2 = Reach.next(~List<&2, U32>, ~V, ~succ, zs, g)
+        +go1 = Reach.go(~List<&2, U32>, ~V, ~Crits.Key.is_eq, ~succ, e, next2, g, m)
         +a = Reach.within_both(
-          ~List<&2, Bool>,
-          ~Tries.Trie.same_key,
+          ~List<&2, U32>,
+          ~Crits.Key.is_eq,
           ks,
           ws,
           append1
         )(
           Reach.within_left(
-            ~List<&2, Bool>,
-            ~Tries.Trie.same_key,
+            ~List<&2, U32>,
+            ~Crits.Key.is_eq,
             ks,
             ks,
             unique1
           )(
             Reach.within_self(
-              ~List<&2, Bool>,
-              ~Tries.Trie.same_key,
-              ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+              ~List<&2, U32>,
+              ~Crits.Key.is_eq,
+              ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
               ks
             )
           )
@@ -3223,50 +3223,50 @@ def Reach.fill_go(
             ks
           )(
             Reach.within_self(
-              ~List<&2, Bool>,
-              ~Tries.Trie.same_key,
-              ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+              ~List<&2, U32>,
+              ~Crits.Key.is_eq,
+              ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
               ws
             )
           )
         )
         +yz = Reach.within_trans(
-          ~List<&2, Bool>,
-          ~Tries.Trie.same_key,
-          ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+          ~List<&2, U32>,
+          ~Crits.Key.is_eq,
+          ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
           unique1,
           ws,
           zs
         )(Reach.unique_within(ws, seen1))(h1)
         +b = Reach.within_trans(
-          ~List<&2, Bool>,
-          ~Tries.Trie.same_key,
-          ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+          ~List<&2, U32>,
+          ~Crits.Key.is_eq,
+          ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
           zs,
-          List.append(&2, List<&2, Bool>, ks, ws),
+          List.append(&2, List<&2, U32>, ks, ws),
           append1
         )(h2)(a)
         +j3 = Reach.next_grown(
-          ~List<&2, Bool>,
+          ~List<&2, U32>,
           ~V,
-          ~Tries.Trie.same_key,
+          ~Crits.Key.is_eq,
           ~succ,
-          ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+          ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
           ks,
           unique1,
           g
         )(
           Reach.within_trans(
-            ~List<&2, Bool>,
-            ~Tries.Trie.same_key,
-            ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
-            Reach.next(~List<&2, Bool>, ~V, ~succ, ks, g),
-            List.append(&2, List<&2, Bool>, ks, ws),
+            ~List<&2, U32>,
+            ~Crits.Key.is_eq,
+            ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
+            Reach.next(~List<&2, U32>, ~V, ~succ, ks, g),
+            List.append(&2, List<&2, U32>, ks, ws),
             append1
           )(h3)(a)
         )
         %Equal.sym(
-          Tries.Trie<Unit>,
+          Crits.Dict(Unit),
           Reach.fill(~V, ~succ, 1n+e, ws, g, seen1),
           Reach.fill(
             ~V,
@@ -3274,38 +3274,38 @@ def Reach.fill_go(
             e,
             next1,
             g,
-            Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, unique1, seen1)
+            Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, unique1, seen1)
           ),
           Reach.fill_step(~V, ~succ, e, ws, g, seen1)
         ): {
-          Tries.Trie.has(
+          Crits.Dict.has(
             Unit,
             _,
             m
           )
             == Bool.or(
-              List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
-              Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)
+              List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m),
+              Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m), go1)
             ): Bool
         }
         %Reach.put_append(
           ks,
           unique1,
-          Tries.Trie.new(Unit)
+          Crits.Dict.new(~Unit)
         ): {
-          Tries.Trie.has(
+          Crits.Dict.has(
             Unit,
             Reach.fill(~V, ~succ, e, next1, g, _),
             m
           )
             == Bool.or(
-              List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
-              Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)
+              List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m),
+              Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m), go1)
             ): Bool
         }
         Equal.trans(
           Bool,
-          Tries.Trie.has(
+          Crits.Dict.has(
             Unit,
             Reach.fill(
               ~V,
@@ -3313,14 +3313,14 @@ def Reach.fill_go(
               e,
               next1,
               g,
-              Tries.Trie.put_keys(~List<&2, Bool>, ~Reach.key, append1, Tries.Trie.new(Unit))
+              Crits.Dict.put_keys(~List<&2, U32>, ~Reach.key, append1, Crits.Dict.new(~Unit))
             ),
             m
           ),
-          Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, append1, m), go1),
+          Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, append1, m), go1),
           Bool.or(
-            List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m),
-            Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)
+            List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m),
+            Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m), go1)
           ),
           Reach.fill_go(
             ~V,
@@ -3333,30 +3333,30 @@ def Reach.fill_go(
             m
           )(
             Reach.next_within(
-              ~List<&2, Bool>,
+              ~List<&2, U32>,
               ~V,
-              ~Tries.Trie.same_key,
+              ~Crits.Key.is_eq,
               ~succ,
-              ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+              ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
               unique1,
               zs,
               g
             )(yz)
           )(
             Reach.within_trans(
-              ~List<&2, Bool>,
-              ~Tries.Trie.same_key,
-              ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+              ~List<&2, U32>,
+              ~Crits.Key.is_eq,
+              ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
               next2,
-              Reach.next(~List<&2, Bool>, ~V, ~succ, append1, g),
-              List.append(&2, List<&2, Bool>, append1, next1)
+              Reach.next(~List<&2, U32>, ~V, ~succ, append1, g),
+              List.append(&2, List<&2, U32>, append1, next1)
             )(
               Reach.next_within(
-                ~List<&2, Bool>,
+                ~List<&2, U32>,
                 ~V,
-                ~Tries.Trie.same_key,
+                ~Crits.Key.is_eq,
                 ~succ,
-                ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+                ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
                 zs,
                 append1,
                 g
@@ -3364,26 +3364,26 @@ def Reach.fill_go(
             )(j3)
           )(j3),
           (
-            %Equal.sym(Bool, List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, append1, m), Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m)), Reach.or_within(~List<&2, Bool>, ~Tries.Trie.same_key, ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()), ks, unique1, zs, m)(yz)(b)): {Bool.or(_, go1) == Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)): Bool}
-            Equal.sym(Bool, Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)), Bool.or(Bool.or(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m)), go1), Shared.Bool.or_assoc(List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ks, m), List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, zs, m), go1)))
+            %Equal.sym(Bool, List.contains(~List<&2, U32>, ~Crits.Key.is_eq, append1, m), Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m)), Reach.or_within(~List<&2, U32>, ~Crits.Key.is_eq, ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()), ks, unique1, zs, m)(yz)(b)): {Bool.or(_, go1) == Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m), go1)): Bool}
+            Equal.sym(Bool, Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m), go1)), Bool.or(Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m)), go1), Shared.Bool.or_assoc(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m), go1)))
         )
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the fast search finds exactly what the search finds
 law Reach.all_in:
   for ~V: Data
-  for ~succ: V -> List<&2, Bool> -> List<&2, List<&2, Bool>>
-  for ~nodes: V -> List<&2, List<&2, Bool>>
+  for ~succ: V -> List<&2, U32> -> List<&2, List<&2, U32>>
+  for ~nodes: V -> List<&2, List<&2, U32>>
   for +g: V
-  for +x: List<&2, Bool>
-  for +m: List<&2, Bool>
+  for +x: List<&2, U32>
+  for +m: List<&2, U32>
   {
-    Tries.Trie.has(
+    Crits.Dict.has(
       Unit,
       Reach.all(~V, ~succ, ~nodes, g, x),
       m
     )
-      == Reach.in(~List<&2, Bool>, ~V, ~Tries.Trie.same_key, ~succ, ~nodes, g, x, m): Bool
+      == Reach.in(~List<&2, U32>, ~V, ~Crits.Key.is_eq, ~succ, ~nodes, g, x, m): Bool
   }
 
 def Reach.all_in(gt, succ, nodes, g, x, m):
@@ -3391,7 +3391,7 @@ def Reach.all_in(gt, succ, nodes, g, x, m):
   Reach.fill_go(
     ~gt,
     ~succ,
-    List.length(&2, List<&2, Bool>, nodes(g)),
+    List.length(&2, List<&2, U32>, nodes(g)),
     level1,
     level1,
     [],
@@ -3399,16 +3399,16 @@ def Reach.all_in(gt, succ, nodes, g, x, m):
     m
   )(
     Reach.within_self(
-      ~List<&2, Bool>,
-      ~Tries.Trie.same_key,
-      ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+      ~List<&2, U32>,
+      ~Crits.Key.is_eq,
+      ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
       level1
     )
   )(
     Reach.within_self(
-      ~List<&2, Bool>,
-      ~Tries.Trie.same_key,
-      ~Shared.List.laws(~Bool, ~Shared.Bool.is_eq, ~Shared.Bool.laws()),
+      ~List<&2, U32>,
+      ~Crits.Key.is_eq,
+      ~Shared.List.laws(~Bool, ~U32.is_eq, ~Shared.U32.laws()),
       level1
     )
   )({==})
@@ -3422,51 +3422,51 @@ def Reach.all_in(gt, succ, nodes, g, x, m):
 
 # a graph: the successors of each node, and the nodes that have some
 type Graph is Data:
-  Graph{edges: Tries.Trie<List<&2, List<&2, Bool>>>, nodes: List<&2, List<&2, Bool>>}
+  Graph{edges: Crits.Dict(List<&2, List<&2, U32>>), nodes: List<&2, List<&2, U32>>}
 
 # a graph with no node
 def Graph.new() -> Graph:
-  Graph{Tries.Trie.new(List<&2, List<&2, Bool>>), []}
+  Graph{Crits.Dict.new(~List<&2, List<&2, U32>>), []}
 
 # the successors of the node k in g
-def Graph.succ(g: Graph, k: List<&2, Bool>) -> List<&2, List<&2, Bool>>:
+def Graph.succ(g: Graph, k: List<&2, U32>) -> List<&2, List<&2, U32>>:
   match g:
     case Graph{e, ns}:
       Maybe.default(
         &2,
-        List<&2, List<&2, Bool>>,
-        Tries.Trie.get(List<&2, List<&2, Bool>>, e, k),
+        List<&2, List<&2, U32>>,
+        Crits.Dict.get(List<&2, List<&2, U32>>, e, k),
         []
       )
 
 # the nodes of g that have successors
-def Graph.nodes(g: Graph) -> List<&2, List<&2, Bool>>:
+def Graph.nodes(g: Graph) -> List<&2, List<&2, U32>>:
   match g:
     case Graph{e, ns}:
       ns
 
 # Graph.link once the successors m of the node k are known
 def Graph.link.at(
-  e: Tries.Trie<List<&2, List<&2, Bool>>>,
-  ns: List<&2, List<&2, Bool>>,
-  +k: List<&2, Bool>,
-  t: List<&2, Bool>,
-  m: Maybe<&2, List<&2, List<&2, Bool>>>
+  e: Crits.Dict(List<&2, List<&2, U32>>),
+  ns: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  t: List<&2, U32>,
+  m: Maybe<&2, List<&2, List<&2, U32>>>
 ) -> Graph:
   match m:
     case None{}:
-      Graph{Tries.Trie.set(List<&2, List<&2, Bool>>, e, k, [t]), k <> ns}
+      Graph{Crits.Dict.set(~List<&2, List<&2, U32>>, e, k, [t]), k <> ns}
     case Some{ts}:
-      Graph{Tries.Trie.set(List<&2, List<&2, Bool>>, e, k, t <> ts), ns}
+      Graph{Crits.Dict.set(~List<&2, List<&2, U32>>, e, k, t <> ts), ns}
 
 # g with the node t as one more successor of the node k
-def Graph.link(g: Graph, +k: List<&2, Bool>, t: List<&2, Bool>) -> Graph:
+def Graph.link(g: Graph, +k: List<&2, U32>, t: List<&2, U32>) -> Graph:
   match g:
     case Graph{+e, ns}:
-      Graph.link.at(e, ns, k, t, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k))
+      Graph.link.at(e, ns, k, t, Crits.Dict.get(List<&2, List<&2, U32>>, e, k))
 
 # g with each node of ts as one more successor of the node k
-def Graph.links(ts: List<&2, List<&2, Bool>>, +k: List<&2, Bool>, g: Graph) -> Graph:
+def Graph.links(ts: List<&2, List<&2, U32>>, +k: List<&2, U32>, g: Graph) -> Graph:
   match ts:
     case Nil{}:
       g
@@ -3474,7 +3474,7 @@ def Graph.links(ts: List<&2, List<&2, Bool>>, +k: List<&2, Bool>, g: Graph) -> G
       Graph.links(r, k, Graph.link(g, k, t))
 
 # g with the node t as one more successor of each node of ks
-def Graph.back(ks: List<&2, List<&2, Bool>>, +t: List<&2, Bool>, g: Graph) -> Graph:
+def Graph.back(ks: List<&2, List<&2, U32>>, +t: List<&2, U32>, g: Graph) -> Graph:
   match ks:
     case Nil{}:
       g
@@ -3482,5 +3482,5 @@ def Graph.back(ks: List<&2, List<&2, Bool>>, +t: List<&2, Bool>, g: Graph) -> Gr
       Graph.back(r, t, Graph.link(g, k, t))
 
 # every node that a search of g finds from the node x, at any depth
-def Graph.reach(g: Graph, x: List<&2, Bool>) -> Tries.Trie<Unit>:
+def Graph.reach(g: Graph, x: List<&2, U32>) -> Crits.Dict(Unit):
   Reach.all(~Graph, ~Graph.succ, ~Graph.nodes, g, x)
