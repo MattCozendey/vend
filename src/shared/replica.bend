@@ -3098,6 +3098,155 @@ def Replica(-mach: Machine(), -d: Led(mach), -kern: Kernel(mach, d)) -> Type:
 # ----
 # What holds of every ledger and every kernel, by the defs above.
 
+# Proofs of the laws
+# ------------------
+# Growth of a ledger, and the laws of its parts, as the proofs below use them.
+
+# the laws of the ledger d
+def Hist.laws(-mach: Machine(), d: Led(mach)) -> Ledgers.Ledger.Laws(
+  Machine.Q(mach),
+  Machine.code(mach),
+  Led.kind(mach, d)
+):
+  match d:
+    case Tuple{x, t}:
+      Ledgers.Ledger.laws(Machine.Q(mach), Machine.code(mach), x)
+
+# the law of an added entry, of the laws ls
+def Hist.laws.add(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledgers.Ledger.Kind(Q),
+  ls: Ledgers.Ledger.Laws(Q, c, k)
+) -> Ledgers.Laws.GetAdd(Q, c, k):
+  match ls:
+    case Tuple{e, Tuple{a, r}}:
+      a
+
+# the law of an added entry, of the ledger d
+def Hist.get_add(-mach: Machine(), d: Led(mach)) -> Ledgers.Laws.GetAdd(
+  Machine.Q(mach),
+  Machine.code(mach),
+  Led.kind(mach, d)
+):
+  Hist.laws.add(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Hist.laws(mach, d))
+
+# a ledger grows from itself
+def Hist.refl(-mach: Machine(), -d: Led(mach), -l: Led.L(mach, d)) -> Led.Grows(mach, d, l, l):
+  n => e => h => h
+
+# growth is transitive
+def Hist.trans(
+  -mach: Machine(),
+  -d: Led(mach),
+  -a: Led.L(mach, d),
+  -b: Led.L(mach, d),
+  -c: Led.L(mach, d),
+  g1: Led.Grows(mach, d, a, b),
+  g2: Led.Grows(mach, d, b, c)
+) -> Led.Grows(mach, d, a, c):
+  +n => +e => h => g2(n)(e)(g1(n)(e)(h))
+
+# a ledger grows by an entry
+def Hist.add(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), x: Entry(mach)) -> Led.Grows(
+  mach,
+  d,
+  l,
+  Led.add(~mach, ~d, l, x)
+):
+  +n => +e => h =>
+    %Equal.sym(
+      Maybe<&2, Entry(mach)>,
+      Led.get(~mach, ~d, Led.add(~mach, ~d, l, x), n),
+      Maybe.or(
+        &2,
+        Entry(mach),
+        Led.get(~mach, ~d, l, n),
+        Shared.Maybe.when(
+          Entry(mach),
+          Ledgers.Name.is_eq(Entry.name(~mach, x), n),
+          u => Some{x}
+        )
+      ),
+      Hist.get_add(mach, d)(l)(x)(n)
+    ): {_ == Some{e}: Maybe<&2, Entry(mach)>}
+    %Equal.sym(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, l, n), Some{e}, h): {
+      Maybe.or(
+        &2,
+        Entry(mach),
+        _,
+        Shared.Maybe.when(
+          Entry(mach),
+          Ledgers.Name.is_eq(Entry.name(~mach, x), n),
+          u => Some{x}
+        )
+      )
+        == Some{e}: Maybe<&2, Entry(mach)>
+    }
+    {==}
+
+# a ledger grows by the data ns
+def Hist.puts(~mach: Machine(), ~d: Led(mach), ns: List<&2, List<&2, U32>>, +l: Led.L(mach, d)) -> Led.Grows(
+  mach,
+  d,
+  l,
+  Led.puts(~mach, ~d, ns, l)
+):
+  match ns:
+    case Nil{}:
+      Hist.refl(mach, d, l)
+    case Con{+ws, rest}:
+      Hist.trans(
+        mach,
+        d,
+        l,
+        Led.add(~mach, ~d, l, Ledgers.Entry.Data{ws}),
+        Led.puts(~mach, ~d, rest, Led.add(~mach, ~d, l, Ledgers.Entry.Data{ws})),
+        Hist.add(~mach, ~d, l, Ledgers.Entry.Data{ws}),
+        Hist.puts(~mach, ~d, rest, Led.add(~mach, ~d, l, Ledgers.Entry.Data{ws}))
+      )
+
+# the words of an entry that grows stay
+def Hist.words(
+  -mach: Machine(),
+  m: Maybe<&2, Entry(mach)>,
+  -m2: Maybe<&2, Entry(mach)>,
+  -w: List<&2, U32>,
+  hm: @e: Entry(mach) -> {m == Some{e}: Maybe<&2, Entry(mach)>} -> {m2 == Some{e}: Maybe<&2, Entry(mach)>}
+) -> {Ledgers.Entry.words(Machine.Q(mach), m) == Some{w}: Maybe<&2, List<&2, U32>>}
+  -> {Ledgers.Entry.words(Machine.Q(mach), m2) == Some{w}: Maybe<&2, List<&2, U32>>}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Ledgers.Entry.words(Machine.Q(mach), m2) == Some{w}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(List<&2, U32>, w, e)
+      )
+    case Some{x}:
+      e =>
+        %Equal.sym(Maybe<&2, Entry(mach)>, m2, Some{x}, hm(x)({==})): {
+          Ledgers.Entry.words(Machine.Q(mach), _) == Some{w}: Maybe<&2, List<&2, U32>>
+        }
+        e
+
+# the data of a ledger stays as it grows
+def Hist.fetch(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  a: Led.L(mach, d),
+  -b: Led.L(mach, d),
+  +h: Hashes.Hash,
+  -w: List<&2, U32>,
+  g: Led.Grows(mach, d, a, b)
+) -> {Led.fetch(~mach, ~d, a, h) == Some{w}: Maybe<&2, List<&2, U32>>}
+  -> {Led.fetch(~mach, ~d, b, h) == Some{w}: Maybe<&2, List<&2, U32>>}:
+  Hist.words(
+    mach,
+    Led.get(~mach, ~d, a, Ledgers.Name.Data{h}),
+    Led.get(~mach, ~d, b, Ledgers.Name.Data{h}),
+    w,
+    e => g(Ledgers.Name.Data{h})(e)
+  )
+
 # one history: the tip of a line after a number of steps stays as the ledger
 # grows, while its ballots are honest. So two replicas whose ledgers an
 # honest ledger holds are, after the same number of steps, at the same tip:
