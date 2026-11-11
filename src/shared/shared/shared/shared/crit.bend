@@ -7340,6 +7340,133 @@ law Crit.get_lookup:
 def Crit.get_lookup(ty, m, k):
   Crit.get_lookup.at(~ty, m, k)
 
+# the end e of a fork with rep r is an entry of x, or there is none
+def Crit.sub_end(-V: Data, +r: List<&2, U32>, e: Maybe<&2, V>, +x: Crit<V>) -> Data:
+  match e:
+    case None{}:
+      Unit
+    case Some{v}:
+      {Crit.lookup(V, x, r) == Some{v}: Maybe<&2, V>}
+
+# each entry of m is an entry of x: a proof of it is data, read at any key
+def Crit.sub(-V: Data, m: Crit<V>, +x: Crit<V>) -> Data:
+  match m:
+    case Crit.Tip{}:
+      Unit
+    case Crit.Leaf{k, v}:
+      {Crit.lookup(V, x, k) == Some{v}: Maybe<&2, V>}
+    case Crit.Fork{+r, p, e, z, o}:
+      Sigma<&2, &2, Crit.sub_end(V, r, e, x), _ => Sigma<&2, &2, Crit.sub(V, z, x), _ => Crit.sub(V, o, x)>>
+
+# each entry of the list es is an entry of x
+def Crit.agrees(-V: Data, es: List<&2, Bind<V>>, +x: Crit<V>) -> Data:
+  match es:
+    case Nil{}:
+      Unit
+    case Con{Bind{k, v}, r}:
+      Sigma<&2, &2, {Crit.lookup(V, x, k) == Some{v}: Maybe<&2, V>}, _ => Crit.agrees(V, r, x)>
+
+# Crit.sub of a fork: its end
+def Crit.sub.e(-V: Data, -r: List<&2, U32>, -p: Nat, -e: Maybe<&2, V>, -z: Crit<V>, -o: Crit<V>, -x: Crit<V>, c: Crit.sub(V, Crit.Fork{r, p, e, z, o}, x)) -> Crit.sub_end(V, r, e, x):
+  (ce, czo) = c
+  ce
+
+# Crit.sub of a fork: its zero side
+def Crit.sub.z(-V: Data, -r: List<&2, U32>, -p: Nat, -e: Maybe<&2, V>, -z: Crit<V>, -o: Crit<V>, -x: Crit<V>, c: Crit.sub(V, Crit.Fork{r, p, e, z, o}, x)) -> Crit.sub(V, z, x):
+  (ce, czo) = c
+  (cz, co) = czo
+  cz
+
+# Crit.sub of a fork: its one side
+def Crit.sub.o(-V: Data, -r: List<&2, U32>, -p: Nat, -e: Maybe<&2, V>, -z: Crit<V>, -o: Crit<V>, -x: Crit<V>, c: Crit.sub(V, Crit.Fork{r, p, e, z, o}, x)) -> Crit.sub(V, o, x):
+  (ce, czo) = c
+  (cz, co) = czo
+  co
+
+# Crit.agrees of a list with a head: the head
+def Crit.agrees.hd(-V: Data, -k: List<&2, U32>, -v: V, -r: List<&2, Bind<V>>, -x: Crit<V>, c: Crit.agrees(V, Bind{k, v} <> r, x)) -> {
+  Crit.lookup(V, x, k) == Some{v}: Maybe<&2, V>
+}:
+  (h, t) = c
+  h
+
+# Crit.agrees of a list with a head: the rest
+def Crit.agrees.tl(-V: Data, -k: List<&2, U32>, -v: V, -r: List<&2, Bind<V>>, -x: Crit<V>, c: Crit.agrees(V, Bind{k, v} <> r, x)) -> Crit.agrees(V, r, x):
+  (h, t) = c
+  t
+
+# the value of an entry whose key is k, when the test of r and k is b
+def Crit.pick_end.at(-V: Data, +r: List<&2, U32>, -w: V, +x: Crit<V>, +k: List<&2, U32>, -v: V, b: Bool) -> {Key.is_eq(r, k) == b: Bool} -> {
+  Crit.lookup(V, x, r) == Some{w}: Maybe<&2, V>
+} -> {Shared.Maybe.when(V, b, u => Some{w}) == Some{v}: Maybe<&2, V>} -> {Crit.lookup(V, x, k) == Some{v}: Maybe<&2, V>}:
+  match b:
+    case True{}:
+      eb => cw => hw =>
+        %Key.is_eq_sound(r, k)(eb): {Crit.lookup(V, x, _) == Some{v}: Maybe<&2, V>}
+        Equal.trans(Maybe<&2, V>, Crit.lookup(V, x, r), Some{w}, Some{v}, cw, hw)
+    case False{}:
+      eb => cw => hw => Empty.absurd({Crit.lookup(V, x, k) == Some{v}: Maybe<&2, V>}, Shared.Maybe.none_ne_some(V, v, hw))
+
+# the end of a fork, read at k, that is some v is an entry of x
+def Crit.pick_end(-V: Data, +r: List<&2, U32>, e: Maybe<&2, V>, +x: Crit<V>, +k: List<&2, U32>, -v: V) -> Crit.sub_end(V, r, e, x) -> {
+  Crit.ended(V, r, e, k) == Some{v}: Maybe<&2, V>
+} -> {Crit.lookup(V, x, k) == Some{v}: Maybe<&2, V>}:
+  match e:
+    case None{}:
+      c => h => Empty.absurd({Crit.lookup(V, x, k) == Some{v}: Maybe<&2, V>}, Shared.Maybe.none_ne_some(V, v, h))
+    case Some{w}:
+      c => h => Crit.pick_end.at(V, r, w, x, k, v, Key.is_eq(r, k))({==})(c)(h)
+
+# a choice of three that is some v is one of them
+def Crit.or3_some(-V: Data, -T: Type, a: Maybe<&2, V>, b: Maybe<&2, V>, -c: Maybe<&2, V>, -v: V) -> ({a == Some{v}: Maybe<&2, V>} -> T) -> (
+  {b == Some{v}: Maybe<&2, V>} -> T
+) -> ({c == Some{v}: Maybe<&2, V>} -> T) -> {Maybe.or(&2, V, a, Maybe.or(&2, V, b, c)) == Some{v}: Maybe<&2, V>} -> T:
+  match a b:
+    case Some{x} y:
+      f1 => f2 => f3 => h => f1(h)
+    case None{} Some{y}:
+      f1 => f2 => f3 => h => f2(h)
+    case None{} None{}:
+      f1 => f2 => f3 => h => f3(h)
+
+# an entry of m is an entry of x, when each entry of m is
+def Crit.sub_pick(-V: Data, m: Crit<V>, +x: Crit<V>, +k: List<&2, U32>, -v: V) -> Crit.sub(V, m, x) -> {Crit.lookup(V, m, k) == Some{v}: Maybe<&2, V>} -> {
+  Crit.lookup(V, x, k) == Some{v}: Maybe<&2, V>
+}:
+  match m:
+    case Crit.Tip{}:
+      c => h => Empty.absurd({Crit.lookup(V, x, k) == Some{v}: Maybe<&2, V>}, Shared.Maybe.none_ne_some(V, v, h))
+    case Crit.Leaf{+k2, w}:
+      c => h => Crit.pick_end.at(V, k2, w, x, k, v, Key.is_eq(k2, k))({==})(c)(h)
+    case Crit.Fork{+r, +p, +e, +z, +o}:
+      +c => Crit.or3_some(V, {Crit.lookup(V, x, k) == Some{v}: Maybe<&2, V>}, Crit.ended(V, r, e, k), Crit.lookup(V, z, k), Crit.lookup(V, o, k), v)(
+        h => Crit.pick_end(V, r, e, x, k, v)(Crit.sub.e(V, r, p, e, z, o, x, c))(h)
+      )(h => Crit.sub_pick(V, z, x, k, v)(Crit.sub.z(V, r, p, e, z, o, x, c))(h))(h => Crit.sub_pick(V, o, x, k, v)(Crit.sub.o(V, r, p, e, z, o, x, c))(h))
+
+# a side is the same as itself
+def Crit.mis_refl(m: Maybe<&2, Bool>) -> {Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, m, m) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{+value}:
+      match value:
+        case False{}:
+          {==}
+        case True{}:
+          {==}
+
+# the first key of a map with an entry does not depend on the default
+def Crit.rep_irr(-V: Data, m: Crit<V>, -d1: List<&2, U32>, -d2: List<&2, U32>) -> {Crit.is_tip(V, m) == False{}: Bool} -> {
+  Crit.rep(V, m, d1) == Crit.rep(V, m, d2): List<&2, U32>
+}:
+  match m:
+    case Crit.Tip{}:
+      h => Empty.absurd({d1 == d2: List<&2, U32>}, Shared.Bool.true_ne_false(h))
+    case Crit.Leaf{k, v}:
+      h => {==}
+    case Crit.Fork{r, p, e, z, o}:
+      h => {==}
+
 # a map is its entries: two well formed maps with the same entries are the
 # same map, so a map has one shape, and one code, for its content
 law Crit.ext:
