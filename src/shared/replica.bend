@@ -14773,6 +14773,676 @@ def Line.get_grows(mach, d, kern, c, key):
     x
   )(e)
 
+# Outcomes of a step
+# ------------------
+# A run whose ledger holds what it added gives each of its requests an
+# outcome: the run writes it, or finds it, and then keeps it (Keep).
+
+# the words v are the code of an outcome
+def Outs.decodes(v: List<&2, U32>) -> Bool:
+  Maybe.is_some(&2, Out, Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, Some{v}))
+
+# that the log of the run r reads, in s, the outcome of the request i, once s
+# holds what r added
+def Outs.Has(-mach: Machine(), -d: Led(mach), -s: Led.L(mach, d), -i: Ledgers.Id, -r: Run<Led.L(mach, d)>) -> Type:
+  Exists(
+    List<&2, U32>,
+    v => {Outs.decodes(v) == True{}: Bool} & Keep.Has(mach, d, s, Log.out(i), v, r)
+  )
+
+# Outs.Has of the result m of a run, when there is one
+def Outs.Res(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -i: Ledgers.Id,
+  m: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{r}:
+      Outs.Has(mach, d, s, i, r)
+
+# the code of an outcome is the code of an outcome
+def Outs.code(+o: Out) -> {Outs.decodes(Out.code(o, [])) == True{}: Bool}:
+  %Equal.sym(
+    Maybe<&2, Out>,
+    Codes.Code.whole.read(~Out, ~Out.code, ~Out.code.read, Out.code(o, [])),
+    Some{o},
+    Codes.Code.whole_read(~Out, ~Out.code, ~Out.code.read, ~(x => r => Out.code_read(x, r)), o)
+  ): {Maybe.is_some(&2, Out, _) == True{}: Bool}
+  {==}
+
+# a kept outcome is an outcome
+def Outs.of_keep(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -i: Ledgers.Id,
+  v: List<&2, U32>,
+  dv: {Outs.decodes(v) == True{}: Bool},
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  ko: Keep.Out(mach, d, s, Log.out(i), v, m)
+) -> Outs.Res(mach, d, s, i, m):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{r}:
+      Tuple{v, Tuple{dv, ko}}
+
+# after a write that s holds, the log reads the key as written, in s (w: the
+# law of the write)
+def Outs.fin.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +t: Tip,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  +e: Trees.Edit,
+  w: {
+    Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Trees.Edit.root(e))(k)
+      == Trees.Look.of(Some{x}): Trees.Look
+  }
+    & (
+      @k2: List<&2, U32> -> {
+        Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool
+      } -> {
+        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Trees.Edit.root(e))(k2)
+          == Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Tip.log(t))(k2): Trees.Look
+      }
+    )
+) -> {Tip.get(~mach, ~d, s, Tip.logged(t, Trees.Edit.root(e)), k) == Some{x}: Maybe<&2, List<&2, U32>>}:
+  match w:
+    case Tuple{w1, w2}:
+      %Equal.sym(
+        Maybe<&2, Hashes.Hash>,
+        Tip.log(Tip.logged(t, Trees.Edit.root(e))),
+        Trees.Edit.root(e),
+        Keep.log_logged(t, Trees.Edit.root(e))
+      ): {Tree.get(~mach, ~d, s, _, k) == Some{x}: Maybe<&2, List<&2, U32>>}
+      %Equal.sym(
+        Trees.Look,
+        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Trees.Edit.root(e))(k),
+        Trees.Look.of(Some{x}),
+        w1
+      ): {Trees.Look.value(_) == Some{x}: Maybe<&2, List<&2, U32>>}
+      {==}
+
+# a write whose nodes s holds reads, in s, as written
+def Outs.fin(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +lr: Led.L(mach, d),
+  +t: Tip,
+  +a: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  +e: Trees.Edit,
+  ep: {Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}) == Some{e}: Maybe<&2, Trees.Edit>},
+  bd: Keep.Base(mach, d, s, Run{lr, t, a}),
+  hn: {Ext.holds(~mach, ~d, s, Trees.Edit.nodes(e)) == True{}: Bool},
+  ha: {Ext.holds(~mach, ~d, s, a) == True{}: Bool}
+) -> {Tip.get(~mach, ~d, s, Tip.logged(t, Trees.Edit.root(e)), k) == Some{x}: Maybe<&2, List<&2, U32>>}:
+  Outs.fin.of(
+    ~mach,
+    ~d,
+    s,
+    t,
+    k,
+    x,
+    e,
+    Hist.write(mach, d)(lr)(s)(Tip.log(t))(k)(Some{x})(e)(ep)(Keep.base_grows(~mach, ~d, s, Run{lr, t, a}, bd, ha))(
+      Ext.held(~mach, ~d, s, e, hn)
+    )
+  )
+
+# a write of a key reads as written
+def Outs.logged(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +lr: Led.L(mach, d),
+  +t: Tip,
+  +a: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  p: Maybe<&2, Trees.Edit>,
+  ep: {Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}) == p: Maybe<&2, Trees.Edit>},
+  bd: Keep.Base(mach, d, s, Run{lr, t, a})
+) -> Keep.Out(mach, d, s, k, x, Run.logged(~mach, ~d, lr, t, a, p)):
+  match p:
+    case None{}:
+      Unit{}
+    case Some{+e}:
+      +hh => Outs.fin(
+        ~mach,
+        ~d,
+        s,
+        lr,
+        t,
+        a,
+        k,
+        x,
+        e,
+        ep,
+        bd,
+        Ext.holds_left(~mach, ~d, s, Trees.Edit.nodes(e), a)(hh),
+        Ext.holds_right(~mach, ~d, s, Trees.Edit.nodes(e), a)(hh)
+      )
+
+# Run.add.at reads as written
+def Outs.add.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  r: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  bd: Keep.Base(mach, d, s, r)
+) -> Keep.Out(mach, d, s, k, x, Run.add.at(~mach, ~d, r, k, x, m)):
+  match r m:
+    case Run{+lr, +t, +a} Some{None{}}:
+      Outs.logged(~mach, ~d, s, lr, t, a, k, x, Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}), {==}, bd)
+    case y Some{Some{old}}:
+      Unit{}
+    case y None{}:
+      Unit{}
+
+# Run.add reads as written
+def Outs.add(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  bd: Keep.Base(mach, d, s, r)
+) -> Keep.Out(mach, d, s, k, x, Run.add(~mach, ~d, r, k, x)):
+  Outs.add.at(
+    ~mach,
+    ~d,
+    s,
+    r,
+    k,
+    x,
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), k),
+    bd
+  )
+
+# a refusal gives an outcome
+def Outs.stale(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.stale(~mach, ~d, r, i, a)):
+  Outs.of_keep(
+    mach,
+    d,
+    s,
+    i,
+    Out.code(Out.Stale{a}, []),
+    Outs.code(Out.Stale{a}),
+    Step.stale(~mach, ~d, r, i, a),
+    Outs.add(~mach, ~d, s, r, Log.out(i), Out.code(Out.Stale{a}, []), bd)
+  )
+
+# taking a request gives an outcome
+def Outs.taken.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +n: U32,
+  +vs: Maybe<&2, List<&2, String>>,
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.taken.at(~mach, ~d, r, i, a, n, vs)):
+  Outs.of_keep(
+    mach,
+    d,
+    s,
+    i,
+    Out.code(Out.Taken{a, n}, []),
+    Outs.code(Out.Taken{a, n}),
+    Step.taken.at(~mach, ~d, r, i, a, n, vs),
+    Keep.bind(
+      ~mach,
+      ~d,
+      s,
+      Log.out(i),
+      Out.code(Out.Taken{a, n}, []),
+      r,
+      Run.add(~mach, ~d, r, Log.out(i), Out.code(Out.Taken{a, n}, [])),
+      +r1 => Maybe.bind(
+        &2,
+        Run<Led.L(mach, d)>,
+        Run<Led.L(mach, d)>,
+        Run.add(
+          ~mach,
+          ~d,
+          r1,
+          Log.taken(n),
+          Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+        ),
+        r2 => Some{Run.next(Led.L(mach, d), r2, vs)}
+      ),
+      Outs.add(~mach, ~d, s, r, Log.out(i), Out.code(Out.Taken{a, n}, []), bd),
+      Ext.add(~mach, ~d, s, r, Log.out(i), Out.code(Out.Taken{a, n}, [])),
+      bd,
+      +r1 => +bd1 => kh1 => Keep.bind(
+        ~mach,
+        ~d,
+        s,
+        Log.out(i),
+        Out.code(Out.Taken{a, n}, []),
+        r1,
+        Run.add(
+          ~mach,
+          ~d,
+          r1,
+          Log.taken(n),
+          Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+        ),
+        r2 => Some{Run.next(Led.L(mach, d), r2, vs)},
+        Keep.add(
+          ~mach,
+          ~d,
+          s,
+          Log.out(i),
+          Out.code(Out.Taken{a, n}, []),
+          r1,
+          Log.taken(n),
+          Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, []),
+          bd1,
+          kh1
+        ),
+        Ext.add(
+          ~mach,
+          ~d,
+          s,
+          r1,
+          Log.taken(n),
+          Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+        ),
+        bd1,
+        r2 => bd2 => kh2 => Keep.step_next(~mach, ~d, s, Log.out(i), Out.code(Out.Taken{a, n}, []), r2, vs, kh2)
+      )
+    )
+  )
+
+# taking a request as the next number gives an outcome
+def Outs.taken(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +vs: Maybe<&2, List<&2, String>>,
+  bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.taken(~mach, ~d, r, i, a, vs)):
+  Outs.taken.at(~mach, ~d, s, r, i, a, Tip.count(Run.tip(Led.L(mach, d), r)), vs, bd)
+
+# a run then a step that gives an outcome gives an outcome
+def Outs.bind(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  -i: Ledgers.Id,
+  +r: Run<Led.L(mach, d)>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  -g: Run<Led.L(mach, d)> -> Maybe<&2, Run<Led.L(mach, d)>>,
+  gm: Ext.GainM(mach, d, s, r, m),
+  bd: Keep.Base(mach, d, s, r),
+  hg: @r1: Run<Led.L(mach, d)> -> Keep.Base(mach, d, s, r1) -> Outs.Res(mach, d, s, i, g(r1))
+) -> Outs.Res(mach, d, s, i, Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, g)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+r1}:
+      hg(r1)(Keep.base(~mach, ~d, s, r, r1, bd, gm))
+
+# a label on a taken request gives an outcome
+def Outs.labelled(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  v: Maybe<&2, Taken>,
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.labelled(~mach, ~d, r, i, a, m, v)):
+  match v:
+    case None{}:
+      Unit{}
+    case Some{+x}:
+      Outs.bind(
+        ~mach,
+        ~d,
+        s,
+        i,
+        r,
+        Run.add(~mach, ~d, r, Log.label(m), Ledgers.Id.code(Taken.id(x), [])),
+        r2 => Step.taken(~mach, ~d, r2, i, a, None{}),
+        Ext.add(~mach, ~d, s, r, Log.label(m), Ledgers.Id.code(Taken.id(x), [])),
+        bd,
+        +r2 => bd2 => Outs.taken(~mach, ~d, s, r2, i, a, None{}, bd2)
+      )
+
+# Step.label.at gives an outcome
+def Outs.label.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  k: Maybe<&2, Maybe<&2, Ledgers.Id>>,
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.label.at(~mach, ~d, r, i, a, m, k)):
+  match k:
+    case None{}:
+      Unit{}
+    case Some{Some{x}}:
+      Outs.stale(~mach, ~d, s, r, i, a, bd)
+    case Some{None{}}:
+      Shared.Bool.when_cases(
+        Maybe<&2, Run<Led.L(mach, d)>>,
+        z => Outs.Res(mach, d, s, i, z),
+        U32.is_eq(Tip.count(Run.tip(Led.L(mach, d), r)), 0),
+        u => Step.stale(~mach, ~d, r, i, a),
+        u => Step.labelled(
+          ~mach,
+          ~d,
+          r,
+          i,
+          a,
+          m,
+          Tip.taken(
+            ~mach,
+            ~d,
+            Run.ledger(Led.L(mach, d), r),
+            Run.tip(Led.L(mach, d), r),
+            U32.sub(Tip.count(Run.tip(Led.L(mach, d), r)), 1)
+          )
+        ),
+        e => Outs.stale(~mach, ~d, s, r, i, a, bd),
+        e => Outs.labelled(
+          ~mach,
+          ~d,
+          s,
+          r,
+          i,
+          a,
+          m,
+          Tip.taken(
+            ~mach,
+            ~d,
+            Run.ledger(Led.L(mach, d), r),
+            Run.tip(Led.L(mach, d), r),
+            U32.sub(Tip.count(Run.tip(Led.L(mach, d), r)), 1)
+          ),
+          bd
+        )
+      )
+
+# a request for a label gives an outcome
+def Outs.label(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.label(~mach, ~d, r, i, a, m)):
+  Outs.label.at(
+    ~mach,
+    ~d,
+    s,
+    r,
+    i,
+    a,
+    m,
+    Tip.known(
+      ~Ledgers.Id,
+      ~Ledgers.Id.code,
+      ~Ledgers.Id.code.read,
+      Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.label(m))
+    ),
+    bd
+  )
+
+# opening a sub line gives an outcome
+def Outs.opens(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +b: String,
+  +t: Tip,
+  +ns: List<&2, List<&2, U32>>,
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.opens(~mach, ~d, r, i, a, b, t, ns)):
+  +r0 = Run.over(~mach, ~d, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r)))
+  Outs.bind(
+    ~mach,
+    ~d,
+    s,
+    i,
+    r,
+    Run.add(~mach, ~d, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), [])),
+    r2 => Step.taken(~mach, ~d, r2, i, a, None{}),
+    Ext.transM(
+      ~mach,
+      ~d,
+      s,
+      r,
+      r0,
+      Run.add(~mach, ~d, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), [])),
+      Ext.over(~mach, ~d, s, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r))),
+      Ext.add(~mach, ~d, s, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), []))
+    ),
+    bd,
+    +r2 => bd2 => Outs.taken(~mach, ~d, s, r2, i, a, None{}, bd2)
+  )
+
+# an act of a kernel gives an outcome
+def Outs.act(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  m: Maybe<&2, Act>,
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Act.run(~mach, ~d, r, i, a, m)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Act.Stale{}}:
+      Outs.stale(~mach, ~d, s, r, i, a, bd)
+    case Some{Act.Label{x}}:
+      Outs.label(~mach, ~d, s, r, i, a, x, bd)
+    case Some{Act.Taken{+vs, +h, +ns}}:
+      Outs.taken(
+        ~mach,
+        ~d,
+        s,
+        Run.over(~mach, ~d, r, ns, h),
+        i,
+        a,
+        vs,
+        Keep.base(~mach, ~d, s, r, Run.over(~mach, ~d, r, ns, h), bd, Ext.over(~mach, ~d, s, r, ns, h))
+      )
+    case Some{Act.Opens{b, t, ns}}:
+      Outs.opens(~mach, ~d, s, r, i, a, b, t, ns, bd)
+
+# a request whose outcome the log holds keeps it, once its code is read (dm)
+def Outs.found(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +q: Machine.Q(mach),
+  +w: List<&2, U32>,
+  dm: Maybe<&2, Out>,
+  edm: {Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, Some{w}) == dm: Maybe<&2, Out>},
+  +em: {
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.out(i))
+      == Some{Some{w}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  },
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.fresh(~mach, ~d, ~kern, r, c, i, a, q, Some{dm})):
+  match dm:
+    case Some{x}:
+      Tuple{
+        w,
+        Tuple{
+          %Equal.sym(
+            Maybe<&2, Out>,
+            Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, Some{w}),
+            Some{x},
+            edm
+          ): {Maybe.is_some(&2, Out, _) == True{}: Bool}
+          {==},
+          +hh => Keep.found_back(
+            Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Tip.log(Run.tip(Led.L(mach, d), r)))(Log.out(i)),
+            w,
+            Hist.find(
+              ~mach,
+              ~d,
+              Run.ledger(Led.L(mach, d), r),
+              s,
+              Tip.log(Run.tip(Led.L(mach, d), r)),
+              Log.out(i),
+              Some{w},
+              Keep.base_grows(~mach, ~d, s, r, bd, hh)
+            )(em)
+          )
+        }
+      }
+    case None{}:
+      Outs.act(
+        ~mach,
+        ~d,
+        s,
+        r,
+        i,
+        a,
+        Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), r))(Run.tip(Led.L(mach, d), r))(c)(i)(q),
+        bd
+      )
+
+# a request gives an outcome, once the read of its outcome is known (fm)
+def Outs.fresh(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +q: Machine.Q(mach),
+  fm: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  em: {
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.out(i))
+      == fm: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  },
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.fresh(~mach, ~d, ~kern, r, c, i, a, q, Tip.known(~Out, ~Out.code, ~Out.code.read, fm))):
+  match fm:
+    case None{}:
+      Unit{}
+    case Some{None{}}:
+      Outs.act(
+        ~mach,
+        ~d,
+        s,
+        r,
+        i,
+        a,
+        Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), r))(Run.tip(Led.L(mach, d), r))(c)(i)(q),
+        bd
+      )
+    case Some{Some{+w}}:
+      Outs.found(
+        ~mach,
+        ~d,
+        ~kern,
+        s,
+        r,
+        c,
+        i,
+        a,
+        q,
+        w,
+        Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, Some{w}),
+        {==},
+        em,
+        bd
+      )
+
+# the request whose entry is known gives an outcome
+def Outs.one(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +a: Hashes.Hash,
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Machine.Q(mach),
+  eg: {
+    Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a})
+      == Some{Ledgers.Entry.Ask{i, time, q}}: Maybe<&2, Entry(mach)>
+  },
+  +bd: Keep.Base(mach, d, s, r)
+) -> Outs.Res(mach, d, s, i, Step.one(~mach, ~d, ~kern, r, c, a)):
+  %Equal.sym(
+    Maybe<&2, Entry(mach)>,
+    Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}),
+    Some{Ledgers.Entry.Ask{i, time, q}},
+    eg
+  ): Outs.Res(mach, d, s, i, Step.asked(~mach, ~d, ~kern, r, c, a, _))
+  Outs.fresh(
+    ~mach,
+    ~d,
+    ~kern,
+    s,
+    r,
+    c,
+    i,
+    a,
+    q,
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.out(i)),
+    {==},
+    bd
+  )
+
 # a step gives each of its requests an outcome: after a run whose ledger
 # holds each node that it added (as a landed step's does), the log holds an
 # outcome of the ID of each request of the step
