@@ -1768,6 +1768,160 @@ def Mst.ops(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>) -> T
     )
   )
 
+# Proofs of reads and writes
+# --------------------------
+
+# the value whose code m1 holds, m2 holds too, when m2 holds the words of m1
+def Mst.whole_kept(
+  m1: Maybe<&2, List<&2, U32>>,
+  -m2: Maybe<&2, List<&2, U32>>,
+  -n: Node,
+  hm: @w: List<&2, U32> -> {m1 == Some{w}: Maybe<&2, List<&2, U32>>} -> {m2 == Some{w}: Maybe<&2, List<&2, U32>>}
+) -> {
+  Codes.Code.whole.of(~Node, ~Node.code, ~Node.code.read, m1) == Some{n}: Maybe<&2, Node>
+} -> {Codes.Code.whole.of(~Node, ~Node.code, ~Node.code.read, m2) == Some{n}: Maybe<&2, Node>}:
+  match m1:
+    case None{}:
+      e => Empty.absurd(
+        {Codes.Code.whole.of(~Node, ~Node.code, ~Node.code.read, m2) == Some{n}: Maybe<&2, Node>},
+        Shared.Maybe.none_ne_some(Node, n, e)
+      )
+    case Some{w}:
+      %Equal.sym(Maybe<&2, List<&2, U32>>, m2, Some{w}, hm(w)({==})): (
+        {Codes.Code.whole.of(~Node, ~Node.code, ~Node.code.read, Some{w}) == Some{n}: Maybe<&2, Node>}
+          -> {Codes.Code.whole.of(~Node, ~Node.code, ~Node.code.read, _) == Some{n}: Maybe<&2, Node>}
+      )
+      e => e
+
+# a node that a depot gives, a depot that grows from it gives too
+def Mst.node_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  +a: S,
+  b: S,
+  +h: Hashes.Hash,
+  -n: Node,
+  gr: {grows(a, b) == True{}: Bool}
+) -> {Mst.node(~S, ~fetch, a, h) == Some{n}: Maybe<&2, Node>} -> {Mst.node(~S, ~fetch, b, h) == Some{n}: Maybe<&2, Node>}:
+  Mst.whole_kept(fetch(a)(h), fetch(b)(h), n, w => e => kept(a)(b)(h)(w)(gr)(e))
+
+# a node that a depot gives in a room, a depot that grows from it gives too
+def Mst.node_in_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  +a: S,
+  +b: S,
+  +h: Hashes.Hash,
+  +r: Room,
+  -n: Node,
+  gr: {grows(a, b) == True{}: Bool}
+) -> {
+  Mst.node.in(~S, ~fetch, a, h, r) == Some{n}: Maybe<&2, Node>
+} -> {Mst.node.in(~S, ~fetch, b, h, r) == Some{n}: Maybe<&2, Node>}:
+  Shared.Maybe.bind_kept(
+    Node,
+    Node,
+    Mst.node(~S, ~fetch, a, h),
+    Mst.node(~S, ~fetch, b, h),
+    m => Node.in(m, r),
+    m => Node.in(m, r),
+    n,
+    m => Mst.node_kept(~S, ~fetch, ~grows, ~kept, a, b, h, m, gr),
+    m => e => e
+  )
+
+# what a pick tells, it tells with any reader of subtrees that tells the same
+def Mst.look.pick_kept(
+  p: Pick,
+  -h: Hashes.Hash,
+  -l: Nat,
+  -k: List<&2, U32>,
+  -goa: Maybe<&2, Hashes.Hash> -> Room -> Look,
+  -gob: Maybe<&2, Hashes.Hash> -> Room -> Look,
+  -x: Maybe<&2, List<&2, U32>>,
+  hg: @m: Maybe<&2, Hashes.Hash> -> @r: Room -> {
+    Look.known(goa(m)(r)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  } -> {Look.known(gob(m)(r)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> {
+  Look.known(Mst.look.pick(p, h, l, k, goa)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {Look.known(Mst.look.pick(p, h, l, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match p:
+    case Pick.Hit{v}:
+      e => e
+    case Pick.Down{m, r}:
+      hg(m)(r)
+
+# what a read of a node tells, it tells of the same node, with a reader of
+# subtrees that tells the same
+def Mst.look.at_kept(
+  -h: Hashes.Hash,
+  na: Maybe<&2, Node>,
+  r: Room,
+  -nb: Maybe<&2, Node>,
+  k: List<&2, U32>,
+  -goa: Maybe<&2, Hashes.Hash> -> Room -> Look,
+  -gob: Maybe<&2, Hashes.Hash> -> Room -> Look,
+  -x: Maybe<&2, List<&2, U32>>,
+  hn: @n: Node -> {na == Some{n}: Maybe<&2, Node>} -> {nb == Some{n}: Maybe<&2, Node>},
+  hg: @m: Maybe<&2, Hashes.Hash> -> @r2: Room -> {
+    Look.known(goa(m)(r2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  } -> {Look.known(gob(m)(r2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> {
+  Look.known(Mst.look.at(h, na, r, k, goa)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {Look.known(Mst.look.at(h, nb, r, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match na r:
+    case None{} r0:
+      e => Empty.absurd(
+        {Look.known(Mst.look.at(h, nb, r0, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, x, e)
+      )
+    case Some{Node{+l, +left, +xs}} Room{+up, +lo, +hi}:
+      %Equal.sym(Maybe<&2, Node>, nb, Some{Node{l, left, xs}}, hn(Node{l, left, xs})({==})): (
+        {Look.known(Mst.look.at(h, Some{Node{l, left, xs}}, Room{up, lo, hi}, k, goa)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+          -> {Look.known(Mst.look.at(h, _, Room{up, lo, hi}, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+      )
+      Mst.look.pick_kept(Mst.pick(xs, left, l, lo, hi, k), h, l, k, goa, gob, x, hg)
+
+# what a read tells, a depot that grows from it tells too
+def Mst.look.go_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  f: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  +a: S,
+  +b: S,
+  +r: Room,
+  +k: List<&2, U32>,
+  -x: Maybe<&2, List<&2, U32>>,
+  +gr: {grows(a, b) == True{}: Bool}
+) -> {
+  Look.known(Mst.look.go(~S, ~fetch, f, a, r, m, k)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {Look.known(Mst.look.go(~S, ~fetch, f, b, r, m, k)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match f m:
+    case f0 None{}:
+      e => e
+    case 0n Some{h}:
+      e => e
+    case 1n+p Some{+h}:
+      Mst.look.at_kept(
+        h,
+        Mst.node.in(~S, ~fetch, a, h, r),
+        r,
+        Mst.node.in(~S, ~fetch, b, h, r),
+        k,
+        m2 => r2 => Mst.look.go(~S, ~fetch, p, a, r2, m2, k),
+        m2 => r2 => Mst.look.go(~S, ~fetch, p, b, r2, m2, k),
+        x,
+        n => Mst.node_in_kept(~S, ~fetch, ~grows, ~kept, a, b, h, r, n, gr),
+        m2 => r2 => Mst.look.go_kept(~S, ~fetch, ~grows, ~kept, p, m2, a, b, r2, k, x, gr)
+      )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
@@ -1775,6 +1929,9 @@ law Mst.reads_final:
   for ~grows: S -> S -> Bool
   for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   Laws.Final(S, grows, Mst.ops(~S, ~fetch))
+
+def Mst.reads_final(S, fetch, grows, kept):
+  h => k => a => b => x => gr => Mst.look.go_kept(~S, ~fetch, ~grows, ~kept, Mst.depth(), h, a, b, Room.top(), k, x, gr)
 
 # a write stays, in a depot that keeps what it holds
 law Mst.puts_final:
