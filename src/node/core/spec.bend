@@ -4457,6 +4457,242 @@ def Merge.pick_facts(
     case Pick.Clash{}:
       Merge.pick_facts.clash(~d, l, lc, hc, P, k, n, W1, Clash.names(~d, lc, hc, k), {==}, e1, wc)
 
+# the tree of the work after a take reads the resource as taken
+def Merge.take_hit(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +x: Maybe<&2, Requests.Res>,
+  +W1: Work<L(d)>,
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  +e1: {Merge.pick(~d, Work{lc, hc, P}, k, n, Pick.Take{x}) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n)) == Trees.Look.of(Res.value(x)): Trees.Look
+}:
+  Merge.writes_hit(
+    ~d,
+    lf,
+    Merge.root(~d, W1),
+    hc,
+    Key.res(n),
+    Res.value(x),
+    Merge.set_core(
+      ~d,
+      l,
+      lc,
+      hc,
+      P,
+      Key.res(n),
+      Res.value(x),
+      lf,
+      N,
+      W1,
+      Replicas.Tree.put(~Requests.Ask.machine(), ~d, lc, hc, Key.res(n), Res.value(x)),
+      {==},
+      e1,
+      wc,
+      wf,
+      held,
+      nd
+    )
+  )
+
+# a pick that clashes leaves the key of a resource as it was, once the clashes
+# that are open are read (mc)
+def Merge.pick_frame.clash.at(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +n0: Resources.Name,
+  +W1: Work<L(d)>,
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  mc: Maybe<&2, List<&2, Resources.Name>>,
+  +eb: {
+    Maybe.bind(
+      &2,
+      List<&2, Resources.Name>,
+      Work<L(d)>,
+      mc,
+      cs => Work.set(~d, Work{lc, hc, P}, Key.clashes(k), Clash.value(Clash.put(n, cs)))
+    )
+      == Some{W1}: Maybe<&2, Work<L(d)>>
+  },
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
+    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+}:
+  match mc:
+    case None{}:
+      Empty.absurd(
+        {
+          Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
+            == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+        },
+        Shared.Maybe.none_ne_some(Work<L(d)>, W1, eb)
+      )
+    case Some{+cs}:
+      Merge.writes_frame(
+        ~d,
+        lf,
+        Merge.root(~d, W1),
+        hc,
+        Key.clashes(k),
+        Clash.value(Clash.put(n, cs)),
+        Merge.set_core(
+          ~d,
+          l,
+          lc,
+          hc,
+          P,
+          Key.clashes(k),
+          Clash.value(Clash.put(n, cs)),
+          lf,
+          N,
+          W1,
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, lc, hc, Key.clashes(k), Clash.value(Clash.put(n, cs))),
+          {==},
+          eb,
+          wc,
+          wf,
+          held,
+          nd
+        ),
+        Key.res(n0),
+        {==}
+      )
+
+# what a pick of a merge does to the key of a resource n0 that it does not
+# write: it reads as it did
+def Merge.pick_frame(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +n0: Resources.Name,
+  p: Pick,
+  +W1: Work<L(d)>,
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  +e1: {Merge.pick(~d, Work{lc, hc, P}, k, n, p) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N),
+  +hk: {Shared.List.is_eq(~U32, ~U32.is_eq, Key.res(n), Key.res(n0)) == False{}: Bool}
+) -> {
+  Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, Merge.root(~d, W1), Key.res(n0))
+    == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, Key.res(n0)): Trees.Look
+}:
+  match p:
+    case Pick.Take{+x}:
+      Merge.writes_frame(
+        ~d,
+        lf,
+        Merge.root(~d, W1),
+        hc,
+        Key.res(n),
+        Res.value(x),
+        Merge.set_core(
+          ~d,
+          l,
+          lc,
+          hc,
+          P,
+          Key.res(n),
+          Res.value(x),
+          lf,
+          N,
+          W1,
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, lc, hc, Key.res(n), Res.value(x)),
+          {==},
+          e1,
+          wc,
+          wf,
+          held,
+          nd
+        ),
+        Key.res(n0),
+        hk
+      )
+    case Pick.Make{+h, +bytes}:
+      Merge.writes_frame(
+        ~d,
+        lf,
+        Merge.root(~d, W1),
+        hc,
+        Key.res(n),
+        Res.value(Some{Requests.Res{h, Ropes.Put.root(Ropes.Rope.of_bytes(bytes))}}),
+        Merge.set_core(
+          ~d,
+          l,
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)), lc),
+          hc,
+          List.append(&2, List<&2, U32>, P, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes))),
+          Key.res(n),
+          Res.value(Some{Requests.Res{h, Ropes.Put.root(Ropes.Rope.of_bytes(bytes))}}),
+          lf,
+          N,
+          W1,
+          Replicas.Tree.put(
+            ~Requests.Ask.machine(),
+            ~d,
+            Replicas.Led.puts(~Requests.Ask.machine(), ~d, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)), lc),
+            hc,
+            Key.res(n),
+            Res.value(Some{Requests.Res{h, Ropes.Put.root(Ropes.Rope.of_bytes(bytes))}})
+          ),
+          {==},
+          e1,
+          Merge.keep_puts(~d, l, lc, P, Ropes.Put.nodes(Ropes.Rope.of_bytes(bytes)), wc),
+          wf,
+          held,
+          nd
+        ),
+        Key.res(n0),
+        hk
+      )
+    case Pick.Clash{}:
+      Merge.pick_frame.clash.at(
+        ~d,
+        l,
+        lc,
+        hc,
+        P,
+        k,
+        n,
+        n0,
+        W1,
+        lf,
+        N,
+        Clash.names(~d, lc, hc, k),
+        e1,
+        wc,
+        wf,
+        held,
+        nd
+      )
+
 # MERGE-HELPERS-END
 
 # a merge never loses a change that only one side made: when the merge of a
