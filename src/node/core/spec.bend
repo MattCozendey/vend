@@ -2938,6 +2938,7 @@ law Merge.act_clashes:
 law Node.affects_holds:
   for ~d: Led()
   for ~kern: Kern(d)
+  for ~rules: Kernel.Rules(d, kern)
   for l: L(d)
   for view: List<&2, Formats.Cond>
   for b: Branch
@@ -2950,6 +2951,7 @@ law Node.affects_holds:
 law Node.affects_complete:
   for ~d: Led()
   for ~kern: Kern(d)
+  for ~rules: Kernel.Rules(d, kern)
   for l: L(d)
   for view: List<&2, Formats.Cond>
   for x: Touch
