@@ -2858,6 +2858,373 @@ def Mst.put_kept(
     case None{}:
       Mst.delete_kept(~S, ~fetch, ~grows, ~kept, Mst.depth(), h, a, b, Room.top(), k, Key.level(k), gr)
 
+# Proofs of writes
+# ----------------
+
+# the comparison c the other way round
+def Mst.flip(c: Cmp) -> Cmp:
+  match c:
+    case LT{}:
+      GT{}
+    case EQ{}:
+      EQ{}
+    case GT{}:
+      LT{}
+
+# a comparison that is LT is LT
+def Mst.lt_sound(c: Cmp) -> {Cmp.is_lt(c) == True{}: Bool} -> {c == LT{}: Cmp}:
+  match c:
+    case LT{}:
+      e => {==}
+    case EQ{}:
+      e => Empty.absurd({EQ{} == LT{}: Cmp}, Shared.Bool.false_ne_true(e))
+    case GT{}:
+      e => Empty.absurd({GT{} == LT{}: Cmp}, Shared.Bool.false_ne_true(e))
+
+# no comparison is two of LT, EQ and GT
+def Mst.cmp_disc(c: Cmp) -> Type:
+  match c:
+    case LT{}:
+      Unit
+    case EQ{}:
+      Empty
+    case GT{}:
+      Empty
+
+# LT is not EQ
+def Mst.lt_ne_eq(e: {LT{} == EQ{}: Cmp}) -> Empty:
+  %e: Mst.cmp_disc(_)
+  Unit{}
+
+# LT is not GT
+def Mst.lt_ne_gt(e: {LT{} == GT{}: Cmp}) -> Empty:
+  %e: Mst.cmp_disc(_)
+  Unit{}
+
+# EQ is not GT
+def Mst.eq_ne_gt(e: {EQ{} == GT{}: Cmp}) -> Empty:
+  %Equal.sym(Cmp, EQ{}, GT{}, e): Mst.cmp_disc(Mst.flip(_))
+  Unit{}
+
+# a comparison of numbers the other way round is flipped
+def Mst.nat_flip(a: Nat, b: Nat) -> {Nat.cmp(b, a) == Mst.flip(Nat.cmp(a, b)): Cmp}:
+  match a b:
+    case 0n 0n:
+      {==}
+    case 0n 1n+q:
+      {==}
+    case 1n+p 0n:
+      {==}
+    case 1n+p 1n+q:
+      Mst.nat_flip(p, q)
+
+# numbers that compare EQ are equal
+def Mst.nat_eq(a: Nat, b: Nat) -> {Nat.cmp(a, b) == EQ{}: Cmp} -> {a == b: Nat}:
+  match a b:
+    case 0n 0n:
+      e => {==}
+    case 0n 1n+q:
+      e => Empty.absurd({0n == 1n+q: Nat}, Mst.lt_ne_eq(e))
+    case 1n+p 0n:
+      e => Empty.absurd({1n+p == 0n: Nat}, Mst.eq_ne_gt(Equal.sym(Cmp, GT{}, EQ{}, e)))
+    case 1n+p 1n+q:
+      e => Equal.cong(Nat, Nat, n => 1n+n, p, q, Mst.nat_eq(p, q)(e))
+
+# LT on numbers is transitive
+def Mst.nat_trans(a: Nat, b: Nat, c: Nat) -> {Nat.cmp(a, b) == LT{}: Cmp} -> {Nat.cmp(b, c) == LT{}: Cmp} -> {
+  Nat.cmp(a, c) == LT{}: Cmp
+}:
+  match a b c:
+    case 0n 0n z:
+      e1 => e2 => Empty.absurd({Nat.cmp(0n, z) == LT{}: Cmp}, Mst.lt_ne_eq(Equal.sym(Cmp, EQ{}, LT{}, e1)))
+    case 0n 1n+q 0n:
+      e1 => e2 => Empty.absurd({Nat.cmp(0n, 0n) == LT{}: Cmp}, Mst.lt_ne_gt(Equal.sym(Cmp, GT{}, LT{}, e2)))
+    case 0n 1n+q 1n+r:
+      e1 => e2 => {==}
+    case 1n+p 0n z:
+      e1 => e2 => Empty.absurd({Nat.cmp(1n+p, z) == LT{}: Cmp}, Mst.lt_ne_gt(Equal.sym(Cmp, GT{}, LT{}, e1)))
+    case 1n+p 1n+q 0n:
+      e1 => e2 => Empty.absurd({Nat.cmp(1n+p, 0n) == LT{}: Cmp}, Mst.lt_ne_gt(Equal.sym(Cmp, GT{}, LT{}, e2)))
+    case 1n+p 1n+q 1n+r:
+      Mst.nat_trans(p, q, r)
+
+# a comparison of words the other way round is flipped
+def Mst.u32_flip(+x: U32, +y: U32) -> {U32.cmp(y, x) == Mst.flip(U32.cmp(x, y)): Cmp}:
+  %Equal.sym(Cmp, U32.cmp(y, x), Nat.cmp(U32.to_nat(y), U32.to_nat(x)), Shared.U32.cmp_to_nat(y, x)): {
+    _ == Mst.flip(U32.cmp(x, y)): Cmp
+  }
+  %Equal.sym(Cmp, U32.cmp(x, y), Nat.cmp(U32.to_nat(x), U32.to_nat(y)), Shared.U32.cmp_to_nat(x, y)): {
+    Nat.cmp(U32.to_nat(y), U32.to_nat(x)) == Mst.flip(_): Cmp
+  }
+  Mst.nat_flip(U32.to_nat(x), U32.to_nat(y))
+
+# words that compare EQ are equal
+def Mst.u32_eq(+x: U32, +y: U32) -> {U32.cmp(x, y) == EQ{}: Cmp} -> {x == y: U32}:
+  e => Shared.U32.is_eq_sound(x, y)(Equal.cong(Cmp, Bool, Cmp.is_eq, U32.cmp(x, y), EQ{}, e))
+
+# LT on words is transitive
+def Mst.u32_trans(+x: U32, +y: U32, +z: U32) -> {U32.cmp(x, y) == LT{}: Cmp} -> {U32.cmp(y, z) == LT{}: Cmp} -> {
+  U32.cmp(x, z) == LT{}: Cmp
+}:
+  e1 => e2 => Equal.trans(
+    Cmp,
+    U32.cmp(x, z),
+    Nat.cmp(U32.to_nat(x), U32.to_nat(z)),
+    LT{},
+    Shared.U32.cmp_to_nat(x, z),
+    Mst.nat_trans(U32.to_nat(x), U32.to_nat(y), U32.to_nat(z))(
+      Equal.trans(
+        Cmp,
+        Nat.cmp(U32.to_nat(x), U32.to_nat(y)),
+        U32.cmp(x, y),
+        LT{},
+        Equal.sym(Cmp, U32.cmp(x, y), Nat.cmp(U32.to_nat(x), U32.to_nat(y)), Shared.U32.cmp_to_nat(x, y)),
+        e1
+      )
+    )(
+      Equal.trans(
+        Cmp,
+        Nat.cmp(U32.to_nat(y), U32.to_nat(z)),
+        U32.cmp(y, z),
+        LT{},
+        Equal.sym(Cmp, U32.cmp(y, z), Nat.cmp(U32.to_nat(y), U32.to_nat(z)), Shared.U32.cmp_to_nat(y, z)),
+        e2
+      )
+    )
+  )
+
+# a word compares EQ to itself
+def Mst.u32_refl(x: U32) -> {U32.cmp(x, x) == EQ{}: Cmp}:
+  Shared.U32.cmp_refl(x)
+
+# Key.cmp of two lists that start with x and y, once x compares to y as c
+def Mst.key_step(+c: Cmp, ra: List<&2, U32>, rb: List<&2, U32>) -> Cmp:
+  Shared.Bool.when(Cmp, Cmp.is_eq(c), u => Key.cmp(ra, rb), u => c)
+
+# a key step flips with its parts
+def Mst.key_flip.step(c: Cmp, k: Cmp, -kf: Cmp, e: {kf == Mst.flip(k): Cmp}) -> {
+  Shared.Bool.when(Cmp, Cmp.is_eq(Mst.flip(c)), u => kf, u => Mst.flip(c))
+    == Mst.flip(Shared.Bool.when(Cmp, Cmp.is_eq(c), u => k, u => c)): Cmp
+}:
+  match c:
+    case LT{}:
+      {==}
+    case EQ{}:
+      e
+    case GT{}:
+      {==}
+
+# a comparison of keys the other way round is flipped
+def Mst.key_flip(a: List<&2, U32>, b: List<&2, U32>) -> {Key.cmp(b, a) == Mst.flip(Key.cmp(a, b)): Cmp}:
+  match a b:
+    case Nil{} Nil{}:
+      {==}
+    case Nil{} Con{y, rb}:
+      {==}
+    case Con{x, ra} Nil{}:
+      {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      %Equal.sym(Cmp, U32.cmp(y, x), Mst.flip(U32.cmp(x, y)), Mst.u32_flip(x, y)): {
+        Shared.Bool.when(Cmp, Cmp.is_eq(_), u => Key.cmp(rb, ra), u => _)
+          == Mst.flip(Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(x, y)), u => Key.cmp(ra, rb), u => U32.cmp(x, y))): Cmp
+      }
+      Mst.key_flip.step(U32.cmp(x, y), Key.cmp(ra, rb), Key.cmp(rb, ra), Mst.key_flip(ra, rb))
+
+# Mst.key_eq once x compares to y as c
+def Mst.key_eq.step(
+  c: Cmp,
+  +x: U32,
+  +y: U32,
+  -ra: List<&2, U32>,
+  -rb: List<&2, U32>,
+  ec: {U32.cmp(x, y) == c: Cmp},
+  ih: {Key.cmp(ra, rb) == EQ{}: Cmp} -> {ra == rb: List<&2, U32>}
+) -> {Shared.Bool.when(Cmp, Cmp.is_eq(c), u => Key.cmp(ra, rb), u => c) == EQ{}: Cmp} -> {
+  x <> ra == y <> rb: List<&2, U32>
+}:
+  match c:
+    case LT{}:
+      e => Empty.absurd({x <> ra == y <> rb: List<&2, U32>}, Mst.lt_ne_eq(e))
+    case EQ{}:
+      e =>
+        %Mst.u32_eq(x, y)(ec): {x <> ra == _ <> rb: List<&2, U32>}
+        %ih(e): {x <> ra == x <> _: List<&2, U32>}
+        {==}
+    case GT{}:
+      e => Empty.absurd({x <> ra == y <> rb: List<&2, U32>}, Mst.eq_ne_gt(Equal.sym(Cmp, GT{}, EQ{}, e)))
+
+# keys that compare EQ are equal
+def Mst.key_eq(a: List<&2, U32>, b: List<&2, U32>) -> {Key.cmp(a, b) == EQ{}: Cmp} -> {a == b: List<&2, U32>}:
+  match a b:
+    case Nil{} Nil{}:
+      e => {==}
+    case Nil{} Con{y, rb}:
+      e => Empty.absurd({Nil{} == y <> rb: List<&2, U32>}, Mst.lt_ne_eq(e))
+    case Con{x, ra} Nil{}:
+      e => Empty.absurd({x <> ra == Nil{}: List<&2, U32>}, Mst.eq_ne_gt(Equal.sym(Cmp, GT{}, EQ{}, e)))
+    case Con{+x, +ra} Con{+y, +rb}:
+      Mst.key_eq.step(U32.cmp(x, y), x, y, ra, rb, {==}, Mst.key_eq(ra, rb))
+
+# a key compares EQ to itself
+def Mst.key_refl(a: List<&2, U32>) -> {Key.cmp(a, a) == EQ{}: Cmp}:
+  match a:
+    case Nil{}:
+      {==}
+    case Con{+x, +ra}:
+      %Equal.sym(Cmp, U32.cmp(x, x), EQ{}, Mst.u32_refl(x)): {
+        Shared.Bool.when(Cmp, Cmp.is_eq(_), u => Key.cmp(ra, ra), u => _) == EQ{}: Cmp
+      }
+      Mst.key_refl(ra)
+
+# Mst.key_trans once the heads compare as cxy, cyz and cxz
+def Mst.key_trans.step(
+  cxy: Cmp,
+  cyz: Cmp,
+  +x: U32,
+  +y: U32,
+  +z: U32,
+  -ra: List<&2, U32>,
+  -rb: List<&2, U32>,
+  -rc: List<&2, U32>,
+  exy: {U32.cmp(x, y) == cxy: Cmp},
+  eyz: {U32.cmp(y, z) == cyz: Cmp},
+  ih: {Key.cmp(ra, rb) == LT{}: Cmp} -> {Key.cmp(rb, rc) == LT{}: Cmp} -> {Key.cmp(ra, rc) == LT{}: Cmp}
+) -> {Mst.key_step(cxy, ra, rb) == LT{}: Cmp} -> {Mst.key_step(cyz, rb, rc) == LT{}: Cmp} -> {
+  Mst.key_step(U32.cmp(x, z), ra, rc) == LT{}: Cmp
+}:
+  match cxy cyz:
+    case LT{} LT{}:
+      e1 => e2 =>
+        %Equal.sym(Cmp, U32.cmp(x, z), LT{}, Mst.u32_trans(x, y, z)(exy)(eyz)): {Mst.key_step(_, ra, rc) == LT{}: Cmp}
+        {==}
+    case LT{} EQ{}:
+      e1 => e2 =>
+        %Mst.u32_eq(y, z)(eyz): {Mst.key_step(U32.cmp(x, _), ra, rc) == LT{}: Cmp}
+        %Equal.sym(Cmp, U32.cmp(x, y), LT{}, exy): {Mst.key_step(_, ra, rc) == LT{}: Cmp}
+        {==}
+    case EQ{} LT{}:
+      e1 => e2 =>
+        %Equal.sym(U32, x, y, Mst.u32_eq(x, y)(exy)): {Mst.key_step(U32.cmp(_, z), ra, rc) == LT{}: Cmp}
+        %Equal.sym(Cmp, U32.cmp(y, z), LT{}, eyz): {Mst.key_step(_, ra, rc) == LT{}: Cmp}
+        {==}
+    case EQ{} EQ{}:
+      e1 => e2 =>
+        %Equal.sym(U32, x, y, Mst.u32_eq(x, y)(exy)): {Mst.key_step(U32.cmp(_, z), ra, rc) == LT{}: Cmp}
+        %Equal.sym(U32, y, z, Mst.u32_eq(y, z)(eyz)): {Mst.key_step(U32.cmp(_, z), ra, rc) == LT{}: Cmp}
+        %Equal.sym(Cmp, U32.cmp(z, z), EQ{}, Mst.u32_refl(z)): {Mst.key_step(_, ra, rc) == LT{}: Cmp}
+        ih(e1)(e2)
+    case GT{} c2:
+      e1 => e2 => Empty.absurd(
+        {Mst.key_step(U32.cmp(x, z), ra, rc) == LT{}: Cmp},
+        Mst.lt_ne_gt(Equal.sym(Cmp, GT{}, LT{}, e1))
+      )
+    case LT{} GT{}:
+      e1 => e2 => Empty.absurd(
+        {Mst.key_step(U32.cmp(x, z), ra, rc) == LT{}: Cmp},
+        Mst.lt_ne_gt(Equal.sym(Cmp, GT{}, LT{}, e2))
+      )
+    case EQ{} GT{}:
+      e1 => e2 => Empty.absurd(
+        {Mst.key_step(U32.cmp(x, z), ra, rc) == LT{}: Cmp},
+        Mst.lt_ne_gt(Equal.sym(Cmp, GT{}, LT{}, e2))
+      )
+
+# LT on keys is transitive
+def Mst.key_trans(a: List<&2, U32>, b: List<&2, U32>, c: List<&2, U32>) -> {Key.cmp(a, b) == LT{}: Cmp} -> {
+  Key.cmp(b, c) == LT{}: Cmp
+} -> {Key.cmp(a, c) == LT{}: Cmp}:
+  match a b c:
+    case Nil{} Nil{} z:
+      e1 => e2 => Empty.absurd({Key.cmp(Nil{}, z) == LT{}: Cmp}, Mst.lt_ne_eq(Equal.sym(Cmp, EQ{}, LT{}, e1)))
+    case Nil{} Con{y, rb} Nil{}:
+      e1 => e2 => Empty.absurd({Key.cmp(Nil{}, Nil{}) == LT{}: Cmp}, Mst.lt_ne_gt(Equal.sym(Cmp, GT{}, LT{}, e2)))
+    case Nil{} Con{y, rb} Con{z, rc}:
+      e1 => e2 => {==}
+    case Con{x, ra} Nil{} z:
+      e1 => e2 => Empty.absurd({Key.cmp(x <> ra, z) == LT{}: Cmp}, Mst.lt_ne_gt(Equal.sym(Cmp, GT{}, LT{}, e1)))
+    case Con{x, ra} Con{y, rb} Nil{}:
+      e1 => e2 => Empty.absurd({Key.cmp(x <> ra, Nil{}) == LT{}: Cmp}, Mst.lt_ne_gt(Equal.sym(Cmp, GT{}, LT{}, e2)))
+    case Con{+x, +ra} Con{+y, +rb} Con{+z, +rc}:
+      Mst.key_trans.step(U32.cmp(x, y), U32.cmp(y, z), x, y, z, ra, rb, rc, {==}, {==}, Mst.key_trans(ra, rb, rc))
+
+# Key.is_lt is the LT of Key.cmp, once x compares to y as c
+def Mst.key_lt.step(c: Cmp, -k: Cmp, -b: Bool, e: {Cmp.is_lt(k) == b: Bool}) -> {
+  Cmp.is_lt(Shared.Bool.when(Cmp, Cmp.is_eq(c), u => k, u => c)) == Bool.or(Cmp.is_lt(c), Bool.and(Cmp.is_eq(c), b)): Bool
+}:
+  match c:
+    case LT{}:
+      {==}
+    case EQ{}:
+      e
+    case GT{}:
+      {==}
+
+# Key.is_lt is the LT of Key.cmp
+def Mst.key_lt(a: List<&2, U32>, b: List<&2, U32>) -> {Cmp.is_lt(Key.cmp(a, b)) == Key.is_lt(a, b): Bool}:
+  match a b:
+    case Nil{} Nil{}:
+      {==}
+    case Nil{} Con{y, rb}:
+      {==}
+    case Con{x, ra} Nil{}:
+      {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      Mst.key_lt.step(U32.cmp(x, y), Key.cmp(ra, rb), Key.is_lt(ra, rb), Mst.key_lt(ra, rb))
+
+# a key before another compares LT
+def Mst.key_lt_of(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.is_lt(a, b) == True{}: Bool} -> {Key.cmp(a, b) == LT{}: Cmp}:
+  e => Mst.lt_sound(Key.cmp(a, b))(Equal.trans(Bool, Cmp.is_lt(Key.cmp(a, b)), Key.is_lt(a, b), True{}, Mst.key_lt(a, b), e))
+
+# a key that compares LT is before
+def Mst.key_is_lt(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.cmp(a, b) == LT{}: Cmp} -> {Key.is_lt(a, b) == True{}: Bool}:
+  e =>
+    %Mst.key_lt(a, b): {_ == True{}: Bool}
+    %Equal.sym(Cmp, Key.cmp(a, b), LT{}, e): {Cmp.is_lt(_) == True{}: Bool}
+    {==}
+
+# a key that compares GT to another is after it
+def Mst.key_gt_lt(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.cmp(a, b) == GT{}: Cmp} -> {Key.cmp(b, a) == LT{}: Cmp}:
+  e =>
+    %Equal.sym(Cmp, Key.cmp(b, a), Mst.flip(Key.cmp(a, b)), Mst.key_flip(a, b)): {_ == LT{}: Cmp}
+    %Equal.sym(Cmp, Key.cmp(a, b), GT{}, e): {Mst.flip(_) == LT{}: Cmp}
+    {==}
+
+# a key that compares LT to another, the other compares GT to it
+def Mst.key_lt_gt(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.cmp(a, b) == LT{}: Cmp} -> {Key.cmp(b, a) == GT{}: Cmp}:
+  e =>
+    %Equal.sym(Cmp, Key.cmp(b, a), Mst.flip(Key.cmp(a, b)), Mst.key_flip(a, b)): {_ == GT{}: Cmp}
+    %Equal.sym(Cmp, Key.cmp(a, b), LT{}, e): {Mst.flip(_) == GT{}: Cmp}
+    {==}
+
+# Key.is_lt is transitive
+def Mst.key_lt_trans(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>) -> {Key.is_lt(a, b) == True{}: Bool} -> {
+  Key.is_lt(b, c) == True{}: Bool
+} -> {Key.is_lt(a, c) == True{}: Bool}:
+  e1 => e2 => Mst.key_is_lt(a, c)(Mst.key_trans(a, b, c)(Mst.key_lt_of(a, b)(e1))(Mst.key_lt_of(b, c)(e2)))
+
+# Shared.List.is_eq calls a key the same as one equal to it
+def Mst.key_ne.of(+k: List<&2, U32>, -k2: List<&2, U32>, e: {k2 == k: List<&2, U32>}) -> {
+  True{} == Shared.List.is_eq(~U32, ~U32.is_eq, k, k2): Bool
+}:
+  %Equal.sym(List<&2, U32>, k2, k, e): {True{} == Shared.List.is_eq(~U32, ~U32.is_eq, k, _): Bool}
+  Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, k, k), True{}, Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), k))
+
+# two keys that Shared.List.is_eq calls different do not compare EQ
+def Mst.key_ne(+k: List<&2, U32>, +k2: List<&2, U32>) -> {
+  Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool
+} -> {Key.cmp(k2, k) == EQ{}: Cmp} -> Empty:
+  ne => e =>
+    Shared.Bool.true_ne_false(
+      Equal.trans(
+        Bool,
+        True{},
+        Shared.List.is_eq(~U32, ~U32.is_eq, k, k2),
+        False{},
+        Mst.key_ne.of(k, k2, Mst.key_eq(k2, k)(e)),
+        ne
+      )
+    )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
