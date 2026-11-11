@@ -6781,6 +6781,153 @@ def Crit.get_lookup.lo(~V: Data, +m: Crit<V>, +lo: Nat, +k: List<&2, U32>) -> {C
     )
   )
 
+# an end that is the first unless the second is some passes a test when the
+# first does
+def Crit.or_pick_none(-V: Data, eb: Maybe<&2, V>, ea: Maybe<&2, V>, -x: Bool) -> {Bool.or(Maybe.is_none(&2, V, ea), x) == True{}: Bool} -> {
+  Bool.or(Maybe.is_none(&2, V, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea)), x) == True{}: Bool
+}:
+  match eb:
+    case None{}:
+      h => h
+    case Some{w}:
+      h => {==}
+
+# the difference of two forks whose reps do not differ before both bits
+# passes p when a does, by how the bits compare (c)
+def Crit.minus_at_all(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +g: G, c: Cmp) -> {Crit.all(~V, ~G, ~p, Crit.Fork{ra, pa, ea, za, oa}, g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.minus(V, za, zb), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.minus(V, oa, ob), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), g) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.minus.at(V, c, ra, pa, ea, rb, pb, eb, u2 => Crit.minus(V, za, zb), u2 => Crit.minus(V, oa, ob), u2 => Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), za, oa), g) == True{}: Bool}:
+  match c:
+    case EQ{}:
+      +h => i1 => i2 => i3 => i4 => i5 => i6 => Crit.mk_all(~V, ~G, ~p, ra, pa, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), Crit.minus(V, za, zb), Crit.minus(V, oa, ob), g)(
+        Crit.or_pick_none(V, eb, ea, p(g)(ra))(Crit.all.hit(~V, ~G, ~p, ra, pa, ea, za, oa, g)(h))
+      )(i1)(i2)
+    case LT{}:
+      +h => i1 => i2 => i3 => i4 => i5 => i6 => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+        Key.bit(rb, pa),
+        u => Crit.mk(V, ra, pa, ea, za, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob})),
+        u => Crit.mk(V, ra, pa, ea, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), oa),
+        t3 => Crit.mk_all(~V, ~G, ~p, ra, pa, ea, za, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), g)(Crit.all.hit(~V, ~G, ~p, ra, pa, ea, za, oa, g)(h))(Crit.all.z(~V, ~G, ~p, ra, pa, ea, za, oa, g)(h))(i4),
+        t3 => Crit.mk_all(~V, ~G, ~p, ra, pa, ea, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), oa, g)(Crit.all.hit(~V, ~G, ~p, ra, pa, ea, za, oa, g)(h))(i3)(Crit.all.o(~V, ~G, ~p, ra, pa, ea, za, oa, g)(h))
+      )
+    case GT{}:
+      h => i1 => i2 => i3 => i4 => i5 => i6 => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+        Key.bit(ra, pb),
+        u => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob),
+        u => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb),
+        t3 => i6,
+        t3 => i5
+      )
+
+# the difference of two maps holds only keys of the first
+def Crit.minus_all(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +a: Crit<V>, +b: Crit<V>, +g: G) -> {Crit.all(~V, ~G, ~p, a, g) == True{}: Bool} -> {
+  Crit.all(~V, ~G, ~p, Crit.minus(V, a, b), g) == True{}: Bool
+}:
+  match a b:
+    case Crit.Tip{} Crit.Tip{}:
+      h => {==}
+    case Crit.Tip{} Crit.Leaf{k2, w2}:
+      h => {==}
+    case Crit.Tip{} Crit.Fork{r2, p2, e2, z2, o2}:
+      h => {==}
+    case Crit.Leaf{k, v} Crit.Tip{}:
+      h => h
+    case Crit.Fork{ra, pa, ea, za, oa} Crit.Tip{}:
+      h => h
+    case Crit.Leaf{+k, +v} Crit.Leaf{+k2, +w}:
+      h => Shared.Bool.when_cases(Crit<V>, t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool}, Crit.has(V, Crit.Leaf{k2, w}, k), u => Crit.Tip{}, u => Crit.Leaf{k, v}, t1 => {==}, t1 => h)
+    case Crit.Leaf{+k, +v} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      h => Shared.Bool.when_cases(Crit<V>, t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool}, Crit.has(V, Crit.Fork{rb, pb, eb, zb, ob}, k), u => Crit.Tip{}, u => Crit.Leaf{k, v}, t1 => {==}, t1 => h)
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Leaf{+k, +w}:
+      h => Crit.drop_all(~V, ~G, ~p, Crit.Fork{ra, pa, ea, za, oa}, 0n, Cur.of(k), k, g)(h)
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      +h => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.all(~V, ~G, ~p, t, g) == True{}: Bool},
+        Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)),
+        u => Crit.Fork{ra, pa, ea, za, oa},
+        u => Crit.minus.at(V, Nat.cmp(pa, pb), ra, pa, ea, rb, pb, eb, u2 => Crit.minus(V, za, zb), u2 => Crit.minus(V, oa, ob), u2 => Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), za, oa),
+        t => h,
+        t => Crit.minus_at_all(~V, ~G, ~p, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, g, Nat.cmp(pa, pb))(h)(Crit.minus_all(~V, ~G, ~p, za, zb, g)(Crit.all.z(~V, ~G, ~p, ra, pa, ea, za, oa, g)(h)))(
+          Crit.minus_all(~V, ~G, ~p, oa, ob, g)(Crit.all.o(~V, ~G, ~p, ra, pa, ea, za, oa, g)(h))
+        )(Crit.minus_all(~V, ~G, ~p, za, b, g)(Crit.all.z(~V, ~G, ~p, ra, pa, ea, za, oa, g)(h)))(Crit.minus_all(~V, ~G, ~p, oa, b, g)(Crit.all.o(~V, ~G, ~p, ra, pa, ea, za, oa, g)(h)))(
+          Crit.minus_all(~V, ~G, ~p, a, zb, g)(h)
+        )(Crit.minus_all(~V, ~G, ~p, a, ob, g)(h))
+      )
+
+# the difference of two well formed forks whose reps do not differ before
+# both bits is well formed, by how the bits compare (c)
+def Crit.minus_at_wf(~V: Data, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +la: Nat, c: Cmp) -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, la) == True{}: Bool} -> {Crit.wf(~V, Crit.minus(V, za, zb), 1n+pa) == True{}: Bool} -> {Crit.wf(~V, Crit.minus(V, oa, ob), 1n+pa) == True{}: Bool} -> {Crit.wf(~V, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), 1n+pa) == True{}: Bool} -> {Crit.wf(~V, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), 1n+pa) == True{}: Bool} -> {Crit.wf(~V, Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), la) == True{}: Bool} -> {Crit.wf(~V, Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), la) == True{}: Bool} -> {Crit.wf(~V, Crit.minus.at(V, c, ra, pa, ea, rb, pb, eb, u2 => Crit.minus(V, za, zb), u2 => Crit.minus(V, oa, ob), u2 => Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), za, oa), la) == True{}: Bool}:
+  match c:
+    case EQ{}:
+      +h => w1 => w2 => w3 => w4 => w5 => w6 => Crit.mk_wf(~V, ra, pa, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), Crit.minus(V, za, zb), Crit.minus(V, oa, ob), la)(Crit.wf.le(~V, ra, pa, ea, za, oa, la)(h))(
+        Crit.or_pick_none(V, eb, ea, Nat.is_eq(List.length(&2, Bool, Key.bits(ra)), pa))(Crit.rep_or(V, ra, pa, ea, za)(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, la)(h)))
+      )(Crit.minus_all(~V, ~Place, ~Place.has, za, zb, Place{ra, pa, False{}})(Crit.wf.all_z(~V, ra, pa, ea, za, oa, la)(h)))(Crit.minus_all(~V, ~Place, ~Place.has, oa, ob, Place{ra, pa, True{}})(Crit.wf.all_o(~V, ra, pa, ea, za, oa, la)(h)))(w1)(w2)
+    case LT{}:
+      +h => w1 => w2 => +w3 => +w4 => w5 => w6 => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.wf(~V, t, la) == True{}: Bool},
+        Key.bit(rb, pa),
+        u => Crit.mk(V, ra, pa, ea, za, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob})),
+        u => Crit.mk(V, ra, pa, ea, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), oa),
+        t3 => Crit.mk_wf(~V, ra, pa, ea, za, Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), la)(Crit.wf.le(~V, ra, pa, ea, za, oa, la)(h))(Crit.rep_or(V, ra, pa, ea, za)(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, la)(h)))(Crit.wf.all_z(~V, ra, pa, ea, za, oa, la)(h))(
+          Crit.minus_all(~V, ~Place, ~Place.has, oa, Crit.Fork{rb, pb, eb, zb, ob}, Place{ra, pa, True{}})(Crit.wf.all_o(~V, ra, pa, ea, za, oa, la)(h))
+        )(Crit.wf.wf_z(~V, ra, pa, ea, za, oa, la)(h))(w4),
+        t3 => Crit.mk_wf(~V, ra, pa, ea, Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), oa, la)(Crit.wf.le(~V, ra, pa, ea, za, oa, la)(h))(Crit.rep_or(V, ra, pa, ea, za)(Crit.wf.rep_ok(~V, ra, pa, ea, za, oa, la)(h)))(
+          Crit.minus_all(~V, ~Place, ~Place.has, za, Crit.Fork{rb, pb, eb, zb, ob}, Place{ra, pa, False{}})(Crit.wf.all_z(~V, ra, pa, ea, za, oa, la)(h))
+        )(Crit.wf.all_o(~V, ra, pa, ea, za, oa, la)(h))(w3)(Crit.wf.wf_o(~V, ra, pa, ea, za, oa, la)(h))
+      )
+    case GT{}:
+      h => w1 => w2 => w3 => w4 => +w5 => +w6 => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.wf(~V, t, la) == True{}: Bool},
+        Key.bit(ra, pb),
+        u => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob),
+        u => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb),
+        t3 => w6,
+        t3 => w5
+      )
+
+# the difference of two well formed maps is well formed
+def Crit.minus_go_wf(~V: Data, +a: Crit<V>, +b: Crit<V>, +la: Nat, +lb: Nat) -> {Crit.wf(~V, a, la) == True{}: Bool} -> {Crit.wf(~V, b, lb) == True{}: Bool} -> {
+  Crit.wf(~V, Crit.minus(V, a, b), la) == True{}: Bool
+}:
+  match a b:
+    case Crit.Tip{} Crit.Tip{}:
+      ha => hb => {==}
+    case Crit.Tip{} Crit.Leaf{k2, w2}:
+      ha => hb => {==}
+    case Crit.Tip{} Crit.Fork{r2, p2, e2, z2, o2}:
+      ha => hb => {==}
+    case Crit.Leaf{k, v} Crit.Tip{}:
+      ha => hb => {==}
+    case Crit.Fork{ra, pa, ea, za, oa} Crit.Tip{}:
+      ha => hb => ha
+    case Crit.Leaf{+k, +v} Crit.Leaf{+k2, +w}:
+      ha => hb => Shared.Bool.when_cases(Crit<V>, t => {Crit.wf(~V, t, la) == True{}: Bool}, Crit.has(V, Crit.Leaf{k2, w}, k), u => Crit.Tip{}, u => Crit.Leaf{k, v}, t1 => {==}, t1 => {==})
+    case Crit.Leaf{+k, +v} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      ha => hb => Shared.Bool.when_cases(Crit<V>, t => {Crit.wf(~V, t, la) == True{}: Bool}, Crit.has(V, Crit.Fork{rb, pb, eb, zb, ob}, k), u => Crit.Tip{}, u => Crit.Leaf{k, v}, t1 => {==}, t1 => {==})
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Leaf{+k, +w}:
+      ha => hb => Crit.drop_go_wf(~V, Crit.Fork{ra, pa, ea, za, oa}, la, 0n, Cur.of(k), k)(ha)
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      +ha => +hb => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.wf(~V, t, la) == True{}: Bool},
+        Bool.and(Crit.above(Key.diff(ra, rb), pa), Crit.above(Key.diff(ra, rb), pb)),
+        u => Crit.Fork{ra, pa, ea, za, oa},
+        u => Crit.minus.at(V, Nat.cmp(pa, pb), ra, pa, ea, rb, pb, eb, u2 => Crit.minus(V, za, zb), u2 => Crit.minus(V, oa, ob), u2 => Crit.minus(V, za, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, oa, Crit.Fork{rb, pb, eb, zb, ob}), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, zb), u2 => Crit.minus(V, Crit.Fork{ra, pa, ea, za, oa}, ob), za, oa),
+        t => ha,
+        t => Crit.minus_at_wf(~V, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, la, Nat.cmp(pa, pb))(ha)(
+          Crit.minus_go_wf(~V, za, zb, 1n+pa, 1n+pb)(Crit.wf.wf_z(~V, ra, pa, ea, za, oa, la)(ha))(Crit.wf.wf_z(~V, rb, pb, eb, zb, ob, lb)(hb))
+        )(Crit.minus_go_wf(~V, oa, ob, 1n+pa, 1n+pb)(Crit.wf.wf_o(~V, ra, pa, ea, za, oa, la)(ha))(Crit.wf.wf_o(~V, rb, pb, eb, zb, ob, lb)(hb)))(
+          Crit.minus_go_wf(~V, za, b, 1n+pa, lb)(Crit.wf.wf_z(~V, ra, pa, ea, za, oa, la)(ha))(hb)
+        )(Crit.minus_go_wf(~V, oa, b, 1n+pa, lb)(Crit.wf.wf_o(~V, ra, pa, ea, za, oa, la)(ha))(hb))(
+          Crit.minus_go_wf(~V, a, zb, la, 1n+pb)(ha)(Crit.wf.wf_z(~V, rb, pb, eb, zb, ob, lb)(hb))
+        )(Crit.minus_go_wf(~V, a, ob, la, 1n+pb)(ha)(Crit.wf.wf_o(~V, rb, pb, eb, zb, ob, lb)(hb)))
+      )
+
 # a difference keeps maps well formed
 law Crit.minus_wf:
   for ~V: Data
@@ -6789,7 +6936,7 @@ law Crit.minus_wf:
   {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.minus(V, a, b), 0n) == True{}: Bool}
 
 def Crit.minus_wf(ty, a, b):
-  ?TODO
+  ha => hb => Crit.minus_go_wf(~ty, a, b, 0n, 0n)(ha)(hb)
 
 # Crit.leaf_minus where the entry's key is the key q or not (b), and the map
 # holds it
