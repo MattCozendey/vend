@@ -1,4 +1,5 @@
 import Base
+import ../../../shared/shared/formats.bend as Formats
 import ../../../shared/shared/shared/shared/code.bend as Codes
 import ../../../shared/shared/shared/shared/shared.bend as Shared
 import ../../../shared/shared/shared/text.bend as Texts
@@ -6,8 +7,9 @@ import ../../../shared/shared/shared/text.bend as Texts
 # Names
 # -----
 # A resource is named by its space and its path in that space, so the same
-# resource has the same name on every machine. The path is the space's own
-# text: a file path, or any other address that the space gives.
+# resource has the same name on every machine. A space is the address world
+# that a resource lives in (a tree of files, a web server, a bucket), and the
+# path is the space's own text.
 
 # A resource name is its text, "<space>:<path>": the space is the text up to
 # its first ':', the path is the rest. Two resources are the same exactly when
@@ -32,10 +34,6 @@ def Name.is_eq_sound(+m: Name, +n: Name) -> {Name.is_eq(m, n) == True{}: Bool} -
 # a resource is the same as itself
 def Name.is_eq_refl(n: Name) -> {Name.is_eq(n, n) == True{}: Bool}:
   Texts.String.eq_refl(Name.show(n))
-
-# the laws of the sameness of resources
-def Name.laws() -> Shared.Eq.Laws(Name, Name.is_eq):
-  (n => Name.is_eq_refl(n), m => n => e => Name.is_eq_sound(m, n)(e))
 
 # the space in the cut c of the text t: t itself when it has no ':'
 def Name.space.cut(c: Maybe<&2, Texts.Cut<String>>, t: String) -> String:
@@ -167,11 +165,13 @@ def name_show_after_read(t, n, h):
 
 # Paths
 # -----
-# A resource names another by a path from its own folder: "." stays, ".."
-# goes up one folder, and a path that starts with '/' starts at the root of
-# the space.
+# A path is read as the path of a URI is (RFC 3986, section 3.3): parts with
+# '/' between them, "." the part where it is, ".." the part above. A resource
+# names another by a path from its own place, and a path that starts with '/'
+# starts at the root of the space. A space whose names have no parts has no
+# names but whole ones: its languages find targets with no step and no root.
 
-# the folders done (the last first) after the part p
+# the parts done (the last first) after the part p
 def Path.step(+p: String, +done: List<&2, String>) -> List<&2, String>:
   Shared.Bool.when(
     List<&2, String>,
@@ -185,7 +185,7 @@ def Path.step(+p: String, +done: List<&2, String>) -> List<&2, String>:
     )
   )
 
-# the parts of a path after the parts ps, from the folders done (the last
+# the parts of a path after the parts ps, from the parts done (the last
 # first)
 def Path.walk(ps: List<&2, String>, done: List<&2, String>) -> List<&2, String>:
   match ps:
@@ -194,8 +194,8 @@ def Path.walk(ps: List<&2, String>, done: List<&2, String>) -> List<&2, String>:
     case Con{p, r}:
       Path.walk(r, Path.step(p, done))
 
-# the parts of the path t, after the folder parts fs when t does not start
-# with '/'
+# the parts of the path t, after the parts fs of the place when t does not
+# start with '/'
 def Path.parts(fs: List<&2, String>, +t: String) -> List<&2, String>:
   Shared.Bool.when(
     List<&2, String>,
@@ -204,7 +204,7 @@ def Path.parts(fs: List<&2, String>, +t: String) -> List<&2, String>:
     u => List.append(&2, String, fs, String.split(t, Chr{47}))
   )
 
-# the resource at the path t from the folder of the resource n
+# the resource at the path t from the place of the resource n
 def Name.at(+n: Name, t: String) -> Name:
   ps = String.split(Name.path(n), Chr{47})
   fs = List.reverse(&2, String, List.tail(&2, String, List.reverse(&2, String, ps)))
@@ -214,3 +214,67 @@ def Name.at(+n: Name, t: String) -> Name:
       String.append(":", String.join(Path.walk(Path.parts(fs, t), []), "/"))
     )
   }
+
+# the path of the target t as written, with each sep of the language as a
+# step: a.b.c is a/b/c when sep is '.'
+def Path.of(sep: Maybe<&2, Char>, t: String) -> String:
+  match sep:
+    case None{}:
+      t
+    case Some{c}:
+      String.join(String.split(t, c), "/")
+
+# the names of the path p with each of the suffixes ss, from the place of the
+# resource n, then rest
+def Name.suffixed(+n: Name, +p: String, ss: List<&2, String>, rest: List<&2, Name>) -> List<&2, Name>:
+  match ss:
+    case Nil{}:
+      rest
+    case Con{s, more}:
+      Name.at(n, String.append(p, s)) <> Name.suffixed(n, p, more, rest)
+
+# the names of the path p under each of the roots rs, with each suffix ss
+def Name.rooted(
+  +n: Name,
+  +p: String,
+  rs: List<&2, String>,
+  +ss: List<&2, String>
+) -> List<&2, Name>:
+  match rs:
+    case Nil{}:
+      []
+    case Con{r, more}:
+      Name.suffixed(
+        n,
+        String.append("/", String.append(r, String.append("/", p))),
+        ss,
+        Name.rooted(n, p, more, ss)
+      )
+
+# the names that the target t, which the resource n imports, may be, in the
+# order that the language looks: beside n when it looks there first, then
+# under each root; each with each suffix. The first that is there is the
+# target
+def Name.candidates(+n: Name, f: Formats.Find, t: String) -> List<&2, Name>:
+  match f:
+    case Formats.Find{sep, local, +rs, +ss}:
+      +p = Path.of(sep, t)
+      Shared.Bool.when(
+        List<&2, Name>,
+        local,
+        u => Name.suffixed(n, p, ss, Name.rooted(n, p, rs, ss)),
+        u => Name.rooted(n, p, rs, ss)
+      )
+
+# the names of ns under the place p: those whose path goes on from p, after '/'
+def Name.under(+p: Name, ns: List<&2, Name>) -> List<&2, Name>:
+  match ns:
+    case Nil{}:
+      []
+    case Con{+n, rest}:
+      List.filter.put(
+        Name,
+        n,
+        Name.under(p, rest),
+        String.starts_with(Name.show(n), String.append(Name.show(p), "/"))
+      )

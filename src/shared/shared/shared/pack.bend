@@ -3,9 +3,9 @@ import Base
 # Packed bytes
 # ------------
 # Content is kept packed: a word holds four bytes, the first one highest, so
-# a byte costs a quarter of a word, not a whole one. A line is its length in
-# bytes, then its words; the last word is filled with zeros. So packed lines,
-# one after the other, read back without a mark between them.
+# a byte costs a quarter of a word, not a whole one. A piece of content is its
+# length in bytes, then its words; the last word is filled with zeros. So
+# packed pieces, one after the other, read back without a mark between them.
 
 # the word of the bytes a, b, c and d
 def Pack.word(a: U32, b: U32, c: U32, d: U32) -> U32:
@@ -25,19 +25,19 @@ def Pack.words(bs: List<&2, U32>) -> List<&2, U32>:
     case Con{a, Con{b, Con{c, Con{d, rest}}}}:
       Pack.word(a, b, c, d) <> Pack.words(rest)
 
-# the line bs, packed: its length, then its words
-def Pack.line(+bs: List<&2, U32>) -> List<&2, U32>:
+# the piece bs, packed: its length, then its words
+def Pack.piece(+bs: List<&2, U32>) -> List<&2, U32>:
   U32.from_nat(List.length(&2, U32, bs)) <> Pack.words(bs)
 
-# each of the lines ls, packed
-def Pack.lines(ls: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
-  match ls:
+# each of the pieces ps, packed
+def Pack.pieces(ps: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
+  match ps:
     case Nil{}:
       []
-    case Con{l, rest}:
-      Pack.line(l) <> Pack.lines(rest)
+    case Con{x, rest}:
+      Pack.piece(x) <> Pack.pieces(rest)
 
-# the fourth byte of w, when a line has one more byte to take, then rest
+# the fourth byte of w, when a piece has one more byte to take, then rest
 def Pack.byte.d(n: Nat, w: U32, rest: List<&2, U32>) -> List<&2, U32>:
   match n:
     case 0n:
@@ -69,8 +69,8 @@ def Pack.bytes(n: Nat, +w: U32, rest: List<&2, U32>) -> List<&2, U32>:
     case 1n+p:
       U32.div(w, 16777216) <> Pack.byte.b(p, w, rest)
 
-# the bytes of the packed lines ws, when left bytes of the line that is being
-# read are still to come (0: the next word is the length of a line)
+# the bytes of the packed pieces ws, when left bytes of the piece that is
+# being read are still to come (0: the next word is the length of a piece)
 def Pack.read(ws: List<&2, U32>, left: Nat) -> List<&2, U32>:
   match ws left:
     case Nil{} n:
@@ -88,18 +88,31 @@ def Pack.fits(bs: List<&2, U32>) -> Bool:
     case Con{b, rest}:
       List.all.if(u => Pack.fits(rest), U32.is_lt(b, 256))
 
-# every element of each of the lines ls is a byte
-def Pack.all_fit(ls: List<&2, List<&2, U32>>) -> Bool:
-  match ls:
+# every element of each of the pieces ps is a byte
+def Pack.all_fit(ps: List<&2, List<&2, U32>>) -> Bool:
+  match ps:
     case Nil{}:
       True{}
-    case Con{l, rest}:
-      List.all.if(u => Pack.all_fit(rest), Pack.fits(l))
+    case Con{x, rest}:
+      List.all.if(u => Pack.all_fit(rest), Pack.fits(x))
 
-# packed lines read back as their bytes, one line after the other
-law Pack.read_lines:
-  for ls: List<&2, List<&2, U32>>
-  {Pack.all_fit(ls) == True{}: Bool}
+# the four bytes of each of the words ws: words as bytes
+def Pack.unpack(ws: List<&2, U32>) -> List<&2, U32>:
+  match ws:
+    case Nil{}:
+      []
+    case Con{+w, rest}:
+      Pack.bytes(4n, w, Pack.unpack(rest))
+
+# packed pieces read back as their bytes, one piece after the other
+law Pack.read_pieces:
+  for ps: List<&2, List<&2, U32>>
+  {Pack.all_fit(ps) == True{}: Bool}
     -> {
-      Pack.read(List.concat(&2, U32, Pack.lines(ls)), 0n) == List.concat(&2, U32, ls): List<&2, U32>
+      Pack.read(List.concat(&2, U32, Pack.pieces(ps)), 0n) == List.concat(&2, U32, ps): List<&2, U32>
     }
+
+# words as bytes pack back to the words
+law Pack.words_unpack:
+  for ws: List<&2, U32>
+  {Pack.words(Pack.unpack(ws)) == ws: List<&2, U32>}

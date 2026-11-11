@@ -169,6 +169,26 @@ def Led.fetch(
 ) -> Maybe<&2, List<&2, U32>>:
   Ledgers.Kind.fetch(~Machine.Q(mach), ~Led.kind(mach, d), l, h)
 
+# the value of a read that is the whole of some words
+def Read.whole(-A: Data, m: Maybe<&2, Codes.Read<A>>) -> Maybe<&2, A>:
+  match m:
+    case Some{Codes.Read{x, Nil{}}}:
+      Some{x}
+    case _:
+      None{}
+
+# the value of A whose code the ledger l holds as data under the hash h (none:
+# l lacks it, or it is not one whole code)
+def Led.load(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~A: Data,
+  ~dec: List<&2, U32> -> Maybe<&2, Codes.Read<A>>,
+  l: Led.L(mach, d),
+  h: Hashes.Hash
+) -> Maybe<&2, A>:
+  Maybe.bind(&2, List<&2, U32>, A, Led.fetch(~mach, ~d, l, h), ws => Read.whole(A, dec(ws)))
+
 # l with each of the words ns as data
 def Led.puts(
   ~mach: Machine(),
@@ -270,14 +290,6 @@ def Tree.set(
   x: List<&2, U32>
 ) -> Maybe<&2, Trees.Put>:
   Trees.Tree.set(~Led.L(mach, d), ~Led.fetch(~mach, ~d), l, h, k, x)
-
-# the value of a read that is the whole of some words
-def Read.whole(-A: Data, m: Maybe<&2, Codes.Read<A>>) -> Maybe<&2, A>:
-  match m:
-    case Some{Codes.Read{x, Nil{}}}:
-      Some{x}
-    case _:
-      None{}
 
 # Tips
 # ----
@@ -924,6 +936,127 @@ def Led.Single(-mach: Machine(), -d: Led(mach), -l: Led.L(mach, d)) -> Type:
 # that the ballots of l are those of voters that keep their two promises
 def Led.Honest(-mach: Machine(), -d: Led(mach), -l: Led.L(mach, d)) -> Type:
   Led.Single(mach, d, l) & (@c: Ledgers.Line -> @h: U32 -> Rounds.Last(mach, d, l, c, h))
+
+# Reads of a log by number
+# ------------------------
+# A line takes requests one after another: the log holds each by its number.
+
+# the root of the content of the taken request x
+def Taken.root(x: Taken) -> Maybe<&2, Hashes.Hash>:
+  match x:
+    case Taken{i, r}:
+      r
+
+# the root of the content that the outcome o names at the tip t (none: the
+# outcome is a refusal, or l lacks a node)
+def Out.root(~mach: Machine(),
+  ~d: Led(mach), l: Led.L(mach, d), t: Tip, o: Out) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
+  match o:
+    case Out.Stale{a}:
+      None{}
+    case Out.Taken{a, n}:
+      Maybe.bind(
+        &2,
+        Taken,
+        Maybe<&2, Hashes.Hash>,
+        Tip.taken(~mach, ~d, l, t, n),
+        x => Some{Taken.root(x)}
+      )
+
+# the root of the content of the version of the request i, at the tip t of
+# its line (none: the line did not take it, or l lacks a node)
+def Tip.version(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +t: Tip,
+  i: Ledgers.Id
+) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
+  Maybe.bind(
+    &2,
+    Out,
+    Maybe<&2, Hashes.Hash>,
+    Tip.out(~mach, ~d, l, t, i),
+    o => Out.root(~mach, ~d, l, t, o)
+  )
+
+# the IDs of the taken requests xs
+def Taken.ids(xs: List<&2, Taken>) -> List<&2, Ledgers.Id>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{Taken{i, r}, rest}:
+      i <> Taken.ids(rest)
+
+# the taken request x, if any, before what rest gives; nothing after a
+# missing one
+def Taken.con(m: Maybe<&2, Taken>, rest: Unit -> List<&2, Taken>) -> List<&2, Taken>:
+  match m:
+    case None{}:
+      []
+    case Some{x}:
+      x <> rest(Unit{})
+
+# k versions from the number n, in order, at the tip t
+def Tip.versions(~mach: Machine(),
+  ~d: Led(mach), k: Nat, +l: Led.L(mach, d), +t: Tip, +n: U32) -> List<&2, Taken>:
+  match k:
+    case 0n:
+      []
+    case 1n+p:
+      Taken.con(
+        Tip.taken(~mach, ~d, l, t, n),
+        u => Tip.versions(~mach, ~d, p, l, t, U32.inc(n))
+      )
+
+# the ID of the newest version at the tip t
+def Tip.newest(~mach: Machine(),
+  ~d: Led(mach), l: Led.L(mach, d), +t: Tip) -> Maybe<&2, Ledgers.Id>:
+  Shared.Maybe.when(
+    Ledgers.Id,
+    Bool.not(U32.is_eq(Tip.count(t), 0)),
+    u => Maybe.bind(
+      &2,
+      Taken,
+      Ledgers.Id,
+      Tip.taken(~mach, ~d, l, t, U32.sub(Tip.count(t), 1)),
+      x => Some{Taken.id(x)}
+    )
+  )
+
+# the root of the content before the version of the number n, at the tip t:
+# the empty tree before the first one
+def Tip.before(~mach: Machine(),
+  ~d: Led(mach), l: Led.L(mach, d), t: Tip, +n: U32) -> Maybe<&2, Maybe<&2, Hashes.Hash>>:
+  Shared.Bool.when(
+    Maybe<&2, Maybe<&2, Hashes.Hash>>,
+    U32.is_eq(n, 0),
+    u => Some{None{}},
+    u => Maybe.bind(
+      &2,
+      Taken,
+      Maybe<&2, Hashes.Hash>,
+      Tip.taken(~mach, ~d, l, t, U32.sub(n, 1)),
+      x => Some{Taken.root(x)}
+    )
+  )
+
+# the time of the request of the entry m (none: it is not a request)
+def Entry.time(-mach: Machine(), m: Maybe<&2, Ledgers.Entry<Machine.Q(mach)>>) -> String:
+  match m:
+    case Some{Ledgers.Entry.Ask{i, time, q}}:
+      time
+    case _:
+      ""
+
+# the time of the request that the outcome m is of, in l
+def Out.time(~mach: Machine(),
+  ~d: Led(mach), l: Led.L(mach, d), m: Maybe<&2, Out>) -> String:
+  match m:
+    case Some{Out.Taken{a, n}}:
+      Entry.time(mach, Led.get(~mach, ~d, l, Ledgers.Name.Ask{a}))
+    case _:
+      ""
 
 # Kernels
 # -------
@@ -1782,14 +1915,15 @@ def Led.Sound(-mach: Machine(), -d: Led(mach), -kern: Kernel(mach, d), -l: Led.L
 
 # what a replica does next: a request arrives; it takes in the entries that
 # another replica sent; it keeps words as data; a client that is connected to
-# it asks for a request that changes who votes; or it passes to the next round
-# on a line
+# it asks for a request that changes who votes; it passes to the next round on
+# a line; or it lets go of what it no longer uses
 type Deed<-Q: Data> is Data:
   Deed.Ask{id: Ledgers.Id, time: String, ask: Q}
   Deed.Take{sent: List<&2, Ledgers.Entry<Q>>}
   Deed.Keep{words: List<&2, List<&2, U32>>}
   Deed.Consent{ask: Hashes.Hash}
   Deed.Pass{line: Ledgers.Line}
+  Deed.Drop{names: List<&2, Ledgers.Name>}
 
 # the entries that the deed x brings
 def Deed.entries(-Q: Data, x: Deed<Q>) -> List<&2, Ledgers.Entry<Q>>:
@@ -1806,6 +1940,16 @@ def Deed.entries(-Q: Data, x: Deed<Q>) -> List<&2, Ledgers.Entry<Q>>:
       []
     case Deed.Pass{c}:
       []
+    case Deed.Drop{ns}:
+      []
+
+# the deed x lets go of entries
+def Deed.is_drop(-Q: Data, x: Deed<Q>) -> Bool:
+  match x:
+    case Deed.Drop{ns}:
+      True{}
+    case _:
+      False{}
 
 # the deed x asks for the request whose entry has the hash a
 def Deed.consents(-Q: Data, x: Deed<Q>, a: Hashes.Hash) -> Bool:
@@ -1817,8 +1961,8 @@ def Deed.consents(-Q: Data, x: Deed<Q>, a: Hashes.Hash) -> Bool:
 
 # the operations of a replica kept as R: the replica of a name and a secret
 # seed that holds nothing; its name; its ledger; the replica after a deed;
-# whether a client that is connected to it asked for a request; and its
-# secret seed
+# whether a client that is connected to it asked for a request; its secret
+# seed; and how many ballots it cast under a root, which numbers its next one
 def Replica.Ops(-mach: Machine(), -d: Led(mach), -R: Data) -> Type:
   (String -> Hashes.Hash -> R)
     & (
@@ -1827,7 +1971,7 @@ def Replica.Ops(-mach: Machine(), -d: Led(mach), -R: Data) -> Type:
           (R -> Led.L(mach, d))
             & (
               (R -> Deed<Machine.Q(mach)> -> R)
-                & ((R -> Hashes.Hash -> Bool) & (R -> Hashes.Hash))
+                & ((R -> Hashes.Hash -> Bool) & ((R -> Hashes.Hash) & (R -> Hashes.Hash -> U32)))
             )
         )
     )
@@ -1876,7 +2020,7 @@ def Kind.does(
   k: Replica.Kind(mach, d)
 ) -> Kind.R(mach, d, k) -> Deed<Machine.Q(mach)> -> Kind.R(mach, d, k):
   match k:
-    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, c}}}}}:
+    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, rest}}}}}:
       f
 
 # a client that is connected to a replica asked for a request
@@ -1886,14 +2030,24 @@ def Kind.consented(
   k: Replica.Kind(mach, d)
 ) -> Kind.R(mach, d, k) -> Hashes.Hash -> Bool:
   match k:
-    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, h}}}}}}:
+    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, cn}}}}}}}:
       c
 
 # the secret seed of a replica
 def Kind.seed(-mach: Machine(), -d: Led(mach), k: Replica.Kind(mach, d)) -> Kind.R(mach, d, k) -> Hashes.Hash:
   match k:
-    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, h}}}}}}:
+    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, cn}}}}}}}:
       h
+
+# how many ballots a replica cast under a root
+def Kind.count(
+  -mach: Machine(),
+  -d: Led(mach),
+  k: Replica.Kind(mach, d)
+) -> Kind.R(mach, d, k) -> Hashes.Hash -> U32:
+  match k:
+    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, cn}}}}}}}:
+      cn
 
 # the replica s after each deed of xs, in order: any later state of it
 def Kind.after(
@@ -2467,19 +2621,112 @@ def Laws.Keeps(-mach: Machine(), -d: Led(mach), -k: Replica.Kind(mach, d)) -> Ty
       }
     )
 
-# a replica only grows, whatever it does: it never loses or changes an entry
+# a replica only grows, whatever it does but let go: it never loses or
+# changes an entry
 def Laws.Grows(-mach: Machine(), -d: Led(mach), -k: Replica.Kind(mach, d)) -> Type:
   @s: Kind.R(
     mach,
     d,
     k
   ) -> @x: Deed<
-    Machine.Q(mach)> -> Led.Grows(
+    Machine.Q(mach)> -> {
+    Deed.is_drop(Machine.Q(mach), x) == False{}: Bool
+  } -> Led.Grows(
     mach,
     d,
     Kind.ledger(mach, d, k)(s),
     Kind.ledger(mach, d, k)(Kind.does(mach, d, k)(s)(x))
   )
+
+# the entry e must stay at a replica of the name voter: a request, a proof of
+# a lie, or a ballot of its own. These are what the history of every line
+# rests on, and what keeps the replica's own promises
+def Entry.stays(-mach: Machine(), e: Entry(mach), voter: String) -> Bool:
+  match e:
+    case Ledgers.Entry.Ask{i, t, q}:
+      True{}
+    case Ledgers.Entry.Lie{x}:
+      True{}
+    case Ledgers.Entry.Ballot{b}:
+      String.eq(Ledgers.Ballot.voter(b), voter)
+    case Ledgers.Entry.Data{ws}:
+      False{}
+
+# a replica lets go only of what it may: what it held, it holds after a drop
+# but for the names that the drop gives; it keeps every request, proof of a
+# lie and ballot of its own; and it keeps all that the lines it votes on rest
+# on: the newest tip of such a line is the same after a drop. So every part of
+# a decided step stays with a majority of its voters, and a drop never makes
+# a replica break a promise
+def Laws.Drops(
+  -mach: Machine(),
+  -d: Led(mach),
+  -kern: Kernel(mach, d),
+  -k: Replica.Kind(mach, d)
+) -> Type:
+  @s: Kind.R(mach, d, k) -> @ns: List<&2, Ledgers.Name> -> (
+    @n: Ledgers.Name -> @e: Entry(mach) -> {
+      Led.get(~mach, ~d, Kind.ledger(mach, d, k)(s), n) == Some{e}: Maybe<&2, Entry(mach)>
+    } -> {
+      Bool.or(
+        Entry.stays(mach, e, Kind.name(mach, d, k)(s)),
+        Bool.not(List.contains(~Ledgers.Name, ~Ledgers.Name.is_eq, ns, n))
+      )
+        == True{}: Bool
+    } -> {
+      Led.get(~mach, ~d, Kind.ledger(mach, d, k)(Kind.does(mach, d, k)(s)(Deed.Drop{ns})), n)
+        == Some{e}: Maybe<&2, Entry(mach)>
+    }
+  )
+    & (
+      @c: Ledgers.Line -> @t: Tip -> {
+        Line.head(~mach, ~d, ~kern, Kind.ledger(mach, d, k)(s), c) == Some{t}: Maybe<&2, Tip>
+      } -> {
+        List.contains(~String, ~String.eq, Tip.voters(t), Kind.name(mach, d, k)(s)) == True{}: Bool
+      } -> {
+        Line.head(~mach, ~d, ~kern, Kind.ledger(mach, d, k)(Kind.does(mach, d, k)(s)(Deed.Drop{ns})), c)
+          == Some{t}: Maybe<&2, Tip>
+      }
+    )
+
+# a replica never signs twice with one key: the count of its ballots under a
+# root never falls, and each ballot of its own under a root is signed with the
+# key of a number below the count, one number for each ballot. A replica keeps
+# its count where it keeps its data, before a ballot leaves it, so a replica
+# that restarts never numbers a ballot again
+def Laws.Count(-mach: Machine(), -d: Led(mach), -k: Replica.Kind(mach, d)) -> Type:
+  (
+    @s: Kind.R(mach, d, k) -> @x: Deed<Machine.Q(mach)> -> @r: Hashes.Hash -> {
+      U32.is_le(Kind.count(mach, d, k)(s)(r), Kind.count(mach, d, k)(Kind.does(mach, d, k)(s)(x))(r))
+        == True{}: Bool
+    }
+  )
+    & (
+      @s: Kind.R(mach, d, k) -> @b: Ledgers.Ballot -> {
+        Led.has(~mach, ~d, Kind.ledger(mach, d, k)(s), Ledgers.Entry.Ballot{b}) == True{}: Bool
+      } -> {
+        String.eq(Ledgers.Ballot.voter(b), Kind.name(mach, d, k)(s)) == True{}: Bool
+      } -> Exists(
+        U32,
+        n => {
+          U32.is_lt(n, Kind.count(mach, d, k)(s)(Ledgers.Ballot.root(b))) == True{}: Bool
+        }
+          & {
+            Ledgers.Ballot.sealed(Key.public(Kind.seed(mach, d, k)(s), Ledgers.Ballot.root(b), n), b) == True{}: Bool
+          }
+      )
+    )
+    & (
+      @s: Kind.R(mach, d, k) -> @a: Ledgers.Ballot -> @b: Ledgers.Ballot -> @n: U32 -> {
+        Led.has(~mach, ~d, Kind.ledger(mach, d, k)(s), Ledgers.Entry.Ballot{a}) == True{}: Bool
+      } -> {
+        Led.has(~mach, ~d, Kind.ledger(mach, d, k)(s), Ledgers.Entry.Ballot{b}) == True{}: Bool
+      } -> {
+        Ledgers.Ballot.sealed(Key.public(Kind.seed(mach, d, k)(s), Ledgers.Ballot.root(a), n), a) == True{}: Bool
+      } -> {
+        Ledgers.Ballot.sealed(Key.public(Kind.seed(mach, d, k)(s), Ledgers.Ballot.root(b), n), b) == True{}: Bool
+      } -> {Hashes.Hash.is_eq(Ledgers.Ballot.root(a), Ledgers.Ballot.root(b)) == True{}: Bool} -> {a == b: Ledgers.Ballot}
+    )
 
 # a replica that holds nothing is good, and a good replica stays good,
 # whatever it does and whatever is sent to it: it keeps nothing that does not
@@ -2660,7 +2907,13 @@ def Replica.Laws(
               Laws.Good(mach, d, kern, k)
                 & (
                   Laws.Takes(mach, d, kern, k)
-                    & (Laws.Detects(mach, d, k) & Laws.Passes(mach, d, kern, k))
+                    & (
+                      Laws.Detects(mach, d, k)
+                        & (
+                          Laws.Passes(mach, d, kern, k)
+                            & (Laws.Drops(mach, d, kern, k) & Laws.Count(mach, d, k))
+                        )
+                    )
                 )
             )
         )

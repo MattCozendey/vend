@@ -10,10 +10,12 @@ last rounds: the work was to state laws and to construct types.
 
 | File | Result |
 | --- | --- |
-| `src/shared/shared/shared/pack.bend` | 1 open law |
+| `src/shared/shared/shared/pack.bend` | 2 open laws |
+| `src/shared/shared/rope.bend` | 1 open law |
+| `src/shared/shared/formats.bend` | 1 open law |
 | Every other file under `src/shared` but `replica.bend` | ALL PROOFS CHECK |
 | `src/shared/replica.bend` | 3 open laws |
-| `src/node/core/spec.bend` | 5 open laws (and the 4 above) |
+| `src/node/core/spec.bend` | 6 open laws (and the ones that it imports) |
 | `src/node/transport/spec.bend` | 33 IO declarations, no implementation |
 | `src/glob/impl.bend` | ALL PROOFS CHECK |
 
@@ -52,7 +54,15 @@ There is no implementation of a ledger, of a replica or of Vend's kernel. They a
    (`Replica.Runs`).
 10. **Trust is two defs.** `Replicas.Led.Single` (one vote at a place, one pass to it) and
     `Replicas.Rounds.Last` (a pass names the last vote). `Led.Honest` is both. No law assumes more.
-11. **A key signs one ballot.** `Replicas.Key.secret` is a hash of the seed of a replica, the root
+11. **A resource carries its format.** A resource is `Requests.Res`: the hash of its format,
+    which the ledger holds as data (`Formats.Format.code`), and the root of its bytes. No node
+    reads a format from a name. `Formats.Format.guess` only suggests one to a front.
+12. **An import keeps what it asked for, and states what it brings.** `Formats.Import` is the
+    edge as written (`asked`), what it brings (`Brings`: the named items, the whole target, or
+    the whole target and all that it brings) and how its target is found (`Find`). A language
+    can make imports with no line (`Format.Code.implicit`). `Resources.Name.candidates` turns a
+    target into names, in the order that the language looks.
+13. **A key signs one ballot.** `Replicas.Key.secret` is a hash of the seed of a replica, the root
     and the number of the ballot. A replica keeps only its seed.
 
 ## What must be built
@@ -113,7 +123,7 @@ each change to its rule, on the line where it belongs, and refuses any other.
 | --- | --- |
 | Write | `Write.act`: taken when the resource holds what it held at the base, else stale. |
 | Resolve | `Resolve.act`: while the clash is open, the resource holds the content and the clash is shut. |
-| Merge | `Merge.act`: each resource that the two sides hold differently gets `Pick.merge`: theirs when ours is the base, ours when theirs is the base or both agree, else both merged in the format. A clash keeps ours and puts the resource among the open clashes of the merge. |
+| Merge | `Merge.act`: each resource that the two sides hold differently gets `Pick.merge`: theirs when ours is the base, ours when theirs is the base or both agree, else both merged in their format. Two sides in two formats clash. A submodule takes the pointer with the higher number on one branch (`Pointer.newer`). A clash keeps ours and puts the resource among the open clashes of the merge. |
 | Move | `Move.act`: the content is the tree of the target, the same tree. |
 | Mark | `Replicas.Act.Label`: a label on the newest version, for good. |
 | Branch | `Branch.act`: the store opens the branch, empty or with the tree of its source. |
@@ -125,7 +135,11 @@ each change to its rule, on the line where it belongs, and refuses any other.
 
 | Law | It says |
 | --- | --- |
-| `Packs.Pack.read_lines` | Packed lines read back as their bytes. |
+| `Packs.Pack.read_pieces` | Packed pieces read back as their bytes. |
+| `Packs.Pack.words_unpack` | Words as bytes pack back to the words. |
+| `Ropes.Rope.cut_with_flat` | The pieces of a cut by content, one after the other, are what was cut. |
+| `Formats.Format.code_read` | A format reads back from its code. |
+| `Core.Pointer.code_read` | A submodule pointer reads back from its code. |
 | `Replicas.Line.at_grows` | One history: the tip of a line after k steps stays as the ledger grows, while the ballots are honest. |
 | `Replicas.Line.get_grows` | What a log holds under a key, it holds for good. Outcomes, versions, marks and branch starts are each one key. |
 | `Replicas.Step.run_outs` | A step gives each of its requests an outcome. |
@@ -143,7 +157,7 @@ each change to its rule, on the line where it belongs, and refuses any other.
 | Same changes, same answers, whatever the order | Item 2 above, with `Laws.AddComm` |
 | A node stops only when nothing is mounted and no writer is connected | `Core.Node.may_stop` (a def) |
 | A store is identified by the hash of the request that started it | `Ledgers.Line.root` |
-| Content is stored once by hash; an edit costs about its own size | `Laws.GetNamed`; `Core.Bytes.rope` cuts at lines; trees and ropes share nodes |
+| Content is stored once by hash; an edit costs about its own size, even in huge resources | `Laws.GetNamed`; `Ropes.Rope.of_bytes` cuts bytes by their content, in text and in any other bytes; trees and ropes share nodes |
 | Each part is fetched on demand, and kept by enough nodes | `Laws.Takes`; item 9 above |
 | The store's owner group decides which branch and group names exist | `Ask.act`: Branch, Group and Key are changes of the store line only |
 | A change counts once, however often it is sent | `Laws.AddTwice`; a step skips an ID that has an outcome (`Step.fresh`) |
@@ -158,11 +172,14 @@ each change to its rule, on the line where it belongs, and refuses any other.
 | Nothing a writer sends is kept unless it checks | `Laws.Takes`, `Laws.Good` |
 | History only grows; a version never changes; marks are for good | `Line.get_grows` |
 | A move records a version equal to its target | `Move.act` |
+| Each resource is read in its format; nested formats at any depth | `Requests.Res`, `Formats.Format` |
+| Imports are tracked with their conditions and aliases | `Formats.Import`, `Core.Res.imports` |
 | Merges go resource by resource, each in its own format | `Merge.act`, `Pick.merge` |
 | A conflict is stored; the merge is Written once each clash is resolved | `Key.clashes`, `Resolve.act`, `Answer.merged` |
 | A merge never loses a change made on only one side | `Merge.act_takes`; inside one resource, `Formats.Plain.merge.cuts` applies both changes or clashes |
 | What a mounted resource held before is recorded as a change | `Core.Mount.change` (a def) |
-| A submodule points to a branch and version of another store | `Core.Pointer`, `Pointer.code_read` |
+| A submodule points to a branch and version of another store | `Core.Pointer`, `Pointer.code_read`, `Pointer.newer` |
+| Mounting to another branch is a checkout; another resource on a second branch is a worktree | `Core.Mounts`: one branch for each resource |
 
 ## What is still not stated
 
@@ -178,6 +195,7 @@ each change to its rule, on the line where it belongs, and refuses any other.
    declarations in `transport/spec.bend`. A law cannot state them.
 4. **A search that answers.** `Glob.Query.search` may answer `Unknown` for every query.
 
+
 ## Structure, laziness and parallel work
 
 No law fixes how a ledger, a replica or a kernel is kept: each is a record, and any value of it
@@ -186,8 +204,10 @@ to the def that it stands for.
 
 Structure that is decided:
 
-1. **Content is packed.** A rope holds lines, each packed four bytes in a word (`Packs.Pack`). The
-   formats still work on a list with one byte in each element, for the time of one merge or diff.
+1. **Content is packed and cut by its content.** A rope holds pieces, each packed four bytes in a
+   word (`Packs.Pack`), cut at line ends and where the state of the bytes before says so
+   (`Ropes.Gear`). The formats still work on a list with one byte in each element, for the time
+   of one merge or diff.
 2. **The open clashes of a merge are one key** (`Core.Key.clashes`). What a merge left is one
    read, not a walk of a tree.
 3. **What touches a branch reads each thing once** (`Core.Branch.touches`): the resources of the
@@ -206,26 +226,54 @@ Defs that state a meaning, and are slow by design. A cache or a faster structure
 | --- | --- | --- |
 | `Replicas.Line.head` | It runs a history from its start. | The head of each line, kept by a replica. |
 | `Core.Tree.kept` | It walks a tree and reads each resource. | To know which trees a ledger holds whole. |
-| `Core.Group.nodes`, `Tree.resources`, `Node.branches` | Each lists a tree. | A tree for each kind of key. `Trees.Tree` has no delete and no range. |
+| `Core.Group.nodes`, `Tree.resources`, `Node.branches`, `Import.under` | Each lists a tree. | A tree for each kind of key (limit 6). |
 | `Core.Node.affects` | The history of each other branch. | A mark of how far a reader is. |
 
-Limits that the types fix:
+Two concepts that have two representations, to unify when their proofs are open again:
 
-1. **A ledger is a pure value, and a replica only grows** (`Laws.Grows`). What a replica holds in
-   memory only grows, unless a deed runs on a part of what the node keeps. A read on a part is
-   sound: an answer that a part gives, the whole gives (`Line.get_grows`). No law says that for a
-   deed.
-2. **A node that is new runs each history from its start.** There is no checkpoint.
-3. **A ballot holds a seal of 67 hashes**, and a ledger keeps each ballot for good.
-4. **The proven `Trie` keeps a key as a list of bits.** A ledger kept in it, under names of 256
-   bits, costs one list element for each bit that a leaf keeps. `Ledger.Kind` does not ask for it.
+1. `Ropes.Rope.cut` is `Ropes.Rope.cut.with` with no state.
+2. `Core.Pick.merge` and `Formats.Merge.decide` are the same three-way rule (theirs, ours, both),
+   on resources and on bytes.
+
+## Limits
+
+Ask about these before any implementation. Each is a cost or a risk of the design, with what is
+now stated for it.
+
+1. **A node lets go of data only as the laws allow.** Stated: `Ledgers.Laws.Drop`,
+   `Replicas.Deed.Drop`, `Replicas.Laws.Drops`. A node keeps every request, proof of a lie and
+   ballot of its own, and all that the lines it votes on rest on. All else may go, and a read
+   then gives the same answer or none (`Line.get_grows`).
+2. **A node never signs twice with one key.** Stated: `Replicas.Laws.Count`. The count of its
+   ballots under a root never falls, and each of its ballots has its own number. Not stated, and
+   an IO rule: a node keeps its count where it keeps its data before a ballot leaves it.
+3. **A new node replays the history of each line that it uses.** No checkpoint: a checkpoint
+   would trust owners for more than README does. A line is replayed when it is first used, and
+   lines replay apart and in parallel, since no rule reads another line.
+4. **A ballot holds a seal of 67 hashes** (about 2 KB). Batches divide the cost; a node that is
+   not an owner of a line may let go of its ballots (limit 1). Signing a byte for each chain
+   instead of 4 bits halves the size, at about 9 times the hashing.
+5. **The ledger's map is free** (`Ledger.Kind`). It must not be the proven `Trie`, which keeps a
+   key as a list of bits. The best known one: a map that splits the 256-bit name by words, with
+   a hash in each node, so a sync compares hashes and costs what differs (`Laws.Missing`).
+6. **The content tree has no range and no delete.** Not done. The best known structure is a
+   tree sorted by key and cut by content (a prolly tree): one root for one content in any order
+   of writes, shared nodes, ranges, delete and fast diff. It is a rope of sorted bindings, so it
+   unifies with `Ropes`. The replica uses `Trees.Tree` directly: the next step is a record for
+   the tree, as for the ledger, and a prolly tree that fills it.
+7. **Conditions are read through a view.** Stated: `Formats.Cond.holds`, `Formats.Import.holds`;
+   `Core.Topic.Affects` carries the view of a subscription. A test that the view does not name
+   holds, so no use is missed. Conditions are matched as written: no expression is evaluated.
+8. **Use is tracked per item, once a format splits items.** Stated: `Formats.Item` (name, bytes,
+   uses), `Formats.Format.items`, `Formats.Edge.names`, `Formats.Import.pool`. No format splits
+   yet: each gives the whole resource as one item, and no rule reads the names that an import
+   asks for. The core still tracks per resource. A language that cannot be read without running
+   it (a dynamic import) must count as using all.
 
 ## Points for the owner of README
 
-1. README names one thing that owners are trusted for. The rounds need two: `Led.Single` and
-   `Rounds.Last`.
-2. An import names its target as written, in the space of the resource that imports it
-   (`Core.Edge.name`). README does not say how a target becomes a resource.
+1. A language finds the target of an import as `Formats.Find` says. A space whose names have
+   no parts has no names but whole ones. README does not say how a target becomes a resource.
 
 ## Proven and kept
 

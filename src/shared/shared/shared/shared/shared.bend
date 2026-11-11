@@ -650,14 +650,6 @@ def Nat.lt_irrefl(a: Nat) -> {Nat.is_lt(a, a) == False{}: Bool}:
     case 1n+p:
       Nat.lt_irrefl(p)
 
-# no number is below 0
-def Nat.lt_zero(a: Nat) -> {Nat.is_lt(a, 0n) == False{}: Bool}:
-  match a:
-    case 0n:
-      {==}
-    case 1n+p:
-      {==}
-
 # a number is below the number after it
 def Nat.lt_succ(a: Nat) -> {Nat.is_lt(a, 1n+a) == True{}: Bool}:
   match a:
@@ -901,17 +893,6 @@ def Maybe.IsNone(-A: Data, m: Maybe<&2, A>) -> Type:
       Unit
     case Some{x}:
       Empty
-
-# a Maybe that is_none calls empty is None
-def Maybe.is_none_sound(
-  -A: Data,
-  m: Maybe<&2, A>
-) -> {Maybe.is_none(&2, A, m) == True{}: Bool} -> {m == None{}: Maybe<&2, A>}:
-  match m:
-    case None{}:
-      e => {==}
-    case Some{x}:
-      e => Empty.absurd({Some{x} == None{}: Maybe<&2, A>}, Bool.false_ne_true(e))
 
 # no None equals a Some
 def Maybe.none_ne_some(-A: Data, -x: A, e: {None{} == Some{x}: Maybe<&2, A>}) -> Empty:
@@ -1412,49 +1393,6 @@ def Maybe.when(-B: Data, b: Bool, k: Unit -> Maybe<&2, B>) -> Maybe<&2, B>:
     case False{}:
       None{}
 
-# a "when" that gives a value holds
-def Maybe.when_hit(
-  -B: Data,
-  b: Bool,
-  -k: Unit -> Maybe<&2, B>,
-  -y: B
-) -> {Maybe.when(B, b, k) == Some{y}: Maybe<&2, B>} -> {b == True{}: Bool}:
-  match b:
-    case True{}:
-      e => {==}
-    case False{}:
-      e => Empty.absurd({False{} == True{}: Bool}, Maybe.none_ne_some(B, y, e))
-
-# a "when" that gives a value gives what its rest gives
-def Maybe.when_rest(
-  -B: Data,
-  b: Bool,
-  -k: Unit -> Maybe<&2, B>,
-  -y: B
-) -> {Maybe.when(B, b, k) == Some{y}: Maybe<&2, B>} -> {k(Unit{}) == Some{y}: Maybe<&2, B>}:
-  match b:
-    case True{}:
-      e => e
-    case False{}:
-      e => Empty.absurd({k(Unit{}) == Some{y}: Maybe<&2, B>}, Maybe.none_ne_some(B, y, e))
-
-# a read m then k that gives x: m gives a value, and k gives x of it
-def Maybe.bind_some(
-  -A: Data,
-  -B: Data,
-  -R: Type,
-  m: Maybe<&2, A>,
-  -k: A -> Maybe<&2, B>,
-  -x: B
-) -> {
-  Maybe.bind(&2, A, B, m, k) == Some{x}: Maybe<&2, B>
-} -> (@a: A -> {m == Some{a}: Maybe<&2, A>} -> {k(a) == Some{x}: Maybe<&2, B>} -> R) -> R:
-  match m:
-    case Some{a}:
-      e => f => f(a)({==})(e)
-    case None{}:
-      e => f => Empty.absurd(R, Maybe.none_ne_some(B, x, e))
-
 # List equality
 # -------------
 # xs and ys hold the same elements in the same order, as same calls them: the
@@ -1632,14 +1570,6 @@ def List.all2(~A: Data, ~B: Data, ~r: A -> B -> Bool, xs: List<&2, A>, ys: List<
     case _ _:
       False{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# a number at most zero is zero
-def Nat.le_zero_eq(a: Nat) -> {Nat.is_le(a, 0n) == True{}: Bool} -> {a == 0n: Nat}:
-  match a:
-    case 0n:
-      h => {==}
-    case 1n+p:
-      h => Empty.absurd({1n+p == 0n: Nat}, Bool.false_ne_true(h))
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a number at most 1 + p that is not 1 + p is at most p
@@ -1992,11 +1922,6 @@ def Nat.IsZero(n: Nat) -> Type:
     case 1n+p:
       Empty
 
-# zero is no successor
-def Nat.zero_ne_succ(-b: Nat, e: {0n == 1n+b: Nat}) -> Empty:
-  %e: Nat.IsZero(_)
-  Unit{}
-
 # the number before n, 0 before 0
 def Nat.before(n: Nat) -> Nat:
   match n:
@@ -2004,10 +1929,6 @@ def Nat.before(n: Nat) -> Nat:
       0n
     case 1n+p:
       p
-
-# successors are the same only of the same numbers
-def Nat.succ_inj(-a: Nat, -b: Nat, e: {1n+a == 1n+b: Nat}) -> {a == b: Nat}:
-  Equal.cong(Nat, Nat, Nat.before, 1n+a, 1n+b, e)
 
 # p holds of g and each element of xs
 def List.holds(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -> Bool:
@@ -2511,21 +2432,6 @@ def Nat.lt_succ_le(
       h => Nat.lt_succ_le(b, q)(h)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# a number below d is at most the number before d
-def Nat.lt_before(
-  a: Nat,
-  d: Nat
-) -> {Nat.is_lt(a, d) == True{}: Bool} -> {Nat.is_le(a, Nat.before(d)) == True{}: Bool}:
-  match a d:
-    case 0n 0n:
-      h => {==}
-    case 1n+b 0n:
-      h => h
-    case 0n 1n+p:
-      h => Nat.le_zero(p)
-    case 1n+b 1n+p:
-      h => Nat.lt_succ_le(1n+b, p)(h)
-
 # Codes of numbers
 # ----------------
 # U32.to_nat gives the code of a U32: its place in the order, as a Nat. These
@@ -2827,3 +2733,24 @@ def U32.inc_to_nat(
 
 # Two-way facts
 # -------------
+
+# x before rest, when m holds x; rest else
+def Maybe.cons(-A: Data, m: Maybe<&2, A>, rest: List<&2, A>) -> List<&2, A>:
+  match m:
+    case None{}:
+      rest
+    case Some{x}:
+      x <> rest
+
+# every element of ps is in ks, as same compares them
+def List.within(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>, +ks: List<&2, A>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{p, r}:
+      Bool.and(List.contains(~A, ~same, ks, p), List.within(~A, ~same, r, ks))
+
+# as and bs hold the same elements, as same compares them, whatever their order
+# and repeats
+def List.same_set(~A: Data, ~same: A -> A -> Bool, +as: List<&2, A>, +bs: List<&2, A>) -> Bool:
+  List.all.if(u => List.within(~A, ~same, bs, as), List.within(~A, ~same, as, bs))

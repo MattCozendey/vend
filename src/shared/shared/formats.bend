@@ -1,4 +1,5 @@
 import Base
+import ./shared/shared/code.bend as Codes
 import ./shared/shared/shared.bend as Shared
 import ./shared/text.bend as Texts
 
@@ -1508,10 +1509,18 @@ def Pieces.build_of(
 # -------
 # What a patch does, part by part, for a reader.
 
-# a part of a resource: its kind (line, content), where it is (a line counts
-# from 1; a whole content is at 0), and its bytes
+# a part of a resource: its kind (line, content, or what a format names, like
+# a function), its name (empty: it has none), where it is (a line counts from
+# 1; a whole content is at 0), its bytes, and the names of the items that it
+# uses
 type Item is Data:
-  Item{kind: String, place: Nat, bytes: Texts.Bytes()}
+  Item{
+    kind: String,
+    name: Texts.Bytes(),
+    place: Nat,
+    bytes: Texts.Bytes(),
+    uses: List<&2, Texts.Bytes()>
+  }
 
 # a part that a patch added or removed
 type Change is Data:
@@ -1524,7 +1533,7 @@ def Lines.changes(~make: Item -> Change, ls: List<&2, Texts.Bytes()>, +at: Nat) 
     case Nil{}:
       []
     case Con{l, r}:
-      make(Item{"line", at, l}) <> Lines.changes(~make, r, 1n+at)
+      make(Item{"line", [], at, l, []}) <> Lines.changes(~make, r, 1n+at)
 
 # the changes of a whole content from a to b, none when they are the same
 # (held)
@@ -1533,7 +1542,7 @@ def Plain.changes.whole(held: Bool, a: Texts.Bytes(), b: Texts.Bytes()) -> List<
     case True{}:
       []
     case False{}:
-      [Change.Removed{Item{"content", 0n, a}}, Change.Added{Item{"content", 0n, b}}]
+      [Change.Removed{Item{"content", [], 0n, a, []}}, Change.Added{Item{"content", [], 0n, b, []}}]
 
 # the changes of the patch p of a
 def Plain.changes.of(+a: Texts.Bytes(), p: Patch) -> List<&2, Change>:
@@ -1565,12 +1574,28 @@ def Plain.changes(+a: Texts.Bytes(), b: Texts.Bytes()) -> List<&2, Change>:
 # one sits under, so a conditional import is an edge with its conditions, and a
 # qualified one keeps its alias.
 
+# what an import brings into scope, beyond what it names: only the names
+# that it asks for; all of its target; or all of its target and all that the
+# target brings, at any depth (an include, a re-export)
+type Brings is Data:
+  Brings.Named{}
+  Brings.Whole{}
+  Brings.Through{}
+
+# how a language finds the target of an import: sep, in the target as
+# written, stands for a step down a path (none: the target is a path); local:
+# the language looks first beside the resource that imports; then under each
+# of roots; each with each of suffixes (a suffix may be empty)
+type Find is Data:
+  Find{sep: Maybe<&2, Char>, local: Bool, roots: List<&2, String>, suffixes: List<&2, String>}
+
 # a line that starts with start, after blanks, names a target after the
 # marker open, up to the marker close or the line's end, and after the marker
 # alias the name that it gets; a line that starts with when opens a
 # condition, otherwise flips it, end closes it. An empty marker never starts a
 # line; an empty open or close is the place right after start or the line's
-# end.
+# end. Such an import brings what brings says, and its target is found as
+# find says.
 type Rule is Data:
   Rule{
     start: Texts.Bytes(),
@@ -1579,7 +1604,9 @@ type Rule is Data:
     alias: Texts.Bytes(),
     when: Texts.Bytes(),
     otherwise: Texts.Bytes(),
-    end: Texts.Bytes()
+    end: Texts.Bytes(),
+    brings: Brings,
+    find: Find
   }
 
 # a condition that an edge sits under: its line, and whether the edge is in
@@ -1587,10 +1614,58 @@ type Rule is Data:
 type Cond is Data:
   Cond{test: Texts.Bytes(), holds: Bool}
 
-# what a resource uses: the target as written, the name that it gets (empty
-# without one), and the conditions that it sits under, innermost first
+# what the view vs sets the test x to, if it names it: a view is the
+# conditions that one build sets, each test with whether it holds
+def View.get(vs: List<&2, Cond>, +x: Texts.Bytes()) -> Maybe<&2, Bool>:
+  match vs:
+    case Nil{}:
+      None{}
+    case Con{Cond{y, h}, rest}:
+      Shared.Bool.when(
+        Maybe<&2, Bool>,
+        Shared.List.is_eq(~U32, ~U32.is_eq, y, x),
+        u => Some{h},
+        u => View.get(rest, x)
+      )
+
+# the condition c holds under the view vs. A test that the view does not name
+# holds: what a build may set counts, so no use is missed
+def Cond.holds(vs: List<&2, Cond>, c: Cond) -> Bool:
+  match c:
+    case Cond{x, h}:
+      Maybe.default(&2, Bool, Maybe.bind(&2, Bool, Bool, View.get(vs, x), v => Some{Shared.Bool.is_eq(v, h)}), True{})
+
+# each of the conditions cs holds under the view vs
+def Conds.hold(+vs: List<&2, Cond>, cs: List<&2, Cond>) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case Con{c, rest}:
+      List.all.if(u => Conds.hold(vs, rest), Cond.holds(vs, c))
+
+# what an import asks for, as written: its target, the name that it gets
+# (empty without one), the names of the items of the target that it asks for
+# (none: it names none), and the conditions that it sits under, innermost
+# first
 type Edge is Data:
-  Edge{target: Texts.Bytes(), alias: Texts.Bytes(), conds: List<&2, Cond>}
+  Edge{
+    target: Texts.Bytes(),
+    alias: Texts.Bytes(),
+    names: List<&2, Texts.Bytes()>,
+    conds: List<&2, Cond>
+  }
+
+# an import: what it asks for, kept as written; what it brings, which may be
+# more; and how its target is found
+type Import is Data:
+  Import{asked: Edge, brings: Brings, find: Find}
+
+# the import x is in the build of the view vs: each condition that it sits
+# under holds
+def Import.holds(vs: List<&2, Cond>, x: Import) -> Bool:
+  match x:
+    case Import{Edge{t, al, ns, cs}, br, fi}:
+      Conds.hold(vs, cs)
 
 # x is a space or a tab
 def Line.is_blank(+x: U32) -> Bool:
@@ -1632,7 +1707,7 @@ def Rule.cut(+p: Texts.Bytes(), +x: Texts.Bytes()) -> Texts.Cut<Texts.Bytes()>:
 def Rule.named(c: Texts.Cut<Texts.Bytes()>, al: Texts.Bytes(), cs: List<&2, Cond>) -> Edge:
   match c:
     case Texts.Cut{t, w}:
-      Edge{t, Texts.Cut.after(Texts.Bytes(), Rule.cut(al, w)), cs}
+      Edge{t, Texts.Cut.after(Texts.Bytes(), Rule.cut(al, w)), [], cs}
 
 # the edges of the bytes w after a start marker, once the open marker is
 # known to be empty or not (held), and m is where it first occurs in w
@@ -1673,7 +1748,7 @@ def Rule.line.at(
 # the edges that the line l names under the conditions cs: one or none
 def Rule.line(r: Rule, l: Texts.Bytes(), cs: List<&2, Cond>) -> List<&2, Edge>:
   match r:
-    case Rule{+st, op, cl, al, wh, ot, en}:
+    case Rule{+st, op, cl, al, wh, ot, en, br, fi}:
       +t = Line.trim(l)
       Rule.line.at(Line.marks(st, t), st, t, op, cl, al, cs)
 
@@ -1707,7 +1782,7 @@ def Rule.step.at(
 # the conditions cs after the line l
 def Rule.step(r: Rule, l: Texts.Bytes(), cs: List<&2, Cond>) -> List<&2, Cond>:
   match r:
-    case Rule{st, op, cl, al, wh, ot, en}:
+    case Rule{st, op, cl, al, wh, ot, en, br, fi}:
       +t = Line.trim(l)
       Rule.step.at(Line.marks(en, t), Line.marks(ot, t), Line.marks(wh, t), t, cs)
 
@@ -1723,18 +1798,34 @@ def Rule.edges.go(ls: List<&2, Texts.Bytes()>, +r: Rule, +cs: List<&2, Cond>) ->
 def Rule.edges(r: Rule, b: Texts.Bytes()) -> List<&2, Edge>:
   Rule.edges.go(Lines.list(b), r, [])
 
+# the imports of the edges es, which bring br and are found by fi
+def Rule.imports(es: List<&2, Edge>, +br: Brings, +fi: Find) -> List<&2, Import>:
+  match es:
+    case Nil{}:
+      []
+    case Con{e, rest}:
+      Import{e, br, fi} <> Rule.imports(rest, br, fi)
+
+# the imports of the bytes b, by the rule r
+def Rule.imports.of(+r: Rule, b: Texts.Bytes()) -> List<&2, Import>:
+  match r:
+    case Rule{st, op, cl, al, wh, ot, en, br, fi}:
+      Rule.imports(Rule.edges(Rule{st, op, cl, al, wh, ot, en, br, fi}, b), br, fi)
+
 # Nested formats
 # --------------
 # A format is a leaf, an embedding of an inner format in an outer one, or a
-# language: a base format and the rule of its imports. Formats nest to any
-# depth (CSS and JS inside HTML), and the laws below hold for every one. Each
+# language: a base format, the rule of its imports, and the imports that it
+# makes with no line (a prelude, the other resources of a package). Formats
+# nest to any depth (CSS and JS inside HTML), and the laws below hold for
+# every one. A language with more rules is a language whose base is one. Each
 # operation takes a list of items, so that an embedding hands all its texts to
 # the outer format and all its regions to the inner one in one call; an old
 # item that is missing is empty.
 type Format is Data:
   Format.Leaf{kind: Leaf}
   Format.Embed{outer: Format, open: Texts.Bytes(), close: Texts.Bytes(), inner: Format}
-  Format.Code{base: Format, rule: Rule}
+  Format.Code{base: Format, rule: Rule, implicit: List<&2, Import>}
 
 # a format that holds no other: lines (the default), the content as one whole
 # part, or a submodule, a pointer to a child that the core reads and merges
@@ -1807,7 +1898,7 @@ def Format.diffs(
         ra
       ) Format.diffs(Format.Embed{o, op, cl, i}, br, List.tail(&2, Texts.Bytes(), as))
       Patch.Pieces{Pieces.shape(pb), ts, rs} <> rest
-    case Format.Code{base, r} c:
+    case Format.Code{base, r, im} c:
       Format.diffs(base, c, as)
 # bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
 
@@ -1850,7 +1941,7 @@ def Format.applies(
         p
       )
         <> Format.applies(Format.Embed{o, op, cl, i}, pr, List.tail(&2, Texts.Bytes(), as))
-    case Format.Code{base, r} q:
+    case Format.Code{base, r, im} q:
       Format.applies(base, q, as)
 # bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
 
@@ -1901,7 +1992,7 @@ def Format.apply_diffs(f, bs, as):
           {Embed.join(op, cl, _) == b: Texts.Bytes()}
         Embed.join_split(op, cl, b),
         Format.apply_diffs(Format.Embed{o, op, cl, i}, br, rest))
-    case Format.Code{base, r} c:
+    case Format.Code{base, r, im} c:
       Format.apply_diffs(base, c, as)
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
@@ -1940,7 +2031,7 @@ def Format.decide.both(f: Format, b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.B
         Decision.Pieces{},
         Decision.Both{}
       )
-    case Format.Code{base, r}:
+    case Format.Code{base, r, im}:
       Format.decide.both(base, b, x, y)
 
 # the decision d, in the format f
@@ -2100,7 +2191,7 @@ def Format.merges(f: Format, js: List<&2, Job>) -> List<&2, Merged>:
       Merged.head(m) <> rest
     case Format.Embed{+o, +op, +cl, +i} Con{Job{b, x, y, d}, jr}:
       Merge.taken(d, x, y) <> Format.merges(Format.Embed{o, op, cl, i}, jr)
-    case Format.Code{base, r} q:
+    case Format.Code{base, r, im} q:
       Format.merges(base, q)
 # bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
 
@@ -2258,7 +2349,7 @@ def Format.merges_taken(
         },
         Shared.Maybe.none_ne_some(Texts.Bytes(), z, h)
       )
-    case Format.Code{base, r} e:
+    case Format.Code{base, r, im} e:
       Format.merges_taken(base, b, x, y, z, e, h)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
@@ -2361,16 +2452,16 @@ def Format.changes(f: Format, +a: Texts.Bytes(), +b: Texts.Bytes()) -> List<&2, 
       Plain.changes.whole(Shared.List.is_eq(~U32, ~U32.is_eq, a, b), a, b)
     case Format.Embed{o, op, cl, i}:
       Format.changes(o, a, b)
-    case Format.Code{base, r}:
+    case Format.Code{base, r, im}:
       Format.changes(base, a, b)
 
-# the edges of each of the items bs, by the rule r
-def Rule.edges.of(bs: List<&2, Texts.Bytes()>, +r: Rule) -> List<&2, Edge>:
+# the imports of each of the items bs, by the rule r
+def Rule.imports.all(bs: List<&2, Texts.Bytes()>, +r: Rule) -> List<&2, Import>:
   match bs:
     case Nil{}:
       []
     case Con{b, br}:
-      List.append(&2, Edge, Rule.edges(r, b), Rule.edges.of(br, r))
+      List.append(&2, Import, Rule.imports.of(r, b), Rule.imports.all(br, r))
 
 # the texts (texts) or the regions of each of the items bs, between the
 # markers op and cl
@@ -2401,7 +2492,7 @@ def Embed.parts(
 # bend-lint: expect-begin bend-lint-rules/performance/deep_call_in_fork@information -- these walks cover the few pieces of one item; a tail walk would need a reverse that Pieces.build_of would then undo
 # what the items bs use, in the format f: the edges of each language, in the
 # parts that it reads
-def Format.uses(f: Format, +bs: List<&2, Texts.Bytes()>) -> List<&2, Edge>:
+def Format.uses(f: Format, +bs: List<&2, Texts.Bytes()>) -> List<&2, Import>:
   match f:
     case Format.Leaf{k}:
       []
@@ -2409,16 +2500,414 @@ def Format.uses(f: Format, +bs: List<&2, Texts.Bytes()>) -> List<&2, Edge>:
       tp = Embed.parts(bs, True{}, op, cl)
       rp = Embed.parts(bs, False{}, op, cl)
       ts rs = Format.uses(o, tp) Format.uses(i, rp)
-      List.append(&2, Edge, ts, rs)
-    case Format.Code{base, r}:
-      List.append(&2, Edge, Rule.edges.of(bs, r), Format.uses(base, bs))
+      List.append(&2, Import, ts, rs)
+    case Format.Code{base, r, im}:
+      List.append(
+        &2,
+        Import,
+        Rule.imports.all(bs, r),
+        List.append(&2, Import, im, Format.uses(base, bs))
+      )
 # bend-lint: expect-end bend-lint-rules/performance/deep_call_in_fork@information
+
+# Items
+# -----
+# A format splits a resource into items (Item): functions, types, sections.
+# What a writer's work uses is then a set of items, not of whole resources. A
+# format that cannot split a resource gives the whole resource as one item
+# with no name, which uses all that the resource imports: so a language
+# without a splitter is tracked per resource, and never misses a use.
+
+# the items of the bytes b in the format f. No format splits yet: each gives
+# the whole resource as one item
+def Format.items(f: Format, b: Texts.Bytes()) -> List<&2, Item>:
+  [Item{"content", [], 0n, b, []}]
+
+# the item x is one of those that the names ns ask for
+def Item.asked(+ns: List<&2, Texts.Bytes()>, x: Item) -> Bool:
+  match x:
+    case Item{k, n, at, b, us}:
+      List.contains(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), ns, n)
+
+# the items of xs that the names ns ask for
+def Items.asked(+ns: List<&2, Texts.Bytes()>, xs: List<&2, Item>) -> List<&2, Item>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{+x, rest}:
+      List.filter.put(Item, x, Items.asked(ns, rest), Item.asked(ns, x))
+
+# the items of its target xs that the import x brings into scope: only those
+# that it names, when it brings only named items and names some; else all of
+# them. An item with no name is the whole resource, which every import brings
+def Import.pool(x: Import, xs: List<&2, Item>) -> List<&2, Item>:
+  match x:
+    case Import{Edge{t, al, Con{n, more}, cs}, Brings.Named{}, fi}:
+      Items.asked(Con{n, more}, xs)
+    case _:
+      xs
+
+# The code of a format
+# --------------------
+# A format is data: a resource keeps its own, by hash, so every node reads a
+# resource in the same format, whatever its name.
+
+# the value x read, with the words r after it
+def Read.give(-A: Data, x: A, r: List<&2, U32>) -> Maybe<&2, Codes.Read<A>>:
+  Some{Codes.Read{x, r}}
+
+# the bit b, then r
+def Bit.code(b: Bool, r: List<&2, U32>) -> List<&2, U32>:
+  match b:
+    case False{}:
+      0 <> r
+    case True{}:
+      1 <> r
+
+# a bit
+def Bit.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Bool>>:
+  match ts:
+    case Con{0, r}:
+      Some{Codes.Read{False{}, r}}
+    case Con{1, r}:
+      Some{Codes.Read{True{}, r}}
+    case _:
+      None{}
+
+# the condition c, then r
+def Cond.code(c: Cond, r: List<&2, U32>) -> List<&2, U32>:
+  match c:
+    case Cond{x, h}:
+      Codes.Code.words(x, Bit.code(h, r))
+
+# a condition
+def Cond.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Cond>>:
+  Codes.Code.two.read(
+    ~Texts.Bytes(),
+    ~Bool,
+    ~Cond,
+    ~Codes.Code.words.read,
+    ~Bit.code.read,
+    x => h => Cond{x, h},
+    ts
+  )
+
+# the edge e, then r
+def Edge.code(e: Edge, r: List<&2, U32>) -> List<&2, U32>:
+  match e:
+    case Edge{t, a, ns, cs}:
+      Codes.Code.words(
+        t,
+        Codes.Code.words(
+          a,
+          Codes.Code.list(
+            ~Texts.Bytes(),
+            ~Codes.Code.words,
+            ns,
+            Codes.Code.list(~Cond, ~Cond.code, cs, r)
+          )
+        )
+      )
+
+# an edge
+def Edge.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Edge>>:
+  Codes.Code.four.read(
+    ~Texts.Bytes(),
+    ~Texts.Bytes(),
+    ~List<&2, Texts.Bytes()>,
+    ~List<&2, Cond>,
+    ~Edge,
+    ~Codes.Code.words.read,
+    ~Codes.Code.words.read,
+    ~(m => Codes.Code.list.read(~Texts.Bytes(), ~Codes.Code.words.read, m)),
+    ~(m => Codes.Code.list.read(~Cond, ~Cond.code.read, m)),
+    t => a => ns => cs => Edge{t, a, ns, cs},
+    ts
+  )
+
+# what an import brings, then r
+def Brings.code(b: Brings, r: List<&2, U32>) -> List<&2, U32>:
+  match b:
+    case Brings.Named{}:
+      0 <> r
+    case Brings.Whole{}:
+      1 <> r
+    case Brings.Through{}:
+      2 <> r
+
+# what an import brings
+def Brings.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Brings>>:
+  match ts:
+    case Con{0, r}:
+      Some{Codes.Read{Brings.Named{}, r}}
+    case Con{1, r}:
+      Some{Codes.Read{Brings.Whole{}, r}}
+    case Con{2, r}:
+      Some{Codes.Read{Brings.Through{}, r}}
+    case _:
+      None{}
+
+# the character c, then r
+def Char.code(c: Char, r: List<&2, U32>) -> List<&2, U32>:
+  Char.to_u32(c) <> r
+
+# a character
+def Char.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Char>>:
+  match ts:
+    case Con{x, r}:
+      Some{Codes.Read{Chr{x}, r}}
+    case Nil{}:
+      None{}
+
+# how a target is found, then r
+def Find.code(f: Find, r: List<&2, U32>) -> List<&2, U32>:
+  match f:
+    case Find{s, l, rs, ss}:
+      Codes.Code.maybe(
+        ~Char,
+        ~Char.code,
+        s,
+        Bit.code(
+          l,
+          Codes.Code.list(~String, ~Codes.Code.text, rs, Codes.Code.list(~String, ~Codes.Code.text, ss, r))
+        )
+      )
+
+# how a target is found
+def Find.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Find>>:
+  Codes.Code.four.read(
+    ~Maybe<&2, Char>,
+    ~Bool,
+    ~List<&2, String>,
+    ~List<&2, String>,
+    ~Find,
+    ~(m => Codes.Code.maybe.read(~Char, ~Char.code.read, m)),
+    ~Bit.code.read,
+    ~(m => Codes.Code.list.read(~String, ~Codes.Code.text.read, m)),
+    ~(m => Codes.Code.list.read(~String, ~Codes.Code.text.read, m)),
+    s => l => rs => ss => Find{s, l, rs, ss},
+    ts
+  )
+
+# the import x, then r
+def Import.code(x: Import, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Import{e, b, f}:
+      Edge.code(e, Brings.code(b, Find.code(f, r)))
+
+# an import
+def Import.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Import>>:
+  Codes.Code.three.read(
+    ~Edge,
+    ~Brings,
+    ~Find,
+    ~Import,
+    ~Edge.code.read,
+    ~Brings.code.read,
+    ~Find.code.read,
+    e => b => f => Import{e, b, f},
+    ts
+  )
+
+# the rule x, then r
+def Rule.code(x: Rule, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Rule{st, op, cl, al, wh, ot, en, br, fi}:
+      Codes.Code.words(
+        st,
+        Codes.Code.words(
+          op,
+          Codes.Code.words(
+            cl,
+            Codes.Code.words(
+              al,
+              Codes.Code.words(
+                wh,
+                Codes.Code.words(ot, Codes.Code.words(en, Brings.code(br, Find.code(fi, r))))
+              )
+            )
+          )
+        )
+      )
+
+# the markers of a rule
+type Marks is Data:
+  Marks{start: Texts.Bytes(), open: Texts.Bytes(), close: Texts.Bytes(), alias: Texts.Bytes()}
+
+# the markers of conditions, what a rule brings, and how it finds targets
+type Tail is Data:
+  Tail{when: Texts.Bytes(), otherwise: Texts.Bytes(), end: Texts.Bytes(), brings: Brings, find: Find}
+
+# the rule of the markers m and the tail x
+def Rule.of(m: Marks, x: Tail) -> Rule:
+  match m x:
+    case Marks{st, op, cl, al} Tail{wh, ot, en, br, fi}:
+      Rule{st, op, cl, al, wh, ot, en, br, fi}
+
+# the markers of a rule
+def Marks.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Marks>>:
+  Codes.Code.four.read(
+    ~Texts.Bytes(),
+    ~Texts.Bytes(),
+    ~Texts.Bytes(),
+    ~Texts.Bytes(),
+    ~Marks,
+    ~Codes.Code.words.read,
+    ~Codes.Code.words.read,
+    ~Codes.Code.words.read,
+    ~Codes.Code.words.read,
+    st => op => cl => al => Marks{st, op, cl, al},
+    ts
+  )
+
+# the end of a rule
+def Tail.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Tail>>:
+  Codes.Read.then(
+    Texts.Bytes(),
+    Tail,
+    Codes.Code.words.read(ts),
+    wh => r => Codes.Code.four.read(
+      ~Texts.Bytes(),
+      ~Texts.Bytes(),
+      ~Brings,
+      ~Find,
+      ~Tail,
+      ~Codes.Code.words.read,
+      ~Codes.Code.words.read,
+      ~Brings.code.read,
+      ~Find.code.read,
+      ot => en => br => fi => Tail{wh, ot, en, br, fi},
+      r
+    )
+  )
+
+# a rule
+def Rule.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Rule>>:
+  Codes.Code.two.read(
+    ~Marks,
+    ~Tail,
+    ~Rule,
+    ~Marks.code.read,
+    ~Tail.code.read,
+    m => x => Rule.of(m, x),
+    ts
+  )
+
+# the leaf k, then r
+def Leaf.code(k: Leaf, r: List<&2, U32>) -> List<&2, U32>:
+  match k:
+    case Leaf.Lines{}:
+      0 <> r
+    case Leaf.Whole{}:
+      1 <> r
+    case Leaf.Module{}:
+      2 <> r
+
+# a leaf
+def Leaf.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Leaf>>:
+  match ts:
+    case Con{0, r}:
+      Some{Codes.Read{Leaf.Lines{}, r}}
+    case Con{1, r}:
+      Some{Codes.Read{Leaf.Whole{}, r}}
+    case Con{2, r}:
+      Some{Codes.Read{Leaf.Module{}, r}}
+    case _:
+      None{}
+
+# the format f, then r
+def Format.code(f: Format, r: List<&2, U32>) -> List<&2, U32>:
+  match f:
+    case Format.Leaf{k}:
+      0 <> Leaf.code(k, r)
+    case Format.Embed{o, op, cl, i}:
+      1 <> Format.code(o, Codes.Code.words(op, Codes.Code.words(cl, Format.code(i, r))))
+    case Format.Code{b, x, im}:
+      2 <> Format.code(b, Rule.code(x, Codes.Code.list(~Import, ~Import.code, im, r)))
+
+# a format, in at most f steps: each step reads one tag, then the parts of
+# its kind
+def Format.code.read.go(f: Nat, ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Format>>:
+  match f ts:
+    case 0n x:
+      None{}
+    case 1n+p Nil{}:
+      None{}
+    case 1n+(+p) Con{+x, +r}:
+      Shared.Bool.when(
+        Maybe<&2, Codes.Read<Format>>,
+        U32.is_eq(x, 0),
+        u => Codes.Code.one.read(~Leaf, ~Format, ~Leaf.code.read, k => Format.Leaf{k}, r),
+        u => Shared.Bool.when(
+          Maybe<&2, Codes.Read<Format>>,
+          U32.is_eq(x, 1),
+          v => Codes.Read.then(
+            Format,
+            Format,
+            Format.code.read.go(p, r),
+            o => r1 => Codes.Read.then(
+              Texts.Bytes(),
+              Format,
+              Codes.Code.words.read(r1),
+              op => r2 => Codes.Read.then(
+                Texts.Bytes(),
+                Format,
+                Codes.Code.words.read(r2),
+                cl => r3 => Codes.Read.then(
+                  Format,
+                  Format,
+                  Format.code.read.go(p, r3),
+                  i => r4 => Read.give(Format, Format.Embed{o, op, cl, i}, r4)
+                )
+              )
+            )
+          ),
+          v => Shared.Bool.when(
+            Maybe<&2, Codes.Read<Format>>,
+            U32.is_eq(x, 2),
+            w => Codes.Read.then(
+              Format,
+              Format,
+              Format.code.read.go(p, r),
+              b => r1 => Codes.Code.two.read(
+                ~Rule,
+                ~List<&2, Import>,
+                ~Format,
+                ~Rule.code.read,
+                ~(m => Codes.Code.list.read(~Import, ~Import.code.read, m)),
+                x2 => im => Format.Code{b, x2, im},
+                r1
+              )
+            ),
+            w => None{}
+          )
+        )
+      )
+
+# a format: a code has no more tags than words
+def Format.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Format>>:
+  +xs = ts
+  Format.code.read.go(List.length(&2, U32, xs), xs)
+
+# a format reads back from its code
+law Format.code_read:
+  for f: Format
+  for r: List<&2, U32>
+  {Format.code.read(Format.code(f, r)) == Some{Codes.Read{f, r}}: Maybe<&2, Codes.Read<Format>>}
 
 # Known formats
 # -------------
 
-# a language whose imports name a target after start, up to close
-def Format.imports(start: String, open: String, close: String, alias: String) -> Format:
+# a language whose imports name a target after start, up to close, bring br
+# and are found by fi
+def Format.imports(
+  start: String,
+  open: String,
+  close: String,
+  alias: String,
+  br: Brings,
+  fi: Find
+) -> Format:
   Format.Code{
     Format.Leaf{Leaf.Lines{}},
     Rule{
@@ -2428,9 +2917,16 @@ def Format.imports(start: String, open: String, close: String, alias: String) ->
       Texts.Bytes.of_text(alias),
       [],
       [],
-      []
-    }
+      [],
+      br,
+      fi
+    },
+    []
   }
+
+# a target that is a path beside the resource, with the suffixes ss
+def Find.beside(ss: List<&2, String>) -> Find:
+  Find{None{}, True{}, [], ss}
 
 # the format of the paths that end with a suffix
 type Known is Data:
@@ -2440,8 +2936,15 @@ type Known is Data:
 def Format.known() -> List<&2, Known>:
   +oftext1 = Texts.Bytes.of_text("```")
   +oftext2 = Texts.Bytes.of_text("\"")
-  +css = Format.imports("@import ", "\"", "\"", "")
-  +js = Format.imports("import ", "from \"", "\"", "")
+  +css = Format.imports("@import ", "\"", "\"", "", Brings.Through{}, Find.beside([""]))
+  +js = Format.imports(
+    "import ",
+    "from \"",
+    "\"",
+    "",
+    Brings.Named{},
+    Find{None{}, True{}, ["node_modules"], ["", ".js", ".ts", "/index.js"]}
+  )
   +c: Format = Format.Code{
     Format.Leaf{Leaf.Lines{}},
     Rule{
@@ -2451,12 +2954,15 @@ def Format.known() -> List<&2, Known>:
       [],
       Texts.Bytes.of_text("#if"),
       Texts.Bytes.of_text("#else"),
-      Texts.Bytes.of_text("#endif")
-    }
+      Texts.Bytes.of_text("#endif"),
+      Brings.Through{},
+      Find.beside([""])
+    },
+    []
   }
   +html: Format = Format.Embed{
     Format.Embed{
-      Format.imports("<script src=\"", "", "\"", ""),
+      Format.imports("<script src=\"", "", "\"", "", Brings.Whole{}, Find.beside([""])),
       Texts.Bytes.of_text("<style>"),
       Texts.Bytes.of_text("</style>"),
       css
@@ -2466,7 +2972,7 @@ def Format.known() -> List<&2, Known>:
     js
   }
   [
-    Known{".bend", Format.imports("import ", "", " ", "as ")},
+    Known{".bend", Format.imports("import ", "", " ", "as ", Brings.Whole{}, Find.beside([""]))},
     Known{".c", c},
     Known{".h", c},
     Known{".js", js},
@@ -2497,6 +3003,7 @@ def Format.find(ks: List<&2, Known>, +p: String) -> Format:
     case Con{Known{k, f}, r}:
       Shared.Bool.when(Format, String.ends_with(p, k), u => f, u => Format.find(r, p))
 
-# the format of a resource at the path p, by its suffix
-def Format.of(p: String) -> Format:
+# a format to suggest for a new resource named p, by its suffix. A resource
+# keeps its format as data: no node reads a format from a name
+def Format.guess(p: String) -> Format:
   Format.find(Format.known(), p)

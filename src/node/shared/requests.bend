@@ -28,11 +28,17 @@ type Ref is Data:
 type Source is Data:
   Source{version: Ref, root: Maybe<&2, Hashes.Hash>}
 
-# new content: what a node holds under a root (the root of the rope of its
-# bytes: Content.of), or what an old version held. A change names its content
-# and does not carry it, so a change of a huge resource is small
+# what a resource is: the hash of its format, which the ledger holds as data
+# (Formats.Format.code), and the root of the rope of its bytes. A resource
+# carries its format, so every node reads it the same way, whatever its name
+type Res is Data:
+  Res{format: Hashes.Hash, root: Ropes.Root}
+
+# new content: a resource that a node holds, or what an old version held. A
+# change names its content and does not carry it, so a change of a huge
+# resource is small
 type Content is Data:
-  Content.Root{root: Ropes.Root}
+  Content.New{res: Res}
   Content.Of{version: Ledgers.Id}
 
 # a change of a branch, or of its store (Ask.on). Key: the store gives the
@@ -208,11 +214,52 @@ def Members.code(ms: List<&2, Member>, r: List<&2, U32>) -> List<&2, U32>:
 def Members.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, Member>>>:
   Codes.Code.list.read(~Member, ~Member.code.read, ts)
 
+# the resource x, then r
+def Res.code(x: Res, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Res{f, t}:
+      Hashes.Hash.code(f, Ropes.Root.code(t, r))
+
+# a resource
+def Res.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Res>>:
+  Codes.Code.two.read(
+    ~Hashes.Hash,
+    ~Ropes.Root,
+    ~Res,
+    ~Hashes.Hash.code.read,
+    ~Ropes.Root.code.read,
+    f => t => Res{f, t},
+    ts
+  )
+
+# a resource reads back
+def Res.code_read(
+  x: Res,
+  r: List<&2, U32>
+) -> {Res.code.read(Res.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Res>>}:
+  match x:
+    case Res{f, t}:
+      Codes.Code.two_read(
+        ~Hashes.Hash,
+        ~Ropes.Root,
+        ~Res,
+        ~Hashes.Hash.codec(),
+        ~Ropes.Root.codec(),
+        a => b => Res{a, b},
+        f,
+        t,
+        r
+      )
+
+# the code of resources
+def Res.codec() -> Codes.Codec(Res):
+  (Res.code, (Res.code.read, x => r => Res.code_read(x, r)))
+
 # the content c, then r
 def Content.code(c: Content, r: List<&2, U32>) -> List<&2, U32>:
   match c:
-    case Content.Root{x}:
-      0 <> Ropes.Root.code(x, r)
+    case Content.New{x}:
+      0 <> Res.code(x, r)
     case Content.Of{v}:
       1 <> Ledgers.Id.code(v, r)
 
@@ -225,13 +272,7 @@ def Content.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Content>>:
       Shared.Bool.when(
         Maybe<&2, Codes.Read<Content>>,
         U32.is_eq(x, 0),
-        u => Codes.Code.one.read(
-          ~Ropes.Root,
-          ~Content,
-          ~Ropes.Root.code.read,
-          x => Content.Root{x},
-          r
-        ),
+        u => Codes.Code.one.read(~Res, ~Content, ~Res.code.read, x => Content.New{x}, r),
         u => Shared.Bool.when(
           Maybe<&2, Codes.Read<Content>>,
           U32.is_eq(x, 1),
@@ -466,8 +507,8 @@ def Content.code_read(
   Content.code.read(Content.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Content>>
 }:
   match x:
-    case Content.Root{b}:
-      Codes.Code.one_read(~Ropes.Root, ~Content, ~Ropes.Root.codec(), a => Content.Root{a}, b, r)
+    case Content.New{b}:
+      Codes.Code.one_read(~Res, ~Content, ~Res.codec(), a => Content.New{a}, b, r)
     case Content.Of{v}:
       Codes.Code.one_read(~Ledgers.Id, ~Content, ~Ledgers.Id.codec(), a => Content.Of{a}, v, r)
 

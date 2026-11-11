@@ -1,5 +1,6 @@
 import Base
 import ./shared/shared/code.bend as Codes
+import ./shared/pack.bend as Packs
 import ./shared/shared/hash.bend as Hashes
 import ./shared/shared/shared.bend as Shared
 import ./shared/depot.bend as Depots
@@ -222,10 +223,6 @@ def Root.is_eq_sound(a: Root, b: Root) -> {Root.is_eq(a, b) == True{}: Bool} -> 
         ): {Root{d1, h1} == Root{d1, _}: Root}
         {==}
 
-# the laws of the sameness of roots
-def Root.laws() -> Shared.Eq.Laws(Root, Root.is_eq):
-  (a => Root.is_eq_refl(a), a => b => e => Root.is_eq_sound(a, b)(e))
-
 # Cuts
 # ----
 
@@ -289,6 +286,35 @@ def Rope.cut_flat(ty, edge, xs):
         r
       ): {x <> List.concat(&2, ty, Rope.cut(~ty, ~edge, r)) == x <> _: List<&2, ty>}
       {==}
+
+# xs cut after each element where edge holds of the state after it: the state
+# starts at s and each element moves it by step. A cut by content: where a
+# piece ends depends on the elements before the cut, not on where it sits, so
+# an edit moves only the cuts near it. Rope.cut is the cut with no state
+def Rope.cut.with(
+  ~A: Data,
+  ~S: Data,
+  ~step: S -> A -> S,
+  ~edge: S -> A -> Bool,
+  xs: List<&2, A>,
+  +s: S
+) -> List<&2, List<&2, A>>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{+x, rest}:
+      +s2 = step(s)(x)
+      Rope.cut.at(A, edge(s2)(x), x, Rope.cut.with(~A, ~S, ~step, ~edge, rest, s2))
+
+# the pieces of a cut by state, one after the other, are what was cut
+law Rope.cut_with_flat:
+  for ~A: Data
+  for ~S: Data
+  for ~step: S -> A -> S
+  for ~edge: S -> A -> Bool
+  for xs: List<&2, A>
+  for +s: S
+  {List.concat(&2, A, Rope.cut.with(~A, ~S, ~step, ~edge, xs, s)) == xs: List<&2, A>}
 
 # the node that the depot s holds under the hash h
 def Rope.node(
@@ -1540,3 +1566,37 @@ def Rope.read_grows(ty, fetch, grows, kept, a, b, r, x):
   match r:
     case Root{d, h}:
       gr => Rope.read.go_kept(~ty, ~fetch, ~grows, ~kept, d, a, b, [h], x, gr)
+
+# Bytes
+# -----
+# A rope of bytes holds them packed, four in a word (Packs), and cut by their
+# content: at the end of each line, and where the state of the bytes before a
+# cut says so. So an edit changes the pieces near it and no others, in text
+# and in any other bytes.
+
+# x is the byte that ends a line
+def Byte.is_end(x: U32) -> Bool:
+  U32.is_eq(x, 10)
+
+# the state of a cut of bytes after the byte x: each byte moves the bits one
+# up and adds a mix of the byte, so after 32 bytes a byte has left the state
+def Gear.step(h: U32) -> U32 -> U32:
+  x => U32.add(U32.shl(h), U32.mul(U32.add(x, 1), 2654435761))
+
+# a piece of bytes ends after the byte x, in the state h: at the end of a
+# line, or where the low 13 bits of the state are 0 (about one byte in 8192)
+def Gear.edge(h: U32) -> U32 -> Bool:
+  x => Bool.or(Byte.is_end(x), U32.is_eq(U32.and(h, 8191), 0))
+
+# the rope of the bytes b
+def Rope.of_bytes(b: List<&2, U32>) -> Put:
+  Rope.put(Packs.Pack.pieces(Rope.cut.with(~U32, ~U32, ~Gear.step, ~Gear.edge, b, 0)))
+
+# the bytes of the rope whose root is r, in the depot s (none: s lacks a node)
+def Rope.bytes(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  r: Root
+) -> Maybe<&2, List<&2, U32>>:
+  Maybe.bind(&2, List<&2, U32>, List<&2, U32>, Rope.read(~S, ~fetch, s, r), ws => Some{Packs.Pack.read(ws, 0n)})

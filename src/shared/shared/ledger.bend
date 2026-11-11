@@ -1040,7 +1040,8 @@ def Ballots.cell(
 # entries of one ledger whose names another lacks; the ballots of a voter at a
 # place; a round that no ballot at a height of a line is above; the voters
 # that the ledger holds a proof of a lie against, under a root; a height that
-# no ballot of a line is above; and the requests of an author
+# no ballot of a line is above; the requests of an author; and the ledger
+# without the entry of a name
 def Ledger.Ops(-Q: Data, -L: Data) -> Type:
   L
     & (
@@ -1055,7 +1056,10 @@ def Ledger.Ops(-Q: Data, -L: Data) -> Type:
                       (L -> Line -> U32 -> Nat)
                         & (
                           (L -> Hashes.Hash -> List<&2, String>)
-                            & ((L -> Line -> Nat) & (L -> String -> List<&2, Entry<Q>>))
+                            & (
+                              (L -> Line -> Nat)
+                                & ((L -> String -> List<&2, Entry<Q>>) & (L -> Name -> L))
+                            )
                         )
                     )
                 )
@@ -1125,15 +1129,22 @@ def Kind.liars(-Q: Data, k: Ledger.Kind(Q)) -> Kind.L(Q, k) -> Hashes.Hash -> Li
 # a height that no ballot of a line is above, in a ledger of the kind k
 def Kind.heights(-Q: Data, k: Ledger.Kind(Q)) -> Kind.L(Q, k) -> Line -> Nat:
   match k:
-    case Tuple{l, Tuple{e, Tuple{g, Tuple{a, Tuple{m, Tuple{b, Tuple{r, Tuple{x, Tuple{hs, as}}}}}}}}}:
+    case Tuple{l, Tuple{e, Tuple{g, Tuple{a, Tuple{m, Tuple{b, Tuple{r, Tuple{x, Tuple{hs, Tuple{as, dr}}}}}}}}}}:
       hs
 
 # the requests of an author, in a ledger of the kind k; the cost is that of
 # those requests
 def Kind.asks(-Q: Data, k: Ledger.Kind(Q)) -> Kind.L(Q, k) -> String -> List<&2, Entry<Q>>:
   match k:
-    case Tuple{l, Tuple{e, Tuple{g, Tuple{a, Tuple{m, Tuple{b, Tuple{r, Tuple{x, Tuple{hs, as}}}}}}}}}:
+    case Tuple{l, Tuple{e, Tuple{g, Tuple{a, Tuple{m, Tuple{b, Tuple{r, Tuple{x, Tuple{hs, Tuple{as, dr}}}}}}}}}}:
       as
+
+# a ledger of the kind k without the entry of a name: a node that lets go of
+# what it no longer uses
+def Kind.drop(-Q: Data, k: Ledger.Kind(Q)) -> Kind.L(Q, k) -> Name -> Kind.L(Q, k):
+  match k:
+    case Tuple{l, Tuple{e, Tuple{g, Tuple{a, Tuple{m, Tuple{b, Tuple{r, Tuple{x, Tuple{hs, Tuple{as, dr}}}}}}}}}}:
+      dr
 
 # the ledger l of the kind k holds the entry e, when c is the code of changes
 def Kind.has(~Q: Data, ~c: Codes.Codec(Q), ~k: Ledger.Kind(Q), l: Kind.L(Q, k), +e: Entry<Q>) -> Bool:
@@ -1281,6 +1292,19 @@ def Laws.Asks(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q)) -> Type:
       == Bool.and(Kind.has(~Q, ~c, ~k, l, e), Entry.is_by(Q, e, author)): Bool
   }
 
+# a ledger without the entry of a name holds nothing there, and all else that
+# it held
+def Laws.Drop(-Q: Data, -k: Ledger.Kind(Q)) -> Type:
+  @l: Kind.L(Q, k) -> @n: Name -> @m: Name -> {
+    Kind.get(Q, k)(Kind.drop(Q, k)(l)(n))(m)
+      == Shared.Bool.when(
+        Maybe<&2, Entry<Q>>,
+        Name.is_eq(n, m),
+        u => None{},
+        u => Kind.get(Q, k)(l)(m)
+      ): Maybe<&2, Entry<Q>>
+  }
+
 # a voter is a liar under a root only when the ledger holds a proof of a lie
 # whose first ballot is of that voter under that root
 def Laws.LiarsSound(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q)) -> Type:
@@ -1334,7 +1358,10 @@ def Ledger.Laws(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q)) -> Type:
                                   Laws.Heights(Q, c, k)
                                     & (
                                       Laws.Asks(Q, c, k)
-                                        & (Laws.LiarsSound(Q, c, k) & Laws.LiarsComplete(Q, c, k))
+                                        & (
+                                          Laws.Drop(Q, k)
+                                            & (Laws.LiarsSound(Q, c, k) & Laws.LiarsComplete(Q, c, k))
+                                        )
                                     )
                                 )
                             )

@@ -668,10 +668,3 @@ def uri_show_after_read(t, u, h):
   +t = t
   show_read.at(Texts.Text.cut(t, 58), t, u)({==})(h)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
-
-# Endpoints
-# ---------
-
-# The kinds of endpoint. A mount's URI scheme picks one.
-type Endpoint is Data:
-  FileEndpoint{}
