@@ -3070,42 +3070,126 @@ def Book.when_end(-V: Data, -f: List<&2, U32> -> V -> Bool, +k2: List<&2, U32>, 
 def Book.ok.entries_rest(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, m: Crits.Crit<Entry<Q>>, +rest: List<&2, Crits.Bind<Entry<Q>>>) -> {
   Book.ok.entries(~Q, ~c, b, Crits.Crit.entries.go(Entry<Q>, m, rest)) == True{}: Bool
 } -> {Book.ok.entries(~Q, ~c, b, rest) == True{}: Bool}:
-  ?TODO
+  match m:
+    case Crits.Crit.Tip{}:
+      h => h
+    case Crits.Crit.Leaf{k, +v}:
+      h => Shared.Bool.and_true_right(Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, v)), k), Book.indexed(Q, b, Entry.keys(Q, v, Entry.name(~Q, ~c, v)), Entry.name(~Q, ~c, v))), Book.ok.entries(~Q, ~c, b, rest))(h)
+    case Crits.Crit.Fork{r, p, None{}, +z, +o}:
+      h => Book.ok.entries_rest(~Q, ~c, b, o, rest)(Book.ok.entries_rest(~Q, ~c, b, z, Crits.Crit.entries.go(Entry<Q>, o, rest))(h))
+    case Crits.Crit.Fork{+r, p, Some{+v}, +z, +o}:
+      h =>
+        Book.ok.entries_rest(~Q, ~c, b, o, rest)(
+          Book.ok.entries_rest(~Q, ~c, b, z, Crits.Crit.entries.go(Entry<Q>, o, rest))(
+            Shared.Bool.and_true_right(Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, v)), r), Book.indexed(Q, b, Entry.keys(Q, v, Entry.name(~Q, ~c, v)), Entry.name(~Q, ~c, v))), Book.ok.entries(~Q, ~c, b, Crits.Crit.entries.go(Entry<Q>, z, Crits.Crit.entries.go(Entry<Q>, o, rest))))(h)
+          )
+        )
 
 # an entry of m is in its place in the book b, when the entries of m then
 # rest are
 def Book.ok.entries_at(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, m: Crits.Crit<Entry<Q>>, +rest: List<&2, Crits.Bind<Entry<Q>>>, +k: List<&2, U32>, -v: Entry<Q>) -> {
   Book.ok.entries(~Q, ~c, b, Crits.Crit.entries.go(Entry<Q>, m, rest)) == True{}: Bool
 } -> {Crits.Crit.lookup(Entry<Q>, m, k) == Some{v}: Maybe<&2, Entry<Q>>} -> {Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, v)), k), Book.indexed(Q, b, Entry.keys(Q, v, Entry.name(~Q, ~c, v)), Entry.name(~Q, ~c, v))) == True{}: Bool}:
-  ?TODO
+  match m:
+    case Crits.Crit.Tip{}:
+      h => hl => Empty.absurd({Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, v)), k), Book.indexed(Q, b, Entry.keys(Q, v, Entry.name(~Q, ~c, v)), Entry.name(~Q, ~c, v))) == True{}: Bool}, Shared.Maybe.none_ne_some(Entry<Q>, v, hl))
+    case Crits.Crit.Leaf{+k2, +w}:
+      h => hl => Book.when_end(Entry<Q>, kk => +vv => Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, vv)), kk), Book.indexed(Q, b, Entry.keys(Q, vv, Entry.name(~Q, ~c, vv)), Entry.name(~Q, ~c, vv))), k2, w, k, v)(Shared.Bool.and_true_left(Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, w)), k2), Book.indexed(Q, b, Entry.keys(Q, w, Entry.name(~Q, ~c, w)), Entry.name(~Q, ~c, w))), Book.ok.entries(~Q, ~c, b, rest))(h))(hl)
+    case Crits.Crit.Fork{+r, p, None{}, +z, +o}:
+      +h => hl =>
+        Crits.Crit.or3_some(Entry<Q>, {Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, v)), k), Book.indexed(Q, b, Entry.keys(Q, v, Entry.name(~Q, ~c, v)), Entry.name(~Q, ~c, v))) == True{}: Bool}, Crits.Crit.ended(Entry<Q>, r, None{}, k), Crits.Crit.lookup(Entry<Q>, z, k), Crits.Crit.lookup(Entry<Q>, o, k), v)(
+          he => Empty.absurd({Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, v)), k), Book.indexed(Q, b, Entry.keys(Q, v, Entry.name(~Q, ~c, v)), Entry.name(~Q, ~c, v))) == True{}: Bool}, Shared.Maybe.none_ne_some(Entry<Q>, v, he))
+        )(hz => Book.ok.entries_at(~Q, ~c, b, z, Crits.Crit.entries.go(Entry<Q>, o, rest), k, v)(h)(hz))(
+          ho => Book.ok.entries_at(~Q, ~c, b, o, rest, k, v)(Book.ok.entries_rest(~Q, ~c, b, z, Crits.Crit.entries.go(Entry<Q>, o, rest))(h))(ho)
+        )(hl)
+    case Crits.Crit.Fork{+r, p, Some{+w}, +z, +o}:
+      +h => hl =>
+        +h2 = Shared.Bool.and_true_right(Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, w)), r), Book.indexed(Q, b, Entry.keys(Q, w, Entry.name(~Q, ~c, w)), Entry.name(~Q, ~c, w))), Book.ok.entries(~Q, ~c, b, Crits.Crit.entries.go(Entry<Q>, z, Crits.Crit.entries.go(Entry<Q>, o, rest))))(h)
+        Crits.Crit.or3_some(Entry<Q>, {Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, v)), k), Book.indexed(Q, b, Entry.keys(Q, v, Entry.name(~Q, ~c, v)), Entry.name(~Q, ~c, v))) == True{}: Bool}, Crits.Crit.ended(Entry<Q>, r, Some{w}, k), Crits.Crit.lookup(Entry<Q>, z, k), Crits.Crit.lookup(Entry<Q>, o, k), v)(
+          he => Book.when_end(Entry<Q>, kk => +vv => Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, vv)), kk), Book.indexed(Q, b, Entry.keys(Q, vv, Entry.name(~Q, ~c, vv)), Entry.name(~Q, ~c, vv))), r, w, k, v)(Shared.Bool.and_true_left(Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, w)), r), Book.indexed(Q, b, Entry.keys(Q, w, Entry.name(~Q, ~c, w)), Entry.name(~Q, ~c, w))), Book.ok.entries(~Q, ~c, b, Crits.Crit.entries.go(Entry<Q>, z, Crits.Crit.entries.go(Entry<Q>, o, rest))))(h))(he)
+        )(hz => Book.ok.entries_at(~Q, ~c, b, z, Crits.Crit.entries.go(Entry<Q>, o, rest), k, v)(h2)(hz))(
+          ho => Book.ok.entries_at(~Q, ~c, b, o, rest, k, v)(Book.ok.entries_rest(~Q, ~c, b, z, Crits.Crit.entries.go(Entry<Q>, o, rest))(h2))(ho)
+        )(hl)
 
 # an entry of the dict d is in its place in the book b, when the entries of d
 # are
 def Book.ok.entries_get(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +d: Crits.Dict(Entry<Q>), +k: List<&2, U32>, -v: Entry<Q>) -> {
   Book.ok.entries(~Q, ~c, b, Crits.Dict.entries(Entry<Q>, d)) == True{}: Bool
 } -> {Crits.Dict.get(Entry<Q>, d, k) == Some{v}: Maybe<&2, Entry<Q>>} -> {Bool.and(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, v)), k), Book.indexed(Q, b, Entry.keys(Q, v, Entry.name(~Q, ~c, v)), Entry.name(~Q, ~c, v))) == True{}: Bool}:
-  ?TODO
+  h => hg =>
+    Book.ok.entries_at(~Q, ~c, b, Crits.Dict.crit(Entry<Q>, d), [], k, v)(h)(
+      Equal.trans(
+        Maybe<&2, Entry<Q>>,
+        Crits.Crit.lookup(Entry<Q>, Crits.Dict.crit(Entry<Q>, d), k),
+        Crits.Dict.get(Entry<Q>, d, k),
+        Some{v},
+        Equal.sym(Maybe<&2, Entry<Q>>, Crits.Dict.get(Entry<Q>, d, k), Crits.Crit.lookup(Entry<Q>, Crits.Dict.crit(Entry<Q>, d), k), Book.dict_lookup(~Entry<Q>, d, k)),
+        hg
+      )
+    )
 
 # the keys rest of the index i of the book b each name an entry with that key,
 # when those of m then rest do
 def Book.ok.index_rest(-Q: Data, +b: Book<Q>, +i: Nat, m: Crits.Crit<Name>, +rest: List<&2, Crits.Bind<Name>>) -> {
   Book.ok.index(Q, b, i, Crits.Crit.entries.go(Name, m, rest)) == True{}: Bool
 } -> {Book.ok.index(Q, b, i, rest) == True{}: Bool}:
-  ?TODO
+  match m:
+    case Crits.Crit.Tip{}:
+      h => h
+    case Crits.Crit.Leaf{k, +v}:
+      h => Shared.Bool.and_true_right(Book.ok.key(Q, Book.get(Q, b, v), i, k, v), Book.ok.index(Q, b, i, rest))(h)
+    case Crits.Crit.Fork{r, p, None{}, +z, +o}:
+      h => Book.ok.index_rest(Q, b, i, o, rest)(Book.ok.index_rest(Q, b, i, z, Crits.Crit.entries.go(Name, o, rest))(h))
+    case Crits.Crit.Fork{+r, p, Some{+v}, +z, +o}:
+      h =>
+        Book.ok.index_rest(Q, b, i, o, rest)(
+          Book.ok.index_rest(Q, b, i, z, Crits.Crit.entries.go(Name, o, rest))(
+            Shared.Bool.and_true_right(Book.ok.key(Q, Book.get(Q, b, v), i, r, v), Book.ok.index(Q, b, i, Crits.Crit.entries.go(Name, z, Crits.Crit.entries.go(Name, o, rest))))(h)
+          )
+        )
 
 # a key of m of the index i of the book b names an entry with that key, when
 # the keys of m then rest do
 def Book.ok.index_at(-Q: Data, +b: Book<Q>, +i: Nat, m: Crits.Crit<Name>, +rest: List<&2, Crits.Bind<Name>>, +k: List<&2, U32>, -x: Name) -> {
   Book.ok.index(Q, b, i, Crits.Crit.entries.go(Name, m, rest)) == True{}: Bool
 } -> {Crits.Crit.lookup(Name, m, k) == Some{x}: Maybe<&2, Name>} -> {Book.ok.key(Q, Book.get(Q, b, x), i, k, x) == True{}: Bool}:
-  ?TODO
+  match m:
+    case Crits.Crit.Tip{}:
+      h => hl => Empty.absurd({Book.ok.key(Q, Book.get(Q, b, x), i, k, x) == True{}: Bool}, Shared.Maybe.none_ne_some(Name, x, hl))
+    case Crits.Crit.Leaf{+k2, +w}:
+      h => hl => Book.when_end(Name, kk => +vv => Book.ok.key(Q, Book.get(Q, b, vv), i, kk, vv), k2, w, k, x)(Shared.Bool.and_true_left(Book.ok.key(Q, Book.get(Q, b, w), i, k2, w), Book.ok.index(Q, b, i, rest))(h))(hl)
+    case Crits.Crit.Fork{+r, p, None{}, +z, +o}:
+      +h => hl =>
+        Crits.Crit.or3_some(Name, {Book.ok.key(Q, Book.get(Q, b, x), i, k, x) == True{}: Bool}, Crits.Crit.ended(Name, r, None{}, k), Crits.Crit.lookup(Name, z, k), Crits.Crit.lookup(Name, o, k), x)(
+          he => Empty.absurd({Book.ok.key(Q, Book.get(Q, b, x), i, k, x) == True{}: Bool}, Shared.Maybe.none_ne_some(Name, x, he))
+        )(hz => Book.ok.index_at(Q, b, i, z, Crits.Crit.entries.go(Name, o, rest), k, x)(h)(hz))(
+          ho => Book.ok.index_at(Q, b, i, o, rest, k, x)(Book.ok.index_rest(Q, b, i, z, Crits.Crit.entries.go(Name, o, rest))(h))(ho)
+        )(hl)
+    case Crits.Crit.Fork{+r, p, Some{+w}, +z, +o}:
+      +h => hl =>
+        +h2 = Shared.Bool.and_true_right(Book.ok.key(Q, Book.get(Q, b, w), i, r, w), Book.ok.index(Q, b, i, Crits.Crit.entries.go(Name, z, Crits.Crit.entries.go(Name, o, rest))))(h)
+        Crits.Crit.or3_some(Name, {Book.ok.key(Q, Book.get(Q, b, x), i, k, x) == True{}: Bool}, Crits.Crit.ended(Name, r, Some{w}, k), Crits.Crit.lookup(Name, z, k), Crits.Crit.lookup(Name, o, k), x)(
+          he => Book.when_end(Name, kk => +vv => Book.ok.key(Q, Book.get(Q, b, vv), i, kk, vv), r, w, k, x)(Shared.Bool.and_true_left(Book.ok.key(Q, Book.get(Q, b, w), i, r, w), Book.ok.index(Q, b, i, Crits.Crit.entries.go(Name, z, Crits.Crit.entries.go(Name, o, rest))))(h))(he)
+        )(hz => Book.ok.index_at(Q, b, i, z, Crits.Crit.entries.go(Name, o, rest), k, x)(h2)(hz))(
+          ho => Book.ok.index_at(Q, b, i, o, rest, k, x)(Book.ok.index_rest(Q, b, i, z, Crits.Crit.entries.go(Name, o, rest))(h2))(ho)
+        )(hl)
 
 # a key of the dict d names an entry of the book b with that key in the index
 # i, when the keys of d do
 def Book.ok.index_get(-Q: Data, +b: Book<Q>, +i: Nat, +d: Crits.Dict(Name), +k: List<&2, U32>, -x: Name) -> {
   Book.ok.index(Q, b, i, Crits.Dict.entries(Name, d)) == True{}: Bool
 } -> {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>} -> {Book.ok.key(Q, Book.get(Q, b, x), i, k, x) == True{}: Bool}:
-  ?TODO
+  h => hg =>
+    Book.ok.index_at(Q, b, i, Crits.Dict.crit(Name, d), [], k, x)(h)(
+      Equal.trans(
+        Maybe<&2, Name>,
+        Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k),
+        Crits.Dict.get(Name, d, k),
+        Some{x},
+        Equal.sym(Maybe<&2, Name>, Crits.Dict.get(Name, d, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Book.dict_lookup(~Name, d, k)),
+        hg
+      )
+    )
 
 # the entries of a put
 def Book.entries_put(~Q: Data, b: Book<Q>, +e: Entry<Q>, +n: Name, -ks: Keys) -> {
