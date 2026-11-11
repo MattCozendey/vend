@@ -5111,6 +5111,208 @@ def Merge.one_hit.at(
     nd
   )
 
+# the name of the key of a resource is the name
+def Merge.key_name(+n: Resources.Name) -> {Res.name(Key.res(n)) == Some{n}: Maybe<&2, Resources.Name>}:
+  Codes.Code.whole_read(
+    ~Resources.Name,
+    ~Resources.Name.code,
+    ~Resources.Name.code.read,
+    ~(x => r => Resources.Name.code_read(x, r)),
+    n
+  )
+
+# the work after the merge of the key x: the work, or what the merge of the
+# resource that the key names gives
+def Merge.next(
+  ~d: Led(),
+  +l: L(d),
+  hb: Maybe<&2, Hashes.Hash>,
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +w: Work<L(d)>,
+  mn: Maybe<&2, Resources.Name>
+) -> Maybe<&2, Work<L(d)>>:
+  match mn:
+    case None{}:
+      Some{w}
+    case Some{+n}:
+      Merge.one(~d, l, hb, ho, ht, k, n, w)
+
+# the work that Merge.all goes on with after the key x
+def Merge.step(
+  ~d: Led(),
+  +l: L(d),
+  hb: Maybe<&2, Hashes.Hash>,
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  x: List<&2, U32>,
+  +w: Work<L(d)>
+) -> Maybe<&2, Work<L(d)>>:
+  Maybe.default(
+    &2,
+    Maybe<&2, Work<L(d)>>,
+    Maybe.bind(
+      &2,
+      Resources.Name,
+      Maybe<&2, Work<L(d)>>,
+      Res.name(x),
+      n => Some{Merge.one(~d, l, hb, ho, ht, k, n, w)}
+    ),
+    Some{w}
+  )
+
+# a step is the work that the name of its key gives, once it is read (mn)
+def Merge.step_eq.at(
+  ~d: Led(),
+  +l: L(d),
+  hb: Maybe<&2, Hashes.Hash>,
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +w: Work<L(d)>,
+  mn: Maybe<&2, Resources.Name>
+) -> {
+  Maybe.default(
+    &2,
+    Maybe<&2, Work<L(d)>>,
+    Maybe.bind(
+      &2,
+      Resources.Name,
+      Maybe<&2, Work<L(d)>>,
+      mn,
+      n => Some{Merge.one(~d, l, hb, ho, ht, k, n, w)}
+    ),
+    Some{w}
+  )
+    == Merge.next(~d, l, hb, ho, ht, k, w, mn): Maybe<&2, Work<L(d)>>
+}:
+  match mn:
+    case None{}:
+      {==}
+    case Some{+n}:
+      {==}
+
+# the work that a merge goes on with after a key is the next work
+def Merge.step_eq(
+  ~d: Led(),
+  +l: L(d),
+  hb: Maybe<&2, Hashes.Hash>,
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  x: List<&2, U32>,
+  +w: Work<L(d)>
+) -> {Merge.step(~d, l, hb, ho, ht, k, x, w) == Merge.next(~d, l, hb, ho, ht, k, w, Res.name(x)): Maybe<&2, Work<L(d)>>}:
+  Merge.step_eq.at(~d, l, hb, ho, ht, k, w, Res.name(x))
+
+# a merge that gave a work went on with a work
+def Merge.all_from(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  xs: List<&2, List<&2, U32>>,
+  m: Maybe<&2, Work<L(d)>>,
+  +Wf: Work<L(d)>,
+  e: {Merge.all(~d, l, hb, ho, ht, k, xs, m) == Some{Wf}: Maybe<&2, Work<L(d)>>}
+) -> Sigma<&2, &2, Work<L(d)>, W1 => {m == Some{W1}: Maybe<&2, Work<L(d)>>}>:
+  match xs m:
+    case Nil{} y:
+      (Wf, e)
+    case Con{x, rest} None{}:
+      Empty.absurd(
+        Sigma<&2, &2, Work<L(d)>, W1 => {None{} == Some{W1}: Maybe<&2, Work<L(d)>>}>,
+        Shared.Maybe.none_ne_some(Work<L(d)>, Wf, e)
+      )
+    case Con{x, rest} Some{+w}:
+      (w, {==})
+
+# the merge of the key x went on, from the work w, with a work W1: the merge of
+# the keys after it went on from W1 to Wf
+def Merge.Stepped(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +x: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +w: Work<L(d)>,
+  +Wf: Work<L(d)>
+) -> Data:
+  Sigma<&2, &2, Work<L(d)>, W1 => Merge.And({Merge.all(~d, l, hb, ho, ht, k, rest, Some{W1}) == Some{Wf}: Maybe<&2, Work<L(d)>>}, {Merge.next(~d, l, hb, ho, ht, k, w, Res.name(x)) == Some{W1}: Maybe<&2, Work<L(d)>>})>
+
+# a merge that went on after a key, from the work w, went on with the work W1
+def Merge.all_step.at(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +x: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +w: Work<L(d)>,
+  +Wf: Work<L(d)>,
+  +e: {Merge.all(~d, l, hb, ho, ht, k, x <> rest, Some{w}) == Some{Wf}: Maybe<&2, Work<L(d)>>},
+  sg: Sigma<&2, &2, Work<L(d)>, W1 => {Merge.step(~d, l, hb, ho, ht, k, x, w) == Some{W1}: Maybe<&2, Work<L(d)>>}>
+) -> Merge.Stepped(~d, l, hb, ho, ht, k, x, rest, w, Wf):
+  (+W1, +es) = sg
+  (
+    W1,
+    (
+      %es: {Merge.all(~d, l, hb, ho, ht, k, rest, _) == Some{Wf}: Maybe<&2, Work<L(d)>>}
+      e,
+      Equal.trans(
+        Maybe<&2, Work<L(d)>>,
+        Merge.next(~d, l, hb, ho, ht, k, w, Res.name(x)),
+        Merge.step(~d, l, hb, ho, ht, k, x, w),
+        Some{W1},
+        Equal.sym(
+          Maybe<&2, Work<L(d)>>,
+          Merge.step(~d, l, hb, ho, ht, k, x, w),
+          Merge.next(~d, l, hb, ho, ht, k, w, Res.name(x)),
+          Merge.step_eq(~d, l, hb, ho, ht, k, x, w)
+        ),
+        es
+      )
+    )
+  )
+
+# a merge that went on after a key went on with a work
+def Merge.all_step(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +x: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +w: Work<L(d)>,
+  +Wf: Work<L(d)>,
+  +e: {Merge.all(~d, l, hb, ho, ht, k, x <> rest, Some{w}) == Some{Wf}: Maybe<&2, Work<L(d)>>}
+) -> Merge.Stepped(~d, l, hb, ho, ht, k, x, rest, w, Wf):
+  Merge.all_step.at(
+    ~d,
+    l,
+    hb,
+    ho,
+    ht,
+    k,
+    x,
+    rest,
+    w,
+    Wf,
+    e,
+    Merge.all_from(~d, l, hb, ho, ht, k, rest, Merge.step(~d, l, hb, ho, ht, k, x, w), Wf, e)
+  )
+
 # MERGE-HELPERS-END
 
 # a merge never loses a change that only one side made: when the merge of a
