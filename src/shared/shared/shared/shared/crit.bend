@@ -1534,6 +1534,37 @@ def Bits.agree_n_sym(a, b, n):
         case 1n+p:
           {==}
 
+# the step of agree_n_trans: x, y, z are the first bits, a, b, c what follows
+# them; ih is the claim for what follows, and the claim holds for the first bits
+def Bits.agree_n_trans.step(
+  x: Bool,
+  y: Bool,
+  z: Bool,
+  a: Bool,
+  b: Bool,
+  c: Bool,
+  ih: {a == True{}: Bool} -> {b == True{}: Bool} -> {c == True{}: Bool},
+  h1: {Bool.and(Shared.Bool.is_eq(x, y), a) == True{}: Bool},
+  h2: {Bool.and(Shared.Bool.is_eq(y, z), b) == True{}: Bool}
+) -> {Bool.and(Shared.Bool.is_eq(x, z), c) == True{}: Bool}:
+  match x y z:
+    case True{} True{} True{}:
+      ih(h1)(h2)
+    case True{} True{} False{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(True{}, False{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case True{} False{} True{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(True{}, True{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case True{} False{} False{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(True{}, False{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case False{} True{} True{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(False{}, True{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case False{} True{} False{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(False{}, False{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case False{} False{} True{}:
+      Empty.absurd({Bool.and(Shared.Bool.is_eq(False{}, True{}), c) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case False{} False{} False{}:
+      ih(h1)(h2)
+
 # what agrees with what agrees with c agrees with c
 law Bits.agree_n_trans:
   for a: List<&2, Bool>
@@ -1545,7 +1576,65 @@ law Bits.agree_n_trans:
     -> {Bits.agree_n(n, a, c) == True{}: Bool}
 
 def Bits.agree_n_trans(a, b, c, n):
-  ?TODO
+  match a b c:
+    case Nil{} Nil{} Nil{}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => {==}
+    case Nil{} Nil{} Con{z, rc}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Nil{}, Con{z, rc}) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case Nil{} Con{x, ra} Nil{}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => {==}
+    case Nil{} Con{x, ra} Con{z, rc}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Nil{}, Con{z, rc}) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case Con{x, ra} Nil{} Nil{}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Con{x, ra}, Nil{}) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case Con{x, ra} Nil{} Con{z, rc}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Con{x, ra}, Con{z, rc}) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case Con{x, ra} Con{y, rb} Nil{}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Empty.absurd({Bits.agree_n(1n+p, Con{x, ra}, Nil{}) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case Con{x, +ra} Con{y, +rb} Con{z, +rc}:
+      match n:
+        case 0n:
+          h1 => h2 => {==}
+        case 1n+(+p):
+          h1 => h2 => Bits.agree_n_trans.step(
+            x,
+            y,
+            z,
+            Bits.agree_n(p, ra, rb),
+            Bits.agree_n(p, rb, rc),
+            Bits.agree_n(p, ra, rc),
+            Bits.agree_n_trans(ra, rb, rc, p),
+            h1,
+            h2
+          )
 
 # bits that agree on their first n agree on fewer
 law Bits.agree_n_le:
