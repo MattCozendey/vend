@@ -7181,6 +7181,365 @@ def Mst.final_root(
     case Some{+h2}:
       hf => Shared.Bool.and_true_left(Look.is_final(Mst.look(~S, ~fetch, s, Some{h2}, k)), True{})(hf)
 
+# Differences of whole trees
+# --------------------------
+
+# each subtree of the pieces ps has keys in its bounds and lists whole, q
+# levels down
+def Pieces.ok(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +q: Nat, +s: S, ps: List<&2, Piece>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{Piece.Bind{k, v}, rest}:
+      Pieces.ok(~S, ~fetch, q, s, rest)
+    case Con{Piece.Sub{h, up, +lo, +hi}, rest}:
+      Bool.and(
+        Bool.and(
+          Bound.before([], hi),
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+          )
+        ),
+        Pieces.ok(~S, ~fetch, q, s, rest)
+      )
+
+# both sides of each of the runs ps are ok
+def Runs.ok(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +q: Nat, +s: S, ps: List<&2, Runs>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{Runs{a, b}, rest}:
+      Bool.and(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))
+
+# the pieces ps, then the pieces acc, are ok when both are
+def Pieces.ok_append(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +acc: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, ps) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, acc) == True{}: Bool} -> {
+  Pieces.ok(~S, ~fetch, q, s, List.append(&2, Piece, ps, acc)) == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      h => g => g
+    case Con{Piece.Bind{k, v}, +rest}:
+      h => g => Pieces.ok_append(~S, ~fetch, q, s, rest, acc)(h)(g)
+    case Con{Piece.Sub{+h2, +up, +lo, +hi}, +rest}:
+      +h => g => Shared.Bool.and_both(
+        Bool.and(
+          Bound.before([], hi),
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+          )
+        ),
+        Pieces.ok(~S, ~fetch, q, s, List.append(&2, Piece, rest, acc))
+      )(
+        Shared.Bool.and_true_left(
+          Bool.and(
+            Bound.before([], hi),
+            Maybe.is_some(
+              &2,
+              List<&2, Binding>,
+              Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+            )
+          ),
+          Pieces.ok(~S, ~fetch, q, s, rest)
+        )(h)
+      )(
+        Pieces.ok_append(
+          ~S,
+          ~fetch,
+          q,
+          s,
+          rest,
+          acc
+        )(
+          Shared.Bool.and_true_right(
+            Bool.and(
+              Bound.before([], hi),
+              Maybe.is_some(
+                &2,
+                List<&2, Binding>,
+                Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+              )
+            ),
+            Pieces.ok(~S, ~fetch, q, s, rest)
+          )(h)
+        )(g)
+      )
+
+# the piece x before ok pieces is ok when x before others is
+def Pieces.ok_move(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  x: Piece,
+  -r: List<&2, Piece>,
+  +acc: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, x <> r) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, acc) == True{}: Bool} -> {
+  Pieces.ok(~S, ~fetch, q, s, x <> acc) == True{}: Bool
+}:
+  match x:
+    case Piece.Bind{k, v}:
+      h => g => g
+    case Piece.Sub{+h2, +up, +lo, +hi}:
+      h => g => Shared.Bool.and_both(
+        Bool.and(
+          Bound.before([], hi),
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+          )
+        ),
+        Pieces.ok(~S, ~fetch, q, s, acc)
+      )(
+        Shared.Bool.and_true_left(
+          Bool.and(
+            Bound.before([], hi),
+            Maybe.is_some(
+              &2,
+              List<&2, Binding>,
+              Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+            )
+          ),
+          Pieces.ok(~S, ~fetch, q, s, r)
+        )(h)
+      )(g)
+
+# the pieces after an ok piece are ok
+def Pieces.ok_tail(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  x: Piece,
+  +r: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, x <> r) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, r) == True{}: Bool}:
+  match x:
+    case Piece.Bind{k, v}:
+      h => h
+    case Piece.Sub{+h2, +up, +lo, +hi}:
+      h => Shared.Bool.and_true_right(
+        Bool.and(
+          Bound.before([], hi),
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+          )
+        ),
+        Pieces.ok(~S, ~fetch, q, s, r)
+      )(h)
+
+# ok pieces read back to front, after ok pieces acc, are ok
+def Pieces.ok_reverse(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +acc: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, ps) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, acc) == True{}: Bool} -> {
+  Pieces.ok(~S, ~fetch, q, s, List.reverse.go(&2, Piece, ps, acc)) == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      h => g => g
+    case Con{+x, +rest}:
+      +h => g => Pieces.ok_reverse(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        rest,
+        x <> acc
+      )(Pieces.ok_tail(~S, ~fetch, q, s, x, rest)(h))(Pieces.ok_move(~S, ~fetch, q, s, x, rest, acc)(h)(g))
+
+# the runs of the round r with the run p first
+def Round.pairs_cons(p: Runs, r: Round) -> {Round.pairs(Round.cons(p, r)) == p <> Round.pairs(r): List<&2, Runs>}:
+  match r:
+    case Round{ks, ps}:
+      {==}
+
+# the runs of a round with a differing key are its runs
+def Round.pairs_differs(k: List<&2, U32>, v1: List<&2, U32>, v2: List<&2, U32>, r: Round) -> {
+  Round.pairs(Round.differs(k, v1, v2, r)) == Round.pairs(r): List<&2, Runs>
+}:
+  match r:
+    case Round{ks, ps}:
+      {==}
+
+# the runs of two rounds, one after the other
+def Round.pairs_append(a: Round, b: Round) -> {
+  Round.pairs(Round.append(a, b)) == List.append(&2, Runs, Round.pairs(a), Round.pairs(b)): List<&2, Runs>
+}:
+  match a b:
+    case Round{k1, p1} Round{k2, p2}:
+      {==}
+
+# ok runs, then ok runs, are ok
+def Runs.ok_append(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  ps: List<&2, Runs>,
+  +acc: List<&2, Runs>
+) -> {Runs.ok(~S, ~fetch, q, s, ps) == True{}: Bool} -> {Runs.ok(~S, ~fetch, q, s, acc) == True{}: Bool} -> {
+  Runs.ok(~S, ~fetch, q, s, List.append(&2, Runs, ps, acc)) == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      h => g => g
+    case Con{Runs{+a, +b}, +rest}:
+      +h => g => Shared.Bool.and_both(
+        Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)),
+        Runs.ok(~S, ~fetch, q, s, List.append(&2, Runs, rest, acc))
+      )(
+        Shared.Bool.and_true_left(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h)
+      )(
+        Runs.ok_append(
+          ~S,
+          ~fetch,
+          q,
+          s,
+          rest,
+          acc
+        )(Shared.Bool.and_true_right(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h))(g)
+      )
+
+# a run cut out of two ok sides, read back to front, is ok
+def Runs.ok_emit(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +sa: List<&2, Piece>,
+  +sb: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, sa) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, sb) == True{}: Bool} -> {
+  Bool.and(Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sa)), Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sb))) == True{}: Bool
+}:
+  ha => hb => Shared.Bool.and_both(
+    Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sa)),
+    Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sb))
+  )(Pieces.ok_reverse(~S, ~fetch, q, s, sa, [])(ha)({==}))(Pieces.ok_reverse(~S, ~fetch, q, s, sb, [])(hb)({==}))
+
+# the runs that a cut of ok pieces gives are ok
+def Mst.cut_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  as: List<&2, Piece>,
+  bs: List<&2, Piece>,
+  +sa: List<&2, Piece>,
+  +sb: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, as) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, bs) == True{}: Bool} -> {
+  Pieces.ok(~S, ~fetch, q, s, sa) == True{}: Bool
+} -> {Pieces.ok(~S, ~fetch, q, s, sb) == True{}: Bool} -> {Runs.ok(~S, ~fetch, q, s, Round.pairs(Mst.cut(as, bs, sa, sb))) == True{}: Bool}:
+  match as bs:
+    case Nil{} Nil{}:
+      ha => hb => hsa => hsb => Shared.Bool.and_both(
+        Bool.and(Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sa)), Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sb))),
+        True{}
+      )(Runs.ok_emit(~S, ~fetch, q, s, sa, sb)(hsa)(hsb))({==})
+    case Nil{} Con{+y, +rb}:
+      ha => +hb => hsa => hsb => Mst.cut_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        [],
+        rb,
+        sa,
+        y <> sb
+      )(ha)(Pieces.ok_tail(~S, ~fetch, q, s, y, rb)(hb))(hsa)(Pieces.ok_move(~S, ~fetch, q, s, y, rb, sb)(hb)(hsb))
+    case Con{+x, +ra} Nil{}:
+      +ha => hb => hsa => hsb => Mst.cut_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        ra,
+        [],
+        x <> sa,
+        sb
+      )(Pieces.ok_tail(~S, ~fetch, q, s, x, ra)(ha))(hb)(Pieces.ok_move(~S, ~fetch, q, s, x, ra, sa)(ha)(hsa))(hsb)
+    case Con{Piece.Sub{+h, +u, +lo, +hi}, +ra} Con{+y, +rb}:
+      +ha => hb => hsa => hsb => Mst.cut_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        ra,
+        y <> rb,
+        Piece.Sub{h, u, lo, hi} <> sa,
+        sb
+      )(Pieces.ok_tail(~S, ~fetch, q, s, Piece.Sub{h, u, lo, hi}, ra)(ha))(hb)(
+        Pieces.ok_move(~S, ~fetch, q, s, Piece.Sub{h, u, lo, hi}, ra, sa)(ha)(hsa)
+      )(hsb)
+    case Con{Piece.Bind{+k1, +v1}, +ra} Con{Piece.Sub{+h, +u, +lo, +hi}, +rb}:
+      ha => +hb => hsa => hsb => Mst.cut_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        Piece.Bind{k1, v1} <> ra,
+        rb,
+        sa,
+        Piece.Sub{h, u, lo, hi} <> sb
+      )(ha)(Pieces.ok_tail(~S, ~fetch, q, s, Piece.Sub{h, u, lo, hi}, rb)(hb))(hsa)(
+        Pieces.ok_move(~S, ~fetch, q, s, Piece.Sub{h, u, lo, hi}, rb, sb)(hb)(hsb)
+      )
+    case Con{Piece.Bind{+k1, +v1}, +ra} Con{Piece.Bind{+k2, +v2}, +rb}:
+      +ha => +hb => +hsa => +hsb => Shared.Bool.when_cases(
+        Round,
+        x => {Runs.ok(~S, ~fetch, q, s, Round.pairs(x)) == True{}: Bool},
+        Cmp.is_lt(Key.cmp(k1, k2)),
+        w => Mst.cut(ra, Piece.Bind{k2, v2} <> rb, Piece.Bind{k1, v1} <> sa, sb),
+        w => Shared.Bool.when(
+          Round,
+          Cmp.is_eq(Key.cmp(k1, k2)),
+          w2 => Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))),
+          w2 => Mst.cut(Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb)
+        ),
+        e1 => Mst.cut_ok(~S, ~fetch, q, s, ra, Piece.Bind{k2, v2} <> rb, Piece.Bind{k1, v1} <> sa, sb)(ha)(hb)(hsa)(hsb),
+        e1 => Shared.Bool.when_cases(
+          Round,
+          x => {Runs.ok(~S, ~fetch, q, s, Round.pairs(x)) == True{}: Bool},
+          Cmp.is_eq(Key.cmp(k1, k2)),
+          w2 => Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))),
+          w2 => Mst.cut(Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb),
+          e2 =>
+            %Equal.sym(
+              List<&2, Runs>,
+              Round.pairs(Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], [])))),
+              Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)} <> Round.pairs(Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))),
+              Round.pairs_cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], [])))
+            ): {Runs.ok(~S, ~fetch, q, s, _) == True{}: Bool}
+            %Equal.sym(
+              List<&2, Runs>,
+              Round.pairs(Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))),
+              Round.pairs(Mst.cut(ra, rb, [], [])),
+              Round.pairs_differs(k1, v1, v2, Mst.cut(ra, rb, [], []))
+            ): {Runs.ok(~S, ~fetch, q, s, Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)} <> _) == True{}: Bool}
+            Shared.Bool.and_both(
+              Bool.and(Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sa)), Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sb))),
+              Runs.ok(~S, ~fetch, q, s, Round.pairs(Mst.cut(ra, rb, [], [])))
+            )(Runs.ok_emit(~S, ~fetch, q, s, sa, sb)(hsa)(hsb))(Mst.cut_ok(~S, ~fetch, q, s, ra, rb, [], [])(ha)(hb)({==})({==})),
+          e2 => Mst.cut_ok(~S, ~fetch, q, s, Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb)(ha)(hb)(hsa)(hsb)
+        )
+      )
+
 def Mst.canon(ty, fetch):
   +s => +h1 => +h2 => +bs => e1 => e2 => Mst.range_list(
     ~ty,
