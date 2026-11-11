@@ -9769,6 +9769,399 @@ def Affects.holds_law(
         +es => ees => e2 => Affects.branches_in(~d, ~kern, l, view, es, Branch{st, n}, ts, x)(e2)(hc)
       )(e)
 
+# a list that holds x holds it with one more value h before it, if kept
+def Affects.put_keep(+h: Touch, +r: List<&2, Touch>, cnd: Bool, +x: Touch) -> {
+  List.contains(~Touch, ~Touch.is_eq, r, x) == True{}: Bool
+} -> {List.contains(~Touch, ~Touch.is_eq, List.filter.put(Touch, h, r, cnd), x) == True{}: Bool}:
+  match cnd:
+    case True{}:
+      e => Shared.List.contains_cons(~Touch, ~Touch.is_eq, h, r, x)(e)
+    case False{}:
+      e => e
+
+# Affects.of_has once it is known whether the head u1 of used is u (q)
+def Affects.of_has.at(
+  +from: Branch,
+  +v: Ledgers.Id,
+  +c: Resources.Name,
+  +b: Branch,
+  +u1: Resources.Name,
+  +rest: List<&2, Resources.Name>,
+  +reach: Crits.Dict(Unit),
+  +u: Resources.Name,
+  q: Bool,
+  eq: {Resources.Name.is_eq(u1, u) == q: Bool},
+  +ein: {List.any.if(w => List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, u), q) == True{}: Bool},
+  +econd: {List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u)), Resources.Name.is_eq(u, c)) == True{}: Bool},
+  ih: {List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, u) == True{}: Bool}
+    -> {List.contains(~Touch, ~Touch.is_eq, Touches.of(from, v, c, b, rest, reach), Touch{from, v, c, b, u}) == True{}: Bool}
+) -> {
+  List.contains(
+    ~Touch,
+    ~Touch.is_eq,
+    List.filter.put(
+      Touch,
+      Touch{from, v, c, b, u1},
+      Touches.of(from, v, c, b, rest, reach),
+      List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u1)), Resources.Name.is_eq(u1, c))
+    ),
+    Touch{from, v, c, b, u}
+  )
+    == True{}: Bool
+}:
+  match q:
+    case True{}:
+      Affects.cast(
+        Resources.Name,
+        z => {
+          List.contains(
+            ~Touch,
+            ~Touch.is_eq,
+            List.filter.put(
+              Touch,
+              Touch{from, v, c, b, z},
+              Touches.of(from, v, c, b, rest, reach),
+              List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(z)), Resources.Name.is_eq(z, c))
+            ),
+            Touch{from, v, c, b, u}
+          )
+            == True{}: Bool
+        },
+        u,
+        u1,
+        Equal.sym(Resources.Name, u1, u, Resources.Name.is_eq_sound(u1, u)(eq)),
+        Affects.cast(
+          Bool,
+          z => {
+            List.contains(
+              ~Touch,
+              ~Touch.is_eq,
+              List.filter.put(Touch, Touch{from, v, c, b, u}, Touches.of(from, v, c, b, rest, reach), z),
+              Touch{from, v, c, b, u}
+            )
+              == True{}: Bool
+          },
+          True{},
+          List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u)), Resources.Name.is_eq(u, c)),
+          Equal.sym(
+            Bool,
+            List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u)), Resources.Name.is_eq(u, c)),
+            True{},
+            econd
+          ),
+          Affects.contains_head(~Touch, ~Touch.is_eq, ~Affects.touch_laws(), Touch{from, v, c, b, u}, Touches.of(from, v, c, b, rest, reach))
+        )
+      )
+    case False{}:
+      Affects.put_keep(
+        Touch{from, v, c, b, u1},
+        Touches.of(from, v, c, b, rest, reach),
+        List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u1)), Resources.Name.is_eq(u1, c)),
+        Touch{from, v, c, b, u}
+      )(ih(ein))
+
+# Touches.of gives a touch of each resource of used that is c or that the
+# set reach holds
+def Affects.of_has(
+  +from: Branch,
+  +v: Ledgers.Id,
+  +c: Resources.Name,
+  +b: Branch,
+  used: List<&2, Resources.Name>,
+  +reach: Crits.Dict(Unit),
+  +u: Resources.Name,
+  +ein: {List.contains(~Resources.Name, ~Resources.Name.is_eq, used, u) == True{}: Bool},
+  +econd: {List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u)), Resources.Name.is_eq(u, c)) == True{}: Bool}
+) -> {List.contains(~Touch, ~Touch.is_eq, Touches.of(from, v, c, b, used, reach), Touch{from, v, c, b, u}) == True{}: Bool}:
+  match used:
+    case Nil{}:
+      Empty.absurd(
+        {List.contains(~Touch, ~Touch.is_eq, [], Touch{from, v, c, b, u}) == True{}: Bool},
+        Shared.Bool.false_ne_true(ein)
+      )
+    case Con{+u1, +rest}:
+      Affects.of_has.at(
+        from,
+        v,
+        c,
+        b,
+        u1,
+        rest,
+        reach,
+        u,
+        Resources.Name.is_eq(u1, u),
+        {==},
+        ein,
+        econd,
+        h2 => Affects.of_has(from, v, c, b, rest, reach, u, h2, econd)
+      )
+
+# the first test of Touches.each is True for a resource that the version
+# wrote and that b does not hold as it gave it
+def Affects.inner_true(
+  ~d: Led(),
+  +l: L(d),
+  +h0: Maybe<&2, Hashes.Hash>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +c: Resources.Name,
+  +d1: {Res.differs(~d, l, h, h0, c) == Some{True{}}: Maybe<&2, Bool>},
+  +d2: {Res.differs(~d, l, h, hb, c) == Some{True{}}: Maybe<&2, Bool>}
+) -> {
+  Maybe.bind(
+    &2,
+    Bool,
+    Bool,
+    Res.differs(~d, l, h, h0, c),
+    w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c), u => Some{False{}})
+  )
+    == Some{True{}}: Maybe<&2, Bool>
+}:
+  %Equal.sym(Maybe<&2, Bool>, Res.differs(~d, l, h, h0, c), Some{True{}}, d1): {
+    Maybe.bind(
+      &2,
+      Bool,
+      Bool,
+      _,
+      w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c), u => Some{False{}})
+    )
+      == Some{True{}}: Maybe<&2, Bool>
+  }
+  d2
+
+# Affects.each_has once it is known whether the head c1 of changed is c (q)
+def Affects.each_has.at(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +v: Ledgers.Id,
+  +h0: Maybe<&2, Hashes.Hash>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +c1: Resources.Name,
+  +rest: List<&2, Resources.Name>,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  +c: Resources.Name,
+  +u: Resources.Name,
+  q: Bool,
+  eq: {Resources.Name.is_eq(c1, c) == q: Bool},
+  +hin: {List.any.if(w => List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, c), q) == True{}: Bool},
+  +d1: {Res.differs(~d, l, h, h0, c) == Some{True{}}: Maybe<&2, Bool>},
+  +d2: {Res.differs(~d, l, h, hb, c) == Some{True{}}: Maybe<&2, Bool>},
+  +ein: {List.contains(~Resources.Name, ~Resources.Name.is_eq, used, u) == True{}: Bool},
+  +econd: {
+    List.any.if(w => Crits.Dict.has(Unit, Reaches.Graph.reach(users, Name.key(c)), Name.key(u)), Resources.Name.is_eq(u, c))
+      == True{}: Bool
+  },
+  +touched: Bool,
+  +et: {
+    Maybe.bind(
+      &2,
+      Bool,
+      Bool,
+      Res.differs(~d, l, h, h0, c1),
+      w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c1), u => Some{False{}})
+    )
+      == Some{touched}: Maybe<&2, Bool>
+  },
+  +r: List<&2, Touch>,
+  ih: {List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, c) == True{}: Bool}
+    -> {List.contains(~Touch, ~Touch.is_eq, r, Touch{from, v, c, b, u}) == True{}: Bool}
+) -> {
+  List.contains(
+    ~Touch,
+    ~Touch.is_eq,
+    List.append(&2, Touch, Touches.when(touched, from, v, c1, b, used, users), r),
+    Touch{from, v, c, b, u}
+  )
+    == True{}: Bool
+}:
+  match q:
+    case True{}:
+      +ec = Resources.Name.is_eq_sound(c1, c)(eq)
+      +tt = Shared.Maybe.some_inj(
+        Bool,
+        touched,
+        True{},
+        Equal.trans(
+          Maybe<&2, Bool>,
+          Some{touched},
+          Maybe.bind(
+            &2,
+            Bool,
+            Bool,
+            Res.differs(~d, l, h, h0, c),
+            w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c), u => Some{False{}})
+          ),
+          Some{True{}},
+          Equal.sym(
+            Maybe<&2, Bool>,
+            Maybe.bind(
+              &2,
+              Bool,
+              Bool,
+              Res.differs(~d, l, h, h0, c),
+              w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c), u => Some{False{}})
+            ),
+            Some{touched},
+            Affects.cast(
+              Resources.Name,
+              z => {
+                Maybe.bind(
+                  &2,
+                  Bool,
+                  Bool,
+                  Res.differs(~d, l, h, h0, z),
+                  w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, z), u => Some{False{}})
+                )
+                  == Some{touched}: Maybe<&2, Bool>
+              },
+              c1,
+              c,
+              ec,
+              et
+            )
+          ),
+          Affects.inner_true(~d, l, h0, h, hb, c, d1, d2)
+        )
+      )
+      Shared.List.contains_left(
+        ~Touch,
+        ~Touch.is_eq,
+        Touches.when(touched, from, v, c1, b, used, users),
+        r,
+        Touch{from, v, c, b, u},
+        Affects.cast(
+          Resources.Name,
+          z => {
+            List.contains(~Touch, ~Touch.is_eq, Touches.when(touched, from, v, z, b, used, users), Touch{from, v, c, b, u})
+              == True{}: Bool
+          },
+          c,
+          c1,
+          Equal.sym(Resources.Name, c1, c, ec),
+          Affects.cast(
+            Bool,
+            z => {
+              List.contains(~Touch, ~Touch.is_eq, Touches.when(z, from, v, c, b, used, users), Touch{from, v, c, b, u})
+                == True{}: Bool
+            },
+            True{},
+            touched,
+            Equal.sym(Bool, touched, True{}, tt),
+            Affects.of_has(from, v, c, b, used, Reaches.Graph.reach(users, Name.key(c)), u, ein, econd)
+          )
+        )
+      )
+    case False{}:
+      Shared.List.contains_right(
+        ~Touch,
+        ~Touch.is_eq,
+        Touches.when(touched, from, v, c1, b, used, users),
+        r,
+        Touch{from, v, c, b, u},
+        ih(hin)
+      )
+
+# Touches.each gives each touch of a resource of changed that the version
+# wrote and that b does not hold as it gave it
+def Affects.each_has(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +v: Ledgers.Id,
+  +h0: Maybe<&2, Hashes.Hash>,
+  +h: Maybe<&2, Hashes.Hash>,
+  changed: List<&2, Resources.Name>,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  +c: Resources.Name,
+  +u: Resources.Name,
+  +hin: {List.contains(~Resources.Name, ~Resources.Name.is_eq, changed, c) == True{}: Bool},
+  +d1: {Res.differs(~d, l, h, h0, c) == Some{True{}}: Maybe<&2, Bool>},
+  +d2: {Res.differs(~d, l, h, hb, c) == Some{True{}}: Maybe<&2, Bool>},
+  +ein: {List.contains(~Resources.Name, ~Resources.Name.is_eq, used, u) == True{}: Bool},
+  +econd: {
+    List.any.if(w => Crits.Dict.has(Unit, Reaches.Graph.reach(users, Name.key(c)), Name.key(u)), Resources.Name.is_eq(u, c))
+      == True{}: Bool
+  },
+  +ts: List<&2, Touch>
+) -> {Touches.each(~d, l, from, v, h0, h, changed, b, hb, used, users) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool}:
+  match changed:
+    case Nil{}:
+      ea => Empty.absurd(
+        {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool},
+        Shared.Bool.false_ne_true(hin)
+      )
+    case Con{+c1, +rest}:
+      ea => Affects.bind_some(
+        Bool,
+        List<&2, Touch>,
+        {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool},
+        Maybe.bind(
+          &2,
+          Bool,
+          Bool,
+          Res.differs(~d, l, h, h0, c1),
+          w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c1), u => Some{False{}})
+        ),
+        touched => Maybe.map(
+          &2,
+          List<&2, Touch>,
+          List<&2, Touch>,
+          r => List.append(&2, Touch, Touches.when(touched, from, v, c1, b, used, users), r),
+          Touches.each(~d, l, from, v, h0, h, rest, b, hb, used, users)
+        ),
+        ts,
+        +touched => +et => e2 => Affects.map_some(
+          List<&2, Touch>,
+          List<&2, Touch>,
+          {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool},
+          r => List.append(&2, Touch, Touches.when(touched, from, v, c1, b, used, users), r),
+          Touches.each(~d, l, from, v, h0, h, rest, b, hb, used, users),
+          ts,
+          +r => +er => +eapp => Affects.cast(
+            List<&2, Touch>,
+            z => {List.contains(~Touch, ~Touch.is_eq, z, Touch{from, v, c, b, u}) == True{}: Bool},
+            List.append(&2, Touch, Touches.when(touched, from, v, c1, b, used, users), r),
+            ts,
+            eapp,
+            Affects.each_has.at(
+              ~d,
+              l,
+              from,
+              v,
+              h0,
+              h,
+              c1,
+              rest,
+              b,
+              hb,
+              used,
+              users,
+              c,
+              u,
+              Resources.Name.is_eq(c1, c),
+              {==},
+              hin,
+              d1,
+              d2,
+              ein,
+              econd,
+              touched,
+              et,
+              r,
+              h2 => Affects.each_has(~d, l, from, v, h0, h, rest, b, hb, used, users, c, u, h2, d1, d2, ein, econd, r)(er)
+            )
+          )
+        )(e2)
+      )(ea)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
