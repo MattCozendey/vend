@@ -6353,6 +6353,234 @@ def Merge.all_take.cc(
           )
         )
       )
+
+# Merge.all_take for the keys y then rest, once the work W1 after the first step
+# is known
+def Merge.all_take.con2(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b0: Maybe<&2, Requests.Res>,
+  +o0: Maybe<&2, Requests.Res>,
+  +t0: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  +y: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +lf: L(d),
+  +hf: Maybe<&2, Hashes.Hash>,
+  +N: List<&2, List<&2, U32>>,
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +hb0: {Res.find(~d, l, hb, n) == Some{b0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, ho, n) == Some{o0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, ht, n) == Some{t0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hp: {Pick.merge(~d, l, b0, o0, t0) == Some{Pick.Take{x}}: Maybe<&2, Pick>},
+  +hx: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), y <> rest, Key.res(n)) == True{}: Bool},
+  W1: Work<L(d)>,
+  +erest: {Merge.all(~d, l, hb, ho, ht, k, rest, Some{W1}) == Some{Work{lf, hf, N}}: Maybe<&2, Work<L(d)>>},
+  +enext: {Merge.next(~d, l, hb, ho, ht, k, Work{lc, hc, P}, Res.name(y)) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  ih: Merge.TakeIH(~d, l, hb, ho, ht, k, n, x, rest, lf, hf, N)
+) -> {
+  Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n)) == Some{Res.value(x)}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  match W1:
+    case Work{+lc1, +hc1, +P1}:
+      Merge.all_take.cc(
+        ~d,
+        l,
+        hb,
+        ho,
+        ht,
+        k,
+        n,
+        b0,
+        o0,
+        t0,
+        x,
+        y,
+        rest,
+        lc,
+        hc,
+        P,
+        lf,
+        hf,
+        N,
+        lc1,
+        hc1,
+        P1,
+        wc,
+        Merge.And.left(
+          Merge.Puts(~d, l, lc1, P1),
+          Merge.Nodes(P, P1),
+          Merge.next_facts(~d, l, lc, hb, ho, ht, hc, P, k, Res.name(y), Work{lc1, hc1, P1}, enext, wc)
+        ),
+        wf,
+        held,
+        hb0,
+        ho0,
+        ht0,
+        hp,
+        erest,
+        enext,
+        Shared.List.is_eq(~U32, ~U32.is_eq, y, Key.res(n)),
+        {==},
+        List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n)),
+        {==},
+        hx,
+        ih
+      )
+
+# Merge.all_take for the keys y then rest, once the first step is known
+def Merge.all_take.con(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b0: Maybe<&2, Requests.Res>,
+  +o0: Maybe<&2, Requests.Res>,
+  +t0: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  +y: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +lf: L(d),
+  +hf: Maybe<&2, Hashes.Hash>,
+  +N: List<&2, List<&2, U32>>,
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +hb0: {Res.find(~d, l, hb, n) == Some{b0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, ho, n) == Some{o0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, ht, n) == Some{t0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hp: {Pick.merge(~d, l, b0, o0, t0) == Some{Pick.Take{x}}: Maybe<&2, Pick>},
+  +hx: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), y <> rest, Key.res(n)) == True{}: Bool},
+  sg: Merge.Stepped(~d, l, hb, ho, ht, k, y, rest, Work{lc, hc, P}, Work{lf, hf, N}),
+  ih: Merge.TakeIH(~d, l, hb, ho, ht, k, n, x, rest, lf, hf, N)
+) -> {
+  Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n)) == Some{Res.value(x)}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  (+W1, st) = sg
+  (erest, enext) = st
+  Merge.all_take.con2(
+    ~d,
+    l,
+    hb,
+    ho,
+    ht,
+    k,
+    n,
+    b0,
+    o0,
+    t0,
+    x,
+    y,
+    rest,
+    lc,
+    hc,
+    P,
+    lf,
+    hf,
+    N,
+    wc,
+    wf,
+    held,
+    hb0,
+    ho0,
+    ht0,
+    hp,
+    hx,
+    W1,
+    erest,
+    enext,
+    ih
+  )
+
+# a merge of keys among which is the key of a resource, whose merge takes a
+# side, reads the resource as that side
+def Merge.all_take(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b0: Maybe<&2, Requests.Res>,
+  +o0: Maybe<&2, Requests.Res>,
+  +t0: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  xs: List<&2, List<&2, U32>>,
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +lf: L(d),
+  +hf: Maybe<&2, Hashes.Hash>,
+  +N: List<&2, List<&2, U32>>,
+  +e: {Merge.all(~d, l, hb, ho, ht, k, xs, Some{Work{lc, hc, P}}) == Some{Work{lf, hf, N}}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +hb0: {Res.find(~d, l, hb, n) == Some{b0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, ho, n) == Some{o0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, ht, n) == Some{t0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hp: {Pick.merge(~d, l, b0, o0, t0) == Some{Pick.Take{x}}: Maybe<&2, Pick>},
+  +hx: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), xs, Key.res(n)) == True{}: Bool}
+) -> {
+  Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n)) == Some{Res.value(x)}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  match xs:
+    case Nil{}:
+      Empty.absurd(
+        {
+          Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n)) == Some{Res.value(x)}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+        },
+        Shared.Bool.false_ne_true(hx)
+      )
+    case Con{+y, +rest}:
+      Merge.all_take.con(
+        ~d,
+        l,
+        hb,
+        ho,
+        ht,
+        k,
+        n,
+        b0,
+        o0,
+        t0,
+        x,
+        y,
+        rest,
+        lc,
+        hc,
+        P,
+        lf,
+        hf,
+        N,
+        wc,
+        wf,
+        held,
+        hb0,
+        ho0,
+        ht0,
+        hp,
+        hx,
+        Merge.all_step(~d, l, hb, ho, ht, k, y, rest, Work{lc, hc, P}, Work{lf, hf, N}, e),
+        lc1 => hc1 => P1 => e1 => wc1 => ec => Merge.all_take(~d, l, hb, ho, ht, k, n, b0, o0, t0, x, rest, lc1, hc1, P1, lf, hf, N, e1, wc1, wf, held, hb0, ho0, ht0, hp, ec)
+      )
 # TMP-END
 
 # a merge never loses a change that only one side made: when the merge of a
