@@ -2128,6 +2128,210 @@ def Key.is_eq_cmp(a: List<&2, U32>, b: List<&2, U32>) -> {
 # Opened nodes
 # ------------
 
+# an is_lt that is True is of LT
+def Cmp.lt_true(c: Cmp) -> {Cmp.is_lt(c) == True{}: Bool} -> {c == LT{}: Cmp}:
+  match c:
+    case LT{}:
+      h => {==}
+    case EQ{}:
+      h => Empty.absurd({EQ{} == LT{}: Cmp}, Shared.Bool.false_ne_true(h))
+    case GT{}:
+      h => Empty.absurd({GT{} == LT{}: Cmp}, Shared.Bool.false_ne_true(h))
+
+# a key before b compares as c, then Key.is_lt asks for LT
+def Key.lt_of(+a: List<&2, U32>, +b: List<&2, U32>, -c: Cmp) -> {Key.cmp(a, b) == c: Cmp} -> {
+  Key.is_lt(a, b) == Cmp.is_lt(c): Bool
+}:
+  e =>
+    %Equal.sym(Bool, Key.is_lt(a, b), Cmp.is_lt(Key.cmp(a, b)), Key.is_lt_cmp(a, b)): {_ == Cmp.is_lt(c): Bool}
+    Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(a, b), c, e)
+
+# a key a that compares to b as c is after b as the flip of c is LT
+def Key.gt_of(+a: List<&2, U32>, +b: List<&2, U32>, -c: Cmp) -> {Key.cmp(a, b) == c: Cmp} -> {
+  Key.is_lt(b, a) == Cmp.is_lt(Cmp.flip(c)): Bool
+}:
+  e =>
+    %Equal.sym(Bool, Key.is_lt(b, a), Cmp.is_lt(Key.cmp(b, a)), Key.is_lt_cmp(b, a)): {_ == Cmp.is_lt(Cmp.flip(c)): Bool}
+    %Equal.sym(Cmp, Key.cmp(b, a), Cmp.flip(Key.cmp(a, b)), Key.cmp_flip(a, b)): {Cmp.is_lt(_) == Cmp.is_lt(Cmp.flip(c)): Bool}
+    Equal.cong(Cmp, Bool, x => Cmp.is_lt(Cmp.flip(x)), Key.cmp(a, b), c, e)
+
+# a key a that compares to b as c has the words of b as the flip of c is EQ
+def Key.eq_of(+a: List<&2, U32>, +b: List<&2, U32>, -c: Cmp) -> {Key.cmp(a, b) == c: Cmp} -> {
+  Shared.List.is_eq(~U32, ~U32.is_eq, b, a) == Cmp.is_eq(Cmp.flip(c)): Bool
+}:
+  e =>
+    %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, b, a), Cmp.is_eq(Key.cmp(b, a)), Key.is_eq_cmp(b, a)): {
+      _ == Cmp.is_eq(Cmp.flip(c)): Bool
+    }
+    %Equal.sym(Cmp, Key.cmp(b, a), Cmp.flip(Key.cmp(a, b)), Key.cmp_flip(a, b)): {Cmp.is_eq(_) == Cmp.is_eq(Cmp.flip(c)): Bool}
+    Equal.cong(Cmp, Bool, x => Cmp.is_eq(Cmp.flip(x)), Key.cmp(a, b), c, e)
+
+# a < b and b < c give a < c
+def Key.lt_trans(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>) -> {Key.is_lt(a, b) == True{}: Bool} -> {
+  Key.is_lt(b, c) == True{}: Bool
+} -> {Key.is_lt(a, c) == True{}: Bool}:
+  h => k =>
+    %Equal.sym(Bool, Key.is_lt(a, c), Cmp.is_lt(Key.cmp(a, c)), Key.is_lt_cmp(a, c)): {_ == True{}: Bool}
+    %Equal.sym(
+      Cmp,
+      Key.cmp(a, c),
+      LT{},
+      Key.cmp_trans(
+        a,
+        b,
+        c
+      )(
+        Cmp.lt_true(Key.cmp(a, b))(Equal.trans(Bool, Cmp.is_lt(Key.cmp(a, b)), Key.is_lt(a, b), True{}, Equal.sym(Bool, Key.is_lt(a, b), Cmp.is_lt(Key.cmp(a, b)), Key.is_lt_cmp(a, b)), h))
+      )(
+        Cmp.lt_true(Key.cmp(b, c))(Equal.trans(Bool, Cmp.is_lt(Key.cmp(b, c)), Key.is_lt(b, c), True{}, Equal.sym(Bool, Key.is_lt(b, c), Cmp.is_lt(Key.cmp(b, c)), Key.is_lt_cmp(b, c)), k))
+      )
+    ): {Cmp.is_lt(_) == True{}: Bool}
+    {==}
+
+# no key is before the empty key
+def Key.lt_nil(k: List<&2, U32>) -> {Key.is_lt(k, []) == False{}: Bool}:
+  match k:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# a key after the bound lo is after it once it grows: lo < a < k
+def Bound.after_trans(+lo: Maybe<&2, List<&2, U32>>, +a: List<&2, U32>, +k: List<&2, U32>) -> {
+  Bound.after(lo, a) == True{}: Bool
+} -> {Key.is_lt(a, k) == True{}: Bool} -> {Bound.after(lo, k) == True{}: Bool}:
+  match lo:
+    case None{}:
+      h => g => {==}
+    case Some{+b}:
+      h => g => Key.lt_trans(b, a, k)(h)(g)
+
+# a key before the bound hi is before it: k < a < hi
+def Bound.before_trans(+k: List<&2, U32>, +a: List<&2, U32>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Key.is_lt(k, a) == True{}: Bool
+} -> {Bound.before(a, hi) == True{}: Bool} -> {Bound.before(k, hi) == True{}: Bool}:
+  match hi:
+    case None{}:
+      g => h => {==}
+    case Some{+b}:
+      g => h => Key.lt_trans(k, a, b)(g)(h)
+
+# Key.leads_before for heads that compare as c, and rests r1 and r2
+def Key.leads_before.con(c: Cmp, r1: Bool, r2: Bool, ih: {r1 == True{}: Bool} -> {r2 == True{}: Bool}) -> {
+  Bool.or(Cmp.is_lt(c), Bool.and(Cmp.is_eq(c), r1)) == True{}: Bool
+} -> {Bool.or(Cmp.is_lt(c), Bool.and(Cmp.is_eq(c), r2)) == True{}: Bool}:
+  match c:
+    case LT{}:
+      h => {==}
+    case EQ{}:
+      h => ih(h)
+    case GT{}:
+      h => h
+
+# a key that starts with p and is before b has p before b
+def Key.leads_before(p: List<&2, U32>, +k: List<&2, U32>, +b: List<&2, U32>) -> {Key.leads(p, k) == True{}: Bool} -> {
+  Key.is_lt(k, b) == True{}: Bool
+} -> {Key.is_lt(p, b) == True{}: Bool}:
+  match p k b:
+    case Nil{} k2 Nil{}:
+      h1 => h2 => Empty.absurd(
+        {Key.is_lt([], []) == True{}: Bool},
+        Shared.Bool.false_ne_true(Equal.trans(Bool, False{}, Key.is_lt(k2, []), True{}, Equal.sym(Bool, Key.is_lt(k2, []), False{}, Key.lt_nil(k2)), h2))
+      )
+    case Nil{} k2 Con{z, rb}:
+      h1 => h2 => {==}
+    case Con{x, rp} Nil{} b2:
+      h1 => h2 => Empty.absurd({Key.is_lt(x <> rp, b2) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case Con{x, rp} Con{y, rk} Nil{}:
+      h1 => h2 => Empty.absurd({Key.is_lt(x <> rp, []) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case Con{+x, +rp} Con{+y, +rk} Con{+z, +rb}:
+      +h1 => h2 =>
+        %Equal.sym(U32, x, y, Shared.U32.is_eq_sound(x, y)(Shared.List.all.if_hit(U32.is_eq(x, y), u => Key.leads(rp, rk))(h1))): {
+          Bool.or(U32.is_lt(_, z), Bool.and(U32.is_eq(_, z), Key.is_lt(rp, rb))) == True{}: Bool
+        }
+        Key.leads_before.con(
+          U32.cmp(y, z),
+          Key.is_lt(rk, rb),
+          Key.is_lt(rp, rb),
+          Key.leads_before(rp, rk, rb)(Shared.List.all.if_rest(U32.is_eq(x, y), u => Key.leads(rp, rk))(h1))
+        )(h2)
+
+# Key.leads_after for heads that compare as c
+def Key.leads_after.con(
+  c: Cmp,
+  r1: Bool,
+  a1: Bool,
+  b1: Bool,
+  ih: {r1 == True{}: Bool} -> {Bool.or(a1, b1) == True{}: Bool}
+) -> {Bool.or(Cmp.is_lt(c), Bool.and(Cmp.is_eq(c), r1)) == True{}: Bool} -> {
+  Bool.or(Bool.or(Cmp.is_lt(c), Bool.and(Cmp.is_eq(c), a1)), List.all.if(u => b1, Cmp.is_eq(Cmp.flip(c)))) == True{}: Bool
+}:
+  match c:
+    case LT{}:
+      h => {==}
+    case EQ{}:
+      h => ih(h)
+    case GT{}:
+      h => h
+
+# a key that starts with p and is after a has a before p, or starts with p
+def Key.leads_after(p: List<&2, U32>, +k: List<&2, U32>, +a: List<&2, U32>) -> {Key.leads(p, k) == True{}: Bool} -> {
+  Key.is_lt(a, k) == True{}: Bool
+} -> {Bool.or(Key.is_lt(a, p), Key.leads(p, a)) == True{}: Bool}:
+  match p k a:
+    case Nil{} k2 a2:
+      h1 => h2 =>
+        %Equal.sym(Bool, Key.is_lt(a2, []), False{}, Key.lt_nil(a2)): {Bool.or(_, Key.leads([], a2)) == True{}: Bool}
+        {==}
+    case Con{x, rp} Nil{} a2:
+      h1 => h2 => Empty.absurd(
+        {Bool.or(Key.is_lt(a2, x <> rp), Key.leads(x <> rp, a2)) == True{}: Bool},
+        Shared.Bool.false_ne_true(h1)
+      )
+    case Con{x, rp} Con{y, rk} Nil{}:
+      h1 => h2 => {==}
+    case Con{+x, +rp} Con{+y, +rk} Con{+z, +ra}:
+      +h1 => h2 =>
+        %Equal.sym(U32, x, y, Shared.U32.is_eq_sound(x, y)(Shared.List.all.if_hit(U32.is_eq(x, y), u => Key.leads(rp, rk))(h1))): {
+          Bool.or(Bool.or(U32.is_lt(z, _), Bool.and(U32.is_eq(z, _), Key.is_lt(ra, rp))), List.all.if(u => Key.leads(rp, ra), U32.is_eq(_, z)))
+            == True{}: Bool
+        }
+        %Equal.sym(Cmp, U32.cmp(y, z), Cmp.flip(U32.cmp(z, y)), U32.cmp_flip(z, y)): {
+          Bool.or(Bool.or(U32.is_lt(z, y), Bool.and(U32.is_eq(z, y), Key.is_lt(ra, rp))), List.all.if(u => Key.leads(rp, ra), Cmp.is_eq(_)))
+            == True{}: Bool
+        }
+        Key.leads_after.con(
+          U32.cmp(z, y),
+          Key.is_lt(ra, rk),
+          Key.is_lt(ra, rp),
+          Key.leads(rp, ra),
+          Key.leads_after(rp, rk, ra)(Shared.List.all.if_rest(U32.is_eq(x, y), u => Key.leads(rp, rk))(h1))
+        )(h2)
+
+# a key that starts with p, between lo and hi, makes p meet both bounds
+def Bound.meets(+p: List<&2, U32>, +k: List<&2, U32>, lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> {
+  Key.leads(p, k) == True{}: Bool
+} -> {Bool.and(Bound.after(lo, k), Bound.before(k, hi)) == True{}: Bool} -> {
+  Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)) == True{}: Bool
+}:
+  match lo hi:
+    case None{} None{}:
+      h1 => h2 => {==}
+    case None{} Some{+b}:
+      h1 => h2 => Key.leads_before(p, k, b)(h1)(h2)
+    case Some{+a} None{}:
+      +h1 => h2 => Shared.Bool.and_both(
+        Bool.or(Key.is_lt(a, p), Key.leads(p, a)),
+        True{}
+      )(Key.leads_after(p, k, a)(h1)(Shared.Bool.and_true_left(Key.is_lt(a, k), True{})(h2)))({==})
+    case Some{+a} Some{+b}:
+      +h1 => +h2 => Shared.Bool.and_both(
+        Bool.or(Key.is_lt(a, p), Key.leads(p, a)),
+        Key.is_lt(p, b)
+      )(Key.leads_after(p, k, a)(h1)(Shared.Bool.and_true_left(Key.is_lt(a, k), Key.is_lt(k, b))(h2)))(
+        Key.leads_before(p, k, b)(h1)(Shared.Bool.and_true_right(Key.is_lt(a, k), Key.is_lt(k, b))(h2))
+      )
+
 # a bind that gives x: m holds a value a, and f gives x of a
 def Maybe.bind_cases(
   -A: Data,
