@@ -8237,6 +8237,88 @@ def Dict.size_set(V, d, k, v):
     case Tuple{m, w}:
       Dict.size_set.at(~V, m, k, v)(w)
 
+# the proofs that a equals b: one when they are equal, none else
+def Bool.code(a: Bool, b: Bool) -> Type:
+  match a b:
+    case True{} True{}:
+      Unit
+    case False{} False{}:
+      Unit
+    case True{} False{}:
+      Empty
+    case False{} True{}:
+      Empty
+
+# the proof that a equals a
+def Bool.code_refl(a: Bool) -> Bool.code(a, a):
+  match a:
+    case True{}:
+      Unit{}
+    case False{}:
+      Unit{}
+
+# the proof of e in Bool.code
+def Bool.encode(+a: Bool, +b: Bool, e: {a == b: Bool}) -> Bool.code(a, b):
+  %e: Bool.code(a, _)
+  Bool.code_refl(a)
+
+# the equation of a proof in Bool.code
+def Bool.decode(a: Bool, b: Bool, c: Bool.code(a, b)) -> {a == b: Bool}:
+  match a b:
+    case True{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+    case True{} False{}:
+      match c:
+    case False{} True{}:
+      match c:
+
+# the proof that a equals a decodes to {==}
+def Bool.decode_refl(+a: Bool) -> {Bool.decode(a, a, Bool.code_refl(a)) == {==}: {a == a: Bool}}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# an equation of Bools decodes from its proof in Bool.code
+def Bool.decode_encode(+a: Bool, +b: Bool, e: {a == b: Bool}) -> {Bool.decode(a, b, Bool.encode(a, b, e)) == e: {a == b: Bool}}:
+  %E@e: {Bool.decode(a, _, Bool.encode(a, _, E)) == E: {a == _: Bool}}
+  Bool.decode_refl(a)
+
+# Bool.code has at most one proof
+def Bool.code_one(+a: Bool, +b: Bool, c: Bool.code(a, b), d: Bool.code(a, b)) -> {c == d: Bool.code(a, b)}:
+  match a b:
+    case True{} True{}:
+      match c d:
+        case Unit{} Unit{}:
+          {==}
+    case False{} False{}:
+      match c d:
+        case Unit{} Unit{}:
+          {==}
+    case True{} False{}:
+      match c:
+    case False{} True{}:
+      match c:
+
+# an equation of Bools has one proof
+def Bool.eq_one(+a: Bool, +b: Bool, +e1: {a == b: Bool}, +e2: {a == b: Bool}) -> {e1 == e2: {a == b: Bool}}:
+  %Bool.decode_encode(a, b, e1): {_ == e2: {a == b: Bool}}
+  %Bool.decode_encode(a, b, e2): {Bool.decode(a, b, Bool.encode(a, b, e1)) == _: {a == b: Bool}}
+  %Bool.code_one(a, b, Bool.encode(a, b, e1), Bool.encode(a, b, e2)): {Bool.decode(a, b, Bool.encode(a, b, e1)) == Bool.decode(a, b, _): {a == b: Bool}}
+  {==}
+
+# two dicts on equal maps are equal: the proofs that the map is well formed are
+def Dict.of_eq(~V: Data, +ma: Crit<V>, +mb: Crit<V>, e: {ma == mb: Crit<V>}) -> @wa: {
+  Crit.wf(~V, ma, 0n) == True{}: Bool
+} -> @wb: {Crit.wf(~V, mb, 0n) == True{}: Bool} -> {Tuple{ma, wa} == Tuple{mb, wb}: Dict(V)}:
+  %e: @wa: {Crit.wf(~V, ma, 0n) == True{}: Bool} -> @wb: {Crit.wf(~V, _, 0n) == True{}: Bool} -> {Tuple{ma, wa} == Tuple{_, wb}: Dict(V)}
+  +wa => +wb =>
+    %Bool.eq_one(Crit.wf(~V, ma, 0n), True{}, wa, wb): {Tuple{ma, wa} == Tuple{ma, _}: Dict(V)}
+    {==}
+
 # a dict is its entries: two dicts with the same entries are the same dict
 law Dict.ext:
   for ~V: Data
@@ -8245,4 +8327,6 @@ law Dict.ext:
   {Dict.entries(V, a) == Dict.entries(V, b): List<&2, Bind<V>>} -> {a == b: Dict(V)}
 
 def Dict.ext(V, a, b):
-  ?TODO
+  match a b:
+    case Tuple{+ma, +wa} Tuple{+mb, +wb}:
+      h => Dict.of_eq(~V, ma, mb, Crit.ext(~V, ma, mb)(wa)(wb)(h))(wa)(wb)
