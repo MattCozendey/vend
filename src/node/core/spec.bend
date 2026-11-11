@@ -12084,6 +12084,184 @@ def Affects.other_store(
     eof => e2 => Empty.absurd({s1 == st: Hashes.Hash}, Shared.Bool.false_ne_true(Shared.Maybe.some_inj(Bool, False{}, True{}, e2)))
   )(e)
 
+# Node.affects gives each touch that holds, of a branch nf of the store st
+def Affects.complete_at(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +st: Hashes.Hash,
+  +nf: String,
+  +v: Ledgers.Id,
+  +changed: Resources.Name,
+  +n: String,
+  +used: Resources.Name,
+  +ts: List<&2, Touch>,
+  hh: {
+    Touch.holds(~d, ~kern, l, view, Touch{Branch{st, nf}, v, changed, Branch{st, n}, used}) == Some{True{}}: Maybe<&2, Bool>
+  }
+) -> {Node.affects(~d, ~kern, l, view, Branch{st, n}) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, ts, Touch{Branch{st, nf}, v, changed, Branch{st, n}, used}) == True{}: Bool}:
+  +ea => Affects.holds_facts(
+    ~d,
+    ~kern,
+    l,
+    view,
+    Branch{st, nf},
+    v,
+    changed,
+    Branch{st, n},
+    used,
+    {List.contains(~Touch, ~Touch.is_eq, ts, Touch{Branch{st, nf}, v, changed, Branch{st, n}, used}) == True{}: Bool},
+    +eo => +tf => +ef => +tb => +eb => +m => +enum => +elt => +hz => +ebef => +hX => +etk => +d1 => +d2 => +r0 => +efind => +ereach => Affects.bind_some(
+      List<&2, BranchEntry>,
+      List<&2, Touch>,
+      {List.contains(~Touch, ~Touch.is_eq, ts, Touch{Branch{st, nf}, v, changed, Branch{st, n}, used}) == True{}: Bool},
+      Node.branches(~d, ~kern, l, st),
+      es => Branches.touch(~d, ~kern, l, view, es, Branch{st, n}),
+      ts,
+      +es => +ees => +et => Affects.bind_some(
+        List<&2, Branch>,
+        List<&2, BranchEntry>,
+        {List.contains(~Touch, ~Touch.is_eq, ts, Touch{Branch{st, nf}, v, changed, Branch{st, n}, used}) == True{}: Bool},
+        Store.branches(~d, l, st, Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st)),
+        bs => Branches.entries(~d, ~kern, l, bs),
+        es,
+        +bs => +ebs => +eent => Affects.head_start(
+          ~d,
+          ~kern,
+          l,
+          st,
+          nf,
+          tf,
+          {List.contains(~Touch, ~Touch.is_eq, ts, Touch{Branch{st, nf}, v, changed, Branch{st, n}, used}) == True{}: Bool},
+          +rt => +ert => +ws => +ews => Affects.map_some(
+            List<&2, Trees.Binding>,
+            List<&2, Branch>,
+            {List.contains(~Touch, ~Touch.is_eq, ts, Touch{Branch{st, nf}, v, changed, Branch{st, n}, used}) == True{}: Bool},
+            xs => Branches.of(st, Branches.names(xs)),
+            Tree.range(~d, l, Replicas.Tip.log(rt), [5]),
+            bs,
+            +lx => +elx => +ebx => Affects.touch_has(
+              ~d,
+              ~kern,
+              l,
+              view,
+              Branches.names(lx),
+              st,
+              nf,
+              Branch{st, n},
+              Touch{Branch{st, nf}, v, changed, Branch{st, n}, used},
+              es,
+              Affects.cast(
+                List<&2, Branch>,
+                z => {Branches.entries(~d, ~kern, l, z) == Some{es}: Maybe<&2, List<&2, BranchEntry>>},
+                bs,
+                Branches.of(st, Branches.names(lx)),
+                Equal.sym(List<&2, Branch>, Branches.of(st, Branches.names(lx)), bs, ebx),
+                eent
+              ),
+              Affects.started_in(~d, l, rt, lx, elx, nf, ws, ews),
+              +a => ea2 => Affects.at_has(
+                ~d,
+                l,
+                view,
+                Branch{st, nf},
+                tf,
+                Branch{st, n},
+                tb,
+                v,
+                changed,
+                used,
+                m,
+                enum,
+                elt,
+                hz,
+                ebef,
+                hX,
+                etk,
+                d1,
+                d2,
+                r0,
+                efind,
+                ereach,
+                a
+              )(
+                Equal.trans(
+                  Maybe<&2, List<&2, Touch>>,
+                  Branch.touches.at(~d, l, view, Branch{st, nf}, tf, Branch{st, n}, tb),
+                  Branch.touches(~d, ~kern, l, view, Branch{st, nf}, Branch{st, n}),
+                  Some{a},
+                  Equal.sym(
+                    Maybe<&2, List<&2, Touch>>,
+                    Branch.touches(~d, ~kern, l, view, Branch{st, nf}, Branch{st, n}),
+                    Branch.touches.at(~d, l, view, Branch{st, nf}, tf, Branch{st, n}, tb),
+                    Affects.touches_at_of(~d, ~kern, l, view, Branch{st, nf}, tf, Branch{st, n}, tb, eo, ef, eb)
+                  ),
+                  ea2
+                )
+              ),
+              ts
+            )(et)
+          )(
+            Affects.cast(
+              Maybe<&2, Replicas.Tip>,
+              z => {Store.branches(~d, l, st, z) == Some{bs}: Maybe<&2, List<&2, Branch>>},
+              Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st),
+              Some{rt},
+              ert,
+              ebs
+            )
+          )
+        )(ef)
+      )(ees)
+    )(ea)
+  )(hh)
+
+# Node.affects_complete, with its binders reusable
+def Affects.complete_law(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  x: Touch,
+  +ts: List<&2, Touch>
+) -> {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}
+  -> {Node.affects(~d, ~kern, l, view, Touch.branch(x)) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}:
+  match x:
+    case Touch{Branch{+s1, +nf}, +v, +changed, Branch{+st, +n}, +used}:
+      +hh => ea => Affects.cast(
+        Hashes.Hash,
+        z => {List.contains(~Touch, ~Touch.is_eq, ts, Touch{Branch{z, nf}, v, changed, Branch{st, n}, used}) == True{}: Bool},
+        st,
+        s1,
+        Equal.sym(Hashes.Hash, s1, st, Affects.other_store(~d, ~kern, l, view, s1, nf, v, changed, st, n, used)(hh)),
+        Affects.complete_at(
+          ~d,
+          ~kern,
+          l,
+          view,
+          st,
+          nf,
+          v,
+          changed,
+          n,
+          used,
+          ts,
+          Affects.cast(
+            Hashes.Hash,
+            z => {
+              Touch.holds(~d, ~kern, l, view, Touch{Branch{z, nf}, v, changed, Branch{st, n}, used}) == Some{True{}}: Maybe<&2, Bool>
+            },
+            s1,
+            st,
+            Affects.other_store(~d, ~kern, l, view, s1, nf, v, changed, st, n, used)(hh),
+            hh
+          )
+        )(ea)
+      )
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
@@ -12115,3 +12293,6 @@ law Node.affects_complete:
   {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}
     -> {Node.affects(~d, ~kern, l, view, Touch.branch(x)) == Some{ts}: Maybe<&2, List<&2, Touch>>}
     -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}
+
+def Node.affects_complete(d, kern, rules, l, view, x, ts):
+  Affects.complete_law(~d, ~kern, l, view, x, ts)
