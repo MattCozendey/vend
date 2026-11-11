@@ -120,6 +120,8 @@ of sorted bindings, so it unifies with `Ropes`.
 | `Laws.Takes` | An entry that a deed brings, that checks, and whose name is free, the replica then holds. |
 | `Laws.Detects` | A replica that sees two ballots signed with one key names the voter a liar. |
 | `Laws.Passes` | A replica that passes on a line is then in a higher round. |
+| `Laws.Drops` | A replica lets go only of data: it keeps every request, proof of a lie and ballot of its own, and the newest tip of each line that it votes on stays. A read then gives the same answer or none (`Line.get_grows`). |
+| `Laws.Count` | A replica never signs twice with one key: the count of its ballots under a root never falls, and each of its ballots has its own number. |
 
 The parts of `Replica.Good`:
 
@@ -217,7 +219,9 @@ each change to its rule, on the line where it belongs, and refuses any other.
    checks `Own.due` and consents. This is decided, and not a law: a replica that consents by itself
    would have to trust a tree of another line.
 3. **IO.** One node per address, mounts, checkout, worktree and the service of submodules are IO
-   declarations in `transport/spec.bend`. A law cannot state them.
+   declarations in `transport/spec.bend`. A law cannot state them. A node keeps its count of
+   ballots (`Laws.Count`) where it keeps its data before a ballot leaves it, so a node that
+   restarts never numbers a ballot again.
 4. **A search that answers.** `Glob.Query.search` may answer `Unknown` for every query.
 
 
@@ -261,38 +265,24 @@ Concepts that have two representations, to unify when their proofs are open agai
 3. `Quorums.Quorum.major_kept` is a `Shared.Read.Stable` read: a majority stays as ballots are
    kept.
 
-## Limits
+## Costs and open items
 
-Ask about these before any implementation. Each is a cost or a risk of the design, with what is
-now stated for it.
-
-1. **A node lets go of data only as the laws allow.** Stated: `Ledgers.Laws.Drop`,
-   `Replicas.Deed.Drop`, `Replicas.Laws.Drops`. A node keeps every request, proof of a lie and
-   ballot of its own, and all that the lines it votes on rest on. All else may go, and a read
-   then gives the same answer or none (`Line.get_grows`).
-2. **A node never signs twice with one key.** Stated: `Replicas.Laws.Count`. The count of its
-   ballots under a root never falls, and each of its ballots has its own number. Not stated, and
-   an IO rule: a node keeps its count where it keeps its data before a ballot leaves it.
-3. **A new node replays the history of each line that it uses.** No checkpoint: a checkpoint
+1. **A new node replays the history of each line that it uses.** No checkpoint: a checkpoint
    would trust owners for more than README does. A line is replayed when it is first used, and
    lines replay apart and in parallel, since no rule reads another line.
-4. **A ballot holds a seal of 67 hashes** (about 2 KB). Batches divide the cost; a node that is
-   not an owner of a line may let go of its ballots (limit 1). Signing a byte for each chain
-   instead of 4 bits halves the size, at about 9 times the hashing.
-5. **The ledger's map is free** (`Ledger.Kind`). It must not be the proven `Trie`, which keeps a
+2. **A ballot holds a seal of 67 hashes** (about 2 KB). Batches divide the cost; a node that is
+   not an owner of a line may let go of its ballots (`Laws.Drops`). Signing a byte for each
+   chain instead of 4 bits halves the size, at about 9 times the hashing.
+3. **The ledger's map is free** (`Ledger.Kind`). It must not be the proven `Trie`, which keeps a
    key as a list of bits. The best known one: a map that splits the 256-bit name by words, with
    a hash in each node, so a sync compares hashes and costs what differs (`Laws.Missing`).
-6. **The content tree is a record.** Stated: `Trees.Tree`, with range, delete and an exact
-   difference; the replica and the core read through it. A resource that goes is a key that
-   goes, and one kind of key is read by its prefix. A prolly tree fills it best.
-7. **Conditions are read through a view.** Stated: `Formats.Cond.holds`, `Formats.Import.holds`;
-   `Core.Topic.Affects` carries the view of a subscription. A test that the view does not name
-   holds, so no use is missed. Conditions are matched as written: no expression is evaluated.
-8. **Use is tracked per item, once a format splits items.** Stated: `Formats.Item` (name, bytes,
+4. **Use is tracked per item, once a format splits items.** Stated: `Formats.Item` (name, bytes,
    uses), `Formats.Format.items`, `Formats.Edge.names`, `Formats.Import.pool`. No format splits
    yet: each gives the whole resource as one item, and no rule reads the names that an import
    asks for. The core still tracks per resource. A language that cannot be read without running
    it (a dynamic import) must count as using all.
+5. **Conditions are matched as written.** A view (`Formats.Cond.holds`) sets each test as
+   written; no expression of conditions is evaluated.
 
 ## Points for the owner of README
 
