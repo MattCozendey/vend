@@ -3057,6 +3057,246 @@ def Answer.at_follows.pending(
         none(ws)({==})
       )
 
+# Answer.at follows itself from a tip t of the first ledger, once the words
+# that t holds for the outcome of i are held by the tip m2 of the second
+def Answer.at_follows.tip(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +m2: Maybe<&2, Replicas.Tip>,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +h: Hashes.Hash,
+  keep: @ws: List<&2, U32> -> {
+    Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t, Replicas.Log.out(i)) == Some{ws}: Maybe<&2, List<&2, U32>>
+  } -> {
+    Maybe.bind(
+      &2,
+      Replicas.Tip,
+      List<&2, U32>,
+      m2,
+      t2 => Replicas.Tip.get(~Requests.Ask.machine(), ~d, b, t2, Replicas.Log.out(i))
+    )
+      == Some{ws}: Maybe<&2, List<&2, U32>>
+  }
+) -> {Answer.follows(Answer.at(~d, a, i, q, h, Some{t}), Some{Answer.at(~d, b, i, q, h, m2)}) == True{}: Bool}:
+  match m2:
+    case None{}:
+      Answer.at_follows.pending(
+        ~d,
+        a,
+        t,
+        i,
+        q,
+        h,
+        Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t, Replicas.Log.out(i)),
+        ws => e => Shared.Maybe.none_ne_some(List<&2, U32>, ws, keep(ws)(e))
+      )
+    case Some{+t2}:
+      Answer.at_follows.words(
+        ~d,
+        a,
+        b,
+        t,
+        t2,
+        i,
+        q,
+        h,
+        Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t, Replicas.Log.out(i)),
+        Replicas.Tip.get(~Requests.Ask.machine(), ~d, b, t2, Replicas.Log.out(i)),
+        keep
+      )
+
+# the log of the head of the line c holds, at a later ledger, what it holds
+# under the key of the outcome of i (Line.get_grows)
+def Answer.at_follows.keep(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +a: L(d),
+  +b: L(d),
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +t: Replicas.Tip,
+  +m2: Maybe<&2, Replicas.Tip>,
+  g: Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
+  e1: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == Some{t}: Maybe<&2, Replicas.Tip>},
+  e2: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == m2: Maybe<&2, Replicas.Tip>},
+  +ws: List<&2, U32>,
+  hw: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t, Replicas.Log.out(i)) == Some{ws}: Maybe<&2, List<&2, U32>>}
+) -> {
+  Maybe.bind(
+    &2,
+    Replicas.Tip,
+    List<&2, U32>,
+    m2,
+    t2 => Replicas.Tip.get(~Requests.Ask.machine(), ~d, b, t2, Replicas.Log.out(i))
+  )
+    == Some{ws}: Maybe<&2, List<&2, U32>>
+}:
+  %e2: {
+    Maybe.bind(
+      &2,
+      Replicas.Tip,
+      List<&2, U32>,
+      _,
+      t2 => Replicas.Tip.get(~Requests.Ask.machine(), ~d, b, t2, Replicas.Log.out(i))
+    )
+      == Some{ws}: Maybe<&2, List<&2, U32>>
+  }
+  Replicas.Line.get_grows(
+    ~Requests.Ask.machine(),
+    ~d,
+    ~kern,
+    c,
+    Replicas.Log.out(i),
+    a,
+    b,
+    ws,
+    g,
+    %Equal.sym(
+      Maybe<&2, Replicas.Tip>,
+      Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+      Some{t},
+      e1
+    ): {
+      Maybe.bind(
+        &2,
+        Replicas.Tip,
+        List<&2, U32>,
+        _,
+        t2 => Replicas.Tip.get(~Requests.Ask.machine(), ~d, a, t2, Replicas.Log.out(i))
+      )
+        == Some{ws}: Maybe<&2, List<&2, U32>>
+    }
+    hw
+  )
+
+# Answer.at follows itself at the heads m1 and m2 of the line c, in two
+# ledgers where the second is a later state of the first
+def Answer.at_follows.head(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +a: L(d),
+  +b: L(d),
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +h: Hashes.Hash,
+  g: Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
+  m1: Maybe<&2, Replicas.Tip>,
+  +m2: Maybe<&2, Replicas.Tip>,
+  +e1: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == m1: Maybe<&2, Replicas.Tip>},
+  +e2: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == m2: Maybe<&2, Replicas.Tip>}
+) -> {Answer.follows(Answer.at(~d, a, i, q, h, m1), Some{Answer.at(~d, b, i, q, h, m2)}) == True{}: Bool}:
+  match m1:
+    case None{}:
+      {==}
+    case Some{+t}:
+      Answer.at_follows.tip(
+        ~d,
+        a,
+        b,
+        t,
+        m2,
+        i,
+        q,
+        h,
+        ws => hw => Answer.at_follows.keep(~d, ~kern, a, b, c, i, t, m2, g, e1, e2, ws, hw)
+      )
+
+# Answer.of follows itself in a later state of the ledger
+def Answer.of_follows(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +a: L(d),
+  +b: L(d),
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +h: Hashes.Hash,
+  g: Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
+  w: Replicas.Arrival
+) -> {Answer.follows(Answer.of(~d, ~kern, a, i, q, h, w), Some{Answer.of(~d, ~kern, b, i, q, h, w)}) == True{}: Bool}:
+  match w:
+    case Replicas.Arrival.Starts{vs}:
+      {==}
+    case Replicas.Arrival.Waits{+c}:
+      Answer.at_follows.head(
+        ~d,
+        ~kern,
+        a,
+        b,
+        c,
+        i,
+        q,
+        h,
+        g,
+        Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+        Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c),
+        {==},
+        {==}
+      )
+
+# an entry that a holds is held by b, when b holds what a held under its name
+def Answer.has_grows.at(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ma: Maybe<&2, A>,
+  mb: Maybe<&2, A>,
+  +e: A,
+  keep: @x: A -> {ma == Some{x}: Maybe<&2, A>} -> {mb == Some{x}: Maybe<&2, A>}
+) -> {Shared.Maybe.is_eq(~A, ~same, ma, Some{e}) == True{}: Bool}
+  -> {Shared.Maybe.is_eq(~A, ~same, mb, Some{e}) == True{}: Bool}:
+  match ma:
+    case None{}:
+      h => Empty.absurd({Shared.Maybe.is_eq(~A, ~same, mb, Some{e}) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Some{+x}:
+      h =>
+        %Equal.sym(Maybe<&2, A>, mb, Some{x}, keep(x)({==})): {Shared.Maybe.is_eq(~A, ~same, _, Some{e}) == True{}: Bool}
+        h
+
+# a ledger that grows holds each entry that it held
+def Answer.has_grows(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +e: Ledgers.Entry<Requests.Ask>,
+  grows: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Replicas.Led.has(~Requests.Ask.machine(), ~d, a, e) == True{}: Bool}
+  -> {Replicas.Led.has(~Requests.Ask.machine(), ~d, b, e) == True{}: Bool}:
+  Answer.has_grows.at(
+    ~Ledgers.Entry<Requests.Ask>,
+    ~Ledgers.Entry.same(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine())),
+    Replicas.Led.get(~Requests.Ask.machine(), ~d, a, Replicas.Entry.name(~Requests.Ask.machine(), e)),
+    Replicas.Led.get(~Requests.Ask.machine(), ~d, b, Replicas.Entry.name(~Requests.Ask.machine(), e)),
+    e,
+    x => hx => grows(Replicas.Entry.name(~Requests.Ask.machine(), e))(x)(hx)
+  )
+
+# Node.answer follows itself once it is known whether each ledger holds the
+# request (pa, pb), and the answers that they give (A1, A2) follow
+def Node.answer_follows.when(
+  +pa: Bool,
+  +pb: Bool,
+  +A1: Answer,
+  +A2: Answer,
+  +x: Answer,
+  keep: {pa == True{}: Bool} -> {pb == True{}: Bool},
+  step: {Answer.follows(A1, Some{A2}) == True{}: Bool},
+  e: {Shared.Maybe.when(Answer, pa, u => Some{A1}) == Some{x}: Maybe<&2, Answer>}
+) -> {Answer.follows(x, Shared.Maybe.when(Answer, pb, u => Some{A2})) == True{}: Bool}:
+  match pa pb:
+    case True{} True{}:
+      %Shared.Maybe.some_inj(Answer, A1, x, e): {Answer.follows(_, Some{A2}) == True{}: Bool}
+      step
+    case True{} False{}:
+      Empty.absurd({Answer.follows(x, None{}) == True{}: Bool}, Shared.Bool.false_ne_true(keep({==})))
+    case False{} y:
+      Empty.absurd(
+        {Answer.follows(x, Shared.Maybe.when(Answer, y, u => Some{A2})) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Answer, x, e)
+      )
+
 # answers only move forward: as the ledger grows, and while its ballots are
 # honest, a request that a node answers stays answered; Stale and Refused are
 # final; a taken change stays taken (Answer.follows)
