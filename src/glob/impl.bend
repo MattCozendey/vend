@@ -496,13 +496,9 @@ def Path.is_end(s: Path) -> Bool:
     case _:
       False{}
 
-# where a path is after the characters w, from s
-def Path.walk(w: List<&2, Char>, s: Path) -> Path:
-  match w:
-    case Nil{}:
-      s
-    case Con{c, t}:
-      Path.walk(t, Path.step(s, Role.of(c)))
+# where a path is after the character c, from s
+def Path.on(s: Path, c: Char) -> Path:
+  Path.step(s, Role.of(c))
 
 # a path that is past a mistake stays there after a character
 def Path.step_dead(k: Role) -> {PDead{} == Path.step(PDead{}, k): Path}:
@@ -517,12 +513,12 @@ def Path.step_dead(k: Role) -> {PDead{} == Path.step(PDead{}, k): Path}:
       {==}
 
 # no valid path can end after a mistake
-def Path.dead_never(w: List<&2, Char>) -> {False{} == Path.is_end(Path.walk(w, PDead{})): Bool}:
+def Path.dead_never(w: List<&2, Char>) -> {False{} == Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, w, PDead{})): Bool}:
   match w:
     case Nil{}:
       {==}
     case Con{c, t}:
-      %Path.step_dead(Role.of(c)): {False{} == Path.is_end(Path.walk(t, _)): Bool}
+      %Path.step_dead(Role.of(c)): {False{} == Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, t, _)): Bool}
       Path.dead_never(t)
 
 # the text h ends a valid segment that was read up to s
@@ -868,14 +864,14 @@ def Path.fits_start(
 def Path.walk_fits(
   t: String,
   +s: Path
-) -> {Path.is_end(Path.walk(String.to_list(t), s)) == Path.fits(s, String.split(t, '/')): Bool}:
+) -> {Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, String.to_list(t), s)) == Path.fits(s, String.split(t, '/')): Bool}:
   match t:
     case SNil{}:
       Path.fits_end(s)
     case SCon{+c, +r}:
       Equal.trans(
         Bool,
-        Path.is_end(Path.walk(String.to_list(r), Path.step(s, Role.of(c)))),
+        Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, String.to_list(r), Path.step(s, Role.of(c)))),
         Path.fits(Path.step(s, Role.of(c)), String.split(r, '/')),
         Path.fits(s, String.split.fin(c, String.split(r, '/'), Char.is_eq(c, '/'))),
         Path.walk_fits(r, Path.step(s, Role.of(c))),
@@ -885,13 +881,13 @@ def Path.walk_fits(
 # the automaton accepts exactly the valid paths
 law Path.walk_ok:
   for p: String
-  {Path.is_end(Path.walk(String.to_list(p), PStart{})) == Spec.is_path(p): Bool}
+  {Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, String.to_list(p), PStart{})) == Spec.is_path(p): Bool}
 
 def Path.walk_ok(p):
   +p = p
   Equal.trans(
     Bool,
-    Path.is_end(Path.walk(String.to_list(p), PStart{})),
+    Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, String.to_list(p), PStart{})),
     Path.fits(PStart{}, String.split(p, '/')),
     Spec.is_path(p),
     Path.walk_fits(p, PStart{}),
@@ -985,7 +981,7 @@ def Walk.accepts_ok.at(
       At{a, x},
       g
     )
-      == List.all.if(u => St.holds(x, t), Path.is_end(Path.walk(t, a))): Bool
+      == List.all.if(u => St.holds(x, t), Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, t, a))): Bool
   }
 ) -> {
   Searches.Machine.accepts(
@@ -998,7 +994,7 @@ def Walk.accepts_ok.at(
     Walk.at(a, u => x),
     g
   )
-    == List.all.if(u => St.holds(x, t), Path.is_end(Path.walk(t, a))): Bool
+    == List.all.if(u => St.holds(x, t), Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, t, a))): Bool
 }:
   match a:
     case PStart{}:
@@ -1045,7 +1041,7 @@ def Walk.accepts_ok(
     At{a, x},
     g
   )
-    == List.all.if(u => St.holds(x, w), Path.is_end(Path.walk(w, a))): Bool
+    == List.all.if(u => St.holds(x, w), Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, w, a))): Bool
 }:
   match w:
     case Nil{}:
@@ -1066,7 +1062,7 @@ def Walk.accepts_ok(
           Walk.at(Path.step(a, Role.of(c)), u => St.step(x, c)),
           g
         )
-          == List.all.if(u => _, Path.is_end(Path.walk(t, Path.step(a, Role.of(c))))): Bool
+          == List.all.if(u => _, Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, t, Path.step(a, Role.of(c))))): Bool
       }
       Walk.accepts_ok.at(
         t,
@@ -1101,7 +1097,7 @@ def Query.holds_fast_ok(
   %St.of_ok(q, p): {Query.holds.fast(q, p, g) == _: Bool}
   %Path.walk_ok(p): {Query.holds.fast(q, p, g) == Bool.and(_, St.holds(x, w)): Bool}
   %Shared.List.all.if_and(
-    Path.is_end(Path.walk(w, PStart{})),
+    Path.is_end(List.foldl(~&2, ~Char, ~Path, ~Path.on, w, PStart{})),
     u => St.holds(x, w)
   ): {Query.holds.fast(q, p, g) == _: Bool}
   Walk.accepts_ok(w, PStart{}, x, g)
