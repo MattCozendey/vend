@@ -3612,6 +3612,20 @@ law Book.ok_add:
   for e: Entry<Q>
   {Book.ok(~Q, ~c, b) == True{}: Bool} -> {Book.ok(~Q, ~c, Book.add(~Q, ~c, b, e)) == True{}: Bool}
 
+def Book.ok_add(Q, c, b, e):
+  +b = b
+  +e = e
+  +h =>
+    Shared.Bool.when_cases(
+      Book<Q>,
+      x => {Book.ok(~Q, ~c, x) == True{}: Bool},
+      Maybe.is_some(&2, Entry<Q>, Book.get(Q, b, Entry.name(~Q, ~c, e))),
+      u => b,
+      u => Book.put(~Q, b, e, Entry.name(~Q, ~c, e), Entry.keys(Q, e, Entry.name(~Q, ~c, e))),
+      t => h,
+      f => Book.add_ok(~Q, ~c, b, e)(h)(Book.none_of(Entry<Q>, Book.get(Q, b, Entry.name(~Q, ~c, e)))(f))
+    )
+
 # a drop keeps a book in its one shape
 law Book.ok_drop:
   for ~Q: Data
