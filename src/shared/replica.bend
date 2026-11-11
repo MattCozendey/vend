@@ -4434,6 +4434,445 @@ def Hist.heights.at(
         )(a)(c)(Hist.ne_zero(Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c), p, en))
       )
 
+# the first tip of a root line stays, once the entry of its request is known
+# (m)
+def Hist.root_start.at(
+  ~mach: Machine(),
+  m: Maybe<&2, Entry(mach)>,
+  -m2: Maybe<&2, Entry(mach)>,
+  hm: @e: Entry(mach) -> {m == Some{e}: Maybe<&2, Entry(mach)>} -> {m2 == Some{e}: Maybe<&2, Entry(mach)>},
+  -x: Tip
+) -> {Root.start.of(~mach, m) == Some{x}: Maybe<&2, Tip>} -> {Root.start.of(~mach, m2) == Some{x}: Maybe<&2, Tip>}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Root.start.of(~mach, m2) == Some{x}: Maybe<&2, Tip>},
+        Shared.Maybe.none_ne_some(Tip, x, e)
+      )
+    case Some{y}:
+      e =>
+        %Equal.sym(Maybe<&2, Entry(mach)>, m2, Some{y}, hm(y)({==})): {
+          Root.start.of(~mach, _) == Some{x}: Maybe<&2, Tip>
+        }
+        e
+
+# the first tip of a root line stays in a later ledger
+def Hist.root_start(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +r: Hashes.Hash,
+  -x: Tip
+) -> {Root.start(~mach, ~d, a, r) == Some{x}: Maybe<&2, Tip>}
+  -> {Root.start(~mach, ~d, b, r) == Some{x}: Maybe<&2, Tip>}:
+  e => Hist.root_start.at(
+    ~mach,
+    Led.get(~mach, ~d, a, Ledgers.Name.Ask{r}),
+    Led.get(~mach, ~d, b, Ledgers.Name.Ask{r}),
+    y => lg(a)(b)(later)(Ledgers.Name.Ask{r})(y),
+    x
+  )(e)
+
+# a tip that some data is stays, once the data is known (m)
+def Hist.whole(
+  m: Maybe<&2, List<&2, U32>>,
+  -m2: Maybe<&2, List<&2, U32>>,
+  hm: @w: List<&2, U32> -> {m == Some{w}: Maybe<&2, List<&2, U32>>} -> {m2 == Some{w}: Maybe<&2, List<&2, U32>>},
+  -x: Tip
+) -> {Codes.Code.whole.of(~Tip, ~Tip.code, ~Tip.code.read, m) == Some{x}: Maybe<&2, Tip>}
+  -> {Codes.Code.whole.of(~Tip, ~Tip.code, ~Tip.code.read, m2) == Some{x}: Maybe<&2, Tip>}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Codes.Code.whole.of(~Tip, ~Tip.code, ~Tip.code.read, m2) == Some{x}: Maybe<&2, Tip>},
+        Shared.Maybe.none_ne_some(Tip, x, e)
+      )
+    case Some{y}:
+      e =>
+        %Equal.sym(Maybe<&2, List<&2, U32>>, m2, Some{y}, hm(y)({==})): {
+          Codes.Code.whole.of(~Tip, ~Tip.code, ~Tip.code.read, _) == Some{x}: Maybe<&2, Tip>
+        }
+        e
+
+# the tip that some words name stays in a later ledger
+def Hist.named(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  ws: List<&2, U32>,
+  -x: Tip
+) -> {Tip.named(~mach, ~d, a, ws) == Some{x}: Maybe<&2, Tip>}
+  -> {Tip.named(~mach, ~d, b, ws) == Some{x}: Maybe<&2, Tip>}:
+  e => Shared.Maybe.bind_kept(
+    Hashes.Hash,
+    Tip,
+    Codes.Code.whole.read(~Hashes.Hash, ~Hashes.Hash.code, ~Hashes.Hash.code.read, ws),
+    Codes.Code.whole.read(~Hashes.Hash, ~Hashes.Hash.code, ~Hashes.Hash.code.read, ws),
+    h => Tip.at(~mach, ~d, a, h),
+    h => Tip.at(~mach, ~d, b, h),
+    x,
+    h => eh => eh,
+    +h => Hist.whole(
+      Led.fetch(~mach, ~d, a, h),
+      Led.fetch(~mach, ~d, b, h),
+      w => Hist.fetch(~mach, ~d, a, b, h, w, lg(a)(b)(later)),
+      x
+    )
+  )(e)
+
+# a bind of a bind is a bind of a bind
+def Hist.bind_assoc(
+  -A: Data,
+  -B: Data,
+  -C: Data,
+  m: Maybe<&2, A>,
+  -f: A -> Maybe<&2, B>,
+  -g: B -> Maybe<&2, C>
+) -> {
+  Maybe.bind(&2, A, C, m, x => Maybe.bind(&2, B, C, f(x), g))
+    == Maybe.bind(&2, B, C, Maybe.bind(&2, A, B, m, f), g): Maybe<&2, C>
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# what the log of the newest tip of a line holds stays in a later ledger, when
+# its first tip stays (hm)
+def Hist.head_get(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  ma: Maybe<&2, Tip>,
+  -mb: Maybe<&2, Tip>,
+  hm: @t: Tip -> {ma == Some{t}: Maybe<&2, Tip>} -> {mb == Some{t}: Maybe<&2, Tip>},
+  +key: List<&2, U32>,
+  +v: List<&2, U32>
+) -> {
+  Maybe.bind(&2, Tip, List<&2, U32>, Line.head.of(~mach, ~d, ~kern, a, c, ma), t => Tip.get(~mach, ~d, a, t, key))
+    == Some{v}: Maybe<&2, List<&2, U32>>
+} -> {
+  Maybe.bind(&2, Tip, List<&2, U32>, Line.head.of(~mach, ~d, ~kern, b, c, mb), t => Tip.get(~mach, ~d, b, t, key))
+    == Some{v}: Maybe<&2, List<&2, U32>>
+}:
+  match ma:
+    case None{}:
+      e => Empty.absurd(
+        {
+          Maybe.bind(&2, Tip, List<&2, U32>, Line.head.of(~mach, ~d, ~kern, b, c, mb), t => Tip.get(~mach, ~d, b, t, key))
+            == Some{v}: Maybe<&2, List<&2, U32>>
+        },
+        Shared.Maybe.none_ne_some(List<&2, U32>, v, e)
+      )
+    case Some{+t}:
+      e =>
+        %Equal.sym(Maybe<&2, Tip>, mb, Some{t}, hm(t)({==})): {
+          Maybe.bind(&2, Tip, List<&2, U32>, Line.head.of(~mach, ~d, ~kern, b, c, _), t => Tip.get(~mach, ~d, b, t, key))
+            == Some{v}: Maybe<&2, List<&2, U32>>
+        }
+        Hist.walk(
+          ~mach,
+          ~d,
+          ~kern,
+          ~lg,
+          ~ls,
+          ~ll,
+          1n+Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c),
+          a,
+          b,
+          later,
+          c,
+          0,
+          t,
+          Line.next(~mach, ~d, ~kern, a, c, 0, t),
+          1n+Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(b)(c),
+          Line.next(~mach, ~d, ~kern, b, c, 0, t),
+          key,
+          v
+        )(
+          Hist.heights.at(
+            ~mach,
+            ~d,
+            ~lg,
+            a,
+            b,
+            later,
+            c,
+            Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c)
+          )({==})
+        )({==})({==})(e)
+
+# the first tip of a sub line stays, once the newest tip of its root line in
+# the earlier ledger is known (ma)
+def Hist.sub_start(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +r: Hashes.Hash,
+  +s: String,
+  -x: Tip
+) -> {Sub.start(~mach, ~d, a, s, Root.head(~mach, ~d, ~kern, a, r)) == Some{x}: Maybe<&2, Tip>}
+  -> {Sub.start(~mach, ~d, b, s, Root.head(~mach, ~d, ~kern, b, r)) == Some{x}: Maybe<&2, Tip>}:
+  e => Equal.trans(
+    Maybe<&2, Tip>,
+    Sub.start(~mach, ~d, b, s, Root.head(~mach, ~d, ~kern, b, r)),
+    Maybe.bind(
+      &2,
+      List<&2, U32>,
+      Tip,
+      Maybe.bind(
+        &2,
+        Tip,
+        List<&2, U32>,
+        Root.head(~mach, ~d, ~kern, b, r),
+        t => Tip.get(~mach, ~d, b, t, Log.start(s))
+      ),
+      ws => Tip.named(~mach, ~d, b, ws)
+    ),
+    Some{x},
+    Hist.bind_assoc(
+      Tip,
+      List<&2, U32>,
+      Tip,
+      Root.head(~mach, ~d, ~kern, b, r),
+      t => Tip.get(~mach, ~d, b, t, Log.start(s)),
+      ws => Tip.named(~mach, ~d, b, ws)
+    ),
+    Shared.Maybe.bind_kept(
+      List<&2, U32>,
+      Tip,
+      Maybe.bind(
+        &2,
+        Tip,
+        List<&2, U32>,
+        Root.head(~mach, ~d, ~kern, a, r),
+        t => Tip.get(~mach, ~d, a, t, Log.start(s))
+      ),
+      Maybe.bind(
+        &2,
+        Tip,
+        List<&2, U32>,
+        Root.head(~mach, ~d, ~kern, b, r),
+        t => Tip.get(~mach, ~d, b, t, Log.start(s))
+      ),
+      ws => Tip.named(~mach, ~d, a, ws),
+      ws => Tip.named(~mach, ~d, b, ws),
+      x,
+      +ws => Hist.head_get(
+        ~mach,
+        ~d,
+        ~kern,
+        ~lg,
+        ~ls,
+        ~ll,
+        a,
+        b,
+        later,
+        Ledgers.Line{r, None{}},
+        Root.start(~mach, ~d, a, r),
+        Root.start(~mach, ~d, b, r),
+        t => Hist.root_start(~mach, ~d, ~lg, a, b, later, r, t),
+        Log.start(s),
+        ws
+      ),
+      ws => Hist.named(~mach, ~d, ~lg, a, b, later, ws, x)
+    )(
+      Equal.trans(
+        Maybe<&2, Tip>,
+        Maybe.bind(
+          &2,
+          List<&2, U32>,
+          Tip,
+          Maybe.bind(
+            &2,
+            Tip,
+            List<&2, U32>,
+            Root.head(~mach, ~d, ~kern, a, r),
+            t => Tip.get(~mach, ~d, a, t, Log.start(s))
+          ),
+          ws => Tip.named(~mach, ~d, a, ws)
+        ),
+        Sub.start(~mach, ~d, a, s, Root.head(~mach, ~d, ~kern, a, r)),
+        Some{x},
+        Equal.sym(
+          Maybe<&2, Tip>,
+          Sub.start(~mach, ~d, a, s, Root.head(~mach, ~d, ~kern, a, r)),
+          Maybe.bind(
+            &2,
+            List<&2, U32>,
+            Tip,
+            Maybe.bind(
+              &2,
+              Tip,
+              List<&2, U32>,
+              Root.head(~mach, ~d, ~kern, a, r),
+              t => Tip.get(~mach, ~d, a, t, Log.start(s))
+            ),
+            ws => Tip.named(~mach, ~d, a, ws)
+          ),
+          Hist.bind_assoc(
+            Tip,
+            List<&2, U32>,
+            Tip,
+            Root.head(~mach, ~d, ~kern, a, r),
+            t => Tip.get(~mach, ~d, a, t, Log.start(s)),
+            ws => Tip.named(~mach, ~d, a, ws)
+          )
+        ),
+        e
+      )
+    )
+  )
+
+# the first tip of a line stays in a later ledger
+def Hist.start(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  c: Ledgers.Line,
+  -x: Tip
+) -> {Line.start(~mach, ~d, ~kern, a, c) == Some{x}: Maybe<&2, Tip>}
+  -> {Line.start(~mach, ~d, ~kern, b, c) == Some{x}: Maybe<&2, Tip>}:
+  match c:
+    case Ledgers.Line{+r, None{}}:
+      Hist.root_start(~mach, ~d, ~lg, a, b, later, r, x)
+    case Ledgers.Line{+r, Some{+s}}:
+      Hist.sub_start(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, r, s, x)
+
+# the tip of a line after k steps stays in a later ledger
+def Hist.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~ll: Hist.LaterLast(mach, d),
+  k: Nat,
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +x: Tip
+) -> {Line.at(~mach, ~d, ~kern, k, a, c) == Some{x}: Maybe<&2, Tip>}
+  -> {Line.at(~mach, ~d, ~kern, k, b, c) == Some{x}: Maybe<&2, Tip>}:
+  match k:
+    case 0n:
+      Hist.start(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, c, x)
+    case 1n+(+p):
+      e => Shared.Maybe.bind_kept(
+        Tip,
+        Tip,
+        Line.at(~mach, ~d, ~kern, p, a, c),
+        Line.at(~mach, ~d, ~kern, p, b, c),
+        t => Line.next(~mach, ~d, ~kern, a, c, U32.from_nat(p), t),
+        t => Line.next(~mach, ~d, ~kern, b, c, U32.from_nat(p), t),
+        x,
+        t => Hist.at(~mach, ~d, ~kern, ~lg, ~ls, ~ll, p, a, b, later, c, t),
+        +t => Hist.next(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, c, U32.from_nat(p), t, x)
+      )(e)
+
+# what the log of a line holds stays in a later ledger
+def Hist.get(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +key: List<&2, U32>,
+  +v: List<&2, U32>
+) -> {Line.get(~mach, ~d, ~kern, a, c, key) == Some{v}: Maybe<&2, List<&2, U32>>}
+  -> {Line.get(~mach, ~d, ~kern, b, c, key) == Some{v}: Maybe<&2, List<&2, U32>>}:
+  Hist.head_get(
+    ~mach,
+    ~d,
+    ~kern,
+    ~lg,
+    ~ls,
+    ~ll,
+    a,
+    b,
+    later,
+    c,
+    Line.start(~mach, ~d, ~kern, a, c),
+    Line.start(~mach, ~d, ~kern, b, c),
+    t => Hist.start(~mach, ~d, ~kern, ~lg, ~ls, ~ll, a, b, later, c, t),
+    key,
+    v
+  )
+
 # one history: the tip of a line after a number of steps stays as the ledger
 # grows, while its ballots are honest. So two replicas whose ledgers an
 # honest ledger holds are, after the same number of steps, at the same tip:
