@@ -5672,8 +5672,8 @@ def Crit.drop_go_none(~V: Data, m: Crit<V>, +lo: Nat, +at: Nat, +c: Cur, +k: Lis
           )(Crit.next_at(k, pos, c2)(h2))
         )
 
-# a drop unbinds its key and no other, with m, k and q used more than once
-def Crit.drop_lookup.at(~V: Data, +m: Crit<V>, +k: List<&2, U32>, +q: List<&2, U32>) -> {Crit.wf(~V, m, 0n) == True{}: Bool} -> {
+# a drop unbinds its key and no other, in a map well formed below any bit
+def Crit.drop_lookup.at(~V: Data, +m: Crit<V>, +lo: Nat, +k: List<&2, U32>, +q: List<&2, U32>) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {
   Crit.lookup(V, Crit.drop(V, m, k), q) == Bool.pick(Maybe<&2, V>, Key.is_eq(q, k), None{}, Crit.lookup(V, m, q)): Maybe<&2, V>
 }:
   h => Equal.sym(
@@ -5687,7 +5687,7 @@ def Crit.drop_lookup.at(~V: Data, +m: Crit<V>, +k: List<&2, U32>, +q: List<&2, U
           Maybe<&2, V>,
           Crit.lookup(V, Crit.drop(V, m, k), k),
           None{},
-          Crit.drop_go_none(~V, m, 0n, 0n, Cur.of(k), k)(h)({==})(
+          Crit.drop_go_none(~V, m, lo, 0n, Cur.of(k), k)(h)(Shared.Nat.le_zero(lo))(
             Equal.sym(List<&2, Bool>, List.drop(&2, Bool, Key.bits(k), 0n), Key.bits(k), Shared.List.drop_zero(&2, Bool, Key.bits(k)))
           )
         )
@@ -5711,7 +5711,7 @@ law Crit.drop_lookup:
   {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.lookup(V, Crit.drop(V, m, k), q) == Bool.pick(Maybe<&2, V>, Key.is_eq(q, k), None{}, Crit.lookup(V, m, q)): Maybe<&2, V>}
 
 def Crit.drop_lookup(ty, m, k, q):
-  Crit.drop_lookup.at(~ty, m, k, q)
+  Crit.drop_lookup.at(~ty, m, 0n, k, q)
 
 # a union keeps maps well formed
 law Crit.union_wf:
@@ -5736,29 +5736,6 @@ law Crit.union_lookup:
   }
 
 def Crit.union_lookup(ty, j, a, b, q):
-  ?TODO
-
-# a difference keeps maps well formed
-law Crit.minus_wf:
-  for ~V: Data
-  for a: Crit<V>
-  for b: Crit<V>
-  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.minus(V, a, b), 0n) == True{}: Bool}
-
-def Crit.minus_wf(ty, a, b):
-  ?TODO
-
-# a difference holds what a holds under the keys that b lacks
-law Crit.minus_lookup:
-  for ~V: Data
-  for a: Crit<V>
-  for b: Crit<V>
-  for q: List<&2, U32>
-  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {
-    Crit.lookup(V, Crit.minus(V, a, b), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, b, q)), None{}, Crit.lookup(V, a, q)): Maybe<&2, V>
-  }
-
-def Crit.minus_lookup(ty, a, b, q):
   ?TODO
 
 # Crit.find_lookup at a fork, once the bits of k from pos are d
@@ -5896,6 +5873,386 @@ def Crit.find_lookup(~V: Data, m: Crit<V>, +lo: Nat, +at: Nat, +k: List<&2, U32>
           ): {Crit.find(V, o, 1n+pos, _, k) == Crit.lookup(V, o, k): Maybe<&2, V>}
           Crit.find_lookup(~V, o, 1n+pos, 1n+pos, k)(Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h))(Shared.Nat.le_refl(1n+pos))
         ))
+
+# a read of a map well formed below any bit is its clear read
+def Crit.get_lookup.lo(~V: Data, +m: Crit<V>, +lo: Nat, +k: List<&2, U32>) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {
+  Crit.get(V, m, k) == Crit.lookup(V, m, k): Maybe<&2, V>
+}:
+  h => Equal.trans(
+    Maybe<&2, V>,
+    Crit.get(V, m, k),
+    Crit.find(V, m, 0n, Key.bits(k), k),
+    Crit.lookup(V, m, k),
+    Crit.get_is_find(V, m, k),
+    (
+      %Shared.List.drop_zero(&2, Bool, Key.bits(k)): {Crit.find(V, m, 0n, _, k) == Crit.lookup(V, m, k): Maybe<&2, V>}
+      Crit.find_lookup(~V, m, lo, 0n, k)(h)(Shared.Nat.le_zero(lo))
+    )
+  )
+
+# a difference keeps maps well formed
+law Crit.minus_wf:
+  for ~V: Data
+  for a: Crit<V>
+  for b: Crit<V>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.minus(V, a, b), 0n) == True{}: Bool}
+
+def Crit.minus_wf(ty, a, b):
+  ?TODO
+
+# a pick between nothing and nothing is nothing
+def Crit.pick_none(-A: Data, c: Bool) -> {Bool.pick(Maybe<&2, A>, c, None{}, None{}) == None{}: Maybe<&2, A>}:
+  match c:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# a pick between nothing and a that is nothing is nothing
+def Crit.pick_none2(-A: Data, +c: Bool, a: Maybe<&2, A>) -> {a == None{}: Maybe<&2, A>} -> {Bool.pick(Maybe<&2, A>, c, None{}, a) == None{}: Maybe<&2, A>}:
+  h =>
+    %Equal.sym(Maybe<&2, A>, a, None{}, h): {Bool.pick(Maybe<&2, A>, c, None{}, _) == None{}: Maybe<&2, A>}
+    Crit.pick_none(A, c)
+
+# a pick between nothing and the value of a key, by whether the same key
+# holds, is nothing
+def Crit.pick_when(-V: Data, b: Bool, -w: V, -u: V) -> {
+  Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Shared.Maybe.when(V, b, x => Some{w})), None{}, Shared.Maybe.when(V, b, x => Some{u})) == None{}: Maybe<&2, V>
+}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# a value that is not some is none
+def Crit.none_by(-V: Data, m: Maybe<&2, V>) -> ({Maybe.is_some(&2, V, m) == True{}: Bool} -> Empty) -> {m == None{}: Maybe<&2, V>}:
+  match m:
+    case None{}:
+      f => {==}
+    case Some{x}:
+      f => Empty.absurd({Some{x} == None{}: Maybe<&2, V>}, f({==}))
+
+# a value that is nothing wherever b holds is the pick between nothing and it
+def Crit.pick_disj(-V: Data, lb: Maybe<&2, V>, -la: Maybe<&2, V>) -> ({Maybe.is_some(&2, V, lb) == True{}: Bool} -> {la == None{}: Maybe<&2, V>}) -> {
+  la == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, lb), None{}, la): Maybe<&2, V>
+}:
+  match lb:
+    case None{}:
+      f => {==}
+    case Some{w}:
+      f => f({==})
+
+# picks between nothing and a value, by tests that agree where it is some
+def Crit.pick_same(-V: Data, la: Maybe<&2, V>, c1: Bool, c2: Bool) -> ({Maybe.is_some(&2, V, la) == True{}: Bool} -> {c1 == c2: Bool}) -> {
+  Bool.pick(Maybe<&2, V>, c1, None{}, la) == Bool.pick(Maybe<&2, V>, c2, None{}, la): Maybe<&2, V>
+}:
+  match la:
+    case None{}:
+      f => Equal.trans(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, c1, None{}, None{}), None{}, Bool.pick(Maybe<&2, V>, c2, None{}, None{}), Crit.pick_none(V, c1), Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, c2, None{}, None{}), None{}, Crit.pick_none(V, c2)))
+    case Some{+u}:
+      f => Equal.cong(Bool, Maybe<&2, V>, t => Bool.pick(Maybe<&2, V>, t, None{}, Some{u}), c1, c2, f({==}))
+
+# an "and" of two true tests is true
+def Crit.and_true(a: Bool, +b: Bool) -> {a == True{}: Bool} -> {b == True{}: Bool} -> {Bool.and(a, b) == True{}: Bool}:
+  match a:
+    case True{}:
+      ha => hb => hb
+    case False{}:
+      ha => hb => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(ha))
+
+# numbers that compare less are less
+def Crit.cmp_lt(+a: Nat, +b: Nat) -> {Nat.cmp(a, b) == LT{}: Cmp} -> {Nat.is_lt(a, b) == True{}: Bool}:
+  h =>
+    %Equal.sym(Cmp, Nat.cmp(a, b), LT{}, h): {Cmp.is_lt(_) == True{}: Bool}
+    {==}
+
+# numbers that compare more: the second is less
+def Crit.cmp_gt(a: Nat, b: Nat) -> {Nat.cmp(a, b) == GT{}: Cmp} -> {Nat.is_lt(b, a) == True{}: Bool}:
+  match a b:
+    case 0n 0n:
+      h => Empty.absurd({Nat.is_lt(0n, 0n) == True{}: Bool}, Shared.Bool.true_ne_false(Equal.cong(Cmp, Bool, c => Cmp.is_eq(c), EQ{}, GT{}, h)))
+    case 0n 1n+q:
+      h => Empty.absurd({Nat.is_lt(1n+q, 0n) == True{}: Bool}, Shared.Bool.true_ne_false(Equal.cong(Cmp, Bool, c => Cmp.is_lt(c), LT{}, GT{}, h)))
+    case 1n+p 0n:
+      h => {==}
+    case 1n+p 1n+q:
+      Crit.cmp_gt(p, q)
+
+# numbers that compare equal are equal
+def Crit.cmp_eq(+a: Nat, +b: Nat) -> {Nat.cmp(a, b) == EQ{}: Cmp} -> {a == b: Nat}:
+  h => Shared.Nat.is_eq_sound(a, b)((
+    %Equal.sym(Cmp, Nat.cmp(a, b), EQ{}, h): {Cmp.is_eq(_) == True{}: Bool}
+    {==}
+  ))
+
+# a difference before the lower of two bits, when it is not before both
+def Crit.above_lt_left(d: Maybe<&2, Nat>, +pa: Nat, +pb: Nat) -> {Bool.and(Crit.above(d, pa), Crit.above(d, pb)) == False{}: Bool} -> {
+  Nat.is_lt(pa, pb) == True{}: Bool
+} -> {Crit.above(d, pa) == False{}: Bool}:
+  match d:
+    case None{}:
+      h => l => {==}
+    case Some{+x}:
+      +h => +l => Crit.false_of(Nat.is_lt(x, pa))(
+        +t => Crit.clash(
+          Bool.and(Nat.is_lt(x, pa), Nat.is_lt(x, pb)),
+          True{},
+          False{},
+          Crit.and_true(Nat.is_lt(x, pa), Nat.is_lt(x, pb))(t)(Shared.Nat.lt_le(x, pa, pb)(t)(Shared.Nat.lt_weak(pa, pb)(l))),
+          h,
+          Shared.Bool.true_ne_false
+        )
+      )
+
+# a difference before the lower second of two bits, when it is not before both
+def Crit.above_lt_right(d: Maybe<&2, Nat>, +pa: Nat, +pb: Nat) -> {Bool.and(Crit.above(d, pa), Crit.above(d, pb)) == False{}: Bool} -> {
+  Nat.is_lt(pb, pa) == True{}: Bool
+} -> {Crit.above(d, pb) == False{}: Bool}:
+  match d:
+    case None{}:
+      h => l => {==}
+    case Some{+x}:
+      +h => +l => Crit.false_of(Nat.is_lt(x, pb))(
+        +t => Crit.clash(
+          Bool.and(Nat.is_lt(x, pa), Nat.is_lt(x, pb)),
+          True{},
+          False{},
+          Crit.and_true(Nat.is_lt(x, pa), Nat.is_lt(x, pb))(Shared.Nat.lt_le(x, pb, pa)(t)(Shared.Nat.lt_weak(pb, pa)(l)))(t),
+          h,
+          Shared.Bool.true_ne_false
+        )
+      )
+
+# a difference not before a bit and itself is not before it
+def Crit.above_eq(+d: Maybe<&2, Nat>, +p: Nat) -> {Bool.and(Crit.above(d, p), Crit.above(d, p)) == False{}: Bool} -> {Crit.above(d, p) == False{}: Bool}:
+  +h => Crit.false_of(Crit.above(d, p))(
+    +t => Crit.clash(Bool.and(Crit.above(d, p), Crit.above(d, p)), True{}, False{}, Crit.and_true(Crit.above(d, p), Crit.above(d, p))(t)(t), h, Shared.Bool.true_ne_false)
+  )
+
+# a key with a side at pos has bits from pos on
+def Crit.side_some_ne(+q: List<&2, U32>, +pos: Nat, +b: Bool) -> {Key.side(q, pos) == Some{b}: Maybe<&2, Bool>} -> {
+  List.is_empty(&2, Bool, List.drop(&2, Bool, Key.bits(q), pos)) == False{}: Bool
+}:
+  hs => Crit.head_ne(List.drop(&2, Bool, Key.bits(q), pos), b)(
+    Equal.trans(
+      Maybe<&2, Bool>,
+      Bits.head(List.drop(&2, Bool, Key.bits(q), pos)),
+      Key.side(q, pos),
+      Some{b},
+      Equal.sym(Maybe<&2, Bool>, Key.side(q, pos), Bits.head(List.drop(&2, Bool, Key.bits(q), pos)), Crit.side_drop(q, pos, List.drop(&2, Bool, Key.bits(q), pos))({==})),
+      hs
+    )
+  )
+
+# a list with no head is empty
+def Crit.head_none(xs: List<&2, Bool>) -> {Bits.head(xs) == None{}: Maybe<&2, Bool>} -> {xs == []: List<&2, Bool>}:
+  match xs:
+    case Nil{}:
+      h => {==}
+    case Con{x, r}:
+      h => Empty.absurd({x <> r == []: List<&2, Bool>}, Crit.some_ne_none(Bool, x, h))
+
+# a key with no side at pos has no bits from pos on
+def Crit.side_nil(+q: List<&2, U32>, +pos: Nat) -> {Key.side(q, pos) == None{}: Maybe<&2, Bool>} -> {List.drop(&2, Bool, Key.bits(q), pos) == []: List<&2, Bool>}:
+  hs => Crit.head_none(List.drop(&2, Bool, Key.bits(q), pos))(
+    Equal.trans(
+      Maybe<&2, Bool>,
+      Bits.head(List.drop(&2, Bool, Key.bits(q), pos)),
+      Key.side(q, pos),
+      None{},
+      Equal.sym(Maybe<&2, Bool>, Key.side(q, pos), Bits.head(List.drop(&2, Bool, Key.bits(q), pos)), Crit.side_drop(q, pos, List.drop(&2, Bool, Key.bits(q), pos))({==})),
+      hs
+    )
+  )
+
+# Crit.side_split, once the side s is known
+def Crit.side_split.at(-T: Type, +q: List<&2, U32>, +pos: Nat, s: Maybe<&2, Bool>) -> {Key.side(q, pos) == s: Maybe<&2, Bool>} -> (
+  {Key.side(q, pos) == Some{True{}}: Maybe<&2, Bool>} -> T
+) -> ({Key.side(q, pos) == Some{False{}}: Maybe<&2, Bool>} -> T) -> ({Key.side(q, pos) == None{}: Maybe<&2, Bool>} -> T) -> T:
+  match s:
+    case None{}:
+      e => f1 => f2 => f3 => f3(e)
+    case Some{True{}}:
+      e => f1 => f2 => f3 => f1(e)
+    case Some{False{}}:
+      e => f1 => f2 => f3 => f2(e)
+
+# what holds for each side of a key at pos holds
+def Crit.side_split(-T: Type, +q: List<&2, U32>, +pos: Nat) -> ({Key.side(q, pos) == Some{True{}}: Maybe<&2, Bool>} -> T) -> (
+  {Key.side(q, pos) == Some{False{}}: Maybe<&2, Bool>} -> T
+) -> ({Key.side(q, pos) == None{}: Maybe<&2, Bool>} -> T) -> T:
+  Crit.side_split.at(T, q, pos, Key.side(q, pos))({==})
+
+# a read of a well formed fork at a key on its side b is a read of that side
+def Crit.route_side(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat, +q: List<&2, U32>, b: Bool) -> {
+  Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool
+} -> {Key.side(q, pos) == Some{b}: Maybe<&2, Bool>} -> {
+  Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, q) == Crit.lookup(V, Bool.pick(Crit<V>, b, o, z), q): Maybe<&2, V>
+}:
+  match b:
+    case True{}:
+      +h => +hs => Crit.or_third(V, Crit.ended(V, rep, e, q), Crit.lookup(V, z, q), Crit.lookup(V, o, q))(
+        Crit.ended_long(V, rep, pos, e, z, q, List.drop(&2, Bool, Key.bits(q), pos))(Crit.wf.rep_ok(~V, rep, pos, e, z, o, lo)(h))({==})(Crit.side_some_ne(q, pos, True{})(hs))
+      )(Crit.lookup_all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}}, q)(Crit.wf.all_z(~V, rep, pos, e, z, o, lo)(h))(Place.has_not(rep, pos, False{}, q, Some{True{}}, hs, {==})))
+    case False{}:
+      +h => +hs => Crit.or_second(V, Crit.ended(V, rep, e, q), Crit.lookup(V, z, q), Crit.lookup(V, o, q))(
+        Crit.ended_long(V, rep, pos, e, z, q, List.drop(&2, Bool, Key.bits(q), pos))(Crit.wf.rep_ok(~V, rep, pos, e, z, o, lo)(h))({==})(Crit.side_some_ne(q, pos, False{})(hs))
+      )(Crit.lookup_all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}}, q)(Crit.wf.all_o(~V, rep, pos, e, z, o, lo)(h))(Place.has_not(rep, pos, True{}, q, Some{False{}}, hs, {==})))
+
+# a read of a well formed fork at a key that ends at its bit is its end
+def Crit.route_end(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat, +q: List<&2, U32>) -> {
+  Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool
+} -> {Key.side(q, pos) == None{}: Maybe<&2, Bool>} -> {Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, q) == Crit.ended(V, rep, e, q): Maybe<&2, V>}:
+  +h => hs =>
+    +nil = Crit.side_nil(q, pos)(hs)
+    Crit.or_first(V, Crit.ended(V, rep, e, q), Crit.lookup(V, z, q), Crit.lookup(V, o, q))(
+      Crit.no_side(~V, rep, pos, z, False{}, q)(Crit.wf.all_z(~V, rep, pos, e, z, o, lo)(h))(nil)
+    )(Crit.no_side(~V, rep, pos, o, True{}, q)(Crit.wf.all_o(~V, rep, pos, e, z, o, lo)(h))(nil))
+
+# a test that is not False is True
+def Crit.true_of(b: Bool) -> ({b == False{}: Bool} -> Empty) -> {b == True{}: Bool}:
+  match b:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => Empty.absurd({False{} == True{}: Bool}, h({==}))
+
+# a key that a map holds, whose keys are on a side, is on that side
+def Crit.in_place(~V: Data, +m: Crit<V>, +g: Place, +q: List<&2, U32>) -> {Crit.all(~V, ~Place, ~Place.has, m, g) == True{}: Bool} -> {
+  Maybe.is_some(&2, V, Crit.lookup(V, m, q)) == True{}: Bool
+} -> {Place.has(g, q) == True{}: Bool}:
+  +a => +s => Crit.true_of(Place.has(g, q))(
+    t => Crit.clash(
+      Maybe.is_some(&2, V, Crit.lookup(V, m, q)),
+      True{},
+      False{},
+      s,
+      Equal.cong(Maybe<&2, V>, Bool, x => Maybe.is_some(&2, V, x), Crit.lookup(V, m, q), None{}, Crit.lookup_all(~V, ~Place, ~Place.has, m, g, q)(a)(t)),
+      Shared.Bool.true_ne_false
+    )
+  )
+
+# a key on a side of a fork has that side at its bit
+def Place.has_side(+r: List<&2, U32>, +pos: Nat, +b: Bool, +q: List<&2, U32>) -> {Place.has(Place{r, pos, b}, q) == True{}: Bool} -> {
+  Key.side(q, pos) == Some{b}: Maybe<&2, Bool>
+}:
+  h => Shared.Maybe.is_eq_sound(~Bool, ~Shared.Bool.is_eq, x1 => y1 => Shared.Bool.is_eq_sound(x1, y1), Key.side(q, pos), Some{b})(
+    Shared.List.all.if_rest(Key.agree(q, r, pos), u => Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(q, pos), Some{b}))(h)
+  )
+
+# a key that a well formed fork holds agrees with its rep before its bit
+def Crit.in_fork_agree(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat, +q: List<&2, U32>) -> {
+  Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool
+} -> {Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, q)) == True{}: Bool} -> {Key.agree(q, rep, pos) == True{}: Bool}:
+  +h => +s => Crit.true_of(Key.agree(q, rep, pos))(
+    t => Crit.clash(
+      Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, q)),
+      True{},
+      False{},
+      s,
+      Equal.cong(Maybe<&2, V>, Bool, x => Maybe.is_some(&2, V, x), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, q), None{}, Crit.not_in_fork(~V, rep, pos, e, z, o, lo, q)(h)(t)),
+      Shared.Bool.true_ne_false
+    )
+  )
+
+# the end of a fork of two ends, the first unless the second is some, read
+# at q
+def Crit.ended_pick(-V: Data, +ra: List<&2, U32>, eb: Maybe<&2, V>, ea: Maybe<&2, V>, +q: List<&2, U32>) -> {Crit.ended(V, ra, ea, q) == None{}: Maybe<&2, V>} -> {
+  Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q) == None{}: Maybe<&2, V>
+}:
+  match eb:
+    case None{}:
+      h => h
+    case Some{w}:
+      h => {==}
+
+# the end of a difference of two forks at one bit: the end of a, unless b
+# has one, read at q
+def Crit.ends_minus(
+  -V: Data,
+  +ra: List<&2, U32>,
+  +pa: Nat,
+  ea: Maybe<&2, V>,
+  -za: Crit<V>,
+  +rb: List<&2, U32>,
+  +pb: Nat,
+  eb: Maybe<&2, V>,
+  -zb: Crit<V>,
+  +q: List<&2, U32>
+) -> {Crit.rep_ok(V, ra, pa, ea, za) == True{}: Bool} -> {Crit.rep_ok(V, rb, pb, eb, zb) == True{}: Bool} -> {pa == pb: Nat} -> {
+  Crit.above(Key.diff(ra, rb), pa) == False{}: Bool
+} -> {
+  Crit.ended(V, ra, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), q)
+    == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.ended(V, rb, eb, q)), None{}, Crit.ended(V, ra, ea, q)): Maybe<&2, V>
+}:
+  match ea eb:
+    case None{} None{}:
+      hra => hrb => eqp => hab => {==}
+    case Some{u} None{}:
+      hra => hrb => eqp => hab => {==}
+    case None{} Some{w}:
+      hra => hrb => eqp => hab => Equal.sym(
+        Maybe<&2, V>,
+        Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(rb, q), x => Some{w})), None{}, None{}),
+        None{},
+        Crit.pick_none(V, Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(rb, q), x => Some{w})))
+      )
+    case Some{u} Some{w}:
+      hra => hrb => eqp => hab =>
+        %Key.is_eq_sound(rb, ra)(
+          Crit.end_is(rb, pa, ra)((
+            %Equal.sym(Nat, pa, pb, eqp): {Nat.is_eq(List.length(&2, Bool, Key.bits(rb)), _) == True{}: Bool}
+            hrb
+          ))((
+            %Shared.Nat.is_eq_sound(List.length(&2, Bool, Key.bits(ra)), pa)(hra): {
+              List.drop(&2, Bool, Key.bits(ra), _) == []: List<&2, Bool>
+            }
+            Crit.drop_length(Key.bits(ra))
+          ))(hab)
+        ): {
+          None{} == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(rb, q), x => Some{w})), None{}, Shared.Maybe.when(V, Key.is_eq(_, q), x => Some{u})): Maybe<&2, V>
+        }
+        Equal.sym(
+          Maybe<&2, V>,
+          Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(rb, q), x => Some{w})), None{}, Shared.Maybe.when(V, Key.is_eq(rb, q), x => Some{u})),
+          None{},
+          Crit.pick_when(V, Key.is_eq(rb, q), w, u)
+        )
+
+# Crit.is_some_when, once the test of q and k is known
+def Crit.is_some_when.at(-V: Data, +k: List<&2, U32>, +q: List<&2, U32>, -w: V, b: Bool) -> {Key.is_eq(q, k) == b: Bool} -> {
+  Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q), u => Some{w})) == b: Bool
+}:
+  match b:
+    case True{}:
+      e =>
+        %Equal.sym(List<&2, U32>, q, k, Key.is_eq_sound(q, k)(e)): {Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, _), u => Some{w})) == True{}: Bool}
+        %Equal.sym(Bool, Key.is_eq(k, k), True{}, Key.is_eq_refl(k)): {Maybe.is_some(&2, V, Shared.Maybe.when(V, _, u => Some{w})) == True{}: Bool}
+        {==}
+    case False{}:
+      e =>
+        %Equal.sym(Bool, Key.is_eq(k, q), False{}, Key.ne_sym(q, k)(e)): {Maybe.is_some(&2, V, Shared.Maybe.when(V, _, u => Some{w})) == False{}: Bool}
+        {==}
+
+# an entry holds q exactly when q is its key
+def Crit.is_some_when(-V: Data, +k: List<&2, U32>, +q: List<&2, U32>, -w: V) -> {
+  Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q), u => Some{w})) == Key.is_eq(q, k): Bool
+}:
+  Crit.is_some_when.at(V, k, q, w, Key.is_eq(q, k))({==})
+
+# a difference holds what a holds under the keys that b lacks
+law Crit.minus_lookup:
+  for ~V: Data
+  for a: Crit<V>
+  for b: Crit<V>
+  for q: List<&2, U32>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {
+    Crit.lookup(V, Crit.minus(V, a, b), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, b, q)), None{}, Crit.lookup(V, a, q)): Maybe<&2, V>
+  }
+
+def Crit.minus_lookup(ty, a, b, q):
+  ?TODO
 
 # a read of a well formed map is its clear read, with k used more than once
 def Crit.get_lookup.at(~ty: Data, +m: Crit<ty>, +k: List<&2, U32>) -> {Crit.wf(~ty, m, 0n) == True{}: Bool} -> {
