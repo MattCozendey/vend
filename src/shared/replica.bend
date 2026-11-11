@@ -1176,24 +1176,30 @@ def Taken.ids(xs: List<&2, Taken>) -> List<&2, Ledgers.Id>:
     case Con{Taken{i, r}, rest}:
       i <> Taken.ids(rest)
 
-# the taken request x, if any, before what rest gives; nothing after a
-# missing one
-def Taken.con(m: Maybe<&2, Taken>, rest: Unit -> List<&2, Taken>) -> List<&2, Taken>:
+# the taken request that a known read m gives, before what rest gives;
+# nothing after an absent one (none: the read cannot tell)
+def Taken.con(
+  m: Maybe<&2, Maybe<&2, Taken>>,
+  rest: Unit -> Maybe<&2, List<&2, Taken>>
+) -> Maybe<&2, List<&2, Taken>>:
   match m:
     case None{}:
-      []
-    case Some{x}:
-      x <> rest(Unit{})
+      None{}
+    case Some{None{}}:
+      Some{[]}
+    case Some{Some{x}}:
+      Maybe.map(&2, List<&2, Taken>, List<&2, Taken>, r => x <> r, rest(Unit{}))
 
-# k versions from the number n, in order, at the tip t
+# k versions from the number n, in order, at the tip t; fewer when the line
+# took fewer (none: l lacks a node of the log, so a read cannot tell)
 def Tip.versions(~mach: Machine(),
-  ~d: Led(mach), k: Nat, +l: Led.L(mach, d), +t: Tip, +n: U32) -> List<&2, Taken>:
+  ~d: Led(mach), k: Nat, +l: Led.L(mach, d), +t: Tip, +n: U32) -> Maybe<&2, List<&2, Taken>>:
   match k:
     case 0n:
-      []
+      Some{[]}
     case 1n+p:
       Taken.con(
-        Tip.taken(~mach, ~d, l, t, n),
+        Tip.known(~Taken, ~Taken.code, ~Taken.code.read, Tip.find(~mach, ~d, l, t, Log.taken(n))),
         u => Tip.versions(~mach, ~d, p, l, t, U32.inc(n))
       )
 
