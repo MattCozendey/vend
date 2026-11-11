@@ -1745,13 +1745,20 @@ def Node.versions(
     )
   )
 
+# the name of the resource of the binding x, when it is one: its key names a
+# resource and its value is the code of one, as Res.find reads it
+def Res.named(x: Trees.Binding) -> Maybe<&2, Resources.Name>:
+  match x:
+    case Trees.Binding{k, v}:
+      Maybe.bind(&2, Requests.Res, Resources.Name, Res.found(Some{v}), r => Res.name(k))
+
 # the names of the resources among the bindings xs
 def Res.names(xs: List<&2, Trees.Binding>) -> List<&2, Resources.Name>:
   match xs:
     case Nil{}:
       []
     case Con{x, rest}:
-      Shared.Maybe.cons(Resources.Name, Res.name(Trees.Binding.key(x)), Res.names(rest))
+      Shared.Maybe.cons(Resources.Name, Res.named(x), Res.names(rest))
 
 # the names of the resources among the keys ks
 def Keys.names(ks: List<&2, List<&2, U32>>) -> List<&2, Resources.Name>:
