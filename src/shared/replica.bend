@@ -1777,19 +1777,10 @@ def Led.later_grows.go(
   +b: Led.L(mach, d),
   h: Led.Later(~mach, ~d, a, b)
 ) -> Led.Grows(mach, d, a, b):
-  Ledgers.Kind.grows_get(
-    ~Machine.Q(mach),
-    ~Machine.code(mach),
-    ~Led.kind(mach, d),
-    ~Led.laws(mach, d),
-    a,
-    b
-  )(
-    Shared.Bool.and_true_left(
-      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
-      Led.honest(~mach, ~d, b)
-    )(h)
-  )
+  Shared.Bool.and_true_left(
+    Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+    Led.honest(~mach, ~d, b)
+  )(h)
 
 # a later ledger holds each entry of the earlier one
 law Led.later_grows:
@@ -4015,88 +4006,40 @@ def Replica(-mach: Machine(), -d: Led(mach), -kern: Kernel(mach, d)) -> Type:
 # ------------------
 # Growth of a ledger, and the laws of its parts, as the proofs below use them.
 
-# the laws of the ledger d
-def Hist.laws(-mach: Machine(), d: Led(mach)) -> Ledgers.Ledger.Laws(
-  Machine.Q(mach),
-  Machine.code(mach),
-  Led.kind(mach, d)
-):
-  match d:
-    case Tuple{x, t}:
-      Ledgers.Ledger.laws(Machine.Q(mach), Machine.code(mach), x)
-
-# the law of an added entry, of the laws ls
-def Hist.laws.add(
-  -Q: Data,
-  -c: Codes.Codec(Q),
-  -k: Ledgers.Ledger.Kind(Q),
-  ls: Ledgers.Ledger.Laws(Q, c, k)
-) -> Ledgers.Laws.GetAdd(Q, c, k):
-  match ls:
-    case Tuple{e, Tuple{a, r}}:
-      a
-
-# the law of an added entry, of the ledger d
-def Hist.get_add(-mach: Machine(), d: Led(mach)) -> Ledgers.Laws.GetAdd(
-  Machine.Q(mach),
-  Machine.code(mach),
-  Led.kind(mach, d)
-):
-  Hist.laws.add(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Hist.laws(mach, d))
+# what a ledger that grows from a gives under each name, by the check
+def Hist.gets(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +g: Led.Grows(mach, d, a, b)
+) -> Ledgers.Kind.Grows(Machine.Q(mach), Led.kind(mach, d), a, b):
+  Ledgers.Kind.grows_get(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), ~Led.laws(mach, d), a, b)(g)
 
 # a ledger grows from itself
-def Hist.refl(-mach: Machine(), -d: Led(mach), -l: Led.L(mach, d)) -> Led.Grows(mach, d, l, l):
-  n => e => h => h
+def Hist.refl(~mach: Machine(), ~d: Led(mach), +l: Led.L(mach, d)) -> Led.Grows(mach, d, l, l):
+  Ledgers.Kind.grows_refl(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), ~Led.laws(mach, d), l)
 
 # growth is transitive
 def Hist.trans(
-  -mach: Machine(),
-  -d: Led(mach),
-  -a: Led.L(mach, d),
-  -b: Led.L(mach, d),
-  -c: Led.L(mach, d),
-  g1: Led.Grows(mach, d, a, b),
-  g2: Led.Grows(mach, d, b, c)
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +c: Led.L(mach, d),
+  +g1: Led.Grows(mach, d, a, b),
+  +g2: Led.Grows(mach, d, b, c)
 ) -> Led.Grows(mach, d, a, c):
-  +n => +e => h => g2(n)(e)(g1(n)(e)(h))
+  Ledgers.Kind.grows_trans(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), ~Led.laws(mach, d), a, b, c, g1, g2)
 
 # a ledger grows by an entry
-def Hist.add(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), x: Entry(mach)) -> Led.Grows(
+def Hist.add(~mach: Machine(), ~d: Led(mach), +l: Led.L(mach, d), +x: Entry(mach)) -> Led.Grows(
   mach,
   d,
   l,
   Led.add(~mach, ~d, l, x)
 ):
-  +n => +e => h =>
-    %Equal.sym(
-      Maybe<&2, Entry(mach)>,
-      Led.get(~mach, ~d, Led.add(~mach, ~d, l, x), n),
-      Maybe.or(
-        &2,
-        Entry(mach),
-        Led.get(~mach, ~d, l, n),
-        Shared.Maybe.when(
-          Entry(mach),
-          Ledgers.Name.is_eq(Entry.name(~mach, x), n),
-          u => Some{x}
-        )
-      ),
-      Hist.get_add(mach, d)(l)(x)(n)
-    ): {_ == Some{e}: Maybe<&2, Entry(mach)>}
-    %Equal.sym(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, l, n), Some{e}, h): {
-      Maybe.or(
-        &2,
-        Entry(mach),
-        _,
-        Shared.Maybe.when(
-          Entry(mach),
-          Ledgers.Name.is_eq(Entry.name(~mach, x), n),
-          u => Some{x}
-        )
-      )
-        == Some{e}: Maybe<&2, Entry(mach)>
-    }
-    {==}
+  Ledgers.Kind.grows_add(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), ~Led.laws(mach, d), l, x)
 
 # a ledger grows by the data ns
 def Hist.puts(~mach: Machine(), ~d: Led(mach), ns: List<&2, List<&2, U32>>, +l: Led.L(mach, d)) -> Led.Grows(
@@ -4107,11 +4050,9 @@ def Hist.puts(~mach: Machine(), ~d: Led(mach), ns: List<&2, List<&2, U32>>, +l: 
 ):
   match ns:
     case Nil{}:
-      Hist.refl(mach, d, l)
-    case Con{+ws, rest}:
-      Hist.trans(
-        mach,
-        d,
+      Hist.refl(~mach, ~d, l)
+    case Con{+ws, +rest}:
+      Hist.trans(~mach, ~d,
         l,
         Led.add(~mach, ~d, l, Ledgers.Entry.Data{ws}),
         Led.puts(~mach, ~d, rest, Led.add(~mach, ~d, l, Ledgers.Entry.Data{ws})),
@@ -4145,11 +4086,11 @@ def Hist.words(
 def Hist.fetch(
   ~mach: Machine(),
   ~d: Led(mach),
-  a: Led.L(mach, d),
-  -b: Led.L(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
   +h: Hashes.Hash,
   -w: List<&2, U32>,
-  g: Led.Grows(mach, d, a, b)
+  +g: Led.Grows(mach, d, a, b)
 ) -> {Led.fetch(~mach, ~d, a, h) == Some{w}: Maybe<&2, List<&2, U32>>}
   -> {Led.fetch(~mach, ~d, b, h) == Some{w}: Maybe<&2, List<&2, U32>>}:
   Hist.words(
@@ -4157,7 +4098,7 @@ def Hist.fetch(
     Led.get(~mach, ~d, a, Ledgers.Name.Data{h}),
     Led.get(~mach, ~d, b, Ledgers.Name.Data{h}),
     w,
-    e => g(Ledgers.Name.Data{h})(e)
+    e => Hist.gets(~mach, ~d, a, b, g)(Ledgers.Name.Data{h})(e)
   )
 
 # a ledger that holds some words gives them under their hash
@@ -4195,7 +4136,7 @@ def Hist.has.of(
 def Hist.final.of(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   t: Trees.Tree(S, fetch, grows)
 ) -> Trees.Laws.Final(S, grows, Trees.Tree.ops(S, fetch, grows, t)):
   match t:
@@ -4206,7 +4147,7 @@ def Hist.final.of(
 def Hist.put_final.of(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   t: Trees.Tree(S, fetch, grows)
 ) -> Trees.Laws.PutFinal(S, grows, Trees.Tree.ops(S, fetch, grows, t)):
   match t:
@@ -4217,7 +4158,7 @@ def Hist.put_final.of(
 def Hist.write.of(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   t: Trees.Tree(S, fetch, grows)
 ) -> Trees.Laws.Write(S, fetch, grows, Trees.Tree.ops(S, fetch, grows, t)):
   match t:
@@ -4227,7 +4168,7 @@ def Hist.write.of(
 # the law that a read stays, of the tree of the ledger d
 def Hist.final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Final(
   Led.L(mach, d),
-  a => b => Led.Grows(mach, d, a, b),
+  a => b => Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
   Led.tree(mach, d)
 ):
   match d:
@@ -4248,7 +4189,7 @@ def Hist.final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Final(
 # the law that a write stays, of the tree of the ledger d
 def Hist.put_final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.PutFinal(
   Led.L(mach, d),
-  a => b => Led.Grows(mach, d, a, b),
+  a => b => Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
   Led.tree(mach, d)
 ):
   match d:
@@ -4270,7 +4211,7 @@ def Hist.put_final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.PutFinal(
 def Hist.write(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Write(
   Led.L(mach, d),
   l => h => Led.fetch(~mach, ~d, l, h),
-  a => b => Led.Grows(mach, d, a, b),
+  a => b => Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
   Led.tree(mach, d)
 ):
   match d:
@@ -4960,7 +4901,7 @@ def Safe.ballots_law(-mach: Machine(), d: Led(mach)) -> Ledgers.Laws.Ballots(
   Machine.code(mach),
   Led.kind(mach, d)
 ):
-  Safe.laws.ballots(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Hist.laws(mach, d))
+  Safe.laws.ballots(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d))
 
 # the law of the bound of rounds, of the ledger d
 def Safe.rounds_law(-mach: Machine(), d: Led(mach)) -> Ledgers.Laws.Rounds(
@@ -4968,7 +4909,7 @@ def Safe.rounds_law(-mach: Machine(), d: Led(mach)) -> Ledgers.Laws.Rounds(
   Machine.code(mach),
   Led.kind(mach, d)
 ):
-  Safe.laws.rounds(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Hist.laws(mach, d))
+  Safe.laws.rounds(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d))
 
 # a read that holds y stays so when its value is kept
 def Safe.is_eq_kept(
@@ -5011,7 +4952,7 @@ def Safe.has_grows(
     Ledgers.Kind.get(Machine.Q(mach), Led.kind(mach, d))(a)(Entry.name(~mach, e)),
     Ledgers.Kind.get(Machine.Q(mach), Led.kind(mach, d))(b)(Entry.name(~mach, e)),
     e,
-    x => Led.later_grows(~mach, ~d, a, b)(later)(Entry.name(~mach, e))(x)
+    x => Hist.gets(~mach, ~d, a, b, Led.later_grows(~mach, ~d, a, b)(later))(Entry.name(~mach, e))(x)
   )
 
 # a ballot of a voter at a place in a ledger is one in a later ledger
@@ -9625,14 +9566,14 @@ def Ext.add_into.none(
 def Ext.add_into.at(
   ~mach: Machine(),
   ~d: Led(mach),
-  -la: Led.L(mach, d),
+  +la: Led.L(mach, d),
   +lb: Led.L(mach, d),
   +w: List<&2, U32>,
   +n: Ledgers.Name,
   +e: Entry(mach),
   m: Maybe<&2, Entry(mach)>,
   em: {Led.get(~mach, ~d, la, n) == m: Maybe<&2, Entry(mach)>},
-  g: Led.Grows(mach, d, la, lb),
+  +g: Led.Grows(mach, d, la, lb),
   hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool},
   h: {
     Maybe.or(
@@ -9650,20 +9591,20 @@ def Ext.add_into.at(
 ) -> {Led.get(~mach, ~d, lb, n) == Some{e}: Maybe<&2, Entry(mach)>}:
   match m:
     case Some{x}:
-      g(n)(e)(Equal.trans(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, la, n), Some{x}, Some{e}, em, h))
+      Hist.gets(~mach, ~d, la, lb, g)(n)(e)(Equal.trans(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, la, n), Some{x}, Some{e}, em, h))
     case None{}:
       Ext.add_into.none(~mach, ~d, lb, w, n, e, hw, h)
 
-# a ledger with data that lb holds still grows into lb
-def Ext.add_into(
+# a ledger with data that lb holds gives what lb gives
+def Ext.add_into.pi(
   ~mach: Machine(),
   ~d: Led(mach),
   +la: Led.L(mach, d),
   +lb: Led.L(mach, d),
   +w: List<&2, U32>,
-  g: Led.Grows(mach, d, la, lb),
-  hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool}
-) -> Led.Grows(mach, d, Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}), lb):
+  +g: Led.Grows(mach, d, la, lb),
+  +hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool}
+) -> Ledgers.Kind.Grows(Machine.Q(mach), Led.kind(mach, d), Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}), lb):
   +n => +e => h => Ext.add_into.at(
     ~mach,
     ~d,
@@ -9703,10 +9644,82 @@ def Ext.add_into(
             u => Some{Ledgers.Entry.Data{w}}
           )
         ),
-        Hist.get_add(mach, d)(la)(Ledgers.Entry.Data{w})(n)
+        Ledgers.Laws.get_add(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d))(la)(Ledgers.Entry.Data{w})(n)
       ),
       h
     )
+  )
+
+# a ledger la that grows into lb, and data w that lb holds
+def Ext.Into(-mach: Machine(), -d: Led(mach)) -> Data:
+  +Sigma<Led.L(mach, d), la => +Sigma<Led.L(mach, d), lb => +Sigma<List<&2, U32>, w => +Sigma<
+    Led.Grows(mach, d, la, lb),
+    g => {Ext.has(~mach, ~d, lb, w) == True{}: Bool}>>>>
+
+# la of x with the data w of x
+def Ext.Into.from(~mach: Machine(), ~d: Led(mach), x: Ext.Into(mach, d)) -> Led.L(mach, d):
+  match x:
+    case Tuple{la, Tuple{lb, Tuple{w, r}}}:
+      Led.add(~mach, ~d, la, Ledgers.Entry.Data{w})
+
+# lb of x
+def Ext.Into.to(-mach: Machine(), -d: Led(mach), x: Ext.Into(mach, d)) -> Led.L(mach, d):
+  match x:
+    case Tuple{la, Tuple{lb, r}}:
+      lb
+
+# what la of x with the data w of x holds, lb of x holds
+def Ext.into.has(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  x: Ext.Into(mach, d),
+  +e: Entry(mach)
+) -> {Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), Ext.Into.from(~mach, ~d, x), e) == True{}: Bool}
+  -> {Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), Ext.Into.to(mach, d, x), e) == True{}: Bool}:
+  match x:
+    case Tuple{+la, Tuple{+lb, Tuple{+w, Tuple{+g, +hw}}}}:
+      h => Ledgers.Kind.has_of_get(
+        ~Machine.Q(mach),
+        ~Machine.code(mach),
+        ~Led.kind(mach, d),
+        Ledgers.Laws.get_named(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d)),
+        lb,
+        Entry.name(~mach, e),
+        e,
+        Ext.add_into.pi(~mach, ~d, la, lb, w, g, hw)(Entry.name(~mach, e))(e)(
+          Ledgers.Kind.get_of_has(
+            ~Machine.Q(mach),
+            ~Machine.code(mach),
+            ~Led.kind(mach, d),
+            Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}),
+            Entry.name(~mach, e),
+            e,
+            {==},
+            h
+          )
+        )
+      )
+
+# a ledger with data that lb holds still grows into lb
+def Ext.add_into(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +la: Led.L(mach, d),
+  +lb: Led.L(mach, d),
+  +w: List<&2, U32>,
+  +g: Led.Grows(mach, d, la, lb),
+  +hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool}
+) -> Led.Grows(mach, d, Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}), lb):
+  Ledgers.Kind.grows_core(
+    ~Machine.Q(mach),
+    ~Machine.code(mach),
+    ~Led.kind(mach, d),
+    ~Led.laws(mach, d),
+    ~Ext.Into(mach, d),
+    ~(x => Ext.Into.from(~mach, ~d, x)),
+    ~(x => Ext.Into.to(mach, d, x)),
+    ~(x => e => h => Ext.into.has(~mach, ~d, x, e)(h)),
+    Tuple{la, Tuple{lb, Tuple{w, Tuple{g, hw}}}}
   )
 
 # a ledger with data ns that lb holds still grows into lb
@@ -9764,7 +9777,7 @@ def Ext.based_grows(
         xs,
         base,
         base,
-        Hist.refl(mach, d, base),
+        Hist.refl(~mach, ~d, base),
         Equal.trans(
           Bool,
           Ext.holds(~mach, ~d, base, xs),
@@ -11242,14 +11255,12 @@ def Sim.grows(
   bdb: Ext.Based(mach, d, b, Run{lb, ta, aa}),
   ha: {Ext.holds(~mach, ~d, a, aa) == True{}: Bool}
 ) -> Led.Grows(mach, d, la, lb):
-  Hist.trans(
-    mach,
-    d,
+  Hist.trans(~mach, ~d,
     la,
     a,
     lb,
     Ext.based_grows(~mach, ~d, a, Run{la, ta, aa}, bda, ha),
-    Hist.trans(mach, d, a, b, lb, Led.later_grows(~mach, ~d, a, b)(later), Ext.based_from(~mach, ~d, b, Run{lb, ta, aa}, bdb))
+    Hist.trans(~mach, ~d, a, b, lb, Led.later_grows(~mach, ~d, a, b)(later), Ext.based_from(~mach, ~d, b, Run{lb, ta, aa}, bdb))
   )
 
 # b holds what a holds
@@ -11887,15 +11898,21 @@ def Sim.get_eq(
     )
       == True{}: Bool
   },
-  ra: Run<Led.L(mach, d)>,
-  rb: Run<Led.L(mach, d)>,
+  +ra: Run<Led.L(mach, d)>,
+  +rb: Run<Led.L(mach, d)>,
   +n: Ledgers.Name,
   +e: Entry(mach),
   rel: Sim.Rel(mach, d, a, b, ra, rb),
   ha: {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool},
   h: {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), ra), n) == Some{e}: Maybe<&2, Entry(mach)>}
 ) -> {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), rb), n) == Some{e}: Maybe<&2, Entry(mach)>}:
-  Sim.grow_of(~mach, ~d, a, b, later, ra, rb, rel, ha)(n)(e)(h)
+  Hist.gets(
+    ~mach,
+    ~d,
+    Run.ledger(Led.L(mach, d), ra),
+    Run.ledger(Led.L(mach, d), rb),
+    Sim.grow_of(~mach, ~d, a, b, later, ra, rb, rel, ha)
+  )(n)(e)(h)
 
 # an act of the kernel in the run in a is its act in the run in b
 def Sim.kern_eq(
@@ -13915,50 +13932,6 @@ def Hist.ne_zero(-n: Nat, -p: Nat, e: {n == 1n+p: Nat}) -> {Nat.is_eq(n, 0n) == 
   %Equal.sym(Nat, n, 1n+p, e): {Nat.is_eq(_, 0n) == False{}: Bool}
   {==}
 
-# what a ledger holds, a ledger that grows holds, once the entry under its
-# name is known (m)
-def Hist.has_grows.at(
-  ~mach: Machine(),
-  ~d: Led(mach),
-  -a: Led.L(mach, d),
-  +b: Led.L(mach, d),
-  +n: Ledgers.Name,
-  +e: Entry(mach),
-  m: Maybe<&2, Entry(mach)>,
-  g: Led.Grows(mach, d, a, b)
-) -> {Led.get(~mach, ~d, a, n) == m: Maybe<&2, Entry(mach)>}
-  -> {Shared.Maybe.is_eq(~Entry(mach), ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)), m, Some{e}) == True{}: Bool}
-  -> {
-    Shared.Maybe.is_eq(
-      ~Entry(mach),
-      ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
-      Led.get(~mach, ~d, b, n),
-      Some{e}
-    )
-      == True{}: Bool
-  }:
-  match m:
-    case None{}:
-      em => h => Empty.absurd(
-        {
-          Shared.Maybe.is_eq(
-            ~Entry(mach),
-            ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
-            Led.get(~mach, ~d, b, n),
-            Some{e}
-          )
-            == True{}: Bool
-        },
-        Shared.Bool.false_ne_true(h)
-      )
-    case Some{y}:
-      em => h =>
-        %Equal.sym(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, b, n), Some{y}, g(n)(y)(em)): {
-          Shared.Maybe.is_eq(~Entry(mach), ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)), _, Some{e})
-            == True{}: Bool
-        }
-        h
-
 # what a ledger holds, a ledger that grows holds
 def Hist.has_grows(
   ~mach: Machine(),
@@ -13966,19 +13939,10 @@ def Hist.has_grows(
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
   +e: Entry(mach),
-  g: Led.Grows(mach, d, a, b)
+  +g: Led.Grows(mach, d, a, b)
 ) -> {Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, e) == True{}: Bool}
   -> {Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), b, e) == True{}: Bool}:
-  h => Hist.has_grows.at(
-    ~mach,
-    ~d,
-    a,
-    b,
-    Entry.name(~mach, e),
-    e,
-    Led.get(~mach, ~d, a, Entry.name(~mach, e)),
-    g
-  )({==})(h)
+  Ledgers.Kind.grows_has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), ~Led.laws(mach, d), a, b, g, e)
 
 # the height bound of a line grows with the ledger, once a ballot at it is
 # known (ex)
@@ -14025,7 +13989,7 @@ def Hist.heights.of(
         Machine.Q(mach),
         Machine.code(mach),
         Led.kind(mach, d),
-        Hist.laws(mach, d)
+        Led.laws(mach, d)
       )(
         b
       )(
@@ -14081,7 +14045,7 @@ def Hist.heights.at(
           Machine.Q(mach),
           Machine.code(mach),
           Led.kind(mach, d),
-          Hist.laws(mach, d)
+          Led.laws(mach, d)
         )(a)(c)(Hist.ne_zero(Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(a)(c), p, en))
       )
 
@@ -14128,7 +14092,7 @@ def Hist.root_start(
     ~mach,
     Led.get(~mach, ~d, a, Ledgers.Name.Ask{r}),
     Led.get(~mach, ~d, b, Ledgers.Name.Ask{r}),
-    y => Led.later_grows(~mach, ~d, a, b)(later)(Ledgers.Name.Ask{r})(y),
+    y => Hist.gets(~mach, ~d, a, b, Led.later_grows(~mach, ~d, a, b)(later))(Ledgers.Name.Ask{r})(y),
     x
   )(e)
 
@@ -15267,7 +15231,7 @@ def Outs.get_gain(
   -s: Led.L(mach, d),
   +a: Hashes.Hash,
   +e: Entry(mach),
-  r: Run<Led.L(mach, d)>,
+  +r: Run<Led.L(mach, d)>,
   -r2: Run<Led.L(mach, d)>,
   g: Ext.Gain(mach, d, s, r, r2),
   eg: {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}
@@ -15280,7 +15244,13 @@ def Outs.get_gain(
         Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
         l1
       ): {Led.get(~mach, ~d, _, Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}
-      Hist.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r))(Ledgers.Name.Ask{a})(e)(eg)
+      Hist.gets(
+        ~mach,
+        ~d,
+        Run.ledger(Led.L(mach, d), r),
+        Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
+        Hist.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r))
+      )(Ledgers.Name.Ask{a})(e)(eg)
 
 # Outs.Pre of a run m2 that follows r
 def Outs.pre_pair(

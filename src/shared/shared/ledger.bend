@@ -1809,3 +1809,379 @@ law Kind.grows_get:
 
 def Kind.grows_get(q, c, k, laws, a, b):
   h => n => e => g => Kind.grows_get.go(~q, ~c, ~k, ~laws, a, b, h, n, e, g)
+
+# Growth as a check
+# -----------------
+# Kind.grows from what each entry gives (Kind.grows_core), and the checks it
+# keeps: from itself, through a ledger between, and by one more entry.
+
+# the law of a ledger with one more entry, of the laws
+def Laws.get_add(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q), laws: Ledger.Laws(Q, c, k)) -> Laws.GetAdd(Q, c, k):
+  match laws:
+    case Tuple{ge, Tuple{ga, rest}}:
+      ga
+
+# the entries ps, each in ks, are each in ks with one more entry
+def Kind.within_cons(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ps: List<&2, Entry<Q>>,
+  +x: Entry<Q>,
+  +ks: List<&2, Entry<Q>>
+) -> {Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), ps, ks) == True{}: Bool}
+  -> {Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), ps, x <> ks) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      h => {==}
+    case Con{+p, +r}:
+      +h => Shared.Bool.and_both(
+        List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), x <> ks, p),
+        Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, x <> ks)
+      )(
+        Shared.List.contains_cons(
+          ~Entry<Q>,
+          ~Entry.same(~Q, ~c),
+          x,
+          ks,
+          p
+        )(
+          Shared.Bool.and_true_left(
+            List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), ks, p),
+            Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, ks)
+          )(h)
+        )
+      )(
+        Kind.within_cons(
+          ~Q,
+          ~c,
+          r,
+          x,
+          ks
+        )(
+          Shared.Bool.and_true_right(
+            List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), ks, p),
+            Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, ks)
+          )(h)
+        )
+      )
+
+# an entry is in a list that it starts
+def Kind.contains_head(~Q: Data, ~c: Codes.Codec(Q), +x: Entry<Q>, r: List<&2, Entry<Q>>) -> {
+  List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), x <> r, x) == True{}: Bool
+}:
+  %Equal.sym(
+    Bool,
+    Entry.same(~Q, ~c, x, x),
+    True{},
+    Entry.is_eq_refl(~Q, ~Codes.Code.is_eq(~Q, ~Codes.Codec.enc(Q, c)), ~Codes.Code.eq_laws(~Q, ~c), x)
+  ): {List.any.if(u => List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), r, x), _) == True{}: Bool}
+  {==}
+
+# each entry of a list is in it
+def Kind.within_refl(~Q: Data, ~c: Codes.Codec(Q), ks: List<&2, Entry<Q>>) -> {
+  Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), ks, ks) == True{}: Bool
+}:
+  match ks:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Shared.Bool.and_both(
+        List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), x <> r, x),
+        Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, x <> r)
+      )(Kind.contains_head(~Q, ~c, x, r))(Kind.within_cons(~Q, ~c, r, x, r)(Kind.within_refl(~Q, ~c, r)))
+
+# a ledger holds each of its entries
+def Kind.has_of_entries(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ms: Laws.Missing(Q, c, k),
+  +l: Kind.L(Q, k),
+  +e: Entry<Q>
+) -> {List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, l), e) == True{}: Bool}
+  -> {Kind.has(~Q, ~c, ~k, l, e) == True{}: Bool}:
+  h => Shared.Bool.and_true_left(
+    Kind.has(~Q, ~c, ~k, l, e),
+    Maybe.is_none(&2, Entry<Q>, Kind.get(Q, k)(Kind.empty(Q, k))(Entry.name(~Q, ~c, e)))
+  )(
+    Equal.trans(
+      Bool,
+      Bool.and(
+        Kind.has(~Q, ~c, ~k, l, e),
+        Maybe.is_none(&2, Entry<Q>, Kind.get(Q, k)(Kind.empty(Q, k))(Entry.name(~Q, ~c, e)))
+      ),
+      List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, l), e),
+      True{},
+      Equal.sym(
+        Bool,
+        List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, l), e),
+        Bool.and(
+          Kind.has(~Q, ~c, ~k, l, e),
+          Maybe.is_none(&2, Entry<Q>, Kind.get(Q, k)(Kind.empty(Q, k))(Entry.name(~Q, ~c, e)))
+        ),
+        ms(l)(Kind.empty(Q, k))(e)
+      ),
+      h
+    )
+  )
+
+# Kind.grows_core over the entries xs of A(x)
+def Kind.grows_core.go(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  ~X: Data,
+  ~A: X -> Kind.L(Q, k),
+  ~B: X -> Kind.L(Q, k),
+  ~f: @x: X -> @e: Entry<Q> -> {Kind.has(~Q, ~c, ~k, A(x), e) == True{}: Bool}
+    -> {Kind.has(~Q, ~c, ~k, B(x), e) == True{}: Bool},
+  +x: X,
+  xs: List<&2, Entry<Q>>
+) -> {Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), xs, Kind.entries(~Q, ~k, A(x))) == True{}: Bool}
+  -> {
+    Shared.List.holds(~Entry<Q>, ~Kind.L(Q, k), ~(l => e => Kind.has(~Q, ~c, ~k, l, e)), xs, B(x)) == True{}: Bool
+  }:
+  match xs:
+    case Nil{}:
+      h => {==}
+    case Con{+y, +r}:
+      +h => Shared.List.all.if_both(
+        Kind.has(~Q, ~c, ~k, B(x), y),
+        u => Shared.List.holds(~Entry<Q>, ~Kind.L(Q, k), ~(l => e => Kind.has(~Q, ~c, ~k, l, e)), r, B(x))
+      )(
+        f(
+          x
+        )(
+          y
+        )(
+          Kind.has_of_entries(
+            ~Q,
+            ~c,
+            ~k,
+            Laws.missing(Q, c, k, laws),
+            A(x),
+            y
+          )(
+            Shared.Bool.and_true_left(
+              List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, A(x)), y),
+              Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, Kind.entries(~Q, ~k, A(x)))
+            )(h)
+          )
+        )
+      )(
+        Kind.grows_core.go(
+          ~Q,
+          ~c,
+          ~k,
+          ~laws,
+          ~X,
+          ~A,
+          ~B,
+          ~f,
+          x,
+          r
+        )(
+          Shared.Bool.and_true_right(
+            List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, A(x)), y),
+            Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, Kind.entries(~Q, ~k, A(x)))
+          )(h)
+        )
+      )
+
+# the check that B(x) grows from A(x), when B(x) holds each entry that A(x)
+# holds (f)
+def Kind.grows_core(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  ~X: Data,
+  ~A: X -> Kind.L(Q, k),
+  ~B: X -> Kind.L(Q, k),
+  ~f: @x: X -> @e: Entry<Q> -> {Kind.has(~Q, ~c, ~k, A(x), e) == True{}: Bool}
+    -> {Kind.has(~Q, ~c, ~k, B(x), e) == True{}: Bool},
+  +x: X
+) -> {Kind.grows(~Q, ~c, ~k, A(x), B(x)) == True{}: Bool}:
+  Kind.grows_core.go(
+    ~Q,
+    ~c,
+    ~k,
+    ~laws,
+    ~X,
+    ~A,
+    ~B,
+    ~f,
+    x,
+    Kind.entries(~Q, ~k, A(x))
+  )(Kind.within_refl(~Q, ~c, Kind.entries(~Q, ~k, A(x))))
+
+# a ledger grows from itself
+def Kind.grows_refl(~Q: Data, ~c: Codes.Codec(Q), ~k: Ledger.Kind(Q), ~laws: Ledger.Laws(Q, c, k), +a: Kind.L(Q, k)) -> {
+  Kind.grows(~Q, ~c, ~k, a, a) == True{}: Bool
+}:
+  Kind.grows_core(~Q, ~c, ~k, ~laws, ~Kind.L(Q, k), ~(l => l), ~(l => l), ~(l => e => h => h), a)
+
+# a ledger that grows from a holds each entry that a holds
+def Kind.grows_has(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  +a: Kind.L(Q, k),
+  +b: Kind.L(Q, k),
+  +g: {Kind.grows(~Q, ~c, ~k, a, b) == True{}: Bool},
+  +e: Entry<Q>
+) -> {Kind.has(~Q, ~c, ~k, a, e) == True{}: Bool} -> {Kind.has(~Q, ~c, ~k, b, e) == True{}: Bool}:
+  h => Kind.holds_member(
+    ~Q,
+    ~c,
+    ~k,
+    Kind.entries(~Q, ~k, a),
+    b,
+    e
+  )(g)(Kind.entries_have(~Q, ~c, ~k, Laws.get_empty(Q, c, k, laws), Laws.missing(Q, c, k, laws), a, e, h))
+
+# three ledgers, each grown from the one before
+def Kind.Chain(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q)) -> Data:
+  +Sigma<Kind.L(Q, k), a => +Sigma<Kind.L(Q, k), b => +Sigma<Kind.L(Q, k), c2 => +Sigma<
+    {Kind.grows(~Q, ~c, ~k, a, b) == True{}: Bool},
+    g1 => {Kind.grows(~Q, ~c, ~k, b, c2) == True{}: Bool}>>>>
+
+# the first ledger of a chain
+def Kind.Chain.first(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q), x: Kind.Chain(Q, c, k)) -> Kind.L(Q, k):
+  match x:
+    case Tuple{a, rest}:
+      a
+
+# the last ledger of a chain
+def Kind.Chain.last(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q), x: Kind.Chain(Q, c, k)) -> Kind.L(Q, k):
+  match x:
+    case Tuple{a, Tuple{b, Tuple{c2, r}}}:
+      c2
+
+# the last ledger of a chain holds each entry that the first holds
+def Kind.Chain.has(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  x: Kind.Chain(Q, c, k),
+  +e: Entry<Q>
+) -> {Kind.has(~Q, ~c, ~k, Kind.Chain.first(Q, c, k, x), e) == True{}: Bool}
+  -> {Kind.has(~Q, ~c, ~k, Kind.Chain.last(Q, c, k, x), e) == True{}: Bool}:
+  match x:
+    case Tuple{+a, Tuple{+b, Tuple{+c2, Tuple{+g1, +g2}}}}:
+      h => Kind.grows_has(~Q, ~c, ~k, ~laws, b, c2, g2, e)(Kind.grows_has(~Q, ~c, ~k, ~laws, a, b, g1, e)(h))
+
+# growth is transitive
+def Kind.grows_trans(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  +a: Kind.L(Q, k),
+  +b: Kind.L(Q, k),
+  +c2: Kind.L(Q, k),
+  +g1: {Kind.grows(~Q, ~c, ~k, a, b) == True{}: Bool},
+  +g2: {Kind.grows(~Q, ~c, ~k, b, c2) == True{}: Bool}
+) -> {Kind.grows(~Q, ~c, ~k, a, c2) == True{}: Bool}:
+  Kind.grows_core(
+    ~Q,
+    ~c,
+    ~k,
+    ~laws,
+    ~Kind.Chain(Q, c, k),
+    ~(x => Kind.Chain.first(Q, c, k, x)),
+    ~(x => Kind.Chain.last(Q, c, k, x)),
+    ~(x => e => h => Kind.Chain.has(~Q, ~c, ~k, ~laws, x, e)(h)),
+    Tuple{a, Tuple{b, Tuple{c2, Tuple{g1, g2}}}}
+  )
+
+# what a ledger holds, it holds with one more entry, once the entry under the
+# name is known (m)
+def Kind.add_has.at(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  +e: Entry<Q>,
+  m: Maybe<&2, Entry<Q>>,
+  -w: Maybe<&2, Entry<Q>>
+) -> {Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), m, Some{e}) == True{}: Bool}
+  -> {Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), Maybe.or(&2, Entry<Q>, m, w), Some{e}) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => Empty.absurd(
+        {Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), Maybe.or(&2, Entry<Q>, None{}, w), Some{e}) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{y}:
+      h => h
+
+# the ledger p.l with the entry p.x
+def Kind.Plus(-Q: Data, -k: Ledger.Kind(Q)) -> Data:
+  +Sigma<Kind.L(Q, k), l => Entry<Q>>
+
+# the ledger of p
+def Kind.Plus.base(-Q: Data, -k: Ledger.Kind(Q), p: Kind.Plus(Q, k)) -> Kind.L(Q, k):
+  match p:
+    case Tuple{l, x}:
+      l
+
+# the ledger of p with its entry
+def Kind.Plus.added(-Q: Data, k: Ledger.Kind(Q), p: Kind.Plus(Q, k)) -> Kind.L(Q, k):
+  match p:
+    case Tuple{l, x}:
+      Kind.add(Q, k)(l)(x)
+
+# what a ledger holds, it holds with one more entry
+def Kind.add_has(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  p: Kind.Plus(Q, k),
+  +e: Entry<Q>
+) -> {Kind.has(~Q, ~c, ~k, Kind.Plus.base(Q, k, p), e) == True{}: Bool}
+  -> {Kind.has(~Q, ~c, ~k, Kind.Plus.added(Q, k, p), e) == True{}: Bool}:
+  match p:
+    case Tuple{+l, +x}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Entry<Q>>,
+          Kind.get(Q, k)(Kind.add(Q, k)(l)(x))(Entry.name(~Q, ~c, e)),
+          Maybe.or(
+            &2,
+            Entry<Q>,
+            Kind.get(Q, k)(l)(Entry.name(~Q, ~c, e)),
+            Shared.Maybe.when(Entry<Q>, Name.is_eq(Entry.name(~Q, ~c, x), Entry.name(~Q, ~c, e)), u => Some{x})
+          ),
+          Laws.get_add(Q, c, k, laws)(l)(x)(Entry.name(~Q, ~c, e))
+        ): {Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), _, Some{e}) == True{}: Bool}
+        Kind.add_has.at(
+          ~Q,
+          ~c,
+          e,
+          Kind.get(Q, k)(l)(Entry.name(~Q, ~c, e)),
+          Shared.Maybe.when(Entry<Q>, Name.is_eq(Entry.name(~Q, ~c, x), Entry.name(~Q, ~c, e)), u => Some{x})
+        )(h)
+
+# a ledger grows by one more entry
+def Kind.grows_add(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  +l: Kind.L(Q, k),
+  +x: Entry<Q>
+) -> {Kind.grows(~Q, ~c, ~k, l, Kind.add(Q, k)(l)(x)) == True{}: Bool}:
+  Kind.grows_core(
+    ~Q,
+    ~c,
+    ~k,
+    ~laws,
+    ~Kind.Plus(Q, k),
+    ~(p => Kind.Plus.base(Q, k, p)),
+    ~(p => Kind.Plus.added(Q, k, p)),
+    ~(p => e => h => Kind.add_has(~Q, ~c, ~k, ~laws, p, e)(h)),
+    Tuple{l, x}
+  )
