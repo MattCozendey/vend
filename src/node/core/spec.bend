@@ -1996,41 +1996,41 @@ def Res.imports.of(
   +h: Maybe<&2, Hashes.Hash>,
   +n: Resources.Name,
   m: Maybe<&2, Requests.Res>
-) -> List<&2, Resources.Name>:
+) -> Maybe<&2, List<&2, Resources.Name>>:
   match m:
     case None{}:
-      []
+      Some{[]}
     case Some{+x}:
-      Maybe.default(
+      Maybe.bind(
         &2,
+        Formats.Format,
         List<&2, Resources.Name>,
-        Maybe.bind(
+        Res.format(~d, l, x),
+        f => Maybe.bind(
           &2,
-          Formats.Format,
+          Texts.Bytes(),
           List<&2, Resources.Name>,
-          Res.format(~d, l, x),
-          f => Maybe.bind(
-            &2,
-            Texts.Bytes(),
-            List<&2, Resources.Name>,
-            Root.bytes(~d, l, Res.root(x)),
-            bs => Some{Imports.names(~d, l, view, h, n, Formats.Format.uses(f, [bs]))}
-          )
-        ),
-        []
+          Root.bytes(~d, l, Res.root(x)),
+          bs => Some{Imports.names(~d, l, view, h, n, Formats.Format.uses(f, [bs]))}
+        )
       )
 
 # what the resource n imports directly, in the tree whose root is h, as its
 # format reads it: each import found as its language finds it (nothing while
 # l lacks the resource)
-def Res.imports(~d: Led(), +l: L(d), +view: List<&2, Formats.Cond>, +h: Maybe<&2, Hashes.Hash>, +n: Resources.Name) -> List<&2, Resources.Name>:
-  Res.imports.of(
-    ~d,
-    l,
-    view,
-    h,
-    n,
-    Maybe.default(&2, Maybe<&2, Requests.Res>, Res.find(~d, l, h, n), None{})
+def Res.imports(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name
+) -> Maybe<&2, List<&2, Resources.Name>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, Requests.Res>,
+    List<&2, Resources.Name>,
+    Res.find(~d, l, h, n),
+    m => Res.imports.of(~d, l, view, h, n, m)
   )
 
 # the key of the resource n in the graph of imports
@@ -2054,18 +2054,17 @@ def Uses.graph(
   +h: Maybe<&2, Hashes.Hash>,
   ns: List<&2, Resources.Name>,
   g: Reaches.Graph
-) -> Reaches.Graph:
+) -> Maybe<&2, Reaches.Graph>:
   match ns:
     case Nil{}:
-      g
+      Some{g}
     case Con{+n, rest}:
-      Uses.graph(
-        ~d,
-        l,
-        view,
-        h,
-        rest,
-        Reaches.Graph.links(Names.keys(Res.imports(~d, l, view, h, n)), Name.key(n), g)
+      Maybe.bind(
+        &2,
+        List<&2, Resources.Name>,
+        Reaches.Graph,
+        Res.imports(~d, l, view, h, n),
+        ns2 => Uses.graph(~d, l, view, h, rest, Reaches.Graph.links(Names.keys(ns2), Name.key(n), g))
       )
 
 # the resource used is the resource changed, or uses it through its imports,
@@ -2078,17 +2077,18 @@ def Uses.reaches(
   +h: Maybe<&2, Hashes.Hash>,
   +used: Resources.Name,
   +changed: Resources.Name
-) -> Bool:
-  List.any.if(
-    u => Tries.Trie.has(
-      Unit,
-      Reaches.Graph.reach(
-        Uses.graph(~d, l, view, h, Tree.resources(~d, l, h), Reaches.Graph.new()),
-        Name.key(used)
-      ),
-      Name.key(changed)
-    ),
-    Resources.Name.is_eq(used, changed)
+) -> Maybe<&2, Bool>:
+  Shared.Bool.when(
+    Maybe<&2, Bool>,
+    Resources.Name.is_eq(used, changed),
+    u => Some{True{}},
+    u => Maybe.bind(
+      &2,
+      Reaches.Graph,
+      Bool,
+      Uses.graph(~d, l, view, h, Tree.resources(~d, l, h), Reaches.Graph.new()),
+      g => Some{Tries.Trie.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
+    )
   )
 
 # a change elsewhere that touches what a branch uses: the version of the
@@ -2237,7 +2237,7 @@ def Touch.holds.at(
   List.all.if(
     u => List.all.if(
       u2 => List.all.if(
-        u3 => Uses.reaches(~d, l, view, hb, used, changed),
+        u3 => Maybe.default(&2, Bool, Uses.reaches(~d, l, view, hb, used, changed), False{}),
         Maybe.is_some(
           &2,
           Requests.Res,
@@ -2311,18 +2311,17 @@ def Uses.users(
   +h: Maybe<&2, Hashes.Hash>,
   ns: List<&2, Resources.Name>,
   g: Reaches.Graph
-) -> Reaches.Graph:
+) -> Maybe<&2, Reaches.Graph>:
   match ns:
     case Nil{}:
-      g
+      Some{g}
     case Con{+n, rest}:
-      Uses.users(
-        ~d,
-        l,
-        view,
-        h,
-        rest,
-        Reaches.Graph.back(Names.keys(Res.imports(~d, l, view, h, n)), Name.key(n), g)
+      Maybe.bind(
+        &2,
+        List<&2, Resources.Name>,
+        Reaches.Graph,
+        Res.imports(~d, l, view, h, n),
+        ns2 => Uses.users(~d, l, view, h, rest, Reaches.Graph.back(Names.keys(ns2), Name.key(n), g))
       )
 
 # a touch of the version v of the branch from on the branch b, for the
@@ -2466,7 +2465,7 @@ def Branch.touches.at(
     b,
     hb,
     Res.names(xs),
-    Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new())
+    Maybe.default(&2, Reaches.Graph, Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()), Reaches.Graph.new())
   )
 
 # Branch.touches once the newest tip m of the branch b is known
