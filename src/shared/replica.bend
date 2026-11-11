@@ -16234,6 +16234,130 @@ def Chk.link_grows(
             }
           }
 
+# a key that seals a ballot, when there is one
+def Chk.seals(m: Maybe<&2, Hashes.Hash>, +b: Ledgers.Ballot) -> {Key.seals(m, b) == True{}: Bool} -> Exists(
+  Hashes.Hash,
+  k => {m == Some{k}: Maybe<&2, Hashes.Hash>} & {Ledgers.Ballot.sealed(k, b) == True{}: Bool}
+):
+  match m:
+    case None{}:
+      h => Empty.absurd(
+        Exists(Hashes.Hash, k => {None{} == Some{k}: Maybe<&2, Hashes.Hash>} & {Ledgers.Ballot.sealed(k, b) == True{}: Bool}),
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{+k}:
+      h => Tuple{k, Tuple{{==}, h}}
+
+# a ballot is in a list that it starts
+def Chk.contains_self(+b0: Ledgers.Ballot, rest: List<&2, Ledgers.Ballot>) -> {
+  List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, b0 <> rest, b0) == True{}: Bool
+}:
+  %Equal.sym(Bool, Ledgers.Ballot.is_eq(b0, b0), True{}, Ledgers.Ballot.is_eq_refl(b0)): {
+    List.any.if(u => List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, rest, b0), _) == True{}: Bool
+  }
+  {==}
+
+# a ballot of rest that names the key that seals b is one of b0 <> rest
+def Chk.link_cons(
+  +b0: Ledgers.Ballot,
+  +rest: List<&2, Ledgers.Ballot>,
+  -b: Ledgers.Ballot,
+  ex: Exists(
+    Ledgers.Ballot,
+    x => {
+      List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, rest, x) == True{}: Bool
+    }
+      & {Ledgers.Ballot.sealed(Ballot.next(x), b) == True{}: Bool}
+  )
+) -> Exists(
+  Ledgers.Ballot,
+  x => {
+    List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, b0 <> rest, x) == True{}: Bool
+  }
+    & {Ledgers.Ballot.sealed(Ballot.next(x), b) == True{}: Bool}
+):
+  match ex:
+    case Tuple{+x, Tuple{hc, hs}}:
+      Tuple{x, Tuple{Shared.List.contains_cons(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, b0, rest, x)(hc), hs}}
+
+# Chk.link_find once whether the first ballot names the key is known (s)
+def Chk.link_find.at(
+  +b0: Ledgers.Ballot,
+  +rest: List<&2, Ledgers.Ballot>,
+  +b: Ledgers.Ballot,
+  s: Bool,
+  es: {Ledgers.Ballot.sealed(Ballot.next(b0), b) == s: Bool},
+  h: {Bool.or(Ledgers.Ballot.sealed(Ballot.next(b0), b), Ballots.link(rest, b)) == True{}: Bool},
+  ih: {Ballots.link(rest, b) == True{}: Bool} -> Exists(
+    Ledgers.Ballot,
+    x => {
+      List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, rest, x) == True{}: Bool
+    }
+      & {Ledgers.Ballot.sealed(Ballot.next(x), b) == True{}: Bool}
+  )
+) -> Exists(
+  Ledgers.Ballot,
+  x => {
+    List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, b0 <> rest, x) == True{}: Bool
+  }
+    & {Ledgers.Ballot.sealed(Ballot.next(x), b) == True{}: Bool}
+):
+  match s:
+    case True{}:
+      Tuple{b0, Tuple{Chk.contains_self(b0, rest), es}}
+    case False{}:
+      Chk.link_cons(
+        b0,
+        rest,
+        b,
+        ih(
+          Equal.trans(
+            Bool,
+            Ballots.link(rest, b),
+            Bool.or(Ledgers.Ballot.sealed(Ballot.next(b0), b), Ballots.link(rest, b)),
+            True{},
+            Equal.sym(
+              Bool,
+              Bool.or(Ledgers.Ballot.sealed(Ballot.next(b0), b), Ballots.link(rest, b)),
+              Ballots.link(rest, b),
+              Equal.cong(Bool, Bool, z => Bool.or(z, Ballots.link(rest, b)), Ledgers.Ballot.sealed(Ballot.next(b0), b), False{}, es)
+            ),
+            h
+          )
+        )
+      )
+
+# a ballot of the list that names the key that seals b
+def Chk.link_find(xs: List<&2, Ledgers.Ballot>, +b: Ledgers.Ballot) -> {Ballots.link(xs, b) == True{}: Bool} -> Exists(
+  Ledgers.Ballot,
+  x => {
+    List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, xs, x) == True{}: Bool
+  }
+    & {Ledgers.Ballot.sealed(Ballot.next(x), b) == True{}: Bool}
+):
+  match xs:
+    case Nil{}:
+      h => Empty.absurd(
+        Exists(
+          Ledgers.Ballot,
+          x => {
+            List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, [], x) == True{}: Bool
+          }
+            & {Ledgers.Ballot.sealed(Ballot.next(x), b) == True{}: Bool}
+        ),
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{+b0, +rest}:
+      h => Chk.link_find.at(
+        b0,
+        rest,
+        b,
+        Ledgers.Ballot.sealed(Ballot.next(b0), b),
+        {==},
+        h,
+        Chk.link_find(rest, b)
+      )
+
 # Laws of checks
 
 # a lie that the test passes proves
