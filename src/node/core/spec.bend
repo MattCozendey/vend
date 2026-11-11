@@ -6581,6 +6581,80 @@ def Merge.all_take(
         Merge.all_step(~d, l, hb, ho, ht, k, y, rest, Work{lc, hc, P}, Work{lf, hf, N}, e),
         lc1 => hc1 => P1 => e1 => wc1 => ec => Merge.all_take(~d, l, hb, ho, ht, k, n, b0, o0, t0, x, rest, lc1, hc1, P1, lf, hf, N, e1, wc1, wf, held, hb0, ho0, ht0, hp, ec)
       )
+
+# the resource that a resource of the tree holds as a value is the resource
+def Merge.found_value(+x: Maybe<&2, Requests.Res>) -> {Res.found(Res.value(x)) == x: Maybe<&2, Requests.Res>}:
+  match x:
+    case None{}:
+      {==}
+    case Some{+r}:
+      Codes.Code.whole_read(
+        ~Requests.Res,
+        ~Requests.Res.code,
+        ~Requests.Res.code.read,
+        ~(a => s => Requests.Res.code_read(a, s)),
+        r
+      )
+
+# a read that finds a value finds the resource that the value holds
+def Merge.find_res(
+  ~d: Led(),
+  l: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  v: Maybe<&2, List<&2, U32>>,
+  e: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h, Key.res(n)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> {Res.find(~d, l, h, n) == Some{Res.found(v)}: Maybe<&2, Maybe<&2, Requests.Res>>}:
+  %Equal.sym(
+    Maybe<&2, Maybe<&2, List<&2, U32>>>,
+    Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h, Key.res(n)),
+    Some{v},
+    e
+  ): {
+    Maybe.bind(
+      &2,
+      Maybe<&2, List<&2, U32>>,
+      Maybe<&2, Requests.Res>,
+      _,
+      m => Some{Res.found(m)}
+    )
+      == Some{Res.found(v)}: Maybe<&2, Maybe<&2, Requests.Res>>
+  }
+  {==}
+
+# a read of a resource found the resource that a value holds
+def Merge.Found(
+  ~d: Led(),
+  l: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +o: Maybe<&2, Requests.Res>
+) -> Data:
+  Sigma<&2, &2, Maybe<&2, List<&2, U32>>, v => Merge.And({Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h, Key.res(n)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>}, {Res.found(v) == o: Maybe<&2, Requests.Res>})>
+
+# a resource that a read finds is the resource that the value found holds, once
+# the read is known (m)
+def Merge.find_some.at(
+  ~d: Led(),
+  l: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +o: Maybe<&2, Requests.Res>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  em: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h, Key.res(n)) == m: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  e: {
+    Maybe.bind(&2, Maybe<&2, List<&2, U32>>, Maybe<&2, Requests.Res>, m, v => Some{Res.found(v)})
+      == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>
+  }
+) -> Merge.Found(~d, l, h, n, o):
+  match m:
+    case None{}:
+      Empty.absurd(
+        Merge.Found(~d, l, h, n, o),
+        Shared.Maybe.none_ne_some(Maybe<&2, Requests.Res>, o, e)
+      )
+    case Some{+v}:
+      (v, (em, Shared.Maybe.some_inj(Maybe<&2, Requests.Res>, Res.found(v), o, e)))
 # TMP-END
 
 # a merge never loses a change that only one side made: when the merge of a
