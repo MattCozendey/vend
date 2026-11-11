@@ -202,11 +202,6 @@ def Res.all_held(~d: Led(), +l: L(d), xs: List<&2, Trees.Binding>) -> Bool:
 def Tree.range(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>, p: List<&2, U32>) -> Maybe<&2, List<&2, Trees.Binding>>:
   Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, h, p)
 
-# the bindings of the tree whose root is h whose keys start with p; none when
-# l lacks a node of the tree
-def Tree.list(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>, p: List<&2, U32>) -> List<&2, Trees.Binding>:
-  Maybe.default(&2, List<&2, Trees.Binding>, Tree.range(~d, l, h, p), [])
-
 # l holds the whole of the tree whose root is h: each of its nodes, and the
 # format and the bytes of each of its resources. A clear def: it reads each
 # resource
@@ -424,28 +419,36 @@ def Clash.value(ns: List<&2, Resources.Name>) -> Maybe<&2, List<&2, U32>>:
     case Con{n, rest}:
       Some{Codes.Code.list(~Resources.Name, ~Resources.Name.code, n <> rest, [])}
 
-# the resources that still clash after the merge k, in the tree h
+# the resources that still clash after the merge k, in the tree h (none: l
+# lacks a node, so a read cannot tell)
 def Clash.names(
   ~d: Led(),
   l: L(d),
   h: Maybe<&2, Hashes.Hash>,
   k: Ledgers.Id
-) -> List<&2, Resources.Name>:
-  Maybe.default(
+) -> Maybe<&2, List<&2, Resources.Name>>:
+  Maybe.map(
     &2,
+    Maybe<&2, List<&2, Resources.Name>>,
     List<&2, Resources.Name>,
-    Codes.Code.whole.of(
+    m => Maybe.default(&2, List<&2, Resources.Name>, m, []),
+    Replicas.Tip.known(
       ~List<&2, Resources.Name>,
       ~(ns => r => Codes.Code.list(~Resources.Name, ~Resources.Name.code, ns, r)),
       ~(ws => Codes.Code.list.read(~Resources.Name, ~Resources.Name.code.read, ws)),
-      Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, h, Key.clashes(k))
-    ),
-    []
+      Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h, Key.clashes(k))
+    )
   )
 
 # a resource of the tree h still clashes after the merge k
-def Clash.left(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>, k: Ledgers.Id) -> Bool:
-  Bool.not(List.is_empty(&2, Resources.Name, Clash.names(~d, l, h, k)))
+def Clash.left(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>, k: Ledgers.Id) -> Maybe<&2, Bool>:
+  Maybe.map(
+    &2,
+    List<&2, Resources.Name>,
+    Bool,
+    ns => Bool.not(List.is_empty(&2, Resources.Name, ns)),
+    Clash.names(~d, l, h, k)
+  )
 
 # the resources ns, with n when it is not among them
 def Clash.put(+n: Resources.Name, +ns: List<&2, Resources.Name>) -> List<&2, Resources.Name>:
@@ -463,8 +466,14 @@ def Clash.open(
   h: Maybe<&2, Hashes.Hash>,
   n: Resources.Name,
   k: Ledgers.Id
-) -> Bool:
-  List.contains(~Resources.Name, ~Resources.Name.is_eq, Clash.names(~d, l, h, k), n)
+) -> Maybe<&2, Bool>:
+  Maybe.map(
+    &2,
+    List<&2, Resources.Name>,
+    Bool,
+    ns => List.contains(~Resources.Name, ~Resources.Name.is_eq, ns, n),
+    Clash.names(~d, l, h, k)
+  )
 
 # Trees being written
 # -------------------
@@ -514,11 +523,12 @@ def Work.keep(~d: Led(), w: Work<L(d)>, +ms: List<&2, List<&2, U32>>) -> Work<L(
 def Work.clash(~d: Led(), w: Work<L(d)>, +k: Ledgers.Id, n: Resources.Name) -> Maybe<&2, Work<L(d)>>:
   match w:
     case Work{+l, +h, ns}:
-      Work.set(
-        ~d,
-        Work{l, h, ns},
-        Key.clashes(k),
-        Clash.value(Clash.put(n, Clash.names(~d, l, h, k)))
+      Maybe.bind(
+        &2,
+        List<&2, Resources.Name>,
+        Work<L(d)>,
+        Clash.names(~d, l, h, k),
+        cs => Work.set(~d, Work{l, h, ns}, Key.clashes(k), Clash.value(Clash.put(n, cs)))
       )
 
 # the act that takes the work m as the content, with the owners vs if any,
@@ -537,7 +547,8 @@ def Work.act(~d: Led(), vs: Maybe<&2, List<&2, String>>, m: Maybe<&2, Work<L(d)>
 
 # what a resolve of the resource n of the merge k, with the content x, does
 # at the tip t: while the clash is open, and once l holds the bytes, the
-# resource holds x and the clash is shut; else it is stale
+# resource holds x and the clash is shut; else it is stale (none: wait for
+# what l lacks)
 def Resolve.act.of(
   ~d: Led(),
   +l: L(d),
@@ -546,38 +557,37 @@ def Resolve.act.of(
   +n: Resources.Name,
   +new: Maybe<&2, Requests.Res>
 ) -> Maybe<&2, Replicas.Act>:
-  Shared.Bool.when(
-    Maybe<&2, Replicas.Act>,
-    Clash.open(~d, l, Replicas.Tip.content(t), n, k),
-    u => Shared.Bool.when(
+  Maybe.bind(
+    &2,
+    List<&2, Resources.Name>,
+    Replicas.Act,
+    Clash.names(~d, l, Replicas.Tip.content(t), k),
+    +cs => Shared.Bool.when(
       Maybe<&2, Replicas.Act>,
-      Res.kept(~d, l, new),
-      v => Work.act(
-        ~d,
-        None{},
-        Maybe.bind(
-          &2,
-          Work<L(d)>,
-          Work<L(d)>,
-          Work.set(~d, Work{l, Replicas.Tip.content(t), []}, Key.res(n), Res.value(new)),
-          w => Work.set(
-            ~d,
-            w,
-            Key.clashes(k),
-            Clash.value(
-              Shared.List.remove(
-                ~Resources.Name,
-                ~Resources.Name.is_eq,
-                Clash.names(~d, l, Replicas.Tip.content(t), k),
-                n
-              )
+      List.contains(~Resources.Name, ~Resources.Name.is_eq, cs, n),
+      u => Shared.Bool.when(
+        Maybe<&2, Replicas.Act>,
+        Res.kept(~d, l, new),
+        v => Work.act(
+          ~d,
+          None{},
+          Maybe.bind(
+            &2,
+            Work<L(d)>,
+            Work<L(d)>,
+            Work.set(~d, Work{l, Replicas.Tip.content(t), []}, Key.res(n), Res.value(new)),
+            w => Work.set(
+              ~d,
+              w,
+              Key.clashes(k),
+              Clash.value(Shared.List.remove(~Resources.Name, ~Resources.Name.is_eq, cs, n))
             )
           )
-        )
+        ),
+        v => None{}
       ),
-      v => None{}
-    ),
-    u => Some{Replicas.Act.Stale{}}
+      u => Some{Replicas.Act.Stale{}}
+    )
   )
 
 # what a resolve does (Resolve.act.of), once the root of its content is known
@@ -1314,14 +1324,19 @@ type Answer is Data:
   Answer.Stale{}
   Answer.Refused{}
 
-# Written, or Conflicted while a resource still clashes after the merge k
+# Written, or Conflicted while a resource still clashes after the merge k;
+# Pending while l lacks a node of the clashes
+def Answer.merged.of(m: Maybe<&2, Bool>, +k: Ledgers.Id) -> Answer:
+  match m:
+    case None{}:
+      Answer.Pending{}
+    case Some{c}:
+      Shared.Bool.when(Answer, c, u => Answer.Conflicted{k}, u => Answer.Written{})
+
+# Answer.merged.of, once l tells whether a resource of the tree h still
+# clashes after the merge k
 def Answer.merged(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>, +k: Ledgers.Id) -> Answer:
-  Shared.Bool.when(
-    Answer,
-    Clash.left(~d, l, h, k),
-    u => Answer.Conflicted{k},
-    u => Answer.Written{}
-  )
+  Answer.merged.of(Clash.left(~d, l, h, k), k)
 
 # the answer to the change q of the request i, which its branch took, when
 # the content of the branch is h
@@ -1707,7 +1722,7 @@ def Branch.head(~d: Led(), ~kern: Kern(d), l: L(d), b: Branch) -> Maybe<&2, Repl
   Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, Branch.line(b))
 
 # k versions of the branch b, from the number n, in order: a reader asks for
-# a part of a history
+# a part of a history (none: l lacks a part)
 def Node.versions(
   ~d: Led(),
   ~kern: Kern(d),
@@ -1715,18 +1730,19 @@ def Node.versions(
   b: Branch,
   n: U32,
   k: Nat
-) -> List<&2, Ledgers.Id>:
-  Maybe.default(
+) -> Maybe<&2, List<&2, Ledgers.Id>>:
+  Maybe.bind(
     &2,
+    Replicas.Tip,
     List<&2, Ledgers.Id>,
-    Maybe.bind(
+    Branch.head(~d, ~kern, l, b),
+    t => Maybe.map(
       &2,
-      Replicas.Tip,
+      List<&2, Replicas.Taken>,
       List<&2, Ledgers.Id>,
-      Branch.head(~d, ~kern, l, b),
-      t => Some{Replicas.Taken.ids(Replicas.Tip.versions(~Requests.Ask.machine(), ~d, k, l, t, n))}
-    ),
-    []
+      Replicas.Taken.ids,
+      Replicas.Tip.versions(~Requests.Ask.machine(), ~d, k, l, t, n)
+    )
   )
 
 # the names of the resources among the bindings xs
@@ -1759,85 +1775,118 @@ def Node.resources(~d: Led(), ~kern: Kern(d), +l: L(d), b: Branch) -> Maybe<&2, 
     t => Tree.resources(~d, l, Replicas.Tip.content(t))
   )
 
-# the members of the group g of the store st, if g is there
+# the members of the group g of the store st, or that g is not there (none:
+# l lacks a node, so a read cannot tell)
 def Node.members(
   ~d: Led(),
   ~kern: Kern(d),
   +l: L(d),
   st: Hashes.Hash,
   g: String
-) -> Maybe<&2, List<&2, Requests.Member>>:
+) -> Maybe<&2, Maybe<&2, List<&2, Requests.Member>>>:
   Maybe.bind(
     &2,
     Replicas.Tip,
-    List<&2, Requests.Member>,
+    Maybe<&2, List<&2, Requests.Member>>,
     Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st),
-    t => Codes.Code.whole.of(
+    t => Replicas.Tip.known(
       ~List<&2, Requests.Member>,
       ~Requests.Members.code,
       ~Requests.Members.code.read,
-      Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, Replicas.Tip.content(t), Key.group(g))
+      Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, Replicas.Tip.content(t), Key.group(g))
     )
   )
 
-# what changed from the resource a to the resource b, in the format of b, else
-# of a (none of them: nothing changed)
-def Res.diff(~d: Led(), +l: L(d), +a: Maybe<&2, Requests.Res>, +b: Maybe<&2, Requests.Res>) -> List<&2, Formats.Change>:
-  Maybe.default(
-    &2,
-    List<&2, Formats.Change>,
-    Maybe.bind(
-      &2,
-      Hashes.Hash,
-      List<&2, Formats.Change>,
-      Res.format.of(b, a),
-      h => Maybe.bind(
+# the bytes of the resource m, empty when it is not there (none: l lacks a
+# node)
+def Res.bytes.or_empty(~d: Led(), l: L(d), m: Maybe<&2, Requests.Res>) -> Maybe<&2, Texts.Bytes()>:
+  match m:
+    case None{}:
+      Some{[]}
+    case Some{x}:
+      Root.bytes(~d, l, Res.root(x))
+
+# Res.diff once the hash m of the format to read with is known (none: neither
+# resource is there)
+def Res.diff.of(
+  ~d: Led(),
+  +l: L(d),
+  a: Maybe<&2, Requests.Res>,
+  b: Maybe<&2, Requests.Res>,
+  m: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, List<&2, Formats.Change>>:
+  match m:
+    case None{}:
+      Some{[]}
+    case Some{h}:
+      Maybe.bind(
         &2,
         Formats.Format,
         List<&2, Formats.Change>,
         Format.at(~d, l, h),
-        f => Some{
-          Formats.Format.changes(
-            f,
-            Maybe.default(&2, Texts.Bytes(), Res.bytes(~d, l, a), []),
-            Maybe.default(&2, Texts.Bytes(), Res.bytes(~d, l, b), [])
+        f => Maybe.bind(
+          &2,
+          Texts.Bytes(),
+          List<&2, Formats.Change>,
+          Res.bytes.or_empty(~d, l, a),
+          xa => Maybe.bind(
+            &2,
+            Texts.Bytes(),
+            List<&2, Formats.Change>,
+            Res.bytes.or_empty(~d, l, b),
+            xb => Some{Formats.Format.changes(f, xa, xb)}
           )
-        }
+        )
       )
-    ),
-    []
-  )
+
+# what changed from the resource a to the resource b, in the format of b, else
+# of a (none of them: nothing changed); none: l lacks a part
+def Res.diff(~d: Led(), +l: L(d), +a: Maybe<&2, Requests.Res>, +b: Maybe<&2, Requests.Res>) -> Maybe<&2, List<&2, Formats.Change>>:
+  Res.diff.of(~d, l, a, b, Res.format.of(b, a))
 
 # what changed in the resource n from the point a to the point b, as the
 # writer w reads them, in the format of the resource: a resource that is not
-# there is empty
+# there is empty (none: l lacks a part)
 def Node.diff(
   ~d: Led(),
   ~kern: Kern(d),
   +l: L(d),
   +w: String,
   +n: Resources.Name,
-  a: Point,
+  +a: Point,
   b: Point
-) -> List<&2, Formats.Change>:
-  Res.diff(
-    ~d,
-    l,
-    Maybe.default(&2, Maybe<&2, Requests.Res>, Node.find(~d, ~kern, l, w, n, a), None{}),
-    Maybe.default(&2, Maybe<&2, Requests.Res>, Node.find(~d, ~kern, l, w, n, b), None{})
+) -> Maybe<&2, List<&2, Formats.Change>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, Requests.Res>,
+    List<&2, Formats.Change>,
+    Node.find(~d, ~kern, l, w, n, a),
+    ra => Maybe.bind(
+      &2,
+      Maybe<&2, Requests.Res>,
+      List<&2, Formats.Change>,
+      Node.find(~d, ~kern, l, w, n, b),
+      rb => Res.diff(~d, l, ra, rb)
+    )
   )
 
 # a branch, with its owners and its newest version (none: it has none yet)
 type BranchEntry is Data:
   BranchEntry{branch: Branch, owners: List<&2, String>, head: Maybe<&2, Ledgers.Id>}
 
-# the entry of the branch b, whose newest tip is m
+# the entry of the branch b, whose newest tip is m (none: l lacks a part)
 def BranchEntry.of(~d: Led(), l: L(d), b: Branch, m: Maybe<&2, Replicas.Tip>) -> Maybe<&2, BranchEntry>:
   match m:
     case None{}:
       None{}
     case Some{+t}:
-      Some{BranchEntry{b, Replicas.Tip.voters(t), Replicas.Tip.newest(~Requests.Ask.machine(), ~d, l, t)}}
+      Maybe.map(
+        &2,
+        Maybe<&2, Ledgers.Id>,
+        BranchEntry,
+        v => BranchEntry{b, Replicas.Tip.voters(t), v},
+        Replicas.Tip.newest(~Requests.Ask.machine(), ~d, l, t)
+      )
 
 # the name of the branch that the binding x of the log of a store starts
 def Branch.started(x: Trees.Binding) -> Maybe<&2, String>:
@@ -1863,38 +1912,43 @@ def Branches.of(+st: Hashes.Hash, ns: List<&2, String>) -> List<&2, Branch>:
     case Con{n, rest}:
       Branch{st, n} <> Branches.of(st, rest)
 
-# the branches of the store st, by the log of its newest tip m
-def Store.branches(~d: Led(), l: L(d), +st: Hashes.Hash, m: Maybe<&2, Replicas.Tip>) -> List<&2, Branch>:
+# the branches of the store st, by the log of its newest tip m (none: l
+# lacks the tip or a node of the log, so a read cannot tell)
+def Store.branches(~d: Led(), l: L(d), +st: Hashes.Hash, m: Maybe<&2, Replicas.Tip>) -> Maybe<&2, List<&2, Branch>>:
   match m:
     case None{}:
-      []
+      None{}
     case Some{t}:
-      Branches.of(
-        st,
-        Branches.names(
-          Tree.list(~d, l, Replicas.Tip.log(t), [5])
-        )
+      Maybe.map(
+        &2,
+        List<&2, Trees.Binding>,
+        List<&2, Branch>,
+        xs => Branches.of(st, Branches.names(xs)),
+        Tree.range(~d, l, Replicas.Tip.log(t), [5])
       )
 
-# the entries of the branches bs
-def Branches.entries(~d: Led(), ~kern: Kern(d), +l: L(d), bs: List<&2, Branch>) -> List<&2, BranchEntry>:
+# the entries of the branches bs (none: l lacks the head of one)
+def Branches.entries(~d: Led(), ~kern: Kern(d), +l: L(d), bs: List<&2, Branch>) -> Maybe<&2, List<&2, BranchEntry>>:
   match bs:
     case Nil{}:
-      []
+      Some{[]}
     case Con{+b, rest}:
-      Shared.Maybe.cons(
+      Maybe.bind(
+        &2,
         BranchEntry,
+        List<&2, BranchEntry>,
         BranchEntry.of(~d, l, b, Branch.head(~d, ~kern, l, b)),
-        Branches.entries(~d, ~kern, l, rest)
+        e => Maybe.map(&2, List<&2, BranchEntry>, List<&2, BranchEntry>, r => e <> r, Branches.entries(~d, ~kern, l, rest))
       )
 
 # every branch of the store st
-def Node.branches(~d: Led(), ~kern: Kern(d), +l: L(d), +st: Hashes.Hash) -> List<&2, BranchEntry>:
-  Branches.entries(
-    ~d,
-    ~kern,
-    l,
-    Store.branches(~d, l, st, Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st))
+def Node.branches(~d: Led(), ~kern: Kern(d), +l: L(d), +st: Hashes.Hash) -> Maybe<&2, List<&2, BranchEntry>>:
+  Maybe.bind(
+    &2,
+    List<&2, Branch>,
+    List<&2, BranchEntry>,
+    Store.branches(~d, l, st, Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st)),
+    bs => Branches.entries(~d, ~kern, l, bs)
   )
 
 # What a work uses
@@ -2181,7 +2235,7 @@ type LogEntry is Data:
   LogEntry{version: Ledgers.Id, time: String}
 
 # the versions among xs that changed the resource n, the first of which came
-# after the tree h0, at the tip t
+# after the tree h0, at the tip t (none: l lacks a part)
 def Log.entries(
   ~d: Led(),
   +l: L(d),
@@ -2189,16 +2243,40 @@ def Log.entries(
   +n: Resources.Name,
   xs: List<&2, Replicas.Taken>,
   +h0: Maybe<&2, Hashes.Hash>
-) -> List<&2, LogEntry>:
+) -> Maybe<&2, List<&2, LogEntry>>:
   match xs:
     case Nil{}:
-      []
+      Some{[]}
     case Con{Replicas.Taken{+i, +h}, rest}:
-      List.filter.put(
-        LogEntry,
-        LogEntry{i, Replicas.Out.time(~Requests.Ask.machine(), ~d, l, Replicas.Tip.out(~Requests.Ask.machine(), ~d, l, t, i))},
-        Log.entries(~d, l, t, n, rest, h),
-        Maybe.default(&2, Bool, Res.differs(~d, l, h, h0, n), False{})
+      Maybe.bind(
+        &2,
+        Bool,
+        List<&2, LogEntry>,
+        Res.differs(~d, l, h, h0, n),
+        c => Maybe.bind(
+          &2,
+          List<&2, LogEntry>,
+          List<&2, LogEntry>,
+          Log.entries(~d, l, t, n, rest, h),
+          +r => Shared.Bool.when(
+            Maybe<&2, List<&2, LogEntry>>,
+            c,
+            u => Maybe.bind(
+              &2,
+              Replicas.Out,
+              List<&2, LogEntry>,
+              Replicas.Tip.out(~Requests.Ask.machine(), ~d, l, t, i),
+              o => Maybe.map(
+                &2,
+                String,
+                List<&2, LogEntry>,
+                time => LogEntry{i, time} <> r,
+                Replicas.Out.time(~Requests.Ask.machine(), ~d, l, o)
+              )
+            ),
+            u => Some{r}
+          )
+        )
       )
 
 # Node.log once the newest tip t of the branch is known
@@ -2209,18 +2287,23 @@ def Node.log.at(
   n: Resources.Name,
   +from: U32,
   k: Nat
-) -> List<&2, LogEntry>:
-  Log.entries(
-    ~d,
-    l,
-    t,
-    n,
+) -> Maybe<&2, List<&2, LogEntry>>:
+  Maybe.bind(
+    &2,
+    List<&2, Replicas.Taken>,
+    List<&2, LogEntry>,
     Replicas.Tip.versions(~Requests.Ask.machine(), ~d, k, l, t, from),
-    Maybe.default(&2, Maybe<&2, Hashes.Hash>, Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, t, from), None{})
+    xs => Maybe.bind(
+      &2,
+      Maybe<&2, Hashes.Hash>,
+      List<&2, LogEntry>,
+      Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, t, from),
+      h0 => Log.entries(~d, l, t, n, xs, h0)
+    )
   )
 
 # the versions of the branch b that changed the resource n, among k versions
-# from the number from
+# from the number from (none: l lacks a part)
 def Node.log(
   ~d: Led(),
   ~kern: Kern(d),
@@ -2229,40 +2312,31 @@ def Node.log(
   b: Branch,
   from: U32,
   k: Nat
-) -> List<&2, LogEntry>:
-  Maybe.default(
+) -> Maybe<&2, List<&2, LogEntry>>:
+  Maybe.bind(
     &2,
+    Replicas.Tip,
     List<&2, LogEntry>,
-    Maybe.bind(
-      &2,
-      Replicas.Tip,
-      List<&2, LogEntry>,
-      Branch.head(~d, ~kern, l, b),
-      t => Some{Node.log.at(~d, l, t, n, from, k)}
-    ),
-    []
+    Branch.head(~d, ~kern, l, b),
+    t => Node.log.at(~d, l, t, n, from, k)
   )
 
-# the version that the line took as the number m, at the tip t, wrote the
-# resource n: the resource holds after it what it did not hold before it
-def Version.wrote(~d: Led(), +l: L(d), +t: Replicas.Tip, +m: U32, +n: Resources.Name) -> Bool:
-  Maybe.default(
+# whether the version that the line took as the number m, at the tip t, wrote
+# the resource n: the resource holds after it what it did not hold before it
+# (none: l lacks a part)
+def Version.wrote(~d: Led(), +l: L(d), +t: Replicas.Tip, +m: U32, +n: Resources.Name) -> Maybe<&2, Bool>:
+  Maybe.bind(
     &2,
+    Maybe<&2, Hashes.Hash>,
     Bool,
-    Maybe.bind(
+    Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, t, m),
+    h0 => Maybe.bind(
       &2,
-      Maybe<&2, Hashes.Hash>,
+      Replicas.Taken,
       Bool,
-      Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, t, m),
-      h0 => Maybe.bind(
-        &2,
-        Replicas.Taken,
-        Bool,
-        Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, t, m),
-        x => Res.differs(~d, l, Replicas.Taken.root(x), h0, n)
-      )
-    ),
-    False{}
+      Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, t, m),
+      x => Res.differs(~d, l, Replicas.Taken.root(x), h0, n)
+    )
   )
 
 # Touch.holds once the newest tips tf of the branch from and tb of the branch
@@ -2276,73 +2350,87 @@ def Touch.holds.at(
   +v: Ledgers.Id,
   +changed: Resources.Name,
   +used: Resources.Name
-) -> Bool:
+) -> Maybe<&2, Bool>:
   +hb = Replicas.Tip.content(tb)
-  List.all.if(
-    u => List.all.if(
-      u2 => List.all.if(
-        u3 => Maybe.default(&2, Bool, Uses.reaches(~d, l, view, hb, used, changed), False{}),
-        Maybe.is_some(
-          &2,
-          Requests.Res,
-          Maybe.default(&2, Maybe<&2, Requests.Res>, Res.find(~d, l, hb, used), None{})
-        )
-      ),
-      Maybe.default(
-        &2,
-        Bool,
-        Res.differs(
-          ~d,
-          l,
-          Maybe.default(&2, Maybe<&2, Hashes.Hash>, Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v), None{}),
-          hb,
-          changed
-        ),
-        False{}
-      )
-    ),
-    Maybe.default(
+  Maybe.bind(
+    &2,
+    U32,
+    Bool,
+    Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v),
+    m => Maybe.bind(
       &2,
       Bool,
-      Maybe.bind(
-        &2,
-        U32,
-        Bool,
-        Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v),
-        m => Some{Version.wrote(~d, l, tf, m, changed)}
-      ),
-      False{}
+      Bool,
+      Version.wrote(~d, l, tf, m, changed),
+      wrote => Shared.Bool.when(
+        Maybe<&2, Bool>,
+        wrote,
+        u => Maybe.bind(
+          &2,
+          Maybe<&2, Hashes.Hash>,
+          Bool,
+          Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v),
+          h => Maybe.bind(
+            &2,
+            Bool,
+            Bool,
+            Res.differs(~d, l, h, hb, changed),
+            differs => Shared.Bool.when(
+              Maybe<&2, Bool>,
+              differs,
+              u2 => Maybe.bind(
+                &2,
+                Maybe<&2, Requests.Res>,
+                Bool,
+                Res.find(~d, l, hb, used),
+                r => Shared.Bool.when(
+                  Maybe<&2, Bool>,
+                  Maybe.is_some(&2, Requests.Res, r),
+                  u3 => Uses.reaches(~d, l, view, hb, used, changed),
+                  u3 => Some{False{}}
+                )
+              ),
+              u2 => Some{False{}}
+            )
+          )
+        ),
+        u => Some{False{}}
+      )
     )
   )
 
-# the touch x holds: its two branches are of one store and are not the same;
-# its version is a version of the branch from, and wrote the resource
+# whether the touch x holds: its two branches are of one store and are not the
+# same; its version is a version of the branch from, and wrote the resource
 # changed; the branch does not hold what that version gave the resource; and
 # the resource used is of the branch, and is the one changed or uses it. So a
-# writer is told only about changes to what its work uses
-def Touch.holds(~d: Led(), ~kern: Kern(d), +l: L(d), +view: List<&2, Formats.Cond>, x: Touch) -> Bool:
+# writer is told only about changes to what its work uses (none: l lacks a
+# part, so a read cannot tell)
+def Touch.holds(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  x: Touch
+) -> Maybe<&2, Bool>:
   match x:
     case Touch{+from, v, changed, +b, used}:
-      List.all.if(
-        u => Maybe.default(
+      Shared.Bool.when(
+        Maybe<&2, Bool>,
+        Branch.other(from, b),
+        u => Maybe.bind(
           &2,
+          Replicas.Tip,
           Bool,
-          Maybe.bind(
+          Branch.head(~d, ~kern, l, from),
+          tf => Maybe.bind(
             &2,
             Replicas.Tip,
             Bool,
-            Branch.head(~d, ~kern, l, from),
-            tf => Maybe.bind(
-              &2,
-              Replicas.Tip,
-              Bool,
-              Branch.head(~d, ~kern, l, b),
-              tb => Some{Touch.holds.at(~d, l, view, tf, tb, v, changed, used)}
-            )
-          ),
-          False{}
+            Branch.head(~d, ~kern, l, b),
+            tb => Touch.holds.at(~d, l, view, tf, tb, v, changed, used)
+          )
         ),
-        Branch.other(from, b)
+        u => Some{False{}}
       )
 
 # the graph g with the users of each import of the resources ns of the tree h:
@@ -2424,67 +2512,80 @@ def Touches.each(
   +hb: Maybe<&2, Hashes.Hash>,
   +used: List<&2, Resources.Name>,
   +users: Reaches.Graph
-) -> List<&2, Touch>:
+) -> Maybe<&2, List<&2, Touch>>:
   match changed:
     case Nil{}:
-      []
+      Some{[]}
     case Con{+c, rest}:
-      List.append(
+      Maybe.bind(
         &2,
-        Touch,
-        Touches.when(
-          List.all.if(u => Maybe.default(&2, Bool, Res.differs(~d, l, h, hb, c), False{}), Maybe.default(&2, Bool, Res.differs(~d, l, h, h0, c), False{})),
-          from,
-          v,
-          c,
-          b,
-          used,
-          users
+        Bool,
+        List<&2, Touch>,
+        Maybe.bind(
+          &2,
+          Bool,
+          Bool,
+          Res.differs(~d, l, h, h0, c),
+          w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c), u => Some{False{}})
         ),
-        Touches.each(~d, l, from, v, h0, h, rest, b, hb, used, users)
+        touched => Maybe.map(
+          &2,
+          List<&2, Touch>,
+          List<&2, Touch>,
+          r => List.append(&2, Touch, Touches.when(touched, from, v, c, b, used, users), r),
+          Touches.each(~d, l, from, v, h0, h, rest, b, hb, used, users)
+        )
       )
 
 # the touches of the versions xs of the branch from, the first of which came
-# after the tree h0, on the branch b
+# after the tree h0 and has the number n, on the branch b; a version counts
+# when its number reads back by its ID at the tip tf (Replicas.Tip.number)
 def Touches.all(
   ~d: Led(),
   +l: L(d),
   +from: Branch,
+  +tf: Replicas.Tip,
   xs: List<&2, Replicas.Taken>,
+  +n: U32,
   +h0: Maybe<&2, Hashes.Hash>,
   +b: Branch,
   +hb: Maybe<&2, Hashes.Hash>,
   +used: List<&2, Resources.Name>,
   +users: Reaches.Graph
-) -> List<&2, Touch>:
+) -> Maybe<&2, List<&2, Touch>>:
   match xs:
     case Nil{}:
-      []
+      Some{[]}
     case Con{Replicas.Taken{+i, +h}, rest}:
-      List.append(
+      Maybe.bind(
         &2,
-        Touch,
-        Touches.each(
-          ~d,
-          l,
-          from,
-          i,
-          h0,
-          h,
-          Keys.names(
-            Maybe.default(
+        List<&2, List<&2, U32>>,
+        List<&2, Touch>,
+        Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, h0, h),
+        ks => Maybe.bind(
+          &2,
+          U32,
+          List<&2, Touch>,
+          Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i),
+          m => Maybe.bind(
+            &2,
+            List<&2, Touch>,
+            List<&2, Touch>,
+            Shared.Bool.when(
+              Maybe<&2, List<&2, Touch>>,
+              U32.is_eq(m, n),
+              u => Touches.each(~d, l, from, i, h0, h, Keys.names(ks), b, hb, used, users),
+              u => Some{[]}
+            ),
+            a => Maybe.map(
               &2,
-              List<&2, List<&2, U32>>,
-              Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, h0, h),
-              []
+              List<&2, Touch>,
+              List<&2, Touch>,
+              r => List.append(&2, Touch, a, r),
+              Touches.all(~d, l, from, tf, rest, U32.inc(n), h, b, hb, used, users)
             )
-          ),
-          b,
-          hb,
-          used,
-          users
-        ),
-        Touches.all(~d, l, from, rest, h, b, hb, used, users)
+          )
+        )
       )
 
 # Branch.touches once the newest tips tf of the branch from and tb of the
@@ -2497,19 +2598,38 @@ def Branch.touches.at(
   +tf: Replicas.Tip,
   b: Branch,
   tb: Replicas.Tip
-) -> List<&2, Touch>:
+) -> Maybe<&2, List<&2, Touch>>:
   +hb = Replicas.Tip.content(tb)
-  +xs = Tree.list(~d, l, hb, [0])
-  Touches.all(
-    ~d,
-    l,
-    from,
-    Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(tf)), l, tf, 0),
-    None{},
-    b,
-    hb,
-    Res.names(xs),
-    Maybe.default(&2, Reaches.Graph, Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()), Reaches.Graph.new())
+  Maybe.bind(
+    &2,
+    List<&2, Trees.Binding>,
+    List<&2, Touch>,
+    Tree.range(~d, l, hb, [0]),
+    +xs => Maybe.bind(
+      &2,
+      Reaches.Graph,
+      List<&2, Touch>,
+      Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()),
+      users => Maybe.bind(
+        &2,
+        List<&2, Replicas.Taken>,
+        List<&2, Touch>,
+        Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(tf)), l, tf, 0),
+        xs2 => Touches.all(
+        ~d,
+        l,
+        from,
+        tf,
+        xs2,
+        0,
+        None{},
+        b,
+        hb,
+        Res.names(xs),
+        users
+        )
+      )
+    )
   )
 
 # Branch.touches once the newest tip m of the branch b is known
@@ -2521,10 +2641,10 @@ def Branch.touches.of(
   tf: Replicas.Tip,
   b: Branch,
   m: Maybe<&2, Replicas.Tip>
-) -> List<&2, Touch>:
+) -> Maybe<&2, List<&2, Touch>>:
   match m:
     case None{}:
-      []
+      None{}
     case Some{tb}:
       Branch.touches.at(~d, l, view, from, tf, b, tb)
 
@@ -2532,23 +2652,25 @@ def Branch.touches.of(
 # version of from, each resource that it wrote and that b does not hold as it
 # gave it, with each resource of b that is that resource or uses it. The cost
 # is the history of from and the resources of b, each read once
-def Branch.touches(~d: Led(), ~kern: Kern(d), +l: L(d), +view: List<&2, Formats.Cond>, +from: Branch, +b: Branch) -> List<&2, Touch>:
+def Branch.touches(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +from: Branch,
+  +b: Branch
+) -> Maybe<&2, List<&2, Touch>>:
   Shared.Bool.when(
-    List<&2, Touch>,
+    Maybe<&2, List<&2, Touch>>,
     Branch.other(from, b),
-    u => Maybe.default(
+    u => Maybe.bind(
       &2,
+      Replicas.Tip,
       List<&2, Touch>,
-      Maybe.bind(
-        &2,
-        Replicas.Tip,
-        List<&2, Touch>,
-        Branch.head(~d, ~kern, l, from),
-        tf => Some{Branch.touches.of(~d, l, view, from, tf, b, Branch.head(~d, ~kern, l, b))}
-      ),
-      []
+      Branch.head(~d, ~kern, l, from),
+      tf => Branch.touches.of(~d, l, view, from, tf, b, Branch.head(~d, ~kern, l, b))
     ),
-    u => []
+    u => Some{[]}
   )
 
 # a and b are the same branch
@@ -2586,23 +2708,43 @@ def Branches.touch(
   +view: List<&2, Formats.Cond>,
   es: List<&2, BranchEntry>,
   +b: Branch
-) -> List<&2, Touch>:
+) -> Maybe<&2, List<&2, Touch>>:
   match es:
     case Nil{}:
-      []
+      Some{[]}
     case Con{BranchEntry{from, os, hd}, rest}:
-      List.append(
+      Maybe.bind(
         &2,
-        Touch,
+        List<&2, Touch>,
+        List<&2, Touch>,
         Branch.touches(~d, ~kern, l, view, from, b),
-        Branches.touch(~d, ~kern, l, view, rest, b)
+        a => Maybe.map(
+          &2,
+          List<&2, Touch>,
+          List<&2, Touch>,
+          r => List.append(&2, Touch, a, r),
+          Branches.touch(~d, ~kern, l, view, rest, b)
+        )
       )
 
-# the changes elsewhere that touch what the branch b uses, at any depth
-def Node.affects(~d: Led(), ~kern: Kern(d), +l: L(d), +view: List<&2, Formats.Cond>, +b: Branch) -> List<&2, Touch>:
+# the changes elsewhere that touch what the branch b uses, at any depth (none:
+# l lacks a node that the answer reads, so it cannot tell yet)
+def Node.affects(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +b: Branch
+) -> Maybe<&2, List<&2, Touch>>:
   match b:
-    case Branch{+st, n}:
-      Branches.touch(~d, ~kern, l, view, Node.branches(~d, ~kern, l, st), Branch{st, n})
+    case Branch{+st, +n}:
+      Maybe.bind(
+        &2,
+        List<&2, BranchEntry>,
+        List<&2, Touch>,
+        Node.branches(~d, ~kern, l, st),
+        es => Branches.touch(~d, ~kern, l, view, es, Branch{st, n})
+      )
 
 # what the changes of the branch from touch in each of the branches es
 def Branches.touched(
@@ -2612,24 +2754,37 @@ def Branches.touched(
   +view: List<&2, Formats.Cond>,
   +from: Branch,
   es: List<&2, BranchEntry>
-) -> List<&2, Touch>:
+) -> Maybe<&2, List<&2, Touch>>:
   match es:
     case Nil{}:
-      []
+      Some{[]}
     case Con{BranchEntry{b, os, hd}, rest}:
-      List.append(
+      Maybe.bind(
         &2,
-        Touch,
+        List<&2, Touch>,
+        List<&2, Touch>,
         Branch.touches(~d, ~kern, l, view, from, b),
-        Branches.touched(~d, ~kern, l, view, from, rest)
+        a => Maybe.map(
+          &2,
+          List<&2, Touch>,
+          List<&2, Touch>,
+          r => List.append(&2, Touch, a, r),
+          Branches.touched(~d, ~kern, l, view, from, rest)
+        )
       )
 
 # what the changes of the branch b touch elsewhere, in every build: the views
-# of other writers are theirs
-def Node.impact(~d: Led(), ~kern: Kern(d), +l: L(d), +b: Branch) -> List<&2, Touch>:
+# of other writers are theirs (none: l lacks a part)
+def Node.impact(~d: Led(), ~kern: Kern(d), +l: L(d), +b: Branch) -> Maybe<&2, List<&2, Touch>>:
   match b:
-    case Branch{+st, n}:
-      Branches.touched(~d, ~kern, l, [], Branch{st, n}, Node.branches(~d, ~kern, l, st))
+    case Branch{+st, +n}:
+      Maybe.bind(
+        &2,
+        List<&2, BranchEntry>,
+        List<&2, Touch>,
+        Node.branches(~d, ~kern, l, st),
+        es => Branches.touched(~d, ~kern, l, [], Branch{st, n}, es)
+      )
 
 # what a subscription or a poll follows: the versions or the conflicts of a
 # branch, the changes elsewhere that touch it in the build of a view, or the
@@ -2664,16 +2819,23 @@ def Notices.conflicts(
   +h: Maybe<&2, Hashes.Hash>,
   +b: Branch,
   ids: List<&2, Ledgers.Id>
-) -> List<&2, Notice>:
+) -> Maybe<&2, List<&2, Notice>>:
   match ids:
     case Nil{}:
-      []
+      Some{[]}
     case Con{+i, rest}:
-      List.filter.put(
-        Notice,
-        Notice.Conflicted{b, i},
-        Notices.conflicts(~d, l, h, b, rest),
-        Clash.left(~d, l, h, i)
+      Maybe.bind(
+        &2,
+        Bool,
+        List<&2, Notice>,
+        Clash.left(~d, l, h, i),
+        c => Maybe.map(
+          &2,
+          List<&2, Notice>,
+          List<&2, Notice>,
+          r => List.filter.put(Notice, Notice.Conflicted{b, i}, r, c),
+          Notices.conflicts(~d, l, h, b, rest)
+        )
       )
 
 # a notice of each of the touches xs
@@ -2693,33 +2855,37 @@ def Notices.lies(+st: Hashes.Hash, ns: List<&2, String>) -> List<&2, Notice>:
       Notice.Lied{st, n} <> Notices.lies(st, rest)
 
 # the notices of the versions (all: every version; else those that still
-# clash) of the branch b, whose newest tip is m
-def Notices.branch(~d: Led(), +l: L(d), +b: Branch, all: Bool, m: Maybe<&2, Replicas.Tip>) -> List<&2, Notice>:
-  match all m:
-    case x None{}:
-      []
-    case True{} Some{+t}:
-      Notices.versions(b, Replicas.Taken.ids(Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(t)), l, t, 0)))
-    case False{} Some{+t}:
-      Notices.conflicts(
-        ~d,
-        l,
-        Replicas.Tip.content(t),
-        b,
-        Replicas.Taken.ids(Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(t)), l, t, 0))
+# clash) of the branch b, whose newest tip is m (none: l lacks a part)
+def Notices.branch(~d: Led(), +l: L(d), +b: Branch, all: Bool, m: Maybe<&2, Replicas.Tip>) -> Maybe<&2, List<&2, Notice>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+t}:
+      Maybe.bind(
+        &2,
+        List<&2, Replicas.Taken>,
+        List<&2, Notice>,
+        Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(t)), l, t, 0),
+        +xs => Shared.Bool.when(
+          Maybe<&2, List<&2, Notice>>,
+          all,
+          u => Some{Notices.versions(b, Replicas.Taken.ids(xs))},
+          u => Notices.conflicts(~d, l, Replicas.Tip.content(t), b, Replicas.Taken.ids(xs))
+        )
       )
 
-# every notice of the topic x, by what the ledger holds
-def Node.notices(~d: Led(), ~kern: Kern(d), +l: L(d), x: Topic) -> List<&2, Notice>:
+# every notice of the topic x, by what the ledger holds (none: l lacks a
+# part, so a read cannot tell)
+def Node.notices(~d: Led(), ~kern: Kern(d), +l: L(d), x: Topic) -> Maybe<&2, List<&2, Notice>>:
   match x:
     case Topic.Versions{+b}:
       Notices.branch(~d, l, b, True{}, Branch.head(~d, ~kern, l, b))
     case Topic.Conflicts{+b}:
       Notices.branch(~d, l, b, False{}, Branch.head(~d, ~kern, l, b))
     case Topic.Affects{b, view}:
-      Notices.touches(Node.affects(~d, ~kern, l, view, b))
+      Maybe.map(&2, List<&2, Touch>, List<&2, Notice>, Notices.touches, Node.affects(~d, ~kern, l, view, b))
     case Topic.Lies{+st}:
-      Notices.lies(st, Ledgers.Kind.liars(Requests.Ask, Replicas.Led.kind(Requests.Ask.machine(), d))(l)(st))
+      Some{Notices.lies(st, Ledgers.Kind.liars(Requests.Ask, Replicas.Led.kind(Requests.Ask.machine(), d))(l)(st))}
 
 # Mounts
 # ------
@@ -2740,24 +2906,32 @@ def Node.may_stop(mounts: Mounts(), writers: Tries.Trie<Unit>, force: Bool) -> B
 
 # the change that records what a resource held when it is mounted: a write
 # of the resource x since the newest version, when the branch does not hold
-# it at its tip t (none: nothing to record). The node keeps the bytes and the
-# format of x before it asks
+# it at its tip t (some none: nothing to record; none: l lacks a part, so a
+# read cannot tell). The node keeps the bytes and the format of x before it
+# asks
 def Mount.change(
   ~d: Led(),
   +l: L(d),
   +t: Replicas.Tip,
   +n: Resources.Name,
   +x: Requests.Res
-) -> Maybe<&2, Requests.Change>:
-  Shared.Maybe.when(
-    Requests.Change,
-    Bool.not(
-      Res.same(
-        Maybe.default(&2, Maybe<&2, Requests.Res>, Res.find(~d, l, Replicas.Tip.content(t), n), None{}),
-        Some{x}
-      )
-    ),
-    u => Some{Requests.Change.Write{n, Replicas.Tip.newest(~Requests.Ask.machine(), ~d, l, t), Requests.Content.New{x}}}
+) -> Maybe<&2, Maybe<&2, Requests.Change>>:
+  Maybe.bind(
+    &2,
+    Maybe<&2, Requests.Res>,
+    Maybe<&2, Requests.Change>,
+    Res.find(~d, l, Replicas.Tip.content(t), n),
+    m => Maybe.map(
+      &2,
+      Maybe<&2, Ledgers.Id>,
+      Maybe<&2, Requests.Change>,
+      v => Shared.Maybe.when(
+        Requests.Change,
+        Bool.not(Res.same(m, Some{x})),
+        u => Some{Requests.Change.Write{n, v, Requests.Content.New{x}}}
+      ),
+      Replicas.Tip.newest(~Requests.Ask.machine(), ~d, l, t)
+    )
   )
 
 # Owners that follow their group
@@ -2832,15 +3006,21 @@ def Own.due.at(
     Tip.group(~d, l, t),
     +g => Maybe.bind(
       &2,
-      Ledgers.Id,
+      Maybe<&2, Ledgers.Id>,
       Replicas.Request<Requests.Ask>,
       Replicas.Tip.newest(~Requests.Ask.machine(), ~d, l, ts),
-      v => Maybe.bind(
+      mv => Maybe.bind(
         &2,
-        List<&2, String>,
+        Ledgers.Id,
         Replicas.Request<Requests.Ask>,
-        Group.nodes(~d, l, Replicas.Tip.content(ts), g),
-        ns => Own.due.of(c, t, ts, g, ns, v)
+        mv,
+        v => Maybe.bind(
+          &2,
+          List<&2, String>,
+          Replicas.Request<Requests.Ask>,
+          Group.nodes(~d, l, Replicas.Tip.content(ts), g),
+          ns => Own.due.of(c, t, ts, g, ns, v)
+        )
       )
     )
   )
@@ -2978,7 +3158,7 @@ law Merge.act_clashes:
           == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>
       }
         & {
-          Clash.open(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n, k) == True{}: Bool
+          Clash.open(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n, k) == Some{True{}}: Maybe<&2, Bool>
         }
     )
 
@@ -2991,9 +3171,11 @@ law Node.affects_holds:
   for l: L(d)
   for view: List<&2, Formats.Cond>
   for b: Branch
+  for ts: List<&2, Touch>
   for x: Touch
-  {List.contains(~Touch, ~Touch.is_eq, Node.affects(~d, ~kern, l, view, b), x) == True{}: Bool}
-    -> {Touch.holds(~d, ~kern, l, view, x) == True{}: Bool}
+  {Node.affects(~d, ~kern, l, view, b) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+    -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}
+    -> {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}
 
 # and they are told about each of them: a touch that holds is among the
 # touches that Node.affects gives for its branch
@@ -3004,7 +3186,7 @@ law Node.affects_complete:
   for l: L(d)
   for view: List<&2, Formats.Cond>
   for x: Touch
-  {Touch.holds(~d, ~kern, l, view, x) == True{}: Bool}
-    -> {
-      List.contains(~Touch, ~Touch.is_eq, Node.affects(~d, ~kern, l, view, Touch.branch(x)), x) == True{}: Bool
-    }
+  for ts: List<&2, Touch>
+  {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}
+    -> {Node.affects(~d, ~kern, l, view, Touch.branch(x)) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+    -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}

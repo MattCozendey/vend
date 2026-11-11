@@ -1203,18 +1203,20 @@ def Tip.versions(~mach: Machine(),
         u => Tip.versions(~mach, ~d, p, l, t, U32.inc(n))
       )
 
-# the ID of the newest version at the tip t
+# the ID of the newest version at the tip t, or that there is none yet (none:
+# l lacks a node of the log)
 def Tip.newest(~mach: Machine(),
-  ~d: Led(mach), l: Led.L(mach, d), +t: Tip) -> Maybe<&2, Ledgers.Id>:
-  Shared.Maybe.when(
-    Ledgers.Id,
-    Bool.not(U32.is_eq(Tip.count(t), 0)),
+  ~d: Led(mach), l: Led.L(mach, d), +t: Tip) -> Maybe<&2, Maybe<&2, Ledgers.Id>>:
+  Shared.Bool.when(
+    Maybe<&2, Maybe<&2, Ledgers.Id>>,
+    U32.is_eq(Tip.count(t), 0),
+    u => Some{None{}},
     u => Maybe.bind(
       &2,
       Taken,
-      Ledgers.Id,
+      Maybe<&2, Ledgers.Id>,
       Tip.taken(~mach, ~d, l, t, U32.sub(Tip.count(t), 1)),
-      x => Some{Taken.id(x)}
+      x => Some{Some{Taken.id(x)}}
     )
   )
 
@@ -1235,22 +1237,29 @@ def Tip.before(~mach: Machine(),
     )
   )
 
-# the time of the request of the entry m (none: it is not a request)
-def Entry.time(-mach: Machine(), m: Maybe<&2, Ledgers.Entry<Machine.Q(mach)>>) -> String:
-  match m:
-    case Some{Ledgers.Entry.Ask{i, time, q}}:
-      time
+# the time of the request of the entry e (none: it is not a request)
+def Entry.time(-mach: Machine(), e: Ledgers.Entry<Machine.Q(mach)>) -> Maybe<&2, String>:
+  match e:
+    case Ledgers.Entry.Ask{i, time, q}:
+      Some{time}
     case _:
-      ""
+      None{}
 
-# the time of the request that the outcome m is of, in l
+# the time of the request that the outcome o is of, in l (none: o is not of
+# a taken request, or l lacks its entry)
 def Out.time(~mach: Machine(),
-  ~d: Led(mach), l: Led.L(mach, d), m: Maybe<&2, Out>) -> String:
-  match m:
-    case Some{Out.Taken{a, n}}:
-      Entry.time(mach, Led.get(~mach, ~d, l, Ledgers.Name.Ask{a}))
+  ~d: Led(mach), l: Led.L(mach, d), o: Out) -> Maybe<&2, String>:
+  match o:
+    case Out.Taken{a, n}:
+      Maybe.bind(
+        &2,
+        Ledgers.Entry<Machine.Q(mach)>,
+        String,
+        Led.get(~mach, ~d, l, Ledgers.Name.Ask{a}),
+        e => Entry.time(mach, e)
+      )
     case _:
-      ""
+      None{}
 
 # Kernels
 # -------
