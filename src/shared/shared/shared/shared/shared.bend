@@ -2910,3 +2910,23 @@ def List.drop_append_le(
       )
     case Con{x, r} 1n+p:
       h => List.drop_append_le(A, r, b, p)(h)
+
+# a choice of m, else nothing, is m
+def Maybe.or_none(-A: Data, m: Maybe<&2, A>) -> {Maybe.or(&2, A, m, None{}) == m: Maybe<&2, A>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# of two choices of which one at most is some, either may come first
+def Maybe.or_comm(-A: Data, a: Maybe<&2, A>, b: Maybe<&2, A>) -> {
+  Bool.or(Maybe.is_none(&2, A, a), Maybe.is_none(&2, A, b)) == True{}: Bool
+} -> {Maybe.or(&2, A, a, b) == Maybe.or(&2, A, b, a): Maybe<&2, A>}:
+  match a b:
+    case None{} y:
+      h => Equal.sym(Maybe<&2, A>, Maybe.or(&2, A, y, None{}), y, Maybe.or_none(A, y))
+    case Some{x} None{}:
+      h => {==}
+    case Some{x} Some{y}:
+      h => Empty.absurd({Some{x} == Some{y}: Maybe<&2, A>}, Bool.false_ne_true(h))

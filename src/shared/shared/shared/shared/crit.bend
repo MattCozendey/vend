@@ -240,6 +240,17 @@ def Crit.get.go(-V: Data, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32>) -> M
 def Crit.get(-V: Data, m: Crit<V>, +k: List<&2, U32>) -> Maybe<&2, V>:
   Crit.get.go(V, m, 0n, Cur.of(k), k)
 
+# what m holds under the key k, read through every entry: a clear def, for
+# the laws, that does not read bits
+def Crit.lookup(-V: Data, m: Crit<V>, +k: List<&2, U32>) -> Maybe<&2, V>:
+  match m:
+    case Crit.Tip{}:
+      None{}
+    case Crit.Leaf{k2, v}:
+      Shared.Maybe.when(V, Key.is_eq(k2, k), u => Some{v})
+    case Crit.Fork{rep, p, e, z, o}:
+      Maybe.or(&2, V, Crit.ended(V, rep, e, k), Maybe.or(&2, V, Crit.lookup(V, z, k), Crit.lookup(V, o, k)))
+
 # m holds the key k
 def Crit.has(-V: Data, m: Crit<V>, +k: List<&2, U32>) -> Bool:
   Maybe.is_some(&2, V, Crit.get(V, m, k))
@@ -279,14 +290,14 @@ def Crit.mk(-V: Data, k: List<&2, U32>, pos: Nat, e: Maybe<&2, V>, z: Crit<V>, o
 
 # the fork at the bit d of the entry x, whose key ends at d, and the map y,
 # on the side b
-def Crit.join.end(-V: Data, x: Crit<V>, y: Crit<V>, d: Nat, b: Bool) -> Crit<V>:
+def Crit.join.end(-V: Data, x: Crit<V>, y: Crit<V>, +d: Nat, b: Bool) -> Crit<V>:
   match x b:
     case Crit.Leaf{k, v} True{}:
       Crit.Fork{k, d, Some{v}, Crit.Tip{}, y}
     case Crit.Leaf{k, v} False{}:
       Crit.Fork{k, d, Some{v}, y, Crit.Tip{}}
-    case _ b1:
-      y
+    case +x1 b1:
+      Crit.Fork{Crit.rep(V, x1, []), d, None{}, x1, y}
 
 # the fork at the bit d of the maps x and y, whose keys agree before d and
 # differ there: the side of each is its first key's bit at d, or its end
@@ -1164,3 +1175,57 @@ def Key.diff_bits(+a: List<&2, U32>, +b: List<&2, U32>) -> {
     Key.diff_go_bits(a, b, 0n)
   ): {_ == Bits.diff(Key.bits(a), Key.bits(b)): Maybe<&2, Nat>}
   Bits.map_zero(Bits.diff(Key.bits(a), Key.bits(b)))
+
+# Laws of reads
+# -------------
+
+# a fork in its one shape holds what its parts hold
+def Crit.mk_lookup(
+  -V: Data,
+  +k0: List<&2, U32>,
+  +pos: Nat,
+  e: Maybe<&2, V>,
+  z: Crit<V>,
+  o: Crit<V>,
+  +k: List<&2, U32>
+) -> {
+  Crit.lookup(V, Crit.mk(V, k0, pos, e, z, o), k)
+    == Maybe.or(&2, V, Crit.ended(V, k0, e, k), Maybe.or(&2, V, Crit.lookup(V, z, k), Crit.lookup(V, o, k))): Maybe<&2, V>
+}:
+  match e z o:
+    case None{} Crit.Tip{} Crit.Tip{}:
+      {==}
+    case None{} Crit.Tip{} Crit.Leaf{kl2, vl2}:
+      {==}
+    case None{} Crit.Tip{} Crit.Fork{fr2, fp2, fe2, fz2, fo2}:
+      {==}
+    case None{} Crit.Leaf{kl, vl} Crit.Tip{}:
+      Equal.sym(Maybe<&2, V>, Maybe.or(&2, V, Crit.lookup(V, Crit.Leaf{kl, vl}, k), None{}), Crit.lookup(V, Crit.Leaf{kl, vl}, k), Shared.Maybe.or_none(V, Crit.lookup(V, Crit.Leaf{kl, vl}, k)))
+    case None{} Crit.Leaf{kl, vl} Crit.Leaf{kl2, vl2}:
+      {==}
+    case None{} Crit.Leaf{kl, vl} Crit.Fork{fr2, fp2, fe2, fz2, fo2}:
+      {==}
+    case None{} Crit.Fork{fr, fp, fe, fz, fo} Crit.Tip{}:
+      Equal.sym(Maybe<&2, V>, Maybe.or(&2, V, Crit.lookup(V, Crit.Fork{fr, fp, fe, fz, fo}, k), None{}), Crit.lookup(V, Crit.Fork{fr, fp, fe, fz, fo}, k), Shared.Maybe.or_none(V, Crit.lookup(V, Crit.Fork{fr, fp, fe, fz, fo}, k)))
+    case None{} Crit.Fork{fr, fp, fe, fz, fo} Crit.Leaf{kl2, vl2}:
+      {==}
+    case None{} Crit.Fork{fr, fp, fe, fz, fo} Crit.Fork{fr2, fp2, fe2, fz2, fo2}:
+      {==}
+    case Some{v} Crit.Tip{} Crit.Tip{}:
+      Equal.sym(Maybe<&2, V>, Maybe.or(&2, V, Shared.Maybe.when(V, Key.is_eq(k0, k), u => Some{v}), None{}), Shared.Maybe.when(V, Key.is_eq(k0, k), u => Some{v}), Shared.Maybe.or_none(V, Shared.Maybe.when(V, Key.is_eq(k0, k), u => Some{v})))
+    case Some{v} Crit.Tip{} Crit.Leaf{kl2, vl2}:
+      {==}
+    case Some{v} Crit.Tip{} Crit.Fork{fr2, fp2, fe2, fz2, fo2}:
+      {==}
+    case Some{v} Crit.Leaf{kl, vl} Crit.Tip{}:
+      {==}
+    case Some{v} Crit.Leaf{kl, vl} Crit.Leaf{kl2, vl2}:
+      {==}
+    case Some{v} Crit.Leaf{kl, vl} Crit.Fork{fr2, fp2, fe2, fz2, fo2}:
+      {==}
+    case Some{v} Crit.Fork{fr, fp, fe, fz, fo} Crit.Tip{}:
+      {==}
+    case Some{v} Crit.Fork{fr, fp, fe, fz, fo} Crit.Leaf{kl2, vl2}:
+      {==}
+    case Some{v} Crit.Fork{fr, fp, fe, fz, fo} Crit.Fork{fr2, fp2, fe2, fz2, fo2}:
+      {==}
