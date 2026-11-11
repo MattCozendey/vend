@@ -6261,6 +6261,283 @@ def Keep.moved(
         hg
       )
 
+# Runs in a later ledger
+# ----------------------
+# A run in a and the same run in a later ledger b reach the same tip, with the
+# same added nodes, while a holds what the run in a added.
+
+# that the run rb in b is the run ra in a: the same tip and added nodes, and
+# each ledger is its own ledger with the same data put
+def Sim.Rel(
+  -mach: Machine(),
+  -d: Led(mach),
+  -a: Led.L(mach, d),
+  -b: Led.L(mach, d),
+  ra: Run<Led.L(mach, d)>,
+  -rb: Run<Led.L(mach, d)>
+) -> Data:
+  match ra:
+    case Run{la, ta, aa}:
+      +Sigma<Led.L(mach, d), lb => +Sigma<
+        {rb == Run{lb, ta, aa}: Run<Led.L(mach, d)>},
+        e => +Sigma<Ext.Based(mach, d, a, Run{la, ta, aa}), x => Ext.Based(mach, d, b, Run{lb, ta, aa})>>>
+
+# Sim.Rel of the run ra and the result mb of a run in b: none breaks it
+def Sim.R2(
+  -mach: Machine(),
+  -d: Led(mach),
+  -a: Led.L(mach, d),
+  -b: Led.L(mach, d),
+  ra: Run<Led.L(mach, d)>,
+  mb: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Data:
+  match mb:
+    case None{}:
+      Empty
+    case Some{rb}:
+      Sim.Rel(mach, d, a, b, ra, rb)
+
+# that the result mb in b of a run is that of ma in a, once a holds what ma
+# added
+def Sim.Out(
+  -mach: Machine(),
+  -d: Led(mach),
+  -a: Led.L(mach, d),
+  -b: Led.L(mach, d),
+  ma: Maybe<&2, Run<Led.L(mach, d)>>,
+  mb: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Type:
+  match ma:
+    case None{}:
+      Unit
+    case Some{ra}:
+      {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool} -> Sim.R2(mach, d, a, b, ra, mb)
+
+# that the run rb in b is the run ra in a, once a holds what ra added
+def Sim.Has(
+  -mach: Machine(),
+  -d: Led(mach),
+  -a: Led.L(mach, d),
+  -b: Led.L(mach, d),
+  ra: Run<Led.L(mach, d)>,
+  rb: Run<Led.L(mach, d)>
+) -> Type:
+  Sim.Out(mach, d, a, b, Some{ra}, Some{rb})
+
+# the ledger of a run in a, whose nodes a holds, grows into that of the same
+# run in b
+def Sim.grows(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +la: Led.L(mach, d),
+  +ta: Tip,
+  +aa: List<&2, List<&2, U32>>,
+  +lb: Led.L(mach, d),
+  bda: Ext.Based(mach, d, a, Run{la, ta, aa}),
+  bdb: Ext.Based(mach, d, b, Run{lb, ta, aa}),
+  ha: {Ext.holds(~mach, ~d, a, aa) == True{}: Bool}
+) -> Led.Grows(mach, d, la, lb):
+  Hist.trans(
+    mach,
+    d,
+    la,
+    a,
+    lb,
+    Ext.based_grows(~mach, ~d, a, Run{la, ta, aa}, bda, ha),
+    Hist.trans(mach, d, a, b, lb, lg(a)(b)(later), Ext.based_from(~mach, ~d, b, Run{lb, ta, aa}, bdb))
+  )
+
+# b holds what a holds
+def Sim.holds_b(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  ns: List<&2, List<&2, U32>>,
+  +h: {Ext.holds(~mach, ~d, a, ns) == True{}: Bool}
+) -> {Ext.holds(~mach, ~d, b, ns) == True{}: Bool}:
+  match ns:
+    case Nil{}:
+      {==}
+    case Con{+w, +r}:
+      Shared.List.all.if_both(
+        Ext.has(~mach, ~d, b, w),
+        u => Ext.holds(~mach, ~d, b, r)
+      )(
+        Hist.has.of(
+          ~mach,
+          ~d,
+          b,
+          w
+        )(
+          Hist.fetch(
+            ~mach,
+            ~d,
+            a,
+            b,
+            Hashes.Sha.hash(w),
+            w,
+            lg(a)(b)(later)
+          )(Hist.has(~mach, ~d, a, w)(Shared.List.all.if_hit(Ext.has(~mach, ~d, a, w), u => Ext.holds(~mach, ~d, a, r))(h)))
+        )
+      )(
+        Sim.holds_b(
+          ~mach,
+          ~d,
+          ~lg,
+          a,
+          b,
+          later,
+          r,
+          Shared.List.all.if_rest(Ext.has(~mach, ~d, a, w), u => Ext.holds(~mach, ~d, a, r))(h)
+        )
+      )
+
+# the ledgers of two related runs grow, once a holds what the run in a added
+def Sim.grow_of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  ra: Run<Led.L(mach, d)>,
+  rb: Run<Led.L(mach, d)>,
+  rel: Sim.Rel(mach, d, a, b, ra, rb),
+  ha: {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool}
+) -> Led.Grows(mach, d, Run.ledger(Led.L(mach, d), ra), Run.ledger(Led.L(mach, d), rb)):
+  match ra:
+    case Run{+la, +ta, +aa}:
+      match rel:
+        case Tuple{+lb, Tuple{erb, Tuple{bda, bdb}}}:
+          %Equal.sym(Run<Led.L(mach, d)>, rb, Run{lb, ta, aa}, erb): Led.Grows(
+            mach,
+            d,
+            la,
+            Run.ledger(Led.L(mach, d), _)
+          )
+          Sim.grows(~mach, ~d, ~lg, a, b, later, la, ta, aa, lb, bda, bdb, ha)
+
+# two related runs have the same tip
+def Sim.tip_of(
+  -mach: Machine(),
+  -d: Led(mach),
+  -a: Led.L(mach, d),
+  -b: Led.L(mach, d),
+  ra: Run<Led.L(mach, d)>,
+  -rb: Run<Led.L(mach, d)>,
+  rel: Sim.Rel(mach, d, a, b, ra, rb)
+) -> {Run.tip(Led.L(mach, d), ra) == Run.tip(Led.L(mach, d), rb): Tip}:
+  match ra:
+    case Run{la, ta, aa}:
+      match rel:
+        case Tuple{lb, Tuple{erb, x}}:
+          %Equal.sym(Run<Led.L(mach, d)>, rb, Run{lb, ta, aa}, erb): {ta == Run.tip(Led.L(mach, d), _): Tip}
+          {==}
+
+# a result in b that equals the result in a run shaped like the one in a,
+# once a holds what that run added: the result in a is the same (gm: the run
+# in a follows ra; heq: the two results in b are equal; inner: the shaped one
+# is related)
+def Sim.cond(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +ra: Run<Led.L(mach, d)>,
+  -rb: Run<Led.L(mach, d)>,
+  ma: Maybe<&2, Run<Led.L(mach, d)>>,
+  -mb: Maybe<&2, Run<Led.L(mach, d)>>,
+  -mb2: Maybe<&2, Run<Led.L(mach, d)>>,
+  gm: Ext.GainM(mach, d, a, ra, ma),
+  sh: Sim.Has(mach, d, a, b, ra, rb),
+  heq: Sim.Rel(mach, d, a, b, ra, rb) -> {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool}
+    -> {mb2 == mb: Maybe<&2, Run<Led.L(mach, d)>>},
+  inner: Sim.Has(mach, d, a, b, ra, rb) -> Sim.Out(mach, d, a, b, ma, mb2)
+) -> Sim.Out(mach, d, a, b, ma, mb):
+  match ma:
+    case None{}:
+      Unit{}
+    case Some{+ra2}:
+      +hh =>
+        +hr = Ext.gain_holds(~mach, ~d, a, ra, ra2, gm, hh)
+        +rel = sh(hr)
+        %heq(rel)(hr): Sim.R2(mach, d, a, b, ra2, _)
+        inner(u => rel)(hh)
+
+# Sim.bind once the step in a is known (m2)
+def Sim.bind.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  -b: Led.L(mach, d),
+  +r1: Run<Led.L(mach, d)>,
+  m2: Maybe<&2, Run<Led.L(mach, d)>>,
+  mb: Maybe<&2, Run<Led.L(mach, d)>>,
+  -g: Run<Led.L(mach, d)> -> Maybe<&2, Run<Led.L(mach, d)>>,
+  hm: Sim.Out(mach, d, a, b, Some{r1}, mb),
+  gn: Ext.GainM(mach, d, a, r1, m2),
+  hg1: @rb1: Run<Led.L(mach, d)> -> Sim.Has(mach, d, a, b, r1, rb1) -> Sim.Out(mach, d, a, b, m2, g(rb1))
+) -> Sim.Out(mach, d, a, b, m2, Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, mb, g)):
+  match m2 mb:
+    case None{} y:
+      Unit{}
+    case Some{+r2} None{}:
+      hh => hm(Ext.gain_holds(~mach, ~d, a, r1, r2, gn, hh))
+    case Some{r2} Some{rb1}:
+      hg1(rb1)(hm)
+
+# a run then the same step, in a and in b, stay related
+def Sim.bind(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  -b: Led.L(mach, d),
+  ma: Maybe<&2, Run<Led.L(mach, d)>>,
+  mb: Maybe<&2, Run<Led.L(mach, d)>>,
+  g: Run<Led.L(mach, d)> -> Maybe<&2, Run<Led.L(mach, d)>>,
+  hm: Sim.Out(mach, d, a, b, ma, mb),
+  gg: @r1: Run<Led.L(mach, d)> -> Ext.GainM(mach, d, a, r1, g(r1)),
+  hg: @r1: Run<Led.L(mach, d)> -> @rb1: Run<Led.L(mach, d)> -> Sim.Has(mach, d, a, b, r1, rb1)
+    -> Sim.Out(mach, d, a, b, g(r1), g(rb1))
+) -> Sim.Out(
+  mach,
+  d,
+  a,
+  b,
+  Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, ma, g),
+  Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, mb, g)
+):
+  match ma:
+    case None{}:
+      Unit{}
+    case Some{+r1}:
+      Sim.bind.at(~mach, ~d, a, b, r1, g(r1), mb, g, hm, gg(r1), rb1 => hg(r1)(rb1))
+
 # a step lands on the same tip in a later ledger
 def Sim.moved(
   ~mach: Machine(),
