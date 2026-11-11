@@ -4900,32 +4900,6 @@ def Safe.witness(
         Safe.witness(~B, ~same, ~of, t, c)
       )
 
-# two lines that Line.is_eq calls the same are the same
-def Safe.line_sound(a: Ledgers.Line, b: Ledgers.Line) -> {Ledgers.Line.is_eq(a, b) == True{}: Bool} -> {a == b: Ledgers.Line}:
-  match a b:
-    case Ledgers.Line{+i1, +k1} Ledgers.Line{+i2, +k2}:
-      +h => Ledgers.Eq.both(
-        Hashes.Hash,
-        Maybe<&2, String>,
-        Ledgers.Line,
-        x => y => Ledgers.Line{x, y},
-        i1,
-        i2,
-        k1,
-        k2,
-        Hashes.Hash.is_eq_sound(
-          i1,
-          i2
-        )(Shared.List.all.if_hit(Hashes.Hash.is_eq(i1, i2), u => Ledgers.Sub.is_eq(k1, k2))(h)),
-        Shared.Maybe.is_eq_sound(
-          ~String,
-          ~String.eq,
-          x => y => Texts.String.eq_sound(x, y),
-          k1,
-          k2
-        )(Shared.List.all.if_rest(Hashes.Hash.is_eq(i1, i2), u => Ledgers.Sub.is_eq(k1, k2))(h))
-      )
-
 # two places that Place.is_eq calls the same are the same
 def Safe.place_sound(a: Ledgers.Place, b: Ledgers.Place) -> {Ledgers.Place.is_eq(a, b) == True{}: Bool} -> {a == b: Ledgers.Place}:
   match a b:
@@ -4947,7 +4921,7 @@ def Safe.place_sound(a: Ledgers.Place, b: Ledgers.Place) -> {Ledgers.Place.is_eq
           h2,
           r1,
           r2,
-          Safe.line_sound(
+          Line.is_eq_sound(
             c1,
             c2
           )(
@@ -4967,14 +4941,6 @@ def Safe.at_of(e: Ledgers.Ballot, +w: Ledgers.Place, +voter: String) -> {
   match e:
     case Ledgers.Ballot{Ledgers.Signed{+w2, +n, a}, l}:
       h => Safe.place_sound(w2, w)(Shared.List.all.if_hit(Ledgers.Place.is_eq(w2, w), u => String.eq(n, voter))(h))
-
-# a ballot of the voter is of the voter
-def Safe.voter_of(e: Ledgers.Ballot, +w: Ledgers.Place, +voter: String) -> {
-  Ledgers.Ballot.is_at(e, w, voter) == True{}: Bool
-} -> {Ledgers.Ballot.voter(e) == voter: String}:
-  match e:
-    case Ledgers.Ballot{Ledgers.Signed{+w2, +n, a}, l}:
-      h => Texts.String.eq_sound(n, voter)(Shared.List.all.if_rest(Ledgers.Place.is_eq(w2, w), u => String.eq(n, voter))(h))
 
 # the law of the ballots of a voter, of the laws ls
 def Safe.laws.ballots(
@@ -5334,7 +5300,7 @@ def Safe.of_in_b(
       %Equal.sym(Ledgers.Place, Ledgers.Ballot.at(e0), w, Safe.at_of(e0, w, voter)(i0)): {
         Ledgers.Ballot.is_at(e, _, Ledgers.Ballot.voter(e0)) == True{}: Bool
       }
-      %Equal.sym(String, Ledgers.Ballot.voter(e0), voter, Safe.voter_of(e0, w, voter)(i0)): {
+      %Equal.sym(String, Ledgers.Ballot.voter(e0), voter, Ballot.is_at_voter(e0, w, voter)(i0)): {
         Ledgers.Ballot.is_at(e, w, _) == True{}: Bool
       }
       Shared.Bool.and_true_right(Led.has(~mach, ~d, b, Ledgers.Entry.Ballot{e}), Ledgers.Ballot.is_at(e, w, voter))(k1),
