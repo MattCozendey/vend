@@ -6538,6 +6538,598 @@ def Sim.bind(
     case Some{+r1}:
       Sim.bind.at(~mach, ~d, a, b, r1, g(r1), mb, g, hm, gg(r1), rb1 => hg(r1)(rb1))
 
+# Sim.add once the write's nodes and the relation are known
+def Sim.add.fin(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +la: Led.L(mach, d),
+  +ta: Tip,
+  +aa: List<&2, List<&2, U32>>,
+  +rb: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  +e: Trees.Edit,
+  ep: {Tree.put(~mach, ~d, la, Tip.log(ta), k, Some{x}) == Some{e}: Maybe<&2, Trees.Edit>},
+  em: {Tip.find(~mach, ~d, la, ta, k) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  rel: Sim.Rel(mach, d, a, b, Run{la, ta, aa}, rb),
+  +ha: {Ext.holds(~mach, ~d, a, aa) == True{}: Bool}
+) -> Sim.R2(
+  mach,
+  d,
+  a,
+  b,
+  Run{
+    Led.puts(~mach, ~d, Trees.Edit.nodes(e), la),
+    Tip.logged(ta, Trees.Edit.root(e)),
+    List.append(&2, List<&2, U32>, Trees.Edit.nodes(e), aa)
+  },
+  Run.add(~mach, ~d, rb, k, x)
+):
+  match rel:
+    case Tuple{+lb, Tuple{erb, Tuple{+bda, +bdb}}}:
+      %Equal.sym(Run<Led.L(mach, d)>, rb, Run{lb, ta, aa}, erb): Sim.R2(
+        mach,
+        d,
+        a,
+        b,
+        Run{
+          Led.puts(~mach, ~d, Trees.Edit.nodes(e), la),
+          Tip.logged(ta, Trees.Edit.root(e)),
+          List.append(&2, List<&2, U32>, Trees.Edit.nodes(e), aa)
+        },
+        Run.add(~mach, ~d, _, k, x)
+      )
+      %Equal.sym(
+        Maybe<&2, Maybe<&2, List<&2, U32>>>,
+        Tip.find(~mach, ~d, lb, ta, k),
+        Some{None{}},
+        Hist.find(~mach, ~d, la, lb, Tip.log(ta), k, None{}, Sim.grows(~mach, ~d, ~lg, a, b, later, la, ta, aa, lb, bda, bdb, ha))(
+          em
+        )
+      ): Sim.R2(
+        mach,
+        d,
+        a,
+        b,
+        Run{
+          Led.puts(~mach, ~d, Trees.Edit.nodes(e), la),
+          Tip.logged(ta, Trees.Edit.root(e)),
+          List.append(&2, List<&2, U32>, Trees.Edit.nodes(e), aa)
+        },
+        Run.add.at(~mach, ~d, Run{lb, ta, aa}, k, x, _)
+      )
+      %Equal.sym(
+        Maybe<&2, Trees.Edit>,
+        Tree.put(~mach, ~d, lb, Tip.log(ta), k, Some{x}),
+        Some{e},
+        Hist.put(
+          ~mach,
+          ~d,
+          la,
+          lb,
+          Tip.log(ta),
+          k,
+          Some{x},
+          e,
+          Sim.grows(~mach, ~d, ~lg, a, b, later, la, ta, aa, lb, bda, bdb, ha)
+        )(ep)
+      ): Sim.R2(
+        mach,
+        d,
+        a,
+        b,
+        Run{
+          Led.puts(~mach, ~d, Trees.Edit.nodes(e), la),
+          Tip.logged(ta, Trees.Edit.root(e)),
+          List.append(&2, List<&2, U32>, Trees.Edit.nodes(e), aa)
+        },
+        Run.logged(~mach, ~d, lb, ta, aa, _)
+      )
+      Tuple{
+        Led.puts(~mach, ~d, Trees.Edit.nodes(e), lb),
+        Tuple{
+          {==},
+          Tuple{
+            Ext.based(
+              ~mach,
+              ~d,
+              a,
+              Run{la, ta, aa},
+              Run{
+                Led.puts(~mach, ~d, Trees.Edit.nodes(e), la),
+                Tip.logged(ta, Trees.Edit.root(e)),
+                List.append(&2, List<&2, U32>, Trees.Edit.nodes(e), aa)
+              },
+              bda,
+              Ext.logged(~mach, ~d, a, la, ta, aa, Some{e})
+            ),
+            Ext.based(
+              ~mach,
+              ~d,
+              b,
+              Run{lb, ta, aa},
+              Run{
+                Led.puts(~mach, ~d, Trees.Edit.nodes(e), lb),
+                Tip.logged(ta, Trees.Edit.root(e)),
+                List.append(&2, List<&2, U32>, Trees.Edit.nodes(e), aa)
+              },
+              bdb,
+              Ext.logged(~mach, ~d, b, lb, ta, aa, Some{e})
+            )
+          }
+        }
+      }
+
+# Sim.add once the write in a is known (p)
+def Sim.add.put(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +la: Led.L(mach, d),
+  +ta: Tip,
+  +aa: List<&2, List<&2, U32>>,
+  +rb: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  p: Maybe<&2, Trees.Edit>,
+  ep: {Tree.put(~mach, ~d, la, Tip.log(ta), k, Some{x}) == p: Maybe<&2, Trees.Edit>},
+  em: {Tip.find(~mach, ~d, la, ta, k) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  sh: Sim.Has(mach, d, a, b, Run{la, ta, aa}, rb)
+) -> Sim.Out(mach, d, a, b, Run.logged(~mach, ~d, la, ta, aa, p), Run.add(~mach, ~d, rb, k, x)):
+  match p:
+    case None{}:
+      Unit{}
+    case Some{+e}:
+      +hh => Sim.add.fin(
+        ~mach,
+        ~d,
+        ~lg,
+        a,
+        b,
+        later,
+        la,
+        ta,
+        aa,
+        rb,
+        k,
+        x,
+        e,
+        ep,
+        em,
+        sh(Ext.holds_right(~mach, ~d, a, Trees.Edit.nodes(e), aa)(hh)),
+        Ext.holds_right(~mach, ~d, a, Trees.Edit.nodes(e), aa)(hh)
+      )
+
+# Sim.add once the read of the key in a is known (m)
+def Sim.add.find(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +la: Led.L(mach, d),
+  +ta: Tip,
+  +aa: List<&2, List<&2, U32>>,
+  +rb: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  em: {Tip.find(~mach, ~d, la, ta, k) == m: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  sh: Sim.Has(mach, d, a, b, Run{la, ta, aa}, rb)
+) -> Sim.Out(mach, d, a, b, Run.add.at(~mach, ~d, Run{la, ta, aa}, k, x, m), Run.add(~mach, ~d, rb, k, x)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Some{o}}:
+      Unit{}
+    case Some{None{}}:
+      Sim.add.put(
+        ~mach,
+        ~d,
+        ~lg,
+        a,
+        b,
+        later,
+        la,
+        ta,
+        aa,
+        rb,
+        k,
+        x,
+        Tree.put(~mach, ~d, la, Tip.log(ta), k, Some{x}),
+        {==},
+        em,
+        sh
+      )
+
+# a write to the log, in a and in b, keeps two runs related
+def Sim.add(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  ra: Run<Led.L(mach, d)>,
+  +rb: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  sh: Sim.Has(mach, d, a, b, ra, rb)
+) -> Sim.Out(mach, d, a, b, Run.add(~mach, ~d, ra, k, x), Run.add(~mach, ~d, rb, k, x)):
+  match ra:
+    case Run{+la, +ta, +aa}:
+      Sim.add.find(~mach, ~d, ~lg, a, b, later, la, ta, aa, rb, k, x, Tip.find(~mach, ~d, la, ta, k), {==}, sh)
+
+# a refusal, in a and in b, keeps two runs related
+def Sim.stale(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +ra: Run<Led.L(mach, d)>,
+  +rb: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +q: Hashes.Hash,
+  sh: Sim.Has(mach, d, a, b, ra, rb)
+) -> Sim.Out(mach, d, a, b, Step.stale(~mach, ~d, ra, i, q), Step.stale(~mach, ~d, rb, i, q)):
+  Sim.add(~mach, ~d, ~lg, a, b, later, ra, rb, Log.out(i), Out.code(Out.Stale{q}, []), sh)
+
+# Sim.step_next once the relation is known
+def Sim.next.fin(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +la: Led.L(mach, d),
+  +ta: Tip,
+  +aa: List<&2, List<&2, U32>>,
+  +rb: Run<Led.L(mach, d)>,
+  +vs: Maybe<&2, List<&2, String>>,
+  rel: Sim.Rel(mach, d, a, b, Run{la, ta, aa}, rb)
+) -> Sim.Rel(mach, d, a, b, Run{la, Tip.next(ta, vs), aa}, Run.next(Led.L(mach, d), rb, vs)):
+  match rel:
+    case Tuple{+lb, Tuple{erb, Tuple{bda, bdb}}}:
+      %Equal.sym(Run<Led.L(mach, d)>, rb, Run{lb, ta, aa}, erb): Sim.Rel(
+        mach,
+        d,
+        a,
+        b,
+        Run{la, Tip.next(ta, vs), aa},
+        Run.next(Led.L(mach, d), _, vs)
+      )
+      Tuple{
+        lb,
+        Tuple{
+          {==},
+          Tuple{
+            Ext.based(
+              ~mach,
+              ~d,
+              a,
+              Run{la, ta, aa},
+              Run{la, Tip.next(ta, vs), aa},
+              bda,
+              Ext.next(mach, d, a, Run{la, ta, aa}, vs)
+            ),
+            Ext.based(
+              ~mach,
+              ~d,
+              b,
+              Run{lb, ta, aa},
+              Run{lb, Tip.next(ta, vs), aa},
+              bdb,
+              Ext.next(mach, d, b, Run{lb, ta, aa}, vs)
+            )
+          }
+        }
+      }
+
+# one request on, in a and in b, keeps two runs related
+def Sim.step_next(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  ra: Run<Led.L(mach, d)>,
+  +rb: Run<Led.L(mach, d)>,
+  +vs: Maybe<&2, List<&2, String>>,
+  sh: Sim.Has(mach, d, a, b, ra, rb)
+) -> Sim.Has(mach, d, a, b, Run.next(Led.L(mach, d), ra, vs), Run.next(Led.L(mach, d), rb, vs)):
+  match ra:
+    case Run{+la, +ta, +aa}:
+      hh => Sim.next.fin(~mach, ~d, a, b, la, ta, aa, rb, vs, sh(hh))
+
+# Sim.over once the relation is known
+def Sim.over.fin(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +la: Led.L(mach, d),
+  +ta: Tip,
+  +aa: List<&2, List<&2, U32>>,
+  +rb: Run<Led.L(mach, d)>,
+  +ns: List<&2, List<&2, U32>>,
+  +hc: Maybe<&2, Hashes.Hash>,
+  rel: Sim.Rel(mach, d, a, b, Run{la, ta, aa}, rb)
+) -> Sim.Rel(
+  mach,
+  d,
+  a,
+  b,
+  Run{Led.puts(~mach, ~d, ns, la), Tip.over(ta, hc), List.append(&2, List<&2, U32>, ns, aa)},
+  Run.over(~mach, ~d, rb, ns, hc)
+):
+  match rel:
+    case Tuple{+lb, Tuple{erb, Tuple{bda, bdb}}}:
+      %Equal.sym(Run<Led.L(mach, d)>, rb, Run{lb, ta, aa}, erb): Sim.Rel(
+        mach,
+        d,
+        a,
+        b,
+        Run{Led.puts(~mach, ~d, ns, la), Tip.over(ta, hc), List.append(&2, List<&2, U32>, ns, aa)},
+        Run.over(~mach, ~d, _, ns, hc)
+      )
+      Tuple{
+        Led.puts(~mach, ~d, ns, lb),
+        Tuple{
+          {==},
+          Tuple{
+            Ext.based(
+              ~mach,
+              ~d,
+              a,
+              Run{la, ta, aa},
+              Run{Led.puts(~mach, ~d, ns, la), Tip.over(ta, hc), List.append(&2, List<&2, U32>, ns, aa)},
+              bda,
+              Ext.over(~mach, ~d, a, Run{la, ta, aa}, ns, hc)
+            ),
+            Ext.based(
+              ~mach,
+              ~d,
+              b,
+              Run{lb, ta, aa},
+              Run{Led.puts(~mach, ~d, ns, lb), Tip.over(ta, hc), List.append(&2, List<&2, U32>, ns, aa)},
+              bdb,
+              Ext.over(~mach, ~d, b, Run{lb, ta, aa}, ns, hc)
+            )
+          }
+        }
+      }
+
+# new content, in a and in b, keeps two runs related
+def Sim.over(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  ra: Run<Led.L(mach, d)>,
+  +rb: Run<Led.L(mach, d)>,
+  +ns: List<&2, List<&2, U32>>,
+  +hc: Maybe<&2, Hashes.Hash>,
+  sh: Sim.Has(mach, d, a, b, ra, rb)
+) -> Sim.Has(mach, d, a, b, Run.over(~mach, ~d, ra, ns, hc), Run.over(~mach, ~d, rb, ns, hc)):
+  match ra:
+    case Run{+la, +ta, +aa}:
+      hh => Sim.over.fin(~mach, ~d, a, b, la, ta, aa, rb, ns, hc, sh(Ext.holds_right(~mach, ~d, a, ns, aa)(hh)))
+
+# a read of a log that tells, in the run in a, tells the same in the run in b
+def Sim.find_eq(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  ra: Run<Led.L(mach, d)>,
+  rb: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +y: Maybe<&2, List<&2, U32>>,
+  rel: Sim.Rel(mach, d, a, b, ra, rb),
+  ha: {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool},
+  ef: {
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), ra), Run.tip(Led.L(mach, d), ra), k) == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  }
+) -> {
+  Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), rb), Run.tip(Led.L(mach, d), rb), k) == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  match ra:
+    case Run{+la, +ta, +aa}:
+      match rel:
+        case Tuple{+lb, Tuple{erb, Tuple{bda, bdb}}}:
+          %Equal.sym(Run<Led.L(mach, d)>, rb, Run{lb, ta, aa}, erb): {
+            Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), _), Run.tip(Led.L(mach, d), _), k) == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+          }
+          Hist.find(~mach, ~d, la, lb, Tip.log(ta), k, y, Sim.grows(~mach, ~d, ~lg, a, b, later, la, ta, aa, lb, bda, bdb, ha))(
+            ef
+          )
+
+# an entry of the ledger of the run in a is one of the run in b
+def Sim.get_eq(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  ra: Run<Led.L(mach, d)>,
+  rb: Run<Led.L(mach, d)>,
+  +n: Ledgers.Name,
+  +e: Entry(mach),
+  rel: Sim.Rel(mach, d, a, b, ra, rb),
+  ha: {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool},
+  h: {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), ra), n) == Some{e}: Maybe<&2, Entry(mach)>}
+) -> {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), rb), n) == Some{e}: Maybe<&2, Entry(mach)>}:
+  Sim.grow_of(~mach, ~d, ~lg, a, b, later, ra, rb, rel, ha)(n)(e)(h)
+
+# an act of the kernel in the run in a is its act in the run in b
+def Sim.kern_eq(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  ra: Run<Led.L(mach, d)>,
+  rb: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +q: Machine.Q(mach),
+  +act: Act,
+  rel: Sim.Rel(mach, d, a, b, ra, rb),
+  ha: {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool},
+  h: {
+    Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), ra))(Run.tip(Led.L(mach, d), ra))(c)(i)(q) == Some{act}: Maybe<&2, Act>
+  }
+) -> {
+  Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), rb))(Run.tip(Led.L(mach, d), rb))(c)(i)(q) == Some{act}: Maybe<&2, Act>
+}:
+  match ra:
+    case Run{+la, +ta, +aa}:
+      match rel:
+        case Tuple{+lb, Tuple{erb, Tuple{bda, bdb}}}:
+          %Equal.sym(Run<Led.L(mach, d)>, rb, Run{lb, ta, aa}, erb): {
+            Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), _))(Run.tip(Led.L(mach, d), _))(c)(i)(q) == Some{act}: Maybe<&2, Act>
+          }
+          Hist.kern(mach, d, kern)(ta)(c)(i)(q)(la)(lb)(act)(Sim.grows(~mach, ~d, ~lg, a, b, later, la, ta, aa, lb, bda, bdb, ha))(h)
+
+# Sim.taken_eq once the read of the log in a is known (m)
+def Sim.taken_eq.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +la: Led.L(mach, d),
+  +lb: Led.L(mach, d),
+  +t: Tip,
+  +n: U32,
+  -x: Taken,
+  g: Led.Grows(mach, d, la, lb),
+  m: Maybe<&2, List<&2, U32>>,
+  em: {Tip.get(~mach, ~d, la, t, Log.taken(n)) == m: Maybe<&2, List<&2, U32>>},
+  h: {
+    Codes.Code.whole.of(~Taken, ~Taken.code, ~Taken.code.read, m) == Some{x}: Maybe<&2, Taken>
+  }
+) -> {Tip.taken(~mach, ~d, lb, t, n) == Some{x}: Maybe<&2, Taken>}:
+  match m:
+    case None{}:
+      Empty.absurd({Tip.taken(~mach, ~d, lb, t, n) == Some{x}: Maybe<&2, Taken>}, Shared.Maybe.none_ne_some(Taken, x, h))
+    case Some{+w}:
+      %Equal.sym(
+        Maybe<&2, List<&2, U32>>,
+        Tip.get(~mach, ~d, lb, t, Log.taken(n)),
+        Some{w},
+        Keep.found_back(
+          Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(lb)(Tip.log(t))(Log.taken(n)),
+          w,
+          Hist.find(
+            ~mach,
+            ~d,
+            la,
+            lb,
+            Tip.log(t),
+            Log.taken(n),
+            Some{w},
+            g
+          )(Keep.found(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(la)(Tip.log(t))(Log.taken(n)), w, em))
+        )
+      ): {Codes.Code.whole.of(~Taken, ~Taken.code, ~Taken.code.read, _) == Some{x}: Maybe<&2, Taken>}
+      h
+
+# a taken request that the log in a gives, the log in b gives
+def Sim.taken_eq(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +ra: Run<Led.L(mach, d)>,
+  +rb: Run<Led.L(mach, d)>,
+  +t: Tip,
+  +n: U32,
+  -x: Taken,
+  +rel: Sim.Rel(mach, d, a, b, ra, rb),
+  +ha: {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool},
+  h: {Tip.taken(~mach, ~d, Run.ledger(Led.L(mach, d), ra), t, n) == Some{x}: Maybe<&2, Taken>}
+) -> {Tip.taken(~mach, ~d, Run.ledger(Led.L(mach, d), rb), t, n) == Some{x}: Maybe<&2, Taken>}:
+  Sim.taken_eq.at(
+    ~mach,
+    ~d,
+    Run.ledger(Led.L(mach, d), ra),
+    Run.ledger(Led.L(mach, d), rb),
+    t,
+    n,
+    x,
+    Sim.grow_of(~mach, ~d, ~lg, a, b, later, ra, rb, rel, ha),
+    Tip.get(~mach, ~d, Run.ledger(Led.L(mach, d), ra), t, Log.taken(n)),
+    {==},
+    h
+  )
+
 # a step lands on the same tip in a later ledger
 def Sim.moved(
   ~mach: Machine(),
