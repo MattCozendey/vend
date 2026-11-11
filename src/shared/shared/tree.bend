@@ -2125,6 +2125,285 @@ def Key.is_eq_cmp(a: List<&2, U32>, b: List<&2, U32>) -> {
       }
       Key.is_eq_cmp.con(U32.cmp(x, y), Key.cmp(ra, rb))
 
+# Opened nodes
+# ------------
+
+# a bind that gives x: m holds a value a, and f gives x of a
+def Maybe.bind_cases(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, A>,
+  -f: A -> Maybe<&2, B>,
+  -x: B,
+  -P: Type,
+  k: @a: A -> {m == Some{a}: Maybe<&2, A>} -> {f(a) == Some{x}: Maybe<&2, B>} -> P
+) -> {Maybe.bind(&2, A, B, m, f) == Some{x}: Maybe<&2, B>} -> P:
+  match m:
+    case None{}:
+      e => Empty.absurd(P, Shared.Maybe.none_ne_some(B, x, e))
+    case Some{+a}:
+      e => k(a)({==})(e)
+
+# a map that gives x: m holds a value a, and f gives x of a
+def Maybe.map_cases(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, A>,
+  -f: A -> B,
+  -x: B,
+  -P: Type,
+  k: @a: A -> {m == Some{a}: Maybe<&2, A>} -> {f(a) == x: B} -> P
+) -> {Maybe.map(&2, A, B, f, m) == Some{x}: Maybe<&2, B>} -> P:
+  match m:
+    case None{}:
+      e => Empty.absurd(P, Shared.Maybe.none_ne_some(B, x, e))
+    case Some{+a}:
+      e => k(a)({==})(Shared.Maybe.some_inj(B, f(a), x, e))
+
+# a Shared.Maybe.when that gives x: its test holds, and its body gives x
+def Maybe.when_cases(
+  -B: Data,
+  b: Bool,
+  -g: Unit -> Maybe<&2, B>,
+  -x: B,
+  -P: Type,
+  k: {b == True{}: Bool} -> {g(Unit{}) == Some{x}: Maybe<&2, B>} -> P
+) -> {Shared.Maybe.when(B, b, g) == Some{x}: Maybe<&2, B>} -> P:
+  match b:
+    case True{}:
+      e => k({==})(e)
+    case False{}:
+      e => Empty.absurd(P, Shared.Maybe.none_ne_some(B, x, e))
+
+# the pieces of an opened node: of a node below up with an item, by its items
+def Mst.open.node_cases(
+  n: Node,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ps: List<&2, Piece>,
+  -P: Type,
+  k: @l: Nat -> @left: Maybe<&2, Hashes.Hash> -> @xs: List<&2, Item> -> {n == Node{l, left, xs}: Node} -> {
+    Nat.is_lt(l, up) == True{}: Bool
+  } -> {List.is_empty(&2, Item, xs) == False{}: Bool} -> {
+    Mst.pieces(xs, l, left, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>
+  } -> P
+) -> {Mst.open.node(n, up, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>} -> P:
+  match n:
+    case Node{+l, +left, +xs}:
+      e => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(Nat.is_lt(l, up), Bool.not(List.is_empty(&2, Item, xs))),
+        u => Mst.pieces(xs, l, left, lo, hi),
+        ps,
+        P,
+        +c => ep => k(l)(left)(xs)({==})(
+          Shared.Bool.and_true_left(Nat.is_lt(l, up), Bool.not(List.is_empty(&2, Item, xs)))(c)
+        )(
+          Shared.Bool.not_true(
+            List.is_empty(&2, Item, xs)
+          )(Shared.Bool.and_true_right(Nat.is_lt(l, up), Bool.not(List.is_empty(&2, Item, xs)))(c))
+        )(ep)
+      )(e)
+
+# the keys of the items of a node that gives pieces fit its bounds
+def Mst.pieces_fit(
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ps: List<&2, Piece>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>} -> {Items.fit(xs, lo, hi) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      e => {==}
+    case Con{Item{+k, +v, +r}, +rest}:
+      e => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(
+          Bool.and(Nat.is_eq(Key.level(k), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, k)))),
+          Bool.and(Bound.after(lo, k), Bound.before(k, hi))
+        ),
+        u => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          ps2 => Piece.sub(prev, l, lo, Some{k}, Piece.Bind{k, v} <> ps2),
+          Mst.pieces(rest, l, r, Some{k}, hi)
+        ),
+        ps,
+        {Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Items.fit(rest, Some{k}, hi)) == True{}: Bool},
+        c => e2 => Maybe.map_cases(
+          List<&2, Piece>,
+          List<&2, Piece>,
+          Mst.pieces(rest, l, r, Some{k}, hi),
+          ps2 => Piece.sub(prev, l, lo, Some{k}, Piece.Bind{k, v} <> ps2),
+          ps,
+          {Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Items.fit(rest, Some{k}, hi)) == True{}: Bool},
+          ps2 => e3 => e4 => Shared.Bool.and_both(
+            Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+            Items.fit(rest, Some{k}, hi)
+          )(
+            Shared.Bool.and_true_right(
+              Bool.and(Nat.is_eq(Key.level(k), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, k)))),
+              Bool.and(Bound.after(lo, k), Bound.before(k, hi))
+            )(c)
+          )(Mst.pieces_fit(rest, l, r, Some{k}, hi, ps2)(e3))
+        )(e2)
+      )(e)
+
+# the node that a depot holds, once its words read whole as a node that may
+# sit in the room of up, lo and hi
+def Mst.node.in_of(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ws: List<&2, U32>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  ew: {fetch(s)(h) == Some{ws}: Maybe<&2, List<&2, U32>>},
+  er: {Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws) == Some{Node{l, left, xs}}: Maybe<&2, Node>},
+  elt: {Nat.is_lt(l, up) == True{}: Bool},
+  ee: {List.is_empty(&2, Item, xs) == False{}: Bool},
+  ef: {Items.fit(xs, lo, hi) == True{}: Bool}
+) -> {Mst.node.in(~S, ~fetch, s, h, Room{up, lo, hi}) == Some{Node{l, left, xs}}: Maybe<&2, Node>}:
+  %Equal.sym(Maybe<&2, List<&2, U32>>, fetch(s)(h), Some{ws}, ew): {
+    Maybe.bind(&2, Node, Node, Codes.Code.whole.of(~Node, ~Node.code, ~Node.code.read, _), n => Node.in(n, Room{up, lo, hi}))
+      == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  }
+  %Equal.sym(Maybe<&2, Node>, Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws), Some{Node{l, left, xs}}, er): {
+    Maybe.bind(&2, Node, Node, _, n => Node.in(n, Room{up, lo, hi})) == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  }
+  %Equal.sym(Bool, Nat.is_lt(l, up), True{}, elt): {
+    Shared.Maybe.when(
+      Node,
+      Bool.and(Bool.and(_, Bool.not(List.is_empty(&2, Item, xs))), Items.fit(xs, lo, hi)),
+      u => Some{Node{l, left, xs}}
+    ) == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  }
+  %Equal.sym(Bool, List.is_empty(&2, Item, xs), False{}, ee): {
+    Shared.Maybe.when(Node, Bool.and(Bool.and(True{}, Bool.not(_)), Items.fit(xs, lo, hi)), u => Some{Node{l, left, xs}})
+      == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  }
+  %Equal.sym(Bool, Items.fit(xs, lo, hi), True{}, ef): {
+    Shared.Maybe.when(Node, Bool.and(Bool.and(True{}, Bool.not(False{})), _), u => Some{Node{l, left, xs}})
+      == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  }
+  {==}
+
+# what an opened node is: the depot holds its code under its hash, a read
+# finds it in its room, and its items give the pieces
+def Mst.open_cases(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ps: List<&2, Piece>,
+  -P: Type,
+  k: @l: Nat -> @left: Maybe<&2, Hashes.Hash> -> @xs: List<&2, Item> -> {
+    fetch(s)(h) == Some{Node.code(Node{l, left, xs}, [])}: Maybe<&2, List<&2, U32>>
+  } -> {Hashes.Sha.hash(Node.code(Node{l, left, xs}, [])) == h: Hashes.Hash} -> {
+    Mst.node.in(~S, ~fetch, s, h, Room{up, lo, hi}) == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  } -> {Mst.pieces(xs, l, left, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>} -> P
+) -> {Mst.open(~S, ~fetch, s, h, up, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>} -> P:
+  e => Maybe.bind_cases(
+    List<&2, U32>,
+    List<&2, Piece>,
+    fetch(s)(h),
+    +ws => Shared.Maybe.when(
+      List<&2, Piece>,
+      Hashes.Hash.is_eq(Hashes.Sha.hash(ws), h),
+      u => Maybe.bind(
+        &2,
+        Node,
+        List<&2, Piece>,
+        Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+        n => Mst.open.node(n, up, lo, hi)
+      )
+    ),
+    ps,
+    P,
+    +ws => +ew => e1 => Maybe.when_cases(
+      List<&2, Piece>,
+      Hashes.Hash.is_eq(Hashes.Sha.hash(ws), h),
+      u => Maybe.bind(
+        &2,
+        Node,
+        List<&2, Piece>,
+        Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+        n => Mst.open.node(n, up, lo, hi)
+      ),
+      ps,
+      P,
+      +eh => e2 => Maybe.bind_cases(
+        Node,
+        List<&2, Piece>,
+        Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+        n => Mst.open.node(n, up, lo, hi),
+        ps,
+        P,
+        +n => +er => e3 => Mst.open.node_cases(
+          n,
+          up,
+          lo,
+          hi,
+          ps,
+          P,
+          +l => +left => +xs => +en => +elt => +ee => +ep =>
+            +er2 = Equal.trans(
+              Maybe<&2, Node>,
+              Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+              Some{n},
+              Some{Node{l, left, xs}},
+              er,
+              Equal.cong(Node, Maybe<&2, Node>, x => Some{x}, n, Node{l, left, xs}, en)
+            )
+            +w = Equal.sym(
+              List<&2, U32>,
+              Node.code(Node{l, left, xs}, []),
+              ws,
+              Codes.Code.whole_back(~Node, ~Node.code, ~Node.code.read, ws, Node{l, left, xs})(er2)
+            )
+            k(l)(left)(xs)(
+              Equal.trans(
+                Maybe<&2, List<&2, U32>>,
+                fetch(s)(h),
+                Some{ws},
+                Some{Node.code(Node{l, left, xs}, [])},
+                ew,
+                Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, x => Some{x}, ws, Node.code(Node{l, left, xs}, []), w)
+              )
+            )(
+              Equal.trans(
+                Hashes.Hash,
+                Hashes.Sha.hash(Node.code(Node{l, left, xs}, [])),
+                Hashes.Sha.hash(ws),
+                h,
+                Equal.cong(
+                  List<&2, U32>,
+                  Hashes.Hash,
+                  x => Hashes.Sha.hash(x),
+                  Node.code(Node{l, left, xs}, []),
+                  ws,
+                  Equal.sym(List<&2, U32>, ws, Node.code(Node{l, left, xs}, []), w)
+                ),
+                Hashes.Hash.is_eq_sound(Hashes.Sha.hash(ws), h)(eh)
+              )
+            )(Mst.node.in_of(~S, ~fetch, s, h, up, lo, hi, ws, l, left, xs, ew, er2, elt, ee, Mst.pieces_fit(xs, l, left, lo, hi, ps)(ep)))(ep)
+        )(e3)
+      )(e2)
+    )(e1)
+  )(e)
+
 # a root is a function of its bindings, over any root
 law Mst.canon:
   for ~S: Data
