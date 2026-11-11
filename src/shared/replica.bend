@@ -10051,6 +10051,125 @@ def Keep.found_back(
 # -------------------------
 # A run whose nodes a ledger l holds keeps, in l, each key that its log holds.
 
+# that a ledger s reads the run r: the ledger of r and s are one ledger with
+# data put (xs and ws), and s holds xs when it holds what r added
+def Keep.Base(-mach: Machine(), -d: Led(mach), -s: Led.L(mach, d), -r: Run<Led.L(mach, d)>) -> Data:
+  +Sigma<List<&2, List<&2, U32>>, xs => +Sigma<Led.L(mach, d), l0 => +Sigma<List<&2, List<&2, U32>>, ws => +Sigma<
+    {Run.ledger(Led.L(mach, d), r) == Led.puts(~mach, ~d, xs, l0): Led.L(mach, d)},
+    e1 => +Sigma<
+      {s == Led.puts(~mach, ~d, ws, l0): Led.L(mach, d)},
+      es => {Ext.holds(~mach, ~d, s, xs) == Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)): Bool}>>>>>
+
+# a run that follows a run that s reads is read by s
+def Keep.base(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +r2: Run<Led.L(mach, d)>,
+  bd: Keep.Base(mach, d, s, r),
+  g: Ext.Gain(mach, d, s, r, r2)
+) -> Keep.Base(mach, d, s, r2):
+  match bd:
+    case Tuple{+xs, Tuple{+l0, Tuple{+ws, Tuple{e1, Tuple{es, e2}}}}}:
+      match g:
+        case Tuple{+ys, Tuple{+zs, Tuple{a1, Tuple{l1, h1}}}}:
+          Tuple{
+            List.append(&2, List<&2, U32>, xs, zs),
+            Tuple{
+              l0,
+              Tuple{
+                ws,
+                Tuple{
+                  Equal.trans(
+                    Led.L(mach, d),
+                    Run.ledger(Led.L(mach, d), r2),
+                    Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
+                    Led.puts(~mach, ~d, List.append(&2, List<&2, U32>, xs, zs), l0),
+                    l1,
+                    Equal.trans(
+                      Led.L(mach, d),
+                      Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
+                      Led.puts(~mach, ~d, zs, Led.puts(~mach, ~d, xs, l0)),
+                      Led.puts(~mach, ~d, List.append(&2, List<&2, U32>, xs, zs), l0),
+                      Equal.cong(
+                        Led.L(mach, d),
+                        Led.L(mach, d),
+                        z => Led.puts(~mach, ~d, zs, z),
+                        Run.ledger(Led.L(mach, d), r),
+                        Led.puts(~mach, ~d, xs, l0),
+                        e1
+                      ),
+                      Ext.puts_append(~mach, ~d, xs, zs, l0)
+                    )
+                  ),
+                  Tuple{
+                    es,
+                    Ext.based.holds(
+                      ~mach,
+                      ~d,
+                      s,
+                      xs,
+                      ys,
+                      zs,
+                      Run.added(Led.L(mach, d), r),
+                      Run.added(Led.L(mach, d), r2),
+                      e2,
+                      h1,
+                      a1
+                    )
+                  }
+                }
+              }
+            }
+          }
+
+# a ledger that is l0 with data put grows from l0
+def Keep.base_from(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l0: Led.L(mach, d),
+  -s: Led.L(mach, d),
+  +ws: List<&2, List<&2, U32>>,
+  es: {s == Led.puts(~mach, ~d, ws, l0): Led.L(mach, d)}
+) -> Led.Grows(mach, d, l0, s):
+  %Equal.sym(Led.L(mach, d), s, Led.puts(~mach, ~d, ws, l0), es): Led.Grows(mach, d, l0, _)
+  Hist.puts(~mach, ~d, ws, l0)
+
+# the ledger of a run that s reads grows into s, once s holds what it added
+def Keep.base_grows(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  r: Run<Led.L(mach, d)>,
+  bd: Keep.Base(mach, d, s, r),
+  h: {Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)) == True{}: Bool}
+) -> Led.Grows(mach, d, Run.ledger(Led.L(mach, d), r), s):
+  match bd:
+    case Tuple{+xs, Tuple{+l0, Tuple{+ws, Tuple{e1, Tuple{es, e2}}}}}:
+      %Equal.sym(Led.L(mach, d), Run.ledger(Led.L(mach, d), r), Led.puts(~mach, ~d, xs, l0), e1): Led.Grows(
+        mach,
+        d,
+        _,
+        s
+      )
+      Ext.puts_into(
+        ~mach,
+        ~d,
+        xs,
+        l0,
+        s,
+        Keep.base_from(~mach, ~d, l0, s, ws, es),
+        Equal.trans(
+          Bool,
+          Ext.holds(~mach, ~d, s, xs),
+          Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)),
+          True{},
+          e2,
+          h
+        )
+      )
+
 # that the log of the run r reads the value val under key in l, once l holds
 # what r added
 def Keep.Has(
@@ -10090,7 +10209,7 @@ def Keep.ne.at(
   +key: List<&2, U32>,
   +val: List<&2, U32>,
   +a: List<&2, List<&2, U32>>,
-  +bd: Ext.Based(mach, d, l, Run{lr, t, a}),
+  +bd: Keep.Base(mach, d, l, Run{lr, t, a}),
   +ha: {Ext.holds(~mach, ~d, l, a) == True{}: Bool},
   b: Bool,
   eb: {Shared.List.is_eq(~U32, ~U32.is_eq, k, key) == b: Bool},
@@ -10145,7 +10264,7 @@ def Keep.ne.at(
                     Tip.log(t),
                     k,
                     None{},
-                    Ext.based_grows(~mach, ~d, l, Run{lr, t, a}, bd, ha)
+                    Keep.base_grows(~mach, ~d, l, Run{lr, t, a}, bd, ha)
                   )(em)
                 )
               ),
@@ -10217,7 +10336,7 @@ def Keep.fin(
   +e: Trees.Edit,
   ep: {Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}) == Some{e}: Maybe<&2, Trees.Edit>},
   em: {Tip.find(~mach, ~d, lr, t, k) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
-  +bd: Ext.Based(mach, d, l, Run{lr, t, a}),
+  +bd: Keep.Base(mach, d, l, Run{lr, t, a}),
   +hg: {Tip.get(~mach, ~d, l, t, key) == Some{val}: Maybe<&2, List<&2, U32>>},
   hn: {Ext.holds(~mach, ~d, l, Trees.Edit.nodes(e)) == True{}: Bool},
   +ha: {Ext.holds(~mach, ~d, l, a) == True{}: Bool}
@@ -10250,7 +10369,7 @@ def Keep.fin(
       hg
     ),
     hg,
-    Hist.write(mach, d)(lr)(l)(Tip.log(t))(k)(Some{x})(e)(ep)(Ext.based_grows(~mach, ~d, l, Run{lr, t, a}, bd, ha))(
+    Hist.write(mach, d)(lr)(l)(Tip.log(t))(k)(Some{x})(e)(ep)(Keep.base_grows(~mach, ~d, l, Run{lr, t, a}, bd, ha))(
       Ext.held(~mach, ~d, l, e, hn)
     )
   )
@@ -10270,7 +10389,7 @@ def Keep.logged(
   p: Maybe<&2, Trees.Edit>,
   ep: {Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}) == p: Maybe<&2, Trees.Edit>},
   em: {Tip.find(~mach, ~d, lr, t, k) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
-  +bd: Ext.Based(mach, d, l, Run{lr, t, a}),
+  +bd: Keep.Base(mach, d, l, Run{lr, t, a}),
   kh: Keep.Has(mach, d, l, key, val, Run{lr, t, a})
 ) -> Keep.Out(mach, d, l, key, val, Run.logged(~mach, ~d, lr, t, a, p)):
   match p:
@@ -10311,7 +10430,7 @@ def Keep.add.at(
   em: {
     Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), k) == m: Maybe<&2, Maybe<&2, List<&2, U32>>>
   },
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Run.add.at(~mach, ~d, r, k, x, m)):
   match r m:
@@ -10332,7 +10451,7 @@ def Keep.add(
   +r: Run<Led.L(mach, d)>,
   +k: List<&2, U32>,
   +x: List<&2, U32>,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Run.add(~mach, ~d, r, k, x)):
   Keep.add.at(
@@ -10360,7 +10479,7 @@ def Keep.stale(
   +r: Run<Led.L(mach, d)>,
   +i: Ledgers.Id,
   +a: Hashes.Hash,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.stale(~mach, ~d, r, i, a)):
   Keep.add(~mach, ~d, l, key, val, r, Log.out(i), Out.code(Out.Stale{a}, []), bd, kh)
@@ -10416,15 +10535,15 @@ def Keep.bind(
   g: Run<Led.L(mach, d)> -> Maybe<&2, Run<Led.L(mach, d)>>,
   hm: Keep.Out(mach, d, l, key, val, m),
   gm: Ext.GainM(mach, d, l, r, m),
-  bd: Ext.Based(mach, d, l, r),
-  hg: @r1: Run<Led.L(mach, d)> -> Ext.Based(mach, d, l, r1) -> Keep.Has(mach, d, l, key, val, r1)
+  bd: Keep.Base(mach, d, l, r),
+  hg: @r1: Run<Led.L(mach, d)> -> Keep.Base(mach, d, l, r1) -> Keep.Has(mach, d, l, key, val, r1)
     -> Keep.Out(mach, d, l, key, val, g(r1))
 ) -> Keep.Out(mach, d, l, key, val, Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, g)):
   match m:
     case None{}:
       Unit{}
     case Some{+r1}:
-      hg(r1)(Ext.based(~mach, ~d, l, r, r1, bd, gm))(hm)
+      hg(r1)(Keep.base(~mach, ~d, l, r, r1, bd, gm))(hm)
 
 # taking a request keeps each key
 def Keep.taken.at(
@@ -10438,7 +10557,7 @@ def Keep.taken.at(
   +a: Hashes.Hash,
   +n: U32,
   +vs: Maybe<&2, List<&2, String>>,
-  +bd: Ext.Based(mach, d, l, r),
+  +bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.taken.at(~mach, ~d, r, i, a, n, vs)):
   Keep.bind(
@@ -10516,7 +10635,7 @@ def Keep.taken(
   +i: Ledgers.Id,
   +a: Hashes.Hash,
   +vs: Maybe<&2, List<&2, String>>,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.taken(~mach, ~d, r, i, a, vs)):
   Keep.taken.at(~mach, ~d, l, key, val, r, i, a, Tip.count(Run.tip(Led.L(mach, d), r)), vs, bd, kh)
@@ -10533,7 +10652,7 @@ def Keep.labelled(
   +a: Hashes.Hash,
   +m: String,
   v: Maybe<&2, Taken>,
-  +bd: Ext.Based(mach, d, l, r),
+  +bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.labelled(~mach, ~d, r, i, a, m, v)):
   match v:
@@ -10567,7 +10686,7 @@ def Keep.label.at(
   +a: Hashes.Hash,
   +m: String,
   k: Maybe<&2, Maybe<&2, Ledgers.Id>>,
-  +bd: Ext.Based(mach, d, l, r),
+  +bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.label.at(~mach, ~d, r, i, a, m, k)):
   match k:
@@ -10630,7 +10749,7 @@ def Keep.label(
   +i: Ledgers.Id,
   +a: Hashes.Hash,
   +m: String,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.label(~mach, ~d, r, i, a, m)):
   Keep.label.at(
@@ -10666,7 +10785,7 @@ def Keep.opens(
   +b: String,
   +t: Tip,
   +ns: List<&2, List<&2, U32>>,
-  +bd: Ext.Based(mach, d, l, r),
+  +bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.opens(~mach, ~d, r, i, a, b, t, ns)):
   +r0 = Run.over(~mach, ~d, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r)))
@@ -10688,7 +10807,7 @@ def Keep.opens(
       r0,
       Log.start(b),
       Hashes.Hash.code(Tip.hash(t), []),
-      Ext.based(
+      Keep.base(
         ~mach,
         ~d,
         l,
@@ -10724,7 +10843,7 @@ def Keep.act(
   +i: Ledgers.Id,
   +a: Hashes.Hash,
   m: Maybe<&2, Act>,
-  +bd: Ext.Based(mach, d, l, r),
+  +bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Act.run(~mach, ~d, r, i, a, m)):
   match m:
@@ -10745,7 +10864,7 @@ def Keep.act(
         i,
         a,
         vs,
-        Ext.based(~mach, ~d, l, r, Run.over(~mach, ~d, r, ns, h), bd, Ext.over(~mach, ~d, l, r, ns, h)),
+        Keep.base(~mach, ~d, l, r, Run.over(~mach, ~d, r, ns, h), bd, Ext.over(~mach, ~d, l, r, ns, h)),
         Keep.over(~mach, ~d, l, key, val, r, ns, h, kh)
       )
     case Some{Act.Opens{b, t, ns}}:
@@ -10765,7 +10884,7 @@ def Keep.fresh(
   +a: Hashes.Hash,
   +q: Machine.Q(mach),
   o: Maybe<&2, Maybe<&2, Out>>,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.fresh(~mach, ~d, ~kern, r, c, i, a, q, o)):
   match o:
@@ -10800,7 +10919,7 @@ def Keep.asked(
   +c: Ledgers.Line,
   +a: Hashes.Hash,
   m: Maybe<&2, Entry(mach)>,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.asked(~mach, ~d, ~kern, r, c, a, m)):
   match m:
@@ -10846,7 +10965,7 @@ def Keep.one(
   +r: Run<Led.L(mach, d)>,
   +c: Ledgers.Line,
   +a: Hashes.Hash,
-  bd: Ext.Based(mach, d, l, r),
+  bd: Keep.Base(mach, d, l, r),
   kh: Keep.Has(mach, d, l, key, val, r)
 ) -> Keep.Out(mach, d, l, key, val, Step.one(~mach, ~d, ~kern, r, c, a)):
   Keep.asked(
@@ -10877,7 +10996,7 @@ def Keep.All(
     case None{}:
       Unit
     case Some{r}:
-      Ext.Based(mach, d, l, r) & Keep.Has(mach, d, l, key, val, r)
+      Keep.Base(mach, d, l, r) & Keep.Has(mach, d, l, key, val, r)
 
 # Keep.All of a run m2 that follows r1
 def Keep.all_pair(
@@ -10890,13 +11009,13 @@ def Keep.all_pair(
   m2: Maybe<&2, Run<Led.L(mach, d)>>,
   ko: Keep.Out(mach, d, l, key, val, m2),
   gm: Ext.GainM(mach, d, l, r1, m2),
-  bd: Ext.Based(mach, d, l, r1)
+  bd: Keep.Base(mach, d, l, r1)
 ) -> Keep.All(mach, d, l, key, val, m2):
   match m2:
     case None{}:
       Unit{}
     case Some{+r2}:
-      Tuple{Ext.based(~mach, ~d, l, r1, r2, bd, gm), ko}
+      Tuple{Keep.base(~mach, ~d, l, r1, r2, bd, gm), ko}
 
 # Keep.All after one more request
 def Keep.all_step(
@@ -11100,7 +11219,7 @@ def Keep.moved.at(
           c,
           qs,
           Some{Run{l, t, []}},
-          Tuple{Tuple{[], Tuple{{==}, {==}}}, u => hg}
+          Tuple{Tuple{[], Tuple{l, Tuple{[], Tuple{{==}, Tuple{{==}, {==}}}}}}, u => hg}
         ),
         e
       )
