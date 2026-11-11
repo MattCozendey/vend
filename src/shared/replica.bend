@@ -4885,47 +4885,26 @@ def Safe.witness(
         Safe.witness(~B, ~same, ~of, t, c)
       )
 
-# two places that Place.is_eq calls the same are the same
-def Safe.place_sound(a: Ledgers.Place, b: Ledgers.Place) -> {Ledgers.Place.is_eq(a, b) == True{}: Bool} -> {a == b: Ledgers.Place}:
-  match a b:
-    case Ledgers.Place{+c1, +h1, +r1} Ledgers.Place{+c2, +h2, +r2}:
-      +h =>
-        +x = Shared.List.all.if_rest(
-          Ledgers.Line.is_eq(c1, c2),
-          u => List.all.if(u2 => Nat.is_eq(r1, r2), U32.is_eq(h1, h2))
-        )(h)
-        Ledgers.Eq.three(
-          Ledgers.Line,
-          U32,
-          Nat,
-          Ledgers.Place,
-          x => y => z => Ledgers.Place{x, y, z},
-          c1,
-          c2,
-          h1,
-          h2,
-          r1,
-          r2,
-          Line.is_eq_sound(
-            c1,
-            c2
-          )(
-            Shared.List.all.if_hit(
-              Ledgers.Line.is_eq(c1, c2),
-              u => List.all.if(u2 => Nat.is_eq(r1, r2), U32.is_eq(h1, h2))
-            )(h)
-          ),
-          Shared.U32.is_eq_sound(h1, h2)(Shared.List.all.if_hit(U32.is_eq(h1, h2), u2 => Nat.is_eq(r1, r2))(x)),
-          Shared.Nat.is_eq_sound(r1, r2)(Shared.List.all.if_rest(U32.is_eq(h1, h2), u2 => Nat.is_eq(r1, r2))(x))
-        )
-
 # a ballot at the place w is at w
-def Safe.at_of(e: Ledgers.Ballot, +w: Ledgers.Place, +voter: String) -> {
+def Safe.at_of(e: Ledgers.Ballot, w: Ledgers.Place, +voter: String) -> {
   Ledgers.Ballot.is_at(e, w, voter) == True{}: Bool
 } -> {Ledgers.Ballot.at(e) == w: Ledgers.Place}:
-  match e:
-    case Ledgers.Ballot{Ledgers.Signed{+w2, +n, a}, l}:
-      h => Safe.place_sound(w2, w)(Shared.List.all.if_hit(Ledgers.Place.is_eq(w2, w), u => String.eq(n, voter))(h))
+  match e w:
+    case Ledgers.Ballot{Ledgers.Signed{Ledgers.Place{+c1, +h1, +r1}, +n, a}, l} Ledgers.Place{+c2, +h2, +r2}:
+      h => Place.is_eq_move(
+        c => x => r => {Ledgers.Place{c1, h1, r1} == Ledgers.Place{c, x, r}: Ledgers.Place},
+        c1,
+        h1,
+        r1,
+        c2,
+        h2,
+        r2,
+        Shared.List.all.if_hit(
+          Ledgers.Place.is_eq(Ledgers.Place{c1, h1, r1}, Ledgers.Place{c2, h2, r2}),
+          u => String.eq(n, voter)
+        )(h),
+        {==}
+      )
 
 # the law of the ballots of a voter, of the laws ls
 def Safe.laws.ballots(
@@ -5607,22 +5586,7 @@ def Safe.last_refl(a: Maybe<&2, Ledgers.Last>) -> {Ledgers.Last.is_eq(a, a) == T
 
 # the laws of Last.is_eq
 def Safe.last_laws() -> Shared.Eq.Laws(Maybe<&2, Ledgers.Last>, Ledgers.Last.is_eq):
-  (
-    a => Safe.last_refl(a),
-    a => b => Shared.Maybe.is_eq_sound(
-      ~Ledgers.Last,
-      ~(x => y => Codes.Code.is_eq(~Ledgers.Last, ~Ledgers.Last.code, x, y)),
-      x => y => Shared.Eq.sound(
-        ~Ledgers.Last,
-        ~(x => y => Codes.Code.is_eq(~Ledgers.Last, ~Ledgers.Last.code, x, y)),
-        Codes.Code.eq_laws(~Ledgers.Last, ~Ledgers.Last.codec()),
-        x,
-        y
-      ),
-      a,
-      b
-    )
-  )
+  (a => Safe.last_refl(a), a => b => Last.is_eq_sound(a, b))
 
 # what Ledgers.Ballot.step reads of a ballot is what its cast says
 def Safe.step_same(
