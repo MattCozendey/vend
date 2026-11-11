@@ -2109,32 +2109,27 @@ def Branch.other(a: Branch, b: Branch) -> Bool:
     case Branch{s1, n1} Branch{s2, n2}:
       List.all.if(u => Bool.not(String.eq(n1, n2)), Hashes.Hash.is_eq(s1, s2))
 
-# what the resource n holds in the tree h is known, and is not what it holds
-# in the tree h2
+# whether what the resource n holds in the tree h is not what it holds in
+# the tree h2 (none: l lacks a node of either, so a read cannot tell)
 def Res.differs(
   ~d: Led(),
   +l: L(d),
   h: Maybe<&2, Hashes.Hash>,
   h2: Maybe<&2, Hashes.Hash>,
   +n: Resources.Name
-) -> Bool:
-  Maybe.default(
+) -> Maybe<&2, Bool>:
+  Maybe.bind(
     &2,
+    Maybe<&2, Requests.Res>,
     Bool,
-    Maybe.bind(
+    Res.find(~d, l, h, n),
+    a => Maybe.bind(
       &2,
       Maybe<&2, Requests.Res>,
       Bool,
-      Res.find(~d, l, h, n),
-      a => Maybe.bind(
-        &2,
-        Maybe<&2, Requests.Res>,
-        Bool,
-        Res.find(~d, l, h2, n),
-        b => Some{Bool.not(Res.same(a, b))}
-      )
-    ),
-    False{}
+      Res.find(~d, l, h2, n),
+      b => Some{Bool.not(Res.same(a, b))}
+    )
   )
 
 # a version that changed a resource, and the time of its request
@@ -2159,7 +2154,7 @@ def Log.entries(
         LogEntry,
         LogEntry{i, Replicas.Out.time(~Requests.Ask.machine(), ~d, l, Replicas.Tip.out(~Requests.Ask.machine(), ~d, l, t, i))},
         Log.entries(~d, l, t, n, rest, h),
-        Res.differs(~d, l, h, h0, n)
+        Maybe.default(&2, Bool, Res.differs(~d, l, h, h0, n), False{})
       )
 
 # Node.log once the newest tip t of the branch is known
@@ -2220,7 +2215,7 @@ def Version.wrote(~d: Led(), +l: L(d), +t: Replicas.Tip, +m: U32, +n: Resources.
         Replicas.Taken,
         Bool,
         Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, t, m),
-        x => Some{Res.differs(~d, l, Replicas.Taken.root(x), h0, n)}
+        x => Res.differs(~d, l, Replicas.Taken.root(x), h0, n)
       )
     ),
     False{}
@@ -2249,12 +2244,17 @@ def Touch.holds.at(
           Maybe.default(&2, Maybe<&2, Requests.Res>, Res.find(~d, l, hb, used), None{})
         )
       ),
-      Res.differs(
-        ~d,
-        l,
-        Maybe.default(&2, Maybe<&2, Hashes.Hash>, Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v), None{}),
-        hb,
-        changed
+      Maybe.default(
+        &2,
+        Bool,
+        Res.differs(
+          ~d,
+          l,
+          Maybe.default(&2, Maybe<&2, Hashes.Hash>, Replicas.Tip.version(~Requests.Ask.machine(), ~d, l, tf, v), None{}),
+          hb,
+          changed
+        ),
+        False{}
       )
     ),
     Maybe.default(
@@ -2390,7 +2390,7 @@ def Touches.each(
         &2,
         Touch,
         Touches.when(
-          List.all.if(u => Res.differs(~d, l, h, hb, c), Res.differs(~d, l, h, h0, c)),
+          List.all.if(u => Maybe.default(&2, Bool, Res.differs(~d, l, h, hb, c), False{}), Maybe.default(&2, Bool, Res.differs(~d, l, h, h0, c), False{})),
           from,
           v,
           c,
