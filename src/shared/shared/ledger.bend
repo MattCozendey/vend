@@ -2528,6 +2528,272 @@ law Book.ok_new:
   for ~c: Codes.Codec(Q)
   {Book.ok(~Q, ~c, Book.new(~Q)) == True{}: Bool}
 
+def Book.ok_new(Q, c):
+  {==}
+
+# The keys of books
+
+# what follows from b True and from b False follows
+def Book.by(-T: Type, b: Bool) -> ({b == True{}: Bool} -> T) -> ({b == False{}: Bool} -> T) -> T:
+  match b:
+    case True{}:
+      t => f => t({==})
+    case False{}:
+      t => f => f({==})
+
+# a pick on a True test is its first
+def Book.pick_true(-A: Type, c: Bool, -a: A, -b: A) -> {c == True{}: Bool} -> {Bool.pick(A, c, a, b) == a: A}:
+  match c:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => Empty.absurd({b == a: A}, Shared.Bool.false_ne_true(h))
+
+# a pick on a False test is its second
+def Book.pick_false(-A: Type, c: Bool, -a: A, -b: A) -> {c == False{}: Bool} -> {Bool.pick(A, c, a, b) == b: A}:
+  match c:
+    case True{}:
+      h => Empty.absurd({a == b: A}, Shared.Bool.true_ne_false(h))
+    case False{}:
+      h => {==}
+
+# Name.is_eq is True for a name and itself
+def Name.is_eq_refl(n: Name) -> {Name.is_eq(n, n) == True{}: Bool}:
+  match n:
+    case Name.Ask{h}:
+      Hashes.Hash.is_eq_refl(h)
+    case Name.Ballot{h}:
+      Hashes.Hash.is_eq_refl(h)
+    case Name.Data{h}:
+      Hashes.Hash.is_eq_refl(h)
+    case Name.Lie{h}:
+      Hashes.Hash.is_eq_refl(h)
+
+# words whose first words differ differ
+def Book.head_ne(+x: U32, +y: U32, -xs: List<&2, U32>, -ys: List<&2, U32>) -> {U32.is_eq(x, y) == False{}: Bool} -> {
+  x <> xs == y <> ys: List<&2, U32>
+} -> Empty:
+  hf => e =>
+    Shared.Bool.true_ne_false(
+      Equal.trans(
+        Bool,
+        True{},
+        U32.is_eq(x, y),
+        False{},
+        Equal.trans(
+          Bool,
+          True{},
+          U32.is_eq(x, x),
+          U32.is_eq(x, y),
+          Equal.sym(Bool, U32.is_eq(x, x), True{}, Shared.U32.is_eq_refl(x)),
+          Equal.cong(List<&2, U32>, Bool, l => U32.is_eq(x, Shared.List.head_or(U32, l, x)), x <> xs, y <> ys, e)
+        ),
+        hf
+      )
+    )
+
+# names with the same key are the same
+def Name.key_inj(a: Name, b: Name) -> {Name.key(a) == Name.key(b): List<&2, U32>} -> {a == b: Name}:
+  ?TODO
+
+# the key of a name has nine words
+def Name.key_len(n: Name) -> {List.length(&2, U32, Name.key(n)) == 9n: Nat}:
+  match n:
+    case Name.Ask{h}:
+      match h:
+        case Hashes.Hash{h0, h1, h2, h3, h4, h5, h6, h7}:
+          {==}
+    case Name.Ballot{h}:
+      match h:
+        case Hashes.Hash{h0, h1, h2, h3, h4, h5, h6, h7}:
+          {==}
+    case Name.Data{h}:
+      match h:
+        case Hashes.Hash{h0, h1, h2, h3, h4, h5, h6, h7}:
+          {==}
+    case Name.Lie{h}:
+      match h:
+        case Hashes.Hash{h0, h1, h2, h3, h4, h5, h6, h7}:
+          {==}
+
+# the words ws, each with its bits in the other order, then r, are those words
+# then r
+def Book.rev_append(+ws: List<&2, U32>, +r: List<&2, U32>) -> {
+  Crits.Words.rev(ws, r) == List.append(&2, U32, Crits.Words.rev(ws, []), r): List<&2, U32>
+}:
+  match ws:
+    case Nil{}:
+      {==}
+    case Con{w, rest}:
+      %Equal.sym(
+        List<&2, U32>,
+        Crits.Words.rev(rest, r),
+        List.append(&2, U32, Crits.Words.rev(rest, []), r),
+        Book.rev_append(rest, r)
+      ): {Crits.U32.rev(w) <> _ == Crits.U32.rev(w) <> List.append(&2, U32, Crits.Words.rev(rest, []), r): List<&2, U32>}
+      {==}
+
+# the length of x then r
+def Book.length_append(+x: List<&2, U32>, +r: List<&2, U32>) -> {
+  List.length(&2, U32, List.append(&2, U32, x, r)) == Nat.add(List.length(&2, U32, r), List.length(&2, U32, x)): Nat
+}:
+  match x:
+    case Nil{}:
+      Equal.sym(Nat, Nat.add(List.length(&2, U32, r), 0n), List.length(&2, U32, r), Shared.Nat.add_zero(List.length(&2, U32, r)))
+    case Con{h, t}:
+      %Equal.sym(
+        Nat,
+        Nat.add(List.length(&2, U32, r), 1n+List.length(&2, U32, t)),
+        1n+Nat.add(List.length(&2, U32, r), List.length(&2, U32, t)),
+        Shared.Nat.add_succ(List.length(&2, U32, r), List.length(&2, U32, t))
+      ): {
+        1n+List.length(&2, U32, List.append(&2, U32, t, r)) == _: Nat
+      }
+      %Equal.sym(
+        Nat,
+        List.length(&2, U32, List.append(&2, U32, t, r)),
+        Nat.add(List.length(&2, U32, r), List.length(&2, U32, t)),
+        Book.length_append(t, r)
+      ): {1n+_ == 1n+Nat.add(List.length(&2, U32, r), List.length(&2, U32, t)): Nat}
+      {==}
+
+# x then r, without as many words as x has, is r
+def Book.drop_append(+x: List<&2, U32>, +r: List<&2, U32>) -> {
+  List.drop(&2, U32, List.append(&2, U32, x, r), List.length(&2, U32, x)) == r: List<&2, U32>
+}:
+  match x:
+    case Nil{}:
+      Shared.List.drop_zero(&2, U32, r)
+    case Con{h, t}:
+      Book.drop_append(t, r)
+
+# the last nine words of x then r, when r has nine words, are r
+def Book.last_nine(+x: List<&2, U32>, +r: List<&2, U32>) -> {List.length(&2, U32, r) == 9n: Nat} -> {
+  List.drop(
+    &2,
+    U32,
+    List.append(&2, U32, x, r),
+    Nat.sub(List.length(&2, U32, List.append(&2, U32, x, r)), 9n)
+  )
+    == r: List<&2, U32>
+}:
+  ?TODO
+
+# the key k of the ballots index of an entry of the name n ends in the key of n
+def Book.key_tail.ballots(-Q: Data, e: Entry<Q>, +n: Name, -k: List<&2, U32>) -> {
+  Keys.at(Entry.keys(Q, e, n), 0n) == Some{k}: Maybe<&2, List<&2, U32>>
+} -> {
+  Codes.Code.read_value(
+    List<&2, U32>,
+    Codes.Read.then(
+      String,
+      List<&2, U32>,
+      Codes.Read.then(Place, String, Place.code.read(k), p => r => Codes.Code.text.read(r)),
+      a => r => Some{Codes.Read{r, []}}
+    ),
+    []
+  )
+    == Name.key(n): List<&2, U32>
+}:
+  ?TODO
+
+# the key k of the rounds index of an entry of the name n ends in the key of n
+def Book.key_tail.rounds(-Q: Data, e: Entry<Q>, +n: Name, -k: List<&2, U32>) -> {
+  Keys.at(Entry.keys(Q, e, n), 1n) == Some{k}: Maybe<&2, List<&2, U32>>
+} -> {
+  List.drop(
+    &2,
+    U32,
+    Codes.Code.read_value(
+      List<&2, U32>,
+      Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}),
+      []
+    ),
+    Nat.sub(
+      List.length(
+        &2,
+        U32,
+        Codes.Code.read_value(
+          List<&2, U32>,
+          Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}),
+          []
+        )
+      ),
+      9n
+    )
+  )
+    == Name.key(n): List<&2, U32>
+}:
+  ?TODO
+
+# the key k of the heights index of an entry of the name n ends in the key of n
+def Book.key_tail.heights(-Q: Data, e: Entry<Q>, +n: Name, -k: List<&2, U32>) -> {
+  Keys.at(Entry.keys(Q, e, n), 2n) == Some{k}: Maybe<&2, List<&2, U32>>
+} -> {
+  List.drop(
+    &2,
+    U32,
+    Codes.Code.read_value(
+      List<&2, U32>,
+      Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}),
+      []
+    ),
+    Nat.sub(
+      List.length(
+        &2,
+        U32,
+        Codes.Code.read_value(
+          List<&2, U32>,
+          Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}),
+          []
+        )
+      ),
+      9n
+    )
+  )
+    == Name.key(n): List<&2, U32>
+}:
+  ?TODO
+
+# the key k of the liars index of an entry of the name n ends in the key of n
+def Book.key_tail.liars(-Q: Data, e: Entry<Q>, +n: Name, -k: List<&2, U32>) -> {
+  Keys.at(Entry.keys(Q, e, n), 3n) == Some{k}: Maybe<&2, List<&2, U32>>
+} -> {
+  Codes.Code.read_value(
+    List<&2, U32>,
+    Codes.Read.then(
+      String,
+      List<&2, U32>,
+      Codes.Read.then(Hashes.Hash, String, Hashes.Hash.code.read(k), p => r => Codes.Code.text.read(r)),
+      a => r => Some{Codes.Read{r, []}}
+    ),
+    []
+  )
+    == Name.key(n): List<&2, U32>
+}:
+  ?TODO
+
+# the key k of the asks index (4 on) of an entry of the name n ends in the
+# key of n
+def Book.key_tail.asks(-Q: Data, e: Entry<Q>, +n: Name, -p: Nat, -k: List<&2, U32>) -> {
+  Keys.at(Entry.keys(Q, e, n), 4n+p) == Some{k}: Maybe<&2, List<&2, U32>>
+} -> {
+  Codes.Code.read_value(
+    List<&2, U32>,
+    Codes.Read.then(String, List<&2, U32>, Codes.Code.text.read(k), a => r => Some{Codes.Read{r, []}}),
+    []
+  )
+    == Name.key(n): List<&2, U32>
+}:
+  ?TODO
+
+# a key of the index i of entries of the names n1 and n2 is of names with the
+# same key
+def Book.keys_one(-Q: Data, +i: Nat, e1: Entry<Q>, +n1: Name, e2: Entry<Q>, +n2: Name, -k: List<&2, U32>) -> {
+  Keys.at(Entry.keys(Q, e1, n1), i) == Some{k}: Maybe<&2, List<&2, U32>>
+} -> {Keys.at(Entry.keys(Q, e2, n2), i) == Some{k}: Maybe<&2, List<&2, U32>>} -> {Name.key(n1) == Name.key(n2): List<&2, U32>}:
+  ?TODO
+
 # an add keeps a book in its one shape
 law Book.ok_add:
   for ~Q: Data
