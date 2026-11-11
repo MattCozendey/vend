@@ -8209,6 +8209,201 @@ def Affects.inc_ne_zero.at(
 def Affects.inc_ne_zero(+n: U32, +c: U32) -> {U32.is_lt(n, c) == True{}: Bool} -> {U32.is_eq(U32.inc(n), 0) == False{}: Bool}:
   h => Affects.inc_ne_zero.at(n, c, U32.is_eq(U32.inc(n), 0), {==}, h)
 
+# the tree before the version after the number n, below the count, is the
+# tree of the version n
+def Affects.before_next(
+  ~d: Led(),
+  +l: L(d),
+  +tf: Replicas.Tip,
+  +n: U32,
+  +x: Replicas.Taken,
+  +hn: {U32.is_lt(n, Replicas.Tip.count(tf)) == True{}: Bool},
+  +et: {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, n) == Some{x}: Maybe<&2, Replicas.Taken>}
+) -> {
+  Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, U32.inc(n))
+    == Some{Replicas.Taken.root(x)}: Maybe<&2, Maybe<&2, Hashes.Hash>>
+}:
+  %Equal.sym(Bool, U32.is_eq(U32.inc(n), 0), False{}, Affects.inc_ne_zero(n, Replicas.Tip.count(tf))(hn)): {
+    Shared.Bool.when(
+      Maybe<&2, Maybe<&2, Hashes.Hash>>,
+      _,
+      u => Some{None{}},
+      u => Maybe.bind(
+        &2,
+        Replicas.Taken,
+        Maybe<&2, Hashes.Hash>,
+        Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, U32.sub(U32.inc(n), 1)),
+        x => Some{Replicas.Taken.root(x)}
+      )
+    )
+      == Some{Replicas.Taken.root(x)}: Maybe<&2, Maybe<&2, Hashes.Hash>>
+  }
+  %Equal.sym(U32, U32.sub(U32.inc(n), 1), n, Affects.sub_inc(n)): {
+    Maybe.bind(
+      &2,
+      Replicas.Taken,
+      Maybe<&2, Hashes.Hash>,
+      Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, _),
+      x => Some{Replicas.Taken.root(x)}
+    )
+      == Some{Replicas.Taken.root(x)}: Maybe<&2, Maybe<&2, Hashes.Hash>>
+  }
+  %Equal.sym(Maybe<&2, Replicas.Taken>, Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, n), Some{x}, et): {
+    Maybe.bind(&2, Replicas.Taken, Maybe<&2, Hashes.Hash>, _, x => Some{Replicas.Taken.root(x)})
+      == Some{Replicas.Taken.root(x)}: Maybe<&2, Maybe<&2, Hashes.Hash>>
+  }
+  {==}
+
+# no empty list is a list with a head
+def Affects.nil_ne_cons(-A: Data, -x: A, -r: List<&2, A>, e: {[] == x <> r: List<&2, A>}) -> Empty:
+  Shared.Bool.true_ne_false(
+    Equal.cong(
+      Nat,
+      Bool,
+      z => Nat.is_eq(z, 0n),
+      0n,
+      1n+List.length(&2, A, r),
+      Equal.cong(List<&2, A>, Nat, z => List.length(&2, A, z), [], x <> r, e)
+    )
+  )
+
+# Affects.versions_cons once the read m of the number n is known
+def Affects.versions_con(
+  ~d: Led(),
+  +l: L(d),
+  +tf: Replicas.Tip,
+  +p: Nat,
+  +n: U32,
+  m: Maybe<&2, Maybe<&2, Replicas.Taken>>,
+  +em: {
+    Replicas.Tip.known(
+      ~Replicas.Taken,
+      ~Replicas.Taken.code,
+      ~Replicas.Taken.code.read,
+      Replicas.Tip.find(~Requests.Ask.machine(), ~d, l, tf, Replicas.Log.taken(n))
+    )
+      == m: Maybe<&2, Maybe<&2, Replicas.Taken>>
+  },
+  +x: Replicas.Taken,
+  +rest: List<&2, Replicas.Taken>,
+  -P: Type,
+  k: {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, n) == Some{x}: Maybe<&2, Replicas.Taken>}
+    -> {
+      Replicas.Tip.versions(~Requests.Ask.machine(), ~d, p, l, tf, U32.inc(n)) == Some{rest}: Maybe<&2, List<&2, Replicas.Taken>>
+    } -> P
+) -> {
+  Replicas.Taken.con(m, u2 => Replicas.Tip.versions(~Requests.Ask.machine(), ~d, p, l, tf, U32.inc(n)))
+    == Some{x <> rest}: Maybe<&2, List<&2, Replicas.Taken>>
+} -> P:
+  match m:
+    case None{}:
+      e => Empty.absurd(P, Shared.Maybe.none_ne_some(List<&2, Replicas.Taken>, x <> rest, e))
+    case Some{None{}}:
+      e => Empty.absurd(P, Shared.Maybe.none_ne_some(List<&2, Replicas.Taken>, x <> rest, e))
+    case Some{Some{+x0}}:
+      e => Affects.map_some(
+        List<&2, Replicas.Taken>,
+        List<&2, Replicas.Taken>,
+        P,
+        r => x0 <> r,
+        Replicas.Tip.versions(~Requests.Ask.machine(), ~d, p, l, tf, U32.inc(n)),
+        x <> rest,
+        +r0 => er0 => +ec => k(
+          Affects.known_taken(~d, l, tf, n, x)(
+            Affects.cast(
+              Replicas.Taken,
+              z => {
+                Replicas.Tip.known(
+                  ~Replicas.Taken,
+                  ~Replicas.Taken.code,
+                  ~Replicas.Taken.code.read,
+                  Replicas.Tip.find(~Requests.Ask.machine(), ~d, l, tf, Replicas.Log.taken(n))
+                )
+                  == Some{Some{z}}: Maybe<&2, Maybe<&2, Replicas.Taken>>
+              },
+              x0,
+              x,
+              Shared.List.head_eq(Replicas.Taken, x0, x, r0, rest, ec),
+              em
+            )
+          )
+        )(
+          Affects.cast(
+            List<&2, Replicas.Taken>,
+            z => {
+              Replicas.Tip.versions(~Requests.Ask.machine(), ~d, p, l, tf, U32.inc(n)) == Some{z}: Maybe<&2, List<&2, Replicas.Taken>>
+            },
+            r0,
+            rest,
+            Shared.List.tail_eq(Replicas.Taken, x0, x, r0, rest, ec),
+            er0
+          )
+        )
+      )(e)
+
+# a listing of versions from the number n that starts with x: n is below the
+# count, x is the version n, and the rest lists from the next number
+def Affects.versions_cons(
+  ~d: Led(),
+  +l: L(d),
+  +tf: Replicas.Tip,
+  +p: Nat,
+  +n: U32,
+  +x: Replicas.Taken,
+  +rest: List<&2, Replicas.Taken>,
+  -P: Type,
+  k: {U32.is_lt(n, Replicas.Tip.count(tf)) == True{}: Bool}
+    -> {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, n) == Some{x}: Maybe<&2, Replicas.Taken>}
+    -> {
+      Replicas.Tip.versions(~Requests.Ask.machine(), ~d, p, l, tf, U32.inc(n)) == Some{rest}: Maybe<&2, List<&2, Replicas.Taken>>
+    } -> P
+) -> {
+  Replicas.Tip.versions(~Requests.Ask.machine(), ~d, 1n+p, l, tf, n) == Some{x <> rest}: Maybe<&2, List<&2, Replicas.Taken>>
+} -> P:
+  e => Affects.when_is(
+    Maybe<&2, List<&2, Replicas.Taken>>,
+    P,
+    U32.is_lt(n, Replicas.Tip.count(tf)),
+    u => Replicas.Taken.con(
+      Replicas.Tip.known(
+        ~Replicas.Taken,
+        ~Replicas.Taken.code,
+        ~Replicas.Taken.code.read,
+        Replicas.Tip.find(~Requests.Ask.machine(), ~d, l, tf, Replicas.Log.taken(n))
+      ),
+      u2 => Replicas.Tip.versions(~Requests.Ask.machine(), ~d, p, l, tf, U32.inc(n))
+    ),
+    u => Some{[]},
+    Some{x <> rest},
+    +et => e1 => Affects.versions_con(
+      ~d,
+      l,
+      tf,
+      p,
+      n,
+      Replicas.Tip.known(
+        ~Replicas.Taken,
+        ~Replicas.Taken.code,
+        ~Replicas.Taken.code.read,
+        Replicas.Tip.find(~Requests.Ask.machine(), ~d, l, tf, Replicas.Log.taken(n))
+      ),
+      {==},
+      x,
+      rest,
+      P,
+      k(et)
+    )(e1),
+    ef => e2 => Empty.absurd(
+      P,
+      Affects.nil_ne_cons(
+        Replicas.Taken,
+        x,
+        rest,
+        Shared.Maybe.some_inj(List<&2, Replicas.Taken>, [], x <> rest, e2)
+      )
+    )
+  )(e)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
