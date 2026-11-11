@@ -16939,12 +16939,379 @@ def Chk.bal(-Q: Data, e: Ledgers.Entry<Q>, +x: Ledgers.Ballot) -> Ledgers.Ballot
     case _:
       x
 
+# the new ballot b of l with b is linked, and so is the ballot b2 when the
+# ledger holds it under the name of b (z: whether the names are one)
+def Chk.new_case(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l2: Led.L(mach, d),
+  +b: Ledgers.Ballot,
+  +b2: Ledgers.Ballot,
+  z: Bool,
+  h: {
+    Shared.Maybe.is_eq(
+      ~Entry(mach),
+      ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+      Shared.Maybe.when(Entry(mach), z, u => Some{Ledgers.Entry.Ballot{b}}),
+      Some{Ledgers.Entry.Ballot{b2}}
+    )
+      == True{}: Bool
+  },
+  ht: {Ballot.linked(~mach, ~d, ~kern, l2, b) == True{}: Bool}
+) -> Ballot.Linked(mach, d, kern, l2, b2, Ballot.prev(b2)):
+  match z:
+    case True{}:
+      %Equal.cong(
+        Entry(mach),
+        Ledgers.Ballot,
+        y => Chk.bal(Machine.Q(mach), y, b),
+        Ledgers.Entry.Ballot{b},
+        Ledgers.Entry.Ballot{b2},
+        Ledgers.Entry.same_sound(~Machine.Q(mach), ~Machine.code(mach), Ledgers.Entry.Ballot{b}, Ledgers.Entry.Ballot{b2})(h)
+      ): Ballot.Linked(mach, d, kern, l2, _, Ballot.prev(_))
+      Chk.new_linked(~mach, ~d, ~kern, l2, b, Ballot.prev(b))(ht)
+    case False{}:
+      Empty.absurd(Ballot.Linked(mach, d, kern, l2, b2, Ballot.prev(b2)), Shared.Bool.false_ne_true(h))
+
+# a ballot of l with b is linked: an old one stays linked, the new one passed
+# the test (m: what l holds under its name)
+def Chk.old_or_new(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +b: Ledgers.Ballot,
+  +b2: Ledgers.Ballot,
+  s1: @x: Ledgers.Ballot -> {Led.has(~mach, ~d, l, Ledgers.Entry.Ballot{x}) == True{}: Bool}
+    -> Ballot.Linked(mach, d, kern, l, x, Ballot.prev(x)),
+  +later: Led.Later(~mach, ~d, l, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b})),
+  +ht: {Ballot.linked(~mach, ~d, ~kern, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}), b) == True{}: Bool},
+  m: Maybe<&2, Entry(mach)>,
+  em: {Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Ballot{b2})) == m: Maybe<&2, Entry(mach)>}
+) -> {
+  Shared.Maybe.is_eq(
+    ~Entry(mach),
+    ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+    Maybe.or(
+      &2,
+      Entry(mach),
+      m,
+      Shared.Maybe.when(
+        Entry(mach),
+        Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+        u => Some{Ledgers.Entry.Ballot{b}}
+      )
+    ),
+    Some{Ledgers.Entry.Ballot{b2}}
+  )
+    == True{}: Bool
+} -> Ballot.Linked(mach, d, kern, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}), b2, Ballot.prev(b2)):
+  match m:
+    case Some{+y}:
+      h => Chk.link_grows(
+        ~mach,
+        ~d,
+        ~kern,
+        l,
+        Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}),
+        later,
+        b2,
+        Ballot.prev(b2),
+        s1(
+          b2
+        )(
+          Equal.trans(
+            Bool,
+            Shared.Maybe.is_eq(
+              ~Entry(mach),
+              ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+              Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+              Some{Ledgers.Entry.Ballot{b2}}
+            ),
+            Shared.Maybe.is_eq(
+              ~Entry(mach),
+              ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+              Some{y},
+              Some{Ledgers.Entry.Ballot{b2}}
+            ),
+            True{},
+            Equal.cong(
+              Maybe<&2, Entry(mach)>,
+              Bool,
+              z => Shared.Maybe.is_eq(
+                ~Entry(mach),
+                ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+                z,
+                Some{Ledgers.Entry.Ballot{b2}}
+              ),
+              Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+              Some{y},
+              em
+            ),
+            h
+          )
+        )
+      )
+    case None{}:
+      h => Chk.new_case(
+        ~mach,
+        ~d,
+        ~kern,
+        Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}),
+        b,
+        b2,
+        Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+        h,
+        ht
+      )
+
+# a choice of m, else nothing, holds what m holds
+def Chk.or_none(-mach: Machine(), m: Maybe<&2, Entry(mach)>, -e: Entry(mach)) -> {
+  Shared.Maybe.is_eq(
+    ~Entry(mach),
+    ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+    Maybe.or(&2, Entry(mach), m, None{}),
+    Some{e}
+  )
+    == True{}: Bool
+} -> {
+  Shared.Maybe.is_eq(~Entry(mach), ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)), m, Some{e}) == True{}: Bool
+}:
+  match m:
+    case None{}:
+      h => h
+    case Some{y}:
+      h => h
+
+# a ledger with one more ballot holds the same proofs of lies
+def Chk.lie_old(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +b: Ledgers.Ballot,
+  +x: Ledgers.Lie
+) -> {Led.has(~mach, ~d, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}), Ledgers.Entry.Lie{x}) == True{}: Bool}
+  -> {Led.has(~mach, ~d, l, Ledgers.Entry.Lie{x}) == True{}: Bool}:
+  hx => Chk.or_none(
+    mach,
+    Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Lie{x})),
+    Ledgers.Entry.Lie{x}
+  )(
+    Equal.trans(
+      Bool,
+      Shared.Maybe.is_eq(
+        ~Entry(mach),
+        ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+        Maybe.or(
+          &2,
+          Entry(mach),
+          Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Lie{x})),
+          Shared.Maybe.when(
+            Entry(mach),
+            Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Lie{x})),
+            u => Some{Ledgers.Entry.Ballot{b}}
+          )
+        ),
+        Some{Ledgers.Entry.Lie{x}}
+      ),
+      Shared.Maybe.is_eq(
+        ~Entry(mach),
+        ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+        Led.get(~mach, ~d, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Lie{x})),
+        Some{Ledgers.Entry.Lie{x}}
+      ),
+      True{},
+      Equal.sym(
+        Bool,
+        Shared.Maybe.is_eq(
+          ~Entry(mach),
+          ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+          Led.get(~mach, ~d, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Lie{x})),
+          Some{Ledgers.Entry.Lie{x}}
+        ),
+        Shared.Maybe.is_eq(
+          ~Entry(mach),
+          ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+          Maybe.or(
+            &2,
+            Entry(mach),
+            Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Lie{x})),
+            Shared.Maybe.when(
+              Entry(mach),
+              Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Lie{x})),
+              u => Some{Ledgers.Entry.Ballot{b}}
+            )
+          ),
+          Some{Ledgers.Entry.Lie{x}}
+        ),
+        Equal.cong(
+          Maybe<&2, Entry(mach)>,
+          Bool,
+          z => Shared.Maybe.is_eq(~Entry(mach), ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)), z, Some{Ledgers.Entry.Lie{x}}),
+          Led.get(~mach, ~d, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Lie{x})),
+          Maybe.or(
+            &2,
+            Entry(mach),
+            Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Lie{x})),
+            Shared.Maybe.when(
+              Entry(mach),
+              Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Lie{x})),
+              u => Some{Ledgers.Entry.Ballot{b}}
+            )
+          ),
+          Ledgers.Laws.get_add(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d))(l)(Ledgers.Entry.Ballot{b})(
+            Entry.name(~mach, Ledgers.Entry.Lie{x})
+          )
+        )
+      ),
+      hx
+    )
+  )
+
+# a ballot that the test passes checks, in a ledger that holds only what checks
+def Chk.ballot(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +b: Ledgers.Ballot,
+  so: Led.Sound(mach, d, kern, l),
+  +h: {Entry.checks(~mach, ~d, ~kern, l, Ledgers.Entry.Ballot{b}) == True{}: Bool}
+) -> Entry.Checks(mach, d, kern, l, Ledgers.Entry.Ballot{b}):
+  match so:
+    case Tuple{s1, s2}:
+      +l2 = Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b})
+      +hon = Shared.Bool.and_true_left(Led.honest(~mach, ~d, l2), Ballot.linked(~mach, ~d, ~kern, l2, b))(h)
+      +ht = Shared.Bool.and_true_right(Led.honest(~mach, ~d, l2), Ballot.linked(~mach, ~d, ~kern, l2, b))(h)
+      +later = Shared.Bool.and_both(
+        Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), l, l2),
+        Led.honest(~mach, ~d, l2)
+      )(Hist.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}))(hon)
+      Tuple{
+        Tuple{Led.later_single(~mach, ~d, l, l2)(later), +c => +hh => Led.later_last(~mach, ~d, l, l2, c, hh)(later)},
+        Tuple{
+          +b2 => hb2 => Chk.old_or_new(
+            ~mach,
+            ~d,
+            ~kern,
+            l,
+            b,
+            b2,
+            s1,
+            later,
+            ht,
+            Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+            {==}
+          )(
+            Equal.trans(
+              Bool,
+              Shared.Maybe.is_eq(
+                ~Entry(mach),
+                ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+                Maybe.or(
+                  &2,
+                  Entry(mach),
+                  Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+                  Shared.Maybe.when(
+                    Entry(mach),
+                    Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+                    u => Some{Ledgers.Entry.Ballot{b}}
+                  )
+                ),
+                Some{Ledgers.Entry.Ballot{b2}}
+              ),
+              Shared.Maybe.is_eq(
+                ~Entry(mach),
+                ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+                Led.get(~mach, ~d, l2, Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+                Some{Ledgers.Entry.Ballot{b2}}
+              ),
+              True{},
+              Equal.sym(
+                Bool,
+                Shared.Maybe.is_eq(
+                  ~Entry(mach),
+                  ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+                  Led.get(~mach, ~d, l2, Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+                  Some{Ledgers.Entry.Ballot{b2}}
+                ),
+                Shared.Maybe.is_eq(
+                  ~Entry(mach),
+                  ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+                  Maybe.or(
+                    &2,
+                    Entry(mach),
+                    Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+                    Shared.Maybe.when(
+                      Entry(mach),
+                      Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+                      u => Some{Ledgers.Entry.Ballot{b}}
+                    )
+                  ),
+                  Some{Ledgers.Entry.Ballot{b2}}
+                ),
+                Equal.cong(
+                  Maybe<&2, Entry(mach)>,
+                  Bool,
+                  z => Shared.Maybe.is_eq(
+                    ~Entry(mach),
+                    ~Ledgers.Entry.same(~Machine.Q(mach), ~Machine.code(mach)),
+                    z,
+                    Some{Ledgers.Entry.Ballot{b2}}
+                  ),
+                  Led.get(~mach, ~d, l2, Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+                  Maybe.or(
+                    &2,
+                    Entry(mach),
+                    Led.get(~mach, ~d, l, Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+                    Shared.Maybe.when(
+                      Entry(mach),
+                      Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Ballot{b}), Entry.name(~mach, Ledgers.Entry.Ballot{b2})),
+                      u => Some{Ledgers.Entry.Ballot{b}}
+                    )
+                  ),
+                  Ledgers.Laws.get_add(Machine.Q(mach), Machine.code(mach), Led.kind(mach, d), Led.laws(mach, d))(l)(
+                    Ledgers.Entry.Ballot{b}
+                  )(Entry.name(~mach, Ledgers.Entry.Ballot{b2}))
+                )
+              ),
+              hb2
+            )
+          ),
+          +x => hx => s2(x)(Chk.lie_old(~mach, ~d, l, b, x)(hx))
+        }
+      }
+
+# Entry.checks_sound, by the kind of the entry
+def Chk.go(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  e: Entry(mach),
+  so: Led.Sound(mach, d, kern, l),
+  h: {Entry.checks(~mach, ~d, ~kern, l, e) == True{}: Bool}
+) -> Entry.Checks(mach, d, kern, l, e):
+  match e:
+    case Ledgers.Entry.Ask{i, t, q}:
+      Unit{}
+    case Ledgers.Entry.Data{ws}:
+      Unit{}
+    case Ledgers.Entry.Ballot{+b}:
+      Chk.ballot(~mach, ~d, ~kern, l, b, so, h)
+    case Ledgers.Entry.Lie{x}:
+      Chk.lie(x)(h)
+
 # Laws of checks
 
 # a lie that the test passes proves
 law Lie.proves_sound:
   for x: Ledgers.Lie
   {Lie.proves(x) == True{}: Bool} -> Lie.Proves(x)
+
+def Lie.proves_sound(x):
+  Chk.lie(x)
 
 # an entry that the test passes checks, in a ledger that holds only what
 # checks
@@ -16955,3 +17322,6 @@ law Entry.checks_sound:
   for l: Led.L(mach, d)
   for e: Entry(mach)
   Led.Sound(mach, d, kern, l) -> {Entry.checks(~mach, ~d, ~kern, l, e) == True{}: Bool} -> Entry.Checks(mach, d, kern, l, e)
+
+def Entry.checks_sound(mach, d, kern, l, e):
+  so => h => Chk.go(~mach, ~d, ~kern, l, e, so, h)
