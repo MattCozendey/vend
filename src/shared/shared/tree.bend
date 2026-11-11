@@ -1,5 +1,6 @@
 import Base
 import ./shared/shared/code.bend as Codes
+import ./shared/depot.bend as Depots
 import ./shared/shared/hash.bend as Hashes
 import ./shared/shared/shared.bend as Shared
 
@@ -1515,3 +1516,73 @@ def Mst.diff(
   b: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, List<&2, List<&2, U32>>>:
   Mst.diff.go(~S, ~fetch, Mst.depth(), s, [Runs{Mst.root(a), Mst.root(b)}])
+
+# The tree
+# --------
+
+# the operations of a Merkle search tree in a depot kept as S, whose data is
+# fetch
+def Mst.ops(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>) -> Tree.Ops(S):
+  (
+    s => m => k => Mst.look(~S, ~fetch, s, m, k),
+    (
+      s => m => k => v => Mst.put(~S, ~fetch, s, m, k, v),
+      (s => m => p => Mst.range(~S, ~fetch, s, m, p), s => a => b => Mst.diff(~S, ~fetch, s, a, b))
+    )
+  )
+
+# what a read tells stays, in a depot that keeps what it holds
+law Mst.reads_final:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for ~grows: S -> S -> Bool
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
+  Laws.Final(S, grows, Mst.ops(~S, ~fetch))
+
+# a write stays, in a depot that keeps what it holds
+law Mst.puts_final:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for ~grows: S -> S -> Bool
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
+  Laws.PutFinal(S, grows, Mst.ops(~S, ~fetch))
+
+# a write changes its key and no other
+law Mst.writes:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for ~grows: S -> S -> Bool
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
+  Laws.Write(S, fetch, grows, Mst.ops(~S, ~fetch))
+
+# a root is a function of its bindings, over any root
+law Mst.canon:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  Laws.Canon(S, Mst.ops(~S, ~fetch))
+
+# a listing holds exactly the bindings under its prefix, in order
+law Mst.lists:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  Laws.Range(S, Mst.ops(~S, ~fetch))
+
+# a difference lists exactly the keys that read differently
+law Mst.differs:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  Laws.Diff(S, Mst.ops(~S, ~fetch))
+
+# a whole tree answers every read, write, listing and difference
+law Mst.whole:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  Laws.Whole(S, Mst.ops(~S, ~fetch))
+
+# a write keeps a whole tree whole
+law Mst.keeps_whole:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for ~grows: S -> S -> Bool
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
+  Laws.Kept(S, fetch, grows, Mst.ops(~S, ~fetch))
