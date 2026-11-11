@@ -574,3 +574,108 @@ def Mst.look(
   k: List<&2, U32>
 ) -> Look:
   Mst.look.go(~S, ~fetch, Mst.depth(), s, m, k)
+
+# Writes
+# ------
+# A write changes only the nodes on the path to its key: an insert splits the
+# subtree where the key goes, a delete merges the two subtrees beside it, and
+# every node it rebuilds is new; all others stay shared.
+
+# the node n stored: its hash, and its words in front of the new nodes acc
+def Mst.store(n: Node, acc: List<&2, List<&2, U32>>) -> Edit:
+  +ws = Node.code(n, [])
+  Edit{Some{Hashes.Sha.hash(ws)}, ws <> acc}
+
+# a node of the level l in its one shape: with no item it is its left subtree
+def Mst.make(+l: Nat, left: Maybe<&2, Hashes.Hash>, xs: List<&2, Item>, acc: List<&2, List<&2, U32>>) -> Edit:
+  match xs:
+    case Nil{}:
+      Edit{left, acc}
+    case Con{x, r}:
+      Mst.store(Node{l, left, x <> r}, acc)
+
+# the items of a node split at the key k: those before it, last first; the
+# subtree where k goes; and those from k on
+type Part is Data:
+  Part{before: List<&2, Item>, gap: Maybe<&2, Hashes.Hash>, after: List<&2, Item>}
+
+# the items xs split at the key k, the subtree before them prev, after the
+# items acc, last first
+def Mst.part(xs: List<&2, Item>, prev: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>, +acc: List<&2, Item>) -> Part:
+  match xs:
+    case Nil{}:
+      Part{acc, prev, []}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Shared.Bool.when(
+        Part,
+        Cmp.is_lt(Key.cmp(ik, k)),
+        u => Mst.part(rest, r, k, Item{ik, iv, r} <> acc),
+        u => Part{acc, prev, Item{ik, iv, r} <> rest}
+      )
+
+# the subtree of a part
+def Part.gap(p: Part) -> Maybe<&2, Hashes.Hash>:
+  match p:
+    case Part{b, g, a}:
+      g
+
+# a node's items before a place, last first, with the subtree there set to
+# m, in order, then the items after
+def Mst.rejoin(before: List<&2, Item>, m: Maybe<&2, Hashes.Hash>, after: List<&2, Item>) -> List<&2, Item>:
+  match before:
+    case Nil{}:
+      after
+    case Con{Item{k, v, r}, rest}:
+      List.append(&2, Item, List.reverse(&2, Item, rest), Item{k, v, m} <> after)
+
+# the left subtree of a node whose items before a place are before (last
+# first), when the subtree there becomes m
+def Mst.left(before: List<&2, Item>, left: Maybe<&2, Hashes.Hash>, m: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Hashes.Hash>:
+  match before:
+    case Nil{}:
+      m
+    case Con{x, r}:
+      left
+
+# a tree split at a key: the subtree of the keys before it, of those after
+# it, and the new nodes
+type Halves is Data:
+  Halves{lo: Maybe<&2, Hashes.Hash>, hi: Maybe<&2, Hashes.Hash>, nodes: List<&2, List<&2, U32>>}
+
+# the node of the level l and the left subtree left, split at k by its part
+# p, once its gap is split (m)
+def Mst.split.done(+l: Nat, +left: Maybe<&2, Hashes.Hash>, p: Part, m: Maybe<&2, Halves>) -> Maybe<&2, Halves>:
+  match p m:
+    case x None{}:
+      None{}
+    case Part{+b, g, a} Some{Halves{+clo, chi, ns}}:
+      +lo = Mst.make(l, Mst.left(b, left, clo), Mst.rejoin(b, clo, []), ns)
+      +hi = Mst.make(l, chi, a, Edit.nodes(lo))
+      Some{Halves{Edit.root(lo), Edit.root(hi), Edit.nodes(hi)}}
+
+# the node m split at the key k, with go splitting a subtree of it
+def Mst.split.at(m: Maybe<&2, Node>, +k: List<&2, U32>, go: Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>) -> Maybe<&2, Halves>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Node{+l, +left, xs}}:
+      +p = Mst.part(xs, left, k, [])
+      Mst.split.done(l, left, p, go(Part.gap(p)))
+
+# the tree of the root m split at the key k, which it lacks, at most f levels
+# down
+def Mst.split(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  m: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>
+) -> Maybe<&2, Halves>:
+  match f m:
+    case x None{}:
+      Some{Halves{None{}, None{}, []}}
+    case 0n Some{h}:
+      None{}
+    case 1n+p Some{h}:
+      Mst.split.at(Mst.node(~S, ~fetch, s, h), k, c => Mst.split(~S, ~fetch, p, s, c, k))
