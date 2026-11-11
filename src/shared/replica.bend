@@ -5280,6 +5280,648 @@ def Safe.tally_kept(
     Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), a, w, os)
   )(Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), b, w, os))(v)(Safe.cells_keep(~mach, ~d, ~lg, ~ls, a, b, later, w, os))(h)
 
+# a read that holds something stays so when its value is kept
+def Safe.is_some_kept(
+  -A: Data,
+  m: Maybe<&2, A>,
+  -m2: Maybe<&2, A>,
+  hm: @y: A -> {m == Some{y}: Maybe<&2, A>} -> {m2 == Some{y}: Maybe<&2, A>}
+) -> {Maybe.is_some(&2, A, m) == True{}: Bool} -> {Maybe.is_some(&2, A, m2) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => Empty.absurd({Maybe.is_some(&2, A, m2) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Some{y}:
+      h =>
+        %Equal.sym(Maybe<&2, A>, m2, Some{y}, hm(y)({==})): {Maybe.is_some(&2, A, _) == True{}: Bool}
+        {==}
+
+# a read that holds something is the same read when its value is kept
+def Safe.eq_kept(
+  -A: Data,
+  m: Maybe<&2, A>,
+  -m2: Maybe<&2, A>,
+  hm: @y: A -> {m == Some{y}: Maybe<&2, A>} -> {m2 == Some{y}: Maybe<&2, A>}
+) -> {Maybe.is_some(&2, A, m) == True{}: Bool} -> {m2 == m: Maybe<&2, A>}:
+  match m:
+    case None{}:
+      h => Empty.absurd({m2 == None{}: Maybe<&2, A>}, Shared.Bool.false_ne_true(h))
+    case Some{y}:
+      h => hm(y)({==})
+
+# the passes that a ledger holds of some voters, a later ledger holds
+def Safe.passed_all_kept(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  from: List<&2, String>
+) -> {Passed.all(~mach, ~d, a, w, from) == True{}: Bool} -> {Passed.all(~mach, ~d, b, w, from) == True{}: Bool}:
+  match from:
+    case Nil{}:
+      e => {==}
+    case Con{+o, +r}:
+      +e => Shared.List.all.if_both(
+        Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, b, w, o)),
+        u => Passed.all(~mach, ~d, b, w, r)
+      )(
+        Safe.is_some_kept(
+          Maybe<&2, Ledgers.Last>,
+          Led.passed(~mach, ~d, a, w, o),
+          Led.passed(~mach, ~d, b, w, o),
+          y => Safe.pass_kept(~mach, ~d, ~lg, ~ls, a, b, later, w, o, y)
+        )(Shared.List.all.if_hit(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e))
+      )(
+        Safe.passed_all_kept(~mach, ~d, ~lg, ~ls, a, b, later, w, r)(
+          Shared.List.all.if_rest(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e)
+        )
+      )
+
+# a pass that a ledger holds is the same pass in a later ledger
+def Safe.passed_eq(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +o: String
+) -> {Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)) == True{}: Bool}
+  -> {Led.passed(~mach, ~d, b, w, o) == Led.passed(~mach, ~d, a, w, o): Maybe<&2, Maybe<&2, Ledgers.Last>>}:
+  Safe.eq_kept(
+    Maybe<&2, Ledgers.Last>,
+    Led.passed(~mach, ~d, a, w, o),
+    Led.passed(~mach, ~d, b, w, o),
+    y => Safe.pass_kept(~mach, ~d, ~lg, ~ls, a, b, later, w, o, y)
+  )
+
+# the highest last vote that the passes of some voters name is the same in a
+# later ledger, when the ledger holds each of the passes
+def Safe.last_eq(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  from: List<&2, String>
+) -> {Passed.all(~mach, ~d, a, w, from) == True{}: Bool}
+  -> {Passes.last(~mach, ~d, b, w, from) == Passes.last(~mach, ~d, a, w, from): Maybe<&2, Ledgers.Last>}:
+  match from:
+    case Nil{}:
+      e => {==}
+    case Con{+o, +r}:
+      +e =>
+        %Equal.sym(
+          Maybe<&2, Maybe<&2, Ledgers.Last>>,
+          Led.passed(~mach, ~d, b, w, o),
+          Led.passed(~mach, ~d, a, w, o),
+          Safe.passed_eq(~mach, ~d, ~lg, ~ls, a, b, later, w, o)(
+            Shared.List.all.if_hit(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e)
+          )
+        ): {
+          Last.newer(Passed.last(_), Passes.last(~mach, ~d, b, w, r))
+            == Last.newer(Passed.last(Led.passed(~mach, ~d, a, w, o)), Passes.last(~mach, ~d, a, w, r)): Maybe<&2, Ledgers.Last>
+        }
+        %Equal.sym(
+          Maybe<&2, Ledgers.Last>,
+          Passes.last(~mach, ~d, b, w, r),
+          Passes.last(~mach, ~d, a, w, r),
+          Safe.last_eq(~mach, ~d, ~lg, ~ls, a, b, later, w, r)(
+            Shared.List.all.if_rest(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e)
+          )
+        ): {
+          Last.newer(Passed.last(Led.passed(~mach, ~d, a, w, o)), _)
+            == Last.newer(Passed.last(Led.passed(~mach, ~d, a, w, o)), Passes.last(~mach, ~d, a, w, r)): Maybe<&2, Ledgers.Last>
+        }
+        {==}
+
+# the passes of some voters agree on a step in a later ledger as they do in
+# the earlier one, when the ledger holds each of them
+def Safe.agree_eq(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  from: List<&2, String>,
+  +t: Nat,
+  +v: Ledgers.Step
+) -> {Passed.all(~mach, ~d, a, w, from) == True{}: Bool}
+  -> {Passes.agree(~mach, ~d, b, w, from, t, v) == Passes.agree(~mach, ~d, a, w, from, t, v): Bool}:
+  match from:
+    case Nil{}:
+      e => {==}
+    case Con{+o, +r}:
+      +e =>
+        %Equal.sym(
+          Maybe<&2, Maybe<&2, Ledgers.Last>>,
+          Led.passed(~mach, ~d, b, w, o),
+          Led.passed(~mach, ~d, a, w, o),
+          Safe.passed_eq(~mach, ~d, ~lg, ~ls, a, b, later, w, o)(
+            Shared.List.all.if_hit(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e)
+          )
+        ): {
+          List.all.if(u => Passes.agree(~mach, ~d, b, w, r, t, v), Last.allows(Passed.last(_), t, v))
+            == List.all.if(u => Passes.agree(~mach, ~d, a, w, r, t, v), Last.allows(Passed.last(Led.passed(~mach, ~d, a, w, o)), t, v)): Bool
+        }
+        %Equal.sym(
+          Bool,
+          Passes.agree(~mach, ~d, b, w, r, t, v),
+          Passes.agree(~mach, ~d, a, w, r, t, v),
+          Safe.agree_eq(~mach, ~d, ~lg, ~ls, a, b, later, w, r, t, v)(
+            Shared.List.all.if_rest(Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, w, o)), u => Passed.all(~mach, ~d, a, w, r))(e)
+          )
+        ): {
+          List.all.if(u => _, Last.allows(Passed.last(Led.passed(~mach, ~d, a, w, o)), t, v))
+            == List.all.if(u => Passes.agree(~mach, ~d, a, w, r, t, v), Last.allows(Passed.last(Led.passed(~mach, ~d, a, w, o)), t, v)): Bool
+        }
+        {==}
+
+# Safe.act_kept once the test of the first voter is known
+def Safe.act_kept.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +r: Nat,
+  rest: List<&2, String>,
+  +k: Nat,
+  +o: String,
+  -y: Ledgers.Cast,
+  cond: Bool,
+  ih: {Passes.act(~mach, ~d, a, c, h, r, rest, k) == Some{y}: Maybe<&2, Ledgers.Cast>}
+    -> {Passes.act(~mach, ~d, b, c, h, r, rest, k) == Some{y}: Maybe<&2, Ledgers.Cast>}
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, Ledgers.Cast>,
+    cond,
+    u => Led.cast(~mach, ~d, a, Ledgers.Place{c, h, k}, o),
+    u => Passes.act(~mach, ~d, a, c, h, r, rest, k)
+  )
+    == Some{y}: Maybe<&2, Ledgers.Cast>
+} -> {
+  Shared.Bool.when(
+    Maybe<&2, Ledgers.Cast>,
+    cond,
+    u => Led.cast(~mach, ~d, b, Ledgers.Place{c, h, k}, o),
+    u => Passes.act(~mach, ~d, b, c, h, r, rest, k)
+  )
+    == Some{y}: Maybe<&2, Ledgers.Cast>
+}:
+  match cond:
+    case True{}:
+      Safe.vote_kept(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, k}, o, y)
+    case False{}:
+      ih
+
+# the vote that the passes of some voters lead back to is the same in a later
+# ledger, when the ledger holds each of the passes
+def Safe.act_kept(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +r: Nat,
+  from: List<&2, String>,
+  +k: Nat,
+  -y: Ledgers.Cast
+) -> {Passed.all(~mach, ~d, a, Ledgers.Place{c, h, r}, from) == True{}: Bool}
+  -> {Passes.act(~mach, ~d, a, c, h, r, from, k) == Some{y}: Maybe<&2, Ledgers.Cast>}
+  -> {Passes.act(~mach, ~d, b, c, h, r, from, k) == Some{y}: Maybe<&2, Ledgers.Cast>}:
+  match from:
+    case Nil{}:
+      e => x => x
+    case Con{+o, +rest}:
+      +e =>
+        %Equal.sym(
+          Maybe<&2, Maybe<&2, Ledgers.Last>>,
+          Led.passed(~mach, ~d, b, Ledgers.Place{c, h, r}, o),
+          Led.passed(~mach, ~d, a, Ledgers.Place{c, h, r}, o),
+          Safe.passed_eq(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, r}, o)(
+            Shared.List.all.if_hit(
+              Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, Ledgers.Place{c, h, r}, o)),
+              u => Passed.all(~mach, ~d, a, Ledgers.Place{c, h, r}, rest)
+            )(e)
+          )
+        ): {
+            Shared.Bool.when(
+              Maybe<&2, Ledgers.Cast>,
+              Last.in(Passed.last(Led.passed(~mach, ~d, a, Ledgers.Place{c, h, r}, o)), k),
+              u => Led.cast(~mach, ~d, a, Ledgers.Place{c, h, k}, o),
+              u => Passes.act(~mach, ~d, a, c, h, r, rest, k)
+            )
+              == Some{y}: Maybe<&2, Ledgers.Cast>
+          } -> {
+            Shared.Bool.when(
+              Maybe<&2, Ledgers.Cast>,
+              Last.in(Passed.last(_), k),
+              u => Led.cast(~mach, ~d, b, Ledgers.Place{c, h, k}, o),
+              u => Passes.act(~mach, ~d, b, c, h, r, rest, k)
+            )
+              == Some{y}: Maybe<&2, Ledgers.Cast>
+          }
+        Safe.act_kept.at(
+          ~mach, ~d, ~lg, ~ls,
+          a,
+          b,
+          later,
+          c,
+          h,
+          r,
+          rest,
+          k,
+          o,
+          y,
+          Last.in(Passed.last(Led.passed(~mach, ~d, a, Ledgers.Place{c, h, r}, o)), k),
+          Safe.act_kept(~mach, ~d, ~lg, ~ls, a, b, later, c, h, r, rest, k, y)(
+            Shared.List.all.if_rest(
+              Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, a, Ledgers.Place{c, h, r}, o)),
+              u => Passed.all(~mach, ~d, a, Ledgers.Place{c, h, r}, rest)
+            )(e)
+          )
+        )
+
+# an all.if holds when its test and its rest do (rest only in the type)
+def Safe.and_both(hit: Bool, -rest: Unit -> Bool) -> {hit == True{}: Bool}
+  -> {rest(Unit{}) == True{}: Bool}
+  -> {List.all.if(rest, hit) == True{}: Bool}:
+  match hit:
+    case True{}:
+      h => r => r
+    case False{}:
+      h => r => h
+
+# the test of an all.if that holds holds (rest only in the type)
+def Safe.and_hit(hit: Bool, -rest: Unit -> Bool) -> {List.all.if(rest, hit) == True{}: Bool}
+  -> {hit == True{}: Bool}:
+  match hit:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => h
+
+# the rest of an all.if that holds holds (rest only in the type)
+def Safe.and_rest(hit: Bool, -rest: Unit -> Bool) -> {List.all.if(rest, hit) == True{}: Bool}
+  -> {rest(Unit{}) == True{}: Bool}:
+  match hit:
+    case True{}:
+      h => h
+    case False{}:
+      h => Empty.absurd({rest(Unit{}) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+
+# a vote for v whose passes allow it stays one when its act stays and its
+# passes stay allowed
+def Safe.casts_kept(
+  m: Maybe<&2, Ledgers.Cast>,
+  -m2: Maybe<&2, Ledgers.Cast>,
+  +v: Ledgers.Step,
+  -ra: List<&2, String> -> Bool,
+  -rb: List<&2, String> -> Bool,
+  hm: @y: Ledgers.Cast -> {m == Some{y}: Maybe<&2, Ledgers.Cast>} -> {m2 == Some{y}: Maybe<&2, Ledgers.Cast>},
+  ih: @f: List<&2, String> -> {ra(f) == True{}: Bool} -> {rb(f) == True{}: Bool}
+) -> {Cast.casts(m, v, ra) == True{}: Bool} -> {Cast.casts(m2, v, rb) == True{}: Bool}:
+  match m:
+    case Some{Ledgers.Cast.Vote{+x, +f}}:
+      +e =>
+        %Equal.sym(
+          Maybe<&2, Ledgers.Cast>,
+          m2,
+          Some{Ledgers.Cast.Vote{x, f}},
+          hm(Ledgers.Cast.Vote{x, f})({==})
+        ): {Cast.casts(_, v, rb) == True{}: Bool}
+        Safe.and_both(Ledgers.Step.is_eq(x, v), u => rb(f))(
+          Safe.and_hit(Ledgers.Step.is_eq(x, v), u => ra(f))(e)
+        )(ih(f)(Safe.and_rest(Ledgers.Step.is_eq(x, v), u => ra(f))(e)))
+    case Some{Ledgers.Cast.Pass{p}}:
+      e => Empty.absurd({Cast.casts(m2, v, rb) == True{}: Bool}, Shared.Bool.false_ne_true(e))
+    case None{}:
+      e => Empty.absurd({Cast.casts(m2, v, rb) == True{}: Bool}, Shared.Bool.false_ne_true(e))
+
+# what holds of the round of a last vote holds of it by a weaker test
+def Safe.holds_kept(
+  m: Maybe<&2, Ledgers.Last>,
+  -ga: Nat -> Bool,
+  -gb: Nat -> Bool,
+  ih: @t: Nat -> {ga(t) == True{}: Bool} -> {gb(t) == True{}: Bool}
+) -> {Last.holds(m, ga) == True{}: Bool} -> {Last.holds(m, gb) == True{}: Bool}:
+  match m:
+    case Some{Ledgers.Last{t, x}}:
+      ih(t)
+    case None{}:
+      e => {==}
+
+# a step that the rules allow in a round stays allowed in a later ledger
+def Safe.allowed_kept(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +v: Ledgers.Step,
+  k: Nat,
+  r: Nat,
+  +from: List<&2, String>
+) -> {Step.allowed.in(~mach, ~d, a, c, h, os, v, k, r, from) == True{}: Bool}
+  -> {Step.allowed.in(~mach, ~d, b, c, h, os, v, k, r, from) == True{}: Bool}:
+  match k r:
+    case 0n 0n:
+      e => {==}
+    case 1n+j 0n:
+      e => {==}
+    case 0n 1n+p:
+      e => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(e))
+    case 1n+(+j) 1n+(+p):
+      +e =>
+        +pm = Shared.List.all.if_hit(
+          Passed.major(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, os, from),
+          u => Last.holds(Passes.last(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from), +t => List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, a, c, h, 1n+p, from, t), v, +f => Step.allowed.in(~mach, ~d, a, c, h, os, v, j, t, f)), Passes.agree(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from, t, v)))
+        )(e)
+        +pall = Shared.List.all.if_hit(
+          Passed.all(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from),
+          u => List.all.if(u2 => Voters.major(os, from), Voters.sub(os, from))
+        )(pm)
+        Shared.List.all.if_both(
+          Passed.major(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, os, from),
+          u => Last.holds(Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from), +t => List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v, j, t, f)), Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v)))
+        )(
+          Shared.List.all.if_both(
+            Passed.all(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from),
+            u => List.all.if(u2 => Voters.major(os, from), Voters.sub(os, from))
+          )(Safe.passed_all_kept(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, 1n+p}, from)(pall))(
+            Shared.List.all.if_rest(
+              Passed.all(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from),
+              u => List.all.if(u2 => Voters.major(os, from), Voters.sub(os, from))
+            )(pm)
+          )
+        )(
+          %Equal.sym(
+            Maybe<&2, Ledgers.Last>,
+            Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from),
+            Passes.last(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from),
+            Safe.last_eq(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, 1n+p}, from)(pall)
+          ): {
+            Last.holds(_, +t => List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v, j, t, f)), Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v))) == True{}: Bool
+          }
+          Safe.holds_kept(
+            Passes.last(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from),
+            +t => List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, a, c, h, 1n+p, from, t), v, +f => Step.allowed.in(~mach, ~d, a, c, h, os, v, j, t, f)), Passes.agree(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from, t, v)),
+            +t => List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v, j, t, f)), Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v)),
+            +t => +g => Shared.List.all.if_both(
+              Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v),
+              u2 => Cast.casts(
+                Passes.act(~mach, ~d, b, c, h, 1n+p, from, t),
+                v,
+                +f => Step.allowed.in(~mach, ~d, b, c, h, os, v, j, t, f)
+              )
+            )(
+              %Equal.sym(
+                Bool,
+                Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v),
+                Passes.agree(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from, t, v),
+                Safe.agree_eq(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, 1n+p}, from, t, v)(pall)
+              ): {_ == True{}: Bool}
+              Shared.List.all.if_hit(
+                Passes.agree(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from, t, v),
+                u2 => Cast.casts(
+                  Passes.act(~mach, ~d, a, c, h, 1n+p, from, t),
+                  v,
+                  +f => Step.allowed.in(~mach, ~d, a, c, h, os, v, j, t, f)
+                )
+              )(g)
+            )(
+              Safe.casts_kept(
+                Passes.act(~mach, ~d, a, c, h, 1n+p, from, t),
+                Passes.act(~mach, ~d, b, c, h, 1n+p, from, t),
+                v,
+                +f => Step.allowed.in(~mach, ~d, a, c, h, os, v, j, t, f),
+                +f => Step.allowed.in(~mach, ~d, b, c, h, os, v, j, t, f),
+                y => Safe.act_kept(~mach, ~d, ~lg, ~ls, a, b, later, c, h, 1n+p, from, t, y)(pall),
+                f => Safe.allowed_kept(~mach, ~d, ~lg, ~ls, a, b, later, c, h, os, v, j, t, f)
+              )(
+                Shared.List.all.if_rest(
+                  Passes.agree(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from, t, v),
+                  u2 => Cast.casts(
+                    Passes.act(~mach, ~d, a, c, h, 1n+p, from, t),
+                    v,
+                    +f => Step.allowed.in(~mach, ~d, a, c, h, os, v, j, t, f)
+                  )
+                )(g)
+              )
+            )
+          )(
+            Shared.List.all.if_rest(
+              Passed.major(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, os, from),
+              u => Last.holds(Passes.last(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from), +t => List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, a, c, h, 1n+p, from, t), v, +f => Step.allowed.in(~mach, ~d, a, c, h, os, v, j, t, f)), Passes.agree(~mach, ~d, a, Ledgers.Place{c, h, 1n+p}, from, t, v)))
+            )(e)
+          )
+        )
+
+# Step.allowed at a place stays in a later ledger
+def Safe.allowed_at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  w: Ledgers.Place,
+  +os: List<&2, String>,
+  +v: Ledgers.Step,
+  +from: List<&2, String>
+) -> {Step.allowed(~mach, ~d, a, w, os, v, from) == True{}: Bool}
+  -> {Step.allowed(~mach, ~d, b, w, os, v, from) == True{}: Bool}:
+  match w:
+    case Ledgers.Place{+c, +h, +r}:
+      Safe.allowed_kept(~mach, ~d, ~lg, ~ls, a, b, later, c, h, os, v, r, r, from)
+
+# a when that holds stays so under a weaker test
+def Safe.when_kept(
+  -B: Data,
+  ba: Bool,
+  -bb: Bool,
+  -k: Unit -> Maybe<&2, B>,
+  -x: B,
+  hb: {ba == True{}: Bool} -> {bb == True{}: Bool}
+) -> {Shared.Maybe.when(B, ba, k) == Some{x}: Maybe<&2, B>} -> {Shared.Maybe.when(B, bb, k) == Some{x}: Maybe<&2, B>}:
+  match ba:
+    case True{}:
+      e =>
+        %Equal.sym(Bool, bb, True{}, hb({==})): {Shared.Maybe.when(B, _, k) == Some{x}: Maybe<&2, B>}
+        e
+    case False{}:
+      e => Empty.absurd({Shared.Maybe.when(B, bb, k) == Some{x}: Maybe<&2, B>}, Shared.Maybe.none_ne_some(B, x, e))
+
+# the step that a round decides once its tally is known stays in a later
+# ledger
+def Safe.led_kept(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +w: Ledgers.Place,
+  +os: List<&2, String>,
+  +v: Ledgers.Step,
+  +p: String,
+  -x: Ledgers.Step
+) -> {Round.led(~mach, ~d, a, w, os, v, p) == Some{x}: Maybe<&2, Ledgers.Step>}
+  -> {Round.led(~mach, ~d, b, w, os, v, p) == Some{x}: Maybe<&2, Ledgers.Step>}:
+  Safe.when_kept(
+    Ledgers.Step,
+    Cast.casts(Led.cast(~mach, ~d, a, w, p), v, f => Step.allowed(~mach, ~d, a, w, os, v, f)),
+    Cast.casts(Led.cast(~mach, ~d, b, w, p), v, f => Step.allowed(~mach, ~d, b, w, os, v, f)),
+    u => Some{v},
+    x,
+    Safe.casts_kept(
+      Led.cast(~mach, ~d, a, w, p),
+      Led.cast(~mach, ~d, b, w, p),
+      v,
+      f => Step.allowed(~mach, ~d, a, w, os, v, f),
+      f => Step.allowed(~mach, ~d, b, w, os, v, f),
+      y => Safe.vote_kept(~mach, ~d, ~lg, ~ls, a, b, later, w, p, y),
+      f => Safe.allowed_at(~mach, ~d, ~lg, ~ls, a, b, later, w, os, v, f)
+    )
+  )
+
+# the step that a round decides stays in a later ledger
+def Safe.decide_kept(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~lg: Hist.LaterGrows(mach, d),
+  ~ls: Hist.LaterSingle(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r: Nat,
+  -x: Ledgers.Step
+) -> {Round.decide(~mach, ~d, a, c, h, os, r) == Some{x}: Maybe<&2, Ledgers.Step>}
+  -> {Round.decide(~mach, ~d, b, c, h, os, r) == Some{x}: Maybe<&2, Ledgers.Step>}:
+  Shared.Maybe.bind_kept(
+    Ledgers.Step,
+    Ledgers.Step,
+    Led.tally(~mach, ~d, a, Ledgers.Place{c, h, r}, os),
+    Led.tally(~mach, ~d, b, Ledgers.Place{c, h, r}, os),
+    +v => Maybe.bind(
+      &2,
+      String,
+      Ledgers.Step,
+      Voters.turn(os, h, r),
+      p => Round.led(~mach, ~d, a, Ledgers.Place{c, h, r}, os, v, p)
+    ),
+    +v => Maybe.bind(
+      &2,
+      String,
+      Ledgers.Step,
+      Voters.turn(os, h, r),
+      p => Round.led(~mach, ~d, b, Ledgers.Place{c, h, r}, os, v, p)
+    ),
+    x,
+    v => Safe.tally_kept(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, r}, os, v),
+    +v => Shared.Maybe.bind_kept(
+      String,
+      Ledgers.Step,
+      Voters.turn(os, h, r),
+      Voters.turn(os, h, r),
+      p => Round.led(~mach, ~d, a, Ledgers.Place{c, h, r}, os, v, p),
+      p => Round.led(~mach, ~d, b, Ledgers.Place{c, h, r}, os, v, p),
+      x,
+      p => e => e,
+      p => Safe.led_kept(~mach, ~d, ~lg, ~ls, a, b, later, Ledgers.Place{c, h, r}, os, v, p, x)
+    )
+  )
+
 # a height decides the same step in a later ledger
 def Safe.decide(
   ~mach: Machine(),
