@@ -3247,6 +3247,170 @@ def Hist.fetch(
     e => g(Ledgers.Name.Data{h})(e)
   )
 
+# a ledger that holds some words gives them under their hash
+def Hist.has(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  l: Led.L(mach, d),
+  +ws: List<&2, U32>
+) -> {
+  Depots.Depot.has(~Led.L(mach, d), ~(s => h => Led.fetch(~mach, ~d, s, h)), l, ws) == True{}: Bool
+} -> {Led.fetch(~mach, ~d, l, Hashes.Sha.hash(ws)) == Some{ws}: Maybe<&2, List<&2, U32>>}:
+  h => Shared.Maybe.is_eq_sound(
+    ~List<&2, U32>,
+    ~Shared.List.is_eq(~U32, ~U32.is_eq),
+    x => y => Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), x, y),
+    Led.fetch(~mach, ~d, l, Hashes.Sha.hash(ws)),
+    Some{ws}
+  )(h)
+
+# and a ledger that gives some words under their hash holds them
+def Hist.has.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -l: Led.L(mach, d),
+  +ws: List<&2, U32>
+) -> {Led.fetch(~mach, ~d, l, Hashes.Sha.hash(ws)) == Some{ws}: Maybe<&2, List<&2, U32>>}
+  -> {Depots.Depot.has(~Led.L(mach, d), ~(s => h => Led.fetch(~mach, ~d, s, h)), l, ws) == True{}: Bool}:
+  h =>
+    %Equal.sym(Maybe<&2, List<&2, U32>>, Led.fetch(~mach, ~d, l, Hashes.Sha.hash(ws)), Some{ws}, h): {
+      Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), _, Some{ws}) == True{}: Bool
+    }
+    Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), ws)
+
+# the law that a read stays, of a tree t
+def Hist.final.of(
+  -S: Data,
+  -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -grows: S -> S -> Type,
+  t: Trees.Tree(S, fetch, grows)
+) -> Trees.Laws.Final(S, grows, Trees.Tree.ops(S, fetch, grows, t)):
+  match t:
+    case Tuple{o, Tuple{f, r}}:
+      f
+
+# the law that a write stays, of a tree t
+def Hist.put_final.of(
+  -S: Data,
+  -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -grows: S -> S -> Type,
+  t: Trees.Tree(S, fetch, grows)
+) -> Trees.Laws.PutFinal(S, grows, Trees.Tree.ops(S, fetch, grows, t)):
+  match t:
+    case Tuple{o, Tuple{f, Tuple{p, r}}}:
+      p
+
+# the law of a write, of a tree t
+def Hist.write.of(
+  -S: Data,
+  -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -grows: S -> S -> Type,
+  t: Trees.Tree(S, fetch, grows)
+) -> Trees.Laws.Write(S, fetch, grows, Trees.Tree.ops(S, fetch, grows, t)):
+  match t:
+    case Tuple{o, Tuple{f, Tuple{p, Tuple{w, r}}}}:
+      w
+
+# the law that a read stays, of the tree of the ledger d
+def Hist.final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Final(
+  Led.L(mach, d),
+  a => b => Led.Grows(mach, d, a, b),
+  Led.tree(mach, d)
+):
+  match d:
+    case Tuple{x, t}:
+      Hist.final.of(
+        Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+        Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+        a => b => Ledgers.Kind.Grows(
+          Machine.Q(mach),
+          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+          a,
+          b
+        ),
+        t
+      )
+
+# the law that a write stays, of the tree of the ledger d
+def Hist.put_final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.PutFinal(
+  Led.L(mach, d),
+  a => b => Led.Grows(mach, d, a, b),
+  Led.tree(mach, d)
+):
+  match d:
+    case Tuple{x, t}:
+      Hist.put_final.of(
+        Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+        Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+        a => b => Ledgers.Kind.Grows(
+          Machine.Q(mach),
+          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+          a,
+          b
+        ),
+        t
+      )
+
+# the law of a write, of the tree of the ledger d
+def Hist.write(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Write(
+  Led.L(mach, d),
+  l => h => Led.fetch(~mach, ~d, l, h),
+  a => b => Led.Grows(mach, d, a, b),
+  Led.tree(mach, d)
+):
+  match d:
+    case Tuple{x, t}:
+      Hist.write.of(
+        Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+        Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+        a => b => Ledgers.Kind.Grows(
+          Machine.Q(mach),
+          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+          a,
+          b
+        ),
+        t
+      )
+
+# what a read of a tree tells stays as the ledger grows
+def Hist.find(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  a: Led.L(mach, d),
+  b: Led.L(mach, d),
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  x: Maybe<&2, List<&2, U32>>,
+  g: Led.Grows(mach, d, a, b)
+) -> {Tree.find(~mach, ~d, a, h, k) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+  -> {Tree.find(~mach, ~d, b, h, k) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  e => Hist.final(mach, d)(h)(k)(a)(b)(x)(g)(e)
+
+# a write to a tree stays as the ledger grows
+def Hist.put(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  a: Led.L(mach, d),
+  b: Led.L(mach, d),
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>,
+  x: Trees.Edit,
+  g: Led.Grows(mach, d, a, b)
+) -> {Tree.put(~mach, ~d, a, h, k, m) == Some{x}: Maybe<&2, Trees.Edit>}
+  -> {Tree.put(~mach, ~d, b, h, k, m) == Some{x}: Maybe<&2, Trees.Edit>}:
+  e => Hist.put_final(mach, d)(a)(b)(h)(k)(m)(x)(e)(g)
+
+# the law that an act stays, of the kernel kern
+def Hist.kern(-mach: Machine(), -d: Led(mach), kern: Kernel(mach, d)) -> Kernel.Stable(
+  mach,
+  d,
+  Kernel.change(mach, d, kern)
+):
+  match kern:
+    case Tuple{f, Tuple{s, w}}:
+      s
+
 # one history: the tip of a line after a number of steps stays as the ledger
 # grows, while its ballots are honest. So two replicas whose ledgers an
 # honest ledger holds are, after the same number of steps, at the same tip:
