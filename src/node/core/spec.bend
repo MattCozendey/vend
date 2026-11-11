@@ -6353,7 +6353,6 @@ def Merge.all_take.cc(
           )
         )
       )
-
 # Merge.all_take for the keys y then rest, once the work W1 after the first step
 # is known
 def Merge.all_take.con2(
@@ -6581,7 +6580,6 @@ def Merge.all_take(
         Merge.all_step(~d, l, hb, ho, ht, k, y, rest, Work{lc, hc, P}, Work{lf, hf, N}, e),
         lc1 => hc1 => P1 => e1 => wc1 => ec => Merge.all_take(~d, l, hb, ho, ht, k, n, b0, o0, t0, x, rest, lc1, hc1, P1, lf, hf, N, e1, wc1, wf, held, hb0, ho0, ht0, hp, ec)
       )
-
 # the resource that a resource of the tree holds as a value is the resource
 def Merge.found_value(+x: Maybe<&2, Requests.Res>) -> {Res.found(Res.value(x)) == x: Maybe<&2, Requests.Res>}:
   match x:
@@ -6655,6 +6653,141 @@ def Merge.find_some.at(
       )
     case Some{+v}:
       (v, (em, Shared.Maybe.some_inj(Maybe<&2, Requests.Res>, Res.found(v), o, e)))
+# a resource that a read finds is the resource that the value found holds
+def Merge.find_some(
+  ~d: Led(),
+  +l: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +o: Maybe<&2, Requests.Res>,
+  e: {Res.find(~d, l, h, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>}
+) -> Merge.Found(~d, l, h, n, o):
+  Merge.find_some.at(~d, l, h, n, o, Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h, Key.res(n)), {==}, e)
+
+# the value that a read finds is the value that it is known as
+def Merge.value_known(
+  r: Trees.Look,
+  m: Maybe<&2, List<&2, U32>>,
+  e: {Trees.Look.known(r) == Some{m}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> {Trees.Look.value(r) == m: Maybe<&2, List<&2, U32>>}:
+  match r:
+    case Trees.Look.Found{+v}:
+      Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, Some{v}, m, e)
+    case Trees.Look.Absent{}:
+      Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, None{}, m, e)
+    case Trees.Look.Missing{h}:
+      Empty.absurd({Trees.Look.value(Trees.Look.Missing{h}) == m: Maybe<&2, List<&2, U32>>}, Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, m, e))
+
+# a resource is the same as itself
+def Merge.same_refl(+a: Maybe<&2, Requests.Res>) -> {Res.same(a, a) == True{}: Bool}:
+  match a:
+    case None{}:
+      {==}
+    case Some{+r}:
+      Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), Requests.Res.code(r, []))
+
+# the resource that a pick takes
+def Merge.pick_res(p: Pick) -> Maybe<&2, Requests.Res>:
+  match p:
+    case Pick.Take{r}:
+      r
+    case _:
+      None{}
+
+# a merge that takes a side, of two sides that are the same, takes them
+def Merge.take_value.at(
+  ~d: Led(),
+  l: L(d),
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +th: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  s: Sides.Side,
+  es: {Sides.Side.of(~Maybe<&2, Requests.Res>, ~Res.same, b, o, th) == s: Sides.Side},
+  hp: {Pick.side(~d, l, b, o, th, s) == Some{Pick.Take{x}}: Maybe<&2, Pick>},
+  eoth: {o == th: Maybe<&2, Requests.Res>}
+) -> {x == o: Maybe<&2, Requests.Res>}:
+  match s:
+    case Sides.Side.Theirs{}:
+      Equal.trans(
+        Maybe<&2, Requests.Res>,
+        x,
+        th,
+        o,
+        Equal.sym(
+          Maybe<&2, Requests.Res>,
+          th,
+          x,
+          Equal.cong(
+            Pick,
+            Maybe<&2, Requests.Res>,
+            q => Merge.pick_res(q),
+            Pick.Take{th},
+            Pick.Take{x},
+            Shared.Maybe.some_inj(Pick, Pick.Take{th}, Pick.Take{x}, hp)
+          )
+        ),
+        Equal.sym(Maybe<&2, Requests.Res>, o, th, eoth)
+      )
+    case Sides.Side.Ours{}:
+      Equal.sym(
+        Maybe<&2, Requests.Res>,
+        o,
+        x,
+        Equal.cong(
+          Pick,
+          Maybe<&2, Requests.Res>,
+          q => Merge.pick_res(q),
+          Pick.Take{o},
+          Pick.Take{x},
+          Shared.Maybe.some_inj(Pick, Pick.Take{o}, Pick.Take{x}, hp)
+        )
+      )
+    case Sides.Side.Both{}:
+      Empty.absurd(
+        {x == o: Maybe<&2, Requests.Res>},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Bool.or(Res.same(o, b), Bool.or(Res.same(th, b), Res.same(o, th))),
+            True{},
+            Equal.sym(
+              Bool,
+              Bool.or(Res.same(o, b), Bool.or(Res.same(th, b), Res.same(o, th))),
+              False{},
+              Sides.Side.both_changed(~Maybe<&2, Requests.Res>, ~Res.same, b, o, th)(es)
+            ),
+            %Equal.sym(
+              Bool,
+              Bool.or(Res.same(th, b), Res.same(o, th)),
+              True{},
+              %Equal.sym(
+                Bool,
+                Res.same(o, th),
+                True{},
+                %eoth: {Res.same(o, _) == True{}: Bool}
+                Merge.same_refl(o)
+              ): {Bool.or(Res.same(th, b), _) == True{}: Bool}
+              Shared.Bool.or_true_right(Res.same(th, b))
+            ): {Bool.or(Res.same(o, b), _) == True{}: Bool}
+            Shared.Bool.or_true_right(Res.same(o, b))
+          )
+        )
+      )
+
+# a merge that takes a side, of two sides that are the same, takes them
+def Merge.take_value(
+  ~d: Led(),
+  l: L(d),
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +th: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  hp: {Pick.merge(~d, l, b, o, th) == Some{Pick.Take{x}}: Maybe<&2, Pick>},
+  eoth: {o == th: Maybe<&2, Requests.Res>}
+) -> {x == o: Maybe<&2, Requests.Res>}:
+  Merge.take_value.at(~d, l, b, o, th, x, Sides.Side.of(~Maybe<&2, Requests.Res>, ~Res.same, b, o, th), {==}, hp, eoth)
 # TMP-END
 
 # a merge never loses a change that only one side made: when the merge of a
