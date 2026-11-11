@@ -1530,6 +1530,17 @@ def Laws.missing(
     case Tuple{ge, Tuple{ga, Tuple{gn, Tuple{ac, Tuple{at, Tuple{ms, rest}}}}}}:
       ms
 
+# the law of a ledger that it gives the ballots of a voter at a place
+def Laws.ballots(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledger.Kind(Q),
+  laws: Ledger.Laws(Q, c, k)
+) -> Laws.Ballots(Q, c, k):
+  match laws:
+    case Tuple{ge, Tuple{ga, Tuple{gn, Tuple{ac, Tuple{at, Tuple{ms, Tuple{bl, rest}}}}}}}:
+      bl
+
 # Entry.same is True for an entry and itself
 def Entry.same_refl(
   ~Q: Data,
