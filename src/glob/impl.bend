@@ -1306,11 +1306,71 @@ def Path.is_eq(a: Path, b: Path) -> Bool:
 
 # Path.is_eq is True for a place and itself
 def Path.is_eq_refl(a: Path) -> {Path.is_eq(a, a) == True{}: Bool}:
-  ?TODO
+  match a:
+    case PStart{}:
+      {==}
+    case PDot{}:
+      {==}
+    case PDots{}:
+      {==}
+    case PSeg{}:
+      {==}
+    case PDead{}:
+      {==}
 
 # Path.is_eq is True only for the same place
 def Path.is_eq_sound(+a: Path, +b: Path) -> {Path.is_eq(a, b) == True{}: Bool} -> {a == b: Path}:
-  ?TODO
+  match a b:
+    case PStart{} PStart{}:
+      h => {==}
+    case PStart{} PDot{}:
+      h => Empty.absurd({PStart{} == PDot{}: Path}, Shared.Bool.false_ne_true(h))
+    case PStart{} PDots{}:
+      h => Empty.absurd({PStart{} == PDots{}: Path}, Shared.Bool.false_ne_true(h))
+    case PStart{} PSeg{}:
+      h => Empty.absurd({PStart{} == PSeg{}: Path}, Shared.Bool.false_ne_true(h))
+    case PStart{} PDead{}:
+      h => Empty.absurd({PStart{} == PDead{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDot{} PStart{}:
+      h => Empty.absurd({PDot{} == PStart{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDot{} PDot{}:
+      h => {==}
+    case PDot{} PDots{}:
+      h => Empty.absurd({PDot{} == PDots{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDot{} PSeg{}:
+      h => Empty.absurd({PDot{} == PSeg{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDot{} PDead{}:
+      h => Empty.absurd({PDot{} == PDead{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDots{} PStart{}:
+      h => Empty.absurd({PDots{} == PStart{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDots{} PDot{}:
+      h => Empty.absurd({PDots{} == PDot{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDots{} PDots{}:
+      h => {==}
+    case PDots{} PSeg{}:
+      h => Empty.absurd({PDots{} == PSeg{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDots{} PDead{}:
+      h => Empty.absurd({PDots{} == PDead{}: Path}, Shared.Bool.false_ne_true(h))
+    case PSeg{} PStart{}:
+      h => Empty.absurd({PSeg{} == PStart{}: Path}, Shared.Bool.false_ne_true(h))
+    case PSeg{} PDot{}:
+      h => Empty.absurd({PSeg{} == PDot{}: Path}, Shared.Bool.false_ne_true(h))
+    case PSeg{} PDots{}:
+      h => Empty.absurd({PSeg{} == PDots{}: Path}, Shared.Bool.false_ne_true(h))
+    case PSeg{} PSeg{}:
+      h => {==}
+    case PSeg{} PDead{}:
+      h => Empty.absurd({PSeg{} == PDead{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDead{} PStart{}:
+      h => Empty.absurd({PDead{} == PStart{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDead{} PDot{}:
+      h => Empty.absurd({PDead{} == PDot{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDead{} PDots{}:
+      h => Empty.absurd({PDead{} == PDots{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDead{} PSeg{}:
+      h => Empty.absurd({PDead{} == PSeg{}: Path}, Shared.Bool.false_ne_true(h))
+    case PDead{} PDead{}:
+      h => {==}
 
 # v and w are the same place
 def Walk.is_eq(v: Walk, w: Walk) -> Bool:
