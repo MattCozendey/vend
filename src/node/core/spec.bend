@@ -8031,6 +8031,184 @@ def Affects.diff_names(
     )(e2)
   )(ediff)
 
+# a word less zero, with a borrow in, is the word
+def Affects.adc_zero(p: Nat, t: Word(p)) -> {Word.adc(p, t, Word.zero(p), True{}, True{}) == t: Word(p)}:
+  match p:
+    case 0n:
+      match t:
+        case WNil{}:
+          {==}
+    case 1n+q:
+      match t:
+        case WCon{False{}, +r}:
+          Equal.cong(
+            Word(q),
+            Word(1n+q),
+            w => WCon{False{}, w},
+            Word.adc(q, r, Word.zero(q), True{}, True{}),
+            r,
+            Affects.adc_zero(q, r)
+          )
+        case WCon{True{}, +r}:
+          Equal.cong(
+            Word(q),
+            Word(1n+q),
+            w => WCon{True{}, w},
+            Word.adc(q, r, Word.zero(q), True{}, True{}),
+            r,
+            Affects.adc_zero(q, r)
+          )
+
+# a word one more, less zero with no borrow in, is the word
+def Affects.adc_inc(p: Nat, t: Word(p)) -> {Word.adc(p, Word.inc(p, t), Word.zero(p), True{}, False{}) == t: Word(p)}:
+  match p:
+    case 0n:
+      match t:
+        case WNil{}:
+          {==}
+    case 1n+q:
+      match t:
+        case WCon{False{}, +r}:
+          Equal.cong(
+            Word(q),
+            Word(1n+q),
+            w => WCon{False{}, w},
+            Word.adc(q, r, Word.zero(q), True{}, True{}),
+            r,
+            Affects.adc_zero(q, r)
+          )
+        case WCon{True{}, +r}:
+          Equal.cong(
+            Word(q),
+            Word(1n+q),
+            w => WCon{True{}, w},
+            Word.adc(q, Word.inc(q, r), Word.zero(q), True{}, False{}),
+            r,
+            Affects.adc_inc(q, r)
+          )
+
+# one more, then one less, is the number
+def Affects.sub_inc(n: U32) -> {U32.sub(U32.inc(n), 1) == n: U32}:
+  match n:
+    case U32{w}:
+      match w:
+        case WCon{False{}, +r}:
+          Equal.cong(
+            Word(31n),
+            U32,
+            z => U32{WCon{False{}, z}},
+            Word.adc(31n, r, Word.zero(31n), True{}, True{}),
+            r,
+            Affects.adc_zero(31n, r)
+          )
+        case WCon{True{}, +r}:
+          Equal.cong(
+            Word(31n),
+            U32,
+            z => U32{WCon{True{}, z}},
+            Word.adc(31n, Word.inc(31n, r), Word.zero(31n), True{}, False{}),
+            r,
+            Affects.adc_inc(31n, r)
+          )
+
+# Affects.lt_not_last once it is known whether n is the last number (q)
+def Affects.lt_not_last.at(
+  +n: U32,
+  +c: U32,
+  q: Bool,
+  eq: {U32.is_eq(n, 4294967295) == q: Bool},
+  +h: {U32.is_lt(n, c) == True{}: Bool}
+) -> {q == False{}: Bool}:
+  match q:
+    case True{}:
+      +tm = U32.to_nat(4294967295)
+      +tc = U32.to_nat(c)
+      Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Nat.is_lt(tm, tm),
+            True{},
+            Equal.sym(Bool, Nat.is_lt(tm, tm), False{}, Shared.Nat.lt_irrefl(tm)),
+            Shared.Nat.lt_le(tm, tc, tm)(
+              Equal.trans(
+                Bool,
+                Nat.is_lt(tm, tc),
+                U32.is_lt(4294967295, c),
+                True{},
+                Equal.sym(Bool, U32.is_lt(4294967295, c), Nat.is_lt(tm, tc), Shared.U32.is_lt_to_nat(4294967295, c)),
+                Affects.cast(
+                  U32,
+                  z => {U32.is_lt(z, c) == True{}: Bool},
+                  n,
+                  4294967295,
+                  Shared.U32.is_eq_sound(n, 4294967295)(eq),
+                  h
+                )
+              )
+            )(
+              Equal.trans(
+                Bool,
+                Nat.is_le(tc, tm),
+                U32.is_le(c, 4294967295),
+                True{},
+                Equal.sym(Bool, U32.is_le(c, 4294967295), Nat.is_le(tc, tm), Shared.U32.is_le_to_nat(c, 4294967295)),
+                Shared.U32.le_last(c)
+              )
+            )
+          )
+        )
+      )
+    case False{}:
+      {==}
+
+# a number below another is not the last number
+def Affects.lt_not_last(+n: U32, +c: U32) -> {U32.is_lt(n, c) == True{}: Bool} -> {U32.is_eq(n, 4294967295) == False{}: Bool}:
+  h => Affects.lt_not_last.at(n, c, U32.is_eq(n, 4294967295), {==}, h)
+
+# one more than a number below another is its successor as a Nat
+def Affects.inc_nat(+n: U32, +c: U32) -> {U32.is_lt(n, c) == True{}: Bool} -> {U32.to_nat(U32.inc(n)) == 1n+U32.to_nat(n): Nat}:
+  h => Shared.U32.inc_to_nat(n)(Affects.lt_not_last(n, c)(h))
+
+# Affects.inc_ne_zero once it is known whether one more than n is zero (q)
+def Affects.inc_ne_zero.at(
+  +n: U32,
+  +c: U32,
+  q: Bool,
+  eq: {U32.is_eq(U32.inc(n), 0) == q: Bool},
+  +h: {U32.is_lt(n, c) == True{}: Bool}
+) -> {q == False{}: Bool}:
+  match q:
+    case True{}:
+      Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.cong(
+            Nat,
+            Bool,
+            z => Nat.is_eq(z, 0n),
+            1n+U32.to_nat(n),
+            0n,
+            Equal.trans(
+              Nat,
+              1n+U32.to_nat(n),
+              U32.to_nat(U32.inc(n)),
+              0n,
+              Equal.sym(Nat, U32.to_nat(U32.inc(n)), 1n+U32.to_nat(n), Affects.inc_nat(n, c)(h)),
+              Equal.cong(U32, Nat, U32.to_nat, U32.inc(n), 0, Shared.U32.is_eq_sound(U32.inc(n), 0)(eq))
+            )
+          )
+        )
+      )
+    case False{}:
+      {==}
+
+# one more than a number below another is not zero
+def Affects.inc_ne_zero(+n: U32, +c: U32) -> {U32.is_lt(n, c) == True{}: Bool} -> {U32.is_eq(U32.inc(n), 0) == False{}: Bool}:
+  h => Affects.inc_ne_zero.at(n, c, U32.is_eq(U32.inc(n), 0), {==}, h)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
