@@ -3110,17 +3110,6 @@ def Answer.at_follows.tip(
         keep
       )
 
-# what Replicas.Led.Later says of the ledgers a and b, as Data: a proof of it
-# may be used as often as a proof needs
-def Answer.Later(~d: Led(), a: L(d), +b: L(d)) -> Data:
-  {
-    Bool.and(
-      Ledgers.Kind.grows(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), a, b),
-      Replicas.Led.honest(~Requests.Ask.machine(), ~d, b)
-    )
-      == True{}: Bool
-  }
-
 # what Replicas.Line.get_grows says of the ledger d and the kernel kern: what
 # the log of a line holds under a key, it holds for good
 def Answer.Stays(~d: Led(), ~kern: Kern(d)) -> Type:
@@ -3142,7 +3131,7 @@ def Answer.at_follows.keep(
   +i: Ledgers.Id,
   +t: Replicas.Tip,
   +m2: Maybe<&2, Replicas.Tip>,
-  g: Answer.Later(~d, a, b),
+  g: Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
   stays: Answer.Stays(~d, ~kern),
   e1: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == Some{t}: Maybe<&2, Replicas.Tip>},
   e2: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == m2: Maybe<&2, Replicas.Tip>},
@@ -3198,7 +3187,7 @@ def Answer.at_follows.head(
   +i: Ledgers.Id,
   +q: Requests.Ask,
   +h: Hashes.Hash,
-  g: Answer.Later(~d, a, b),
+  g: Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
   stays: Answer.Stays(~d, ~kern),
   m1: Maybe<&2, Replicas.Tip>,
   +m2: Maybe<&2, Replicas.Tip>,
@@ -3230,7 +3219,7 @@ def Answer.of_follows(
   +i: Ledgers.Id,
   +q: Requests.Ask,
   +h: Hashes.Hash,
-  g: Answer.Later(~d, a, b),
+  g: Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
   stays: Answer.Stays(~d, ~kern),
   w: Replicas.Arrival
 ) -> {Answer.follows(Answer.of(~d, ~kern, a, i, q, h, w), Some{Answer.of(~d, ~kern, b, i, q, h, w)}) == True{}: Bool}:
@@ -3325,7 +3314,7 @@ def Node.answer_follows.go(
   +time: String,
   +q: Requests.Ask,
   +x: Answer,
-  +g: Answer.Later(~d, a, b),
+  +g: Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
   stays: Answer.Stays(~d, ~kern),
   e: {Node.answer(~d, ~kern, a, i, time, q) == Some{x}: Maybe<&2, Answer>}
 ) -> {Answer.follows(x, Node.answer(~d, ~kern, b, i, time, q)) == True{}: Bool}:
