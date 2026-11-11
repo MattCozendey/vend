@@ -15443,6 +15443,452 @@ def Outs.one(
     bd
   )
 
+# before the request a runs: s reads the run m, and its ledger holds the
+# entry of a
+def Outs.Pre(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -a: Hashes.Hash,
+  -e: Entry(mach),
+  m: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Data:
+  match m:
+    case None{}:
+      Unit
+    case Some{r}:
+      +Sigma<
+        Keep.Base(mach, d, s, r),
+        x => {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}>
+
+# after the request of the ID i ran: s reads the run m, and its outcome
+def Outs.All(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -i: Ledgers.Id,
+  m: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{r}:
+      Keep.Base(mach, d, s, r) & Outs.Has(mach, d, s, i, r)
+
+# the entry that the ledger of a run holds, a run that follows it holds
+def Outs.get_gain(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -s: Led.L(mach, d),
+  +a: Hashes.Hash,
+  +e: Entry(mach),
+  r: Run<Led.L(mach, d)>,
+  -r2: Run<Led.L(mach, d)>,
+  g: Ext.Gain(mach, d, s, r, r2),
+  eg: {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}
+) -> {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r2), Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}:
+  match g:
+    case Tuple{ys, Tuple{+zs, Tuple{a1, Tuple{l1, h1}}}}:
+      %Equal.sym(
+        Led.L(mach, d),
+        Run.ledger(Led.L(mach, d), r2),
+        Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
+        l1
+      ): {Led.get(~mach, ~d, _, Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}
+      Hist.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r))(Ledgers.Name.Ask{a})(e)(eg)
+
+# Outs.Pre of a run m2 that follows r
+def Outs.pre_pair(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +a: Hashes.Hash,
+  +e: Entry(mach),
+  +r: Run<Led.L(mach, d)>,
+  m2: Maybe<&2, Run<Led.L(mach, d)>>,
+  +gm: Ext.GainM(mach, d, s, r, m2),
+  +bd: Keep.Base(mach, d, s, r),
+  +eg: {Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}) == Some{e}: Maybe<&2, Entry(mach)>}
+) -> Outs.Pre(mach, d, s, a, e, m2):
+  match m2:
+    case None{}:
+      Unit{}
+    case Some{+r2}:
+      Tuple{Keep.base(~mach, ~d, s, r, r2, bd, gm), Outs.get_gain(~mach, ~d, s, a, e, r, r2, gm, eg)}
+
+# Outs.Pre after one more request
+def Outs.pre_step(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +a: Hashes.Hash,
+  +e: Entry(mach),
+  +c: Ledgers.Line,
+  +q: Hashes.Hash,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  st: Outs.Pre(mach, d, s, a, e, m)
+) -> Outs.Pre(
+  mach,
+  d,
+  s,
+  a,
+  e,
+  Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, x => Step.one(~mach, ~d, ~kern, x, c, q))
+):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+r}:
+      match st:
+        case Tuple{+bd, +eg}:
+          Outs.pre_pair(
+            ~mach,
+            ~d,
+            s,
+            a,
+            e,
+            r,
+            Step.one(~mach, ~d, ~kern, r, c, q),
+            Ext.one(~mach, ~d, ~kern, s, r, c, q),
+            bd,
+            eg
+          )
+
+# Outs.All of a run m2 that follows r
+def Outs.mid_pair(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  -i: Ledgers.Id,
+  +r: Run<Led.L(mach, d)>,
+  m2: Maybe<&2, Run<Led.L(mach, d)>>,
+  res: Outs.Res(mach, d, s, i, m2),
+  gm: Ext.GainM(mach, d, s, r, m2),
+  bd: Keep.Base(mach, d, s, r)
+) -> Outs.All(mach, d, s, i, m2):
+  match m2:
+    case None{}:
+      Unit{}
+    case Some{+r2}:
+      Tuple{Keep.base(~mach, ~d, s, r, r2, bd, gm), res}
+
+# the request a gives its outcome
+def Outs.mid(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +a: Hashes.Hash,
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Machine.Q(mach),
+  +c: Ledgers.Line,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  st: Outs.Pre(mach, d, s, a, Ledgers.Entry.Ask{i, time, q}, m)
+) -> Outs.All(
+  mach,
+  d,
+  s,
+  i,
+  Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, x => Step.one(~mach, ~d, ~kern, x, c, a))
+):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+r}:
+      match st:
+        case Tuple{+bd, eg}:
+          Outs.mid_pair(
+            ~mach,
+            ~d,
+            s,
+            i,
+            r,
+            Step.one(~mach, ~d, ~kern, r, c, a),
+            Outs.one(~mach, ~d, ~kern, s, r, c, a, i, time, q, eg, bd),
+            Ext.one(~mach, ~d, ~kern, s, r, c, a),
+            bd
+          )
+
+# the outcome stays through the rest of the requests
+def Outs.post(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +c: Ledgers.Line,
+  +rest: List<&2, Hashes.Hash>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  st: Outs.All(mach, d, s, i, m)
+) -> Outs.Res(mach, d, s, i, Step.all(~mach, ~d, ~kern, c, rest, m)):
+  match m:
+    case None{}:
+      Outs.of_keep(
+        mach,
+        d,
+        s,
+        i,
+        Out.code(Out.Stale{a}, []),
+        Outs.code(Out.Stale{a}),
+        Step.all(~mach, ~d, ~kern, c, rest, None{}),
+        Keep.all(~mach, ~d, ~kern, s, Log.out(i), Out.code(Out.Stale{a}, []), c, rest, None{}, Unit{})
+      )
+    case Some{+r1}:
+      match st:
+        case Tuple{+bd, oh}:
+          match oh:
+            case Tuple{+v, Tuple{dv, kh}}:
+              Outs.of_keep(
+                mach,
+                d,
+                s,
+                i,
+                v,
+                dv,
+                Step.all(~mach, ~d, ~kern, c, rest, Some{r1}),
+                Keep.all(~mach, ~d, ~kern, s, Log.out(i), v, c, rest, Some{r1}, Tuple{bd, kh})
+              )
+
+# a step whose requests include a gives a its outcome
+def Outs.all(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Led.L(mach, d),
+  +a: Hashes.Hash,
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Machine.Q(mach),
+  +c: Ledgers.Line,
+  qs: List<&2, Hashes.Hash>,
+  +m: Maybe<&2, Run<Led.L(mach, d)>>,
+  +st: Outs.Pre(mach, d, s, a, Ledgers.Entry.Ask{i, time, q}, m)
+) -> {List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, qs, a) == True{}: Bool}
+  -> Outs.Res(mach, d, s, i, Step.all(~mach, ~d, ~kern, c, qs, m)):
+  match qs:
+    case Nil{}:
+      h => Empty.absurd(Outs.Res(mach, d, s, i, Step.all(~mach, ~d, ~kern, c, [], m)), Shared.Bool.false_ne_true(h))
+    case Con{+x, +rest}:
+      h => Ext.any_cases(
+        Hashes.Hash.is_eq(x, a),
+        u => List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, rest, a),
+        Outs.Res(mach, d, s, i, Step.all(~mach, ~d, ~kern, c, x <> rest, m)),
+        hx =>
+          %Equal.sym(Hashes.Hash, x, a, Hashes.Hash.is_eq_sound(x, a)(hx)): Outs.Res(
+            mach,
+            d,
+            s,
+            i,
+            Step.all(
+              ~mach,
+              ~d,
+              ~kern,
+              c,
+              rest,
+              Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, y => Step.one(~mach, ~d, ~kern, y, c, _))
+            )
+          )
+          Outs.post(
+            ~mach,
+            ~d,
+            ~kern,
+            s,
+            i,
+            a,
+            c,
+            rest,
+            Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, y => Step.one(~mach, ~d, ~kern, y, c, a)),
+            Outs.mid(~mach, ~d, ~kern, s, a, i, time, q, c, m, st)
+          ),
+        hr => Outs.all(
+          ~mach,
+          ~d,
+          ~kern,
+          s,
+          a,
+          i,
+          time,
+          q,
+          c,
+          rest,
+          Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, y => Step.one(~mach, ~d, ~kern, y, c, x)),
+          Outs.pre_step(~mach, ~d, ~kern, s, a, Ledgers.Entry.Ask{i, time, q}, c, x, m, st)
+        )(hr),
+        h
+      )
+
+# the outcome that the log of a run reads, once s holds what it added
+def Outs.final.has(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +i: Ledgers.Id,
+  +r: Run<Led.L(mach, d)>,
+  res: Outs.Has(mach, d, s, i, r)
+) -> {Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)) == True{}: Bool}
+  -> {Maybe.is_some(&2, Out, Tip.out(~mach, ~d, s, Run.tip(Led.L(mach, d), r), i)) == True{}: Bool}:
+  match res:
+    case Tuple{+v, Tuple{dv, kh}}:
+      hh =>
+        %Equal.sym(
+          Maybe<&2, List<&2, U32>>,
+          Tip.get(~mach, ~d, s, Run.tip(Led.L(mach, d), r), Log.out(i)),
+          Some{v},
+          kh(hh)
+        ): {Maybe.is_some(&2, Out, Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, _)) == True{}: Bool}
+        dv
+
+# the outcome of the run that a step gave
+def Outs.final(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +i: Ledgers.Id,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  +r: Run<Led.L(mach, d)>,
+  res: Outs.Res(mach, d, s, i, m)
+) -> {m == Some{r}: Maybe<&2, Run<Led.L(mach, d)>>}
+  -> {Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)) == True{}: Bool}
+  -> {Maybe.is_some(&2, Out, Tip.out(~mach, ~d, s, Run.tip(Led.L(mach, d), r), i)) == True{}: Bool}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)) == True{}: Bool}
+          -> {Maybe.is_some(&2, Out, Tip.out(~mach, ~d, s, Run.tip(Led.L(mach, d), r), i)) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Run<Led.L(mach, d)>, r, e)
+      )
+    case Some{+r2}:
+      e =>
+        %Shared.Maybe.some_inj(Run<Led.L(mach, d)>, r2, r, e): {
+          Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), _)) == True{}: Bool
+        }
+          -> {Maybe.is_some(&2, Out, Tip.out(~mach, ~d, s, Run.tip(Led.L(mach, d), _), i)) == True{}: Bool}
+        Outs.final.has(~mach, ~d, s, i, r2, res)
+
+# the start of a run that ends at r2, which the ledger of r reads, when r2 is r
+def Outs.base0.of(
+  -mach: Machine(),
+  -d: Led(mach),
+  +l: Led.L(mach, d),
+  -t: Tip,
+  r2: Run<Led.L(mach, d)>,
+  -r: Run<Led.L(mach, d)>,
+  g: Ext.Gain(mach, d, Run.ledger(Led.L(mach, d), r), Run{l, t, []}, r2),
+  er: {r2 == r: Run<Led.L(mach, d)>}
+) -> Keep.Base(mach, d, Run.ledger(Led.L(mach, d), r), Run{l, t, []}):
+  match g:
+    case Tuple{ys, Tuple{+zs, Tuple{a1, Tuple{l1, h1}}}}:
+      Tuple{
+        [],
+        Tuple{
+          l,
+          Tuple{
+            zs,
+            Tuple{
+              {==},
+              Tuple{
+                Equal.trans(
+                  Led.L(mach, d),
+                  Run.ledger(Led.L(mach, d), r),
+                  Run.ledger(Led.L(mach, d), r2),
+                  Led.puts(~mach, ~d, zs, l),
+                  Equal.cong(
+                    Run<Led.L(mach, d)>,
+                    Led.L(mach, d),
+                    z => Run.ledger(Led.L(mach, d), z),
+                    r,
+                    r2,
+                    Equal.sym(Run<Led.L(mach, d)>, r2, r, er)
+                  ),
+                  l1
+                ),
+                {==}
+              }
+            }
+          }
+        }
+      }
+
+# the start of a run that ends at r, which the ledger of r reads, once the
+# run is known (m)
+def Outs.base0(
+  -mach: Machine(),
+  -d: Led(mach),
+  +l: Led.L(mach, d),
+  +t: Tip,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  -r: Run<Led.L(mach, d)>,
+  gm: Ext.GainM(mach, d, Run.ledger(Led.L(mach, d), r), Run{l, t, []}, m)
+) -> {m == Some{r}: Maybe<&2, Run<Led.L(mach, d)>>}
+  -> Keep.Base(mach, d, Run.ledger(Led.L(mach, d), r), Run{l, t, []}):
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        Keep.Base(mach, d, Run.ledger(Led.L(mach, d), r), Run{l, t, []}),
+        Shared.Maybe.none_ne_some(Run<Led.L(mach, d)>, r, e)
+      )
+    case Some{+r2}:
+      e => Outs.base0.of(mach, d, l, t, r2, r, gm, Shared.Maybe.some_inj(Run<Led.L(mach, d)>, r2, r, e))
+
+# Step.run_outs, with its premises
+def Outs.go(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +t: Tip,
+  +qs: List<&2, Hashes.Hash>,
+  +r: Run<Led.L(mach, d)>,
+  +a: Hashes.Hash,
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Machine.Q(mach),
+  +e: {Step.run(~mach, ~d, ~kern, l, c, t, qs) == Some{r}: Maybe<&2, Run<Led.L(mach, d)>>},
+  hh: {Ext.holds(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.added(Led.L(mach, d), r)) == True{}: Bool},
+  hc: {List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, qs, a) == True{}: Bool},
+  eg: {Led.get(~mach, ~d, l, Ledgers.Name.Ask{a}) == Some{Ledgers.Entry.Ask{i, time, q}}: Maybe<&2, Entry(mach)>}
+) -> {
+  Maybe.is_some(&2, Out, Tip.out(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), i)) == True{}: Bool
+}:
+  +s = Run.ledger(Led.L(mach, d), r)
+  Outs.final(
+    ~mach,
+    ~d,
+    s,
+    i,
+    Step.run(~mach, ~d, ~kern, l, c, t, qs),
+    r,
+    Outs.all(
+      ~mach,
+      ~d,
+      ~kern,
+      s,
+      a,
+      i,
+      time,
+      q,
+      c,
+      qs,
+      Some{Run{l, t, []}},
+      Tuple{
+        Outs.base0(
+          mach,
+          d,
+          l,
+          t,
+          Step.run(~mach, ~d, ~kern, l, c, t, qs),
+          r,
+          Ext.all(~mach, ~d, ~kern, s, Run{l, t, []}, c, qs, Some{Run{l, t, []}}, Ext.refl(mach, d, s, Run{l, t, []}))
+        )(e),
+        eg
+      }
+    )(hc)
+  )(e)(hh)
+
 # a step gives each of its requests an outcome: after a run whose ledger
 # holds each node that it added (as a landed step's does), the log holds an
 # outcome of the ID of each request of the step
@@ -15481,3 +15927,6 @@ law Step.run_outs:
       )
         == True{}: Bool
     }
+
+def Step.run_outs(mach, d, kern, l, c, t, qs, r, a, i, time, q):
+  e => hh => hc => eg => Outs.go(~mach, ~d, ~kern, l, c, t, qs, r, a, i, time, q, e, hh, hc, eg)
