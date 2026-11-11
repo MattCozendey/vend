@@ -2,6 +2,7 @@ import Base
 import ./shared/quorum.bend as Quorums
 import ./shared/shared/cell.bend as Cells
 import ./shared/shared/code.bend as Codes
+import ./shared/shared/crit.bend as Crits
 import ./shared/shared/hash.bend as Hashes
 import ./shared/shared/seal.bend as Seals
 import ./shared/shared/shared.bend as Shared
@@ -2185,3 +2186,360 @@ def Kind.grows_add(
     ~(p => e => h => Kind.add_has(~Q, ~c, ~k, ~laws, p, e)(h)),
     Tuple{l, x}
   )
+
+# Books
+# =====
+# A way to keep entries (a Ledger.Kind): a dict of the entries by name, and,
+# for each question that a ledger answers often, a dict from a key that
+# starts with what the question names to the name of an entry. A number in a
+# key is a Crits.Key.ord, so the greatest round or height under a prefix is
+# the last key there (Crits.Crit.last). Each index holds exactly the keys of
+# the entries (Book.ok), so a drop takes an entry out of each, and a sync
+# sends the difference of two dicts of entries.
+
+# the code of the name n, then r
+def Name.code(n: Name, r: List<&2, U32>) -> List<&2, U32>:
+  match n:
+    case Name.Ask{h}:
+      0 <> Hashes.Hash.code(h, r)
+    case Name.Ballot{h}:
+      1 <> Hashes.Hash.code(h, r)
+    case Name.Data{h}:
+      2 <> Hashes.Hash.code(h, r)
+    case Name.Lie{h}:
+      3 <> Hashes.Hash.code(h, r)
+
+# the key of the name n among the entries of a book
+def Name.key(n: Name) -> List<&2, U32>:
+  Name.code(n, [])
+
+# a book: the entries by name, and the names of the entries by their keys
+# for the ballots of a voter at a place, the rounds of ballots at a height,
+# the heights of ballots on a line, the proofs of lies under a root, and the
+# requests of an author
+type Book<-Q: Data> is Data:
+  Book{
+    entries: Crits.Dict(Entry<Q>),
+    ballots: Crits.Dict(Name),
+    rounds: Crits.Dict(Name),
+    heights: Crits.Dict(Name),
+    liars: Crits.Dict(Name),
+    asks: Crits.Dict(Name)
+  }
+
+# the keys of an entry in each index of a book (none: it is not in that one)
+type Keys is Data:
+  Keys{
+    ballot: Maybe<&2, List<&2, U32>>,
+    round: Maybe<&2, List<&2, U32>>,
+    height: Maybe<&2, List<&2, U32>>,
+    liar: Maybe<&2, List<&2, U32>>,
+    ask: Maybe<&2, List<&2, U32>>
+  }
+
+# the keys of the ballot b, of the name n
+def Ballot.keys(b: Ballot, +n: Name) -> Keys:
+  match b:
+    case Ballot{Signed{Place{+line, +h, +r}, +voter, a}, l}:
+      Keys{
+        Some{Place.code(Place{line, h, r}, Codes.Code.text(voter, Name.key(n)))},
+        Some{Line.code(line, h <> Crits.Key.ord(r, Name.key(n)))},
+        Some{Line.code(line, Crits.Key.ord(U32.to_nat(h), Name.key(n)))},
+        None{},
+        None{}
+      }
+
+# the keys of the entry e, of the name n
+def Entry.keys(-Q: Data, e: Entry<Q>, +n: Name) -> Keys:
+  match e:
+    case Entry.Ballot{b}:
+      Ballot.keys(b, n)
+    case Entry.Lie{+x}:
+      Keys{
+        None{},
+        None{},
+        None{},
+        Some{Hashes.Hash.code(Ballot.root(Lie.first(x)), Codes.Code.text(Ballot.voter(Lie.first(x)), Name.key(n)))},
+        None{}
+      }
+    case Entry.Ask{Id{w, q}, t, a}:
+      Keys{None{}, None{}, None{}, None{}, Some{Codes.Code.text(w, Name.key(n))}}
+    case Entry.Data{ws}:
+      Keys{None{}, None{}, None{}, None{}, None{}}
+
+# the key of an index, of the keys ks: 0 ballots, 1 rounds, 2 heights, 3
+# liars, 4 asks
+def Keys.at(ks: Keys, i: Nat) -> Maybe<&2, List<&2, U32>>:
+  match ks i:
+    case Keys{b, r, h, l, a} 0n:
+      b
+    case Keys{b, r, h, l, a} 1n:
+      r
+    case Keys{b, r, h, l, a} 2n:
+      h
+    case Keys{b, r, h, l, a} 3n:
+      l
+    case Keys{b, r, h, l, a} x:
+      a
+
+# the index i of the book b (Keys.at)
+def Book.index(-Q: Data, b: Book<Q>, i: Nat) -> Crits.Dict(Name):
+  match b i:
+    case Book{es, bs, rs, hs, ls, as} 0n:
+      bs
+    case Book{es, bs, rs, hs, ls, as} 1n:
+      rs
+    case Book{es, bs, rs, hs, ls, as} 2n:
+      hs
+    case Book{es, bs, rs, hs, ls, as} 3n:
+      ls
+    case Book{es, bs, rs, hs, ls, as} x:
+      as
+
+# the entries of the book b
+def Book.entries(-Q: Data, b: Book<Q>) -> Crits.Dict(Entry<Q>):
+  match b:
+    case Book{es, bs, rs, hs, ls, as}:
+      es
+
+# a book with no entry
+def Book.new(~Q: Data) -> Book<Q>:
+  Book{
+    Crits.Dict.new(~Entry<Q>),
+    Crits.Dict.new(~Name),
+    Crits.Dict.new(~Name),
+    Crits.Dict.new(~Name),
+    Crits.Dict.new(~Name),
+    Crits.Dict.new(~Name)
+  }
+
+# the index d with the key m, if any, for the name n
+def Index.put(d: Crits.Dict(Name), m: Maybe<&2, List<&2, U32>>, +n: Name) -> Crits.Dict(Name):
+  match m:
+    case None{}:
+      d
+    case Some{k}:
+      Crits.Dict.set(~Name, d, k, n)
+
+# the index d without the key m, if any
+def Index.drop(d: Crits.Dict(Name), m: Maybe<&2, List<&2, U32>>) -> Crits.Dict(Name):
+  match m:
+    case None{}:
+      d
+    case Some{k}:
+      Crits.Dict.drop(~Name, d, k)
+
+# the book b with the entry e under the name n, and its keys ks in each index
+def Book.put(~Q: Data, b: Book<Q>, e: Entry<Q>, +n: Name, +ks: Keys) -> Book<Q>:
+  match b:
+    case Book{es, bs, rs, hs, ls, as}:
+      Book{
+        Crits.Dict.set(~Entry<Q>, es, Name.key(n), e),
+        Index.put(bs, Keys.at(ks, 0n), n),
+        Index.put(rs, Keys.at(ks, 1n), n),
+        Index.put(hs, Keys.at(ks, 2n), n),
+        Index.put(ls, Keys.at(ks, 3n), n),
+        Index.put(as, Keys.at(ks, 4n), n)
+      }
+
+# the book b without the entry of the name n and its keys ks in each index
+def Book.take(~Q: Data, b: Book<Q>, +n: Name, +ks: Keys) -> Book<Q>:
+  match b:
+    case Book{es, bs, rs, hs, ls, as}:
+      Book{
+        Crits.Dict.drop(~Entry<Q>, es, Name.key(n)),
+        Index.drop(bs, Keys.at(ks, 0n)),
+        Index.drop(rs, Keys.at(ks, 1n)),
+        Index.drop(hs, Keys.at(ks, 2n)),
+        Index.drop(ls, Keys.at(ks, 3n)),
+        Index.drop(as, Keys.at(ks, 4n))
+      }
+
+# the entry that the book b holds under the name n
+def Book.get(-Q: Data, b: Book<Q>, n: Name) -> Maybe<&2, Entry<Q>>:
+  Crits.Dict.get(Entry<Q>, Book.entries(Q, b), Name.key(n))
+
+# the book b with the entry e, when it holds nothing under its name; else b,
+# which keeps what it holds, when c is the code of changes
+def Book.add(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +e: Entry<Q>) -> Book<Q>:
+  +n = Entry.name(~Q, ~c, e)
+  Shared.Bool.when(
+    Book<Q>,
+    Maybe.is_some(&2, Entry<Q>, Book.get(Q, b, n)),
+    u => b,
+    u => Book.put(~Q, b, e, n, Entry.keys(Q, e, n))
+  )
+
+# Book.drop once the entry m of the name n is known
+def Book.drop.at(~Q: Data, b: Book<Q>, +n: Name, m: Maybe<&2, Entry<Q>>) -> Book<Q>:
+  match m:
+    case None{}:
+      b
+    case Some{e}:
+      Book.take(~Q, b, n, Entry.keys(Q, e, n))
+
+# the book b without the entry of the name n, in each of its dicts
+def Book.drop(~Q: Data, +b: Book<Q>, +n: Name) -> Book<Q>:
+  Book.drop.at(~Q, b, n, Book.get(Q, b, n))
+
+# the entries of s whose names r lacks
+def Book.missing(~Q: Data, s: Book<Q>, r: Book<Q>) -> List<&2, Entry<Q>>:
+  Crits.Dict.values(Entry<Q>, Crits.Dict.minus(~Entry<Q>, Book.entries(Q, s), Book.entries(Q, r)))
+
+# the names in the index d under the keys that start with the words p
+def Index.under(d: Crits.Dict(Name), +p: List<&2, U32>) -> List<&2, Name>:
+  Crits.Binds.values(Name, Crits.Crit.entries(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p)))
+
+# the entries of the book b of the names ns
+def Book.named(-Q: Data, +b: Book<Q>, ns: List<&2, Name>) -> List<&2, Entry<Q>>:
+  match ns:
+    case Nil{}:
+      []
+    case Con{n, rest}:
+      Shared.Maybe.cons(Entry<Q>, Book.get(Q, b, n), Book.named(Q, b, rest))
+
+# the ballots among the entries es
+def Entries.ballots(-Q: Data, es: List<&2, Entry<Q>>) -> List<&2, Ballot>:
+  match es:
+    case Nil{}:
+      []
+    case Con{Entry.Ballot{x}, rest}:
+      x <> Entries.ballots(Q, rest)
+    case Con{e, rest}:
+      Entries.ballots(Q, rest)
+
+# the voters of the first ballots of the lies among the entries es
+def Entries.liars(-Q: Data, es: List<&2, Entry<Q>>) -> List<&2, String>:
+  match es:
+    case Nil{}:
+      []
+    case Con{Entry.Lie{x}, rest}:
+      Ballot.voter(Lie.first(x)) <> Entries.liars(Q, rest)
+    case Con{e, rest}:
+      Entries.liars(Q, rest)
+
+# the ballots of the voter at the place w
+def Book.ballots(-Q: Data, +b: Book<Q>, +w: Place, +voter: String) -> List<&2, Ballot>:
+  Entries.ballots(Q, Book.named(Q, b, Index.under(Book.index(Q, b, 0n), Place.code(w, Codes.Code.text(voter, [])))))
+
+# the number at the front of the words of the last key m, after its first n
+# words (0: none)
+def Index.number(m: Maybe<&2, Crits.Bind<Name>>, +n: Nat) -> Nat:
+  match m:
+    case None{}:
+      0n
+    case Some{Crits.Bind{k, x}}:
+      Maybe.default(&2, Nat, Crits.Key.ord.value(List.drop(&2, U32, k, n)), 0n)
+
+# the greatest number in the keys of the index d under the prefix p, which
+# a Key.ord follows (0: none)
+def Index.last(d: Crits.Dict(Name), +p: List<&2, U32>) -> Nat:
+  Index.number(
+    Crits.Crit.last(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p)),
+    List.length(&2, U32, p)
+  )
+
+# a round that no ballot at the height h of the line is above
+def Book.rounds(-Q: Data, b: Book<Q>, +line: Line, +h: U32) -> Nat:
+  Index.last(Book.index(Q, b, 1n), Line.code(line, [h]))
+
+# a height that no ballot of the line is above
+def Book.heights(-Q: Data, b: Book<Q>, +line: Line) -> Nat:
+  Index.last(Book.index(Q, b, 2n), Line.code(line, []))
+
+# the voters that the book b holds a proof of a lie against, under the root r
+def Book.liars(-Q: Data, +b: Book<Q>, +r: Hashes.Hash) -> List<&2, String>:
+  Entries.liars(Q, Book.named(Q, b, Index.under(Book.index(Q, b, 3n), Hashes.Hash.code(r, []))))
+
+# the requests of the author
+def Book.asks(-Q: Data, +b: Book<Q>, +author: String) -> List<&2, Entry<Q>>:
+  Book.named(Q, b, Index.under(Book.index(Q, b, 4n), Codes.Code.text(author, [])))
+
+# The one shape of a book
+
+# the index d holds the name n under the key m, if any
+def Index.holds(d: Crits.Dict(Name), m: Maybe<&2, List<&2, U32>>, +n: Name) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{k}:
+      Shared.Maybe.is_eq(~Name, ~Name.is_eq, Crits.Dict.get(Name, d, k), Some{n})
+
+# each index of the book b holds the name n under the keys ks
+def Book.indexed(-Q: Data, +b: Book<Q>, +ks: Keys, +n: Name) -> Bool:
+  Bool.and(
+    Bool.and(Index.holds(Book.index(Q, b, 0n), Keys.at(ks, 0n), n), Index.holds(Book.index(Q, b, 1n), Keys.at(ks, 1n), n)),
+    Bool.and(
+      Bool.and(Index.holds(Book.index(Q, b, 2n), Keys.at(ks, 2n), n), Index.holds(Book.index(Q, b, 3n), Keys.at(ks, 3n), n)),
+      Index.holds(Book.index(Q, b, 4n), Keys.at(ks, 4n), n)
+    )
+  )
+
+# each of the entries es of the book b is under the key of its name, and
+# each index holds its keys
+def Book.ok.entries(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, es: List<&2, Crits.Bind<Entry<Q>>>) -> Bool:
+  match es:
+    case Nil{}:
+      True{}
+    case Con{Crits.Bind{k, +e}, rest}:
+      +n = Entry.name(~Q, ~c, e)
+      Bool.and(
+        Bool.and(Crits.Key.is_eq(Name.key(n), k), Book.indexed(Q, b, Entry.keys(Q, e, n), n)),
+        Book.ok.entries(~Q, ~c, b, rest)
+      )
+
+# the key k of the index i of the book b is a key of the entry of the name n
+def Book.ok.key(-Q: Data, m: Maybe<&2, Entry<Q>>, +i: Nat, +k: List<&2, U32>, +n: Name) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{e}:
+      Shared.Maybe.is_eq(~List<&2, U32>, ~Crits.Key.is_eq, Keys.at(Entry.keys(Q, e, n), i), Some{k})
+
+# each key ks of the index i of the book b is a key of the entry it names
+def Book.ok.index(-Q: Data, +b: Book<Q>, +i: Nat, ks: List<&2, Crits.Bind<Name>>) -> Bool:
+  match ks:
+    case Nil{}:
+      True{}
+    case Con{Crits.Bind{+k, +n}, rest}:
+      Bool.and(Book.ok.key(Q, Book.get(Q, b, n), i, k, n), Book.ok.index(Q, b, i, rest))
+
+# the index i of the book b holds only keys of its entries
+def Book.ok.at(-Q: Data, +b: Book<Q>, +i: Nat) -> Bool:
+  Book.ok.index(Q, b, i, Crits.Dict.entries(Name, Book.index(Q, b, i)))
+
+# the book b is in its one shape, when c is the code of changes: each entry is
+# under the key of its name, each index holds the keys of each entry, and no
+# other key
+def Book.ok(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>) -> Bool:
+  Bool.and(
+    Book.ok.entries(~Q, ~c, b, Crits.Dict.entries(Entry<Q>, Book.entries(Q, b))),
+    Bool.and(
+      Bool.and(Book.ok.at(Q, b, 0n), Book.ok.at(Q, b, 1n)),
+      Bool.and(Bool.and(Book.ok.at(Q, b, 2n), Book.ok.at(Q, b, 3n)), Book.ok.at(Q, b, 4n))
+    )
+  )
+
+# Laws of books
+
+# a new book is in its one shape
+law Book.ok_new:
+  for ~Q: Data
+  for ~c: Codes.Codec(Q)
+  {Book.ok(~Q, ~c, Book.new(~Q)) == True{}: Bool}
+
+# an add keeps a book in its one shape
+law Book.ok_add:
+  for ~Q: Data
+  for ~c: Codes.Codec(Q)
+  for b: Book<Q>
+  for e: Entry<Q>
+  {Book.ok(~Q, ~c, b) == True{}: Bool} -> {Book.ok(~Q, ~c, Book.add(~Q, ~c, b, e)) == True{}: Bool}
+
+# a drop keeps a book in its one shape
+law Book.ok_drop:
+  for ~Q: Data
+  for ~c: Codes.Codec(Q)
+  for b: Book<Q>
+  for n: Name
+  {Book.ok(~Q, ~c, b) == True{}: Bool} -> {Book.ok(~Q, ~c, Book.drop(~Q, b, n)) == True{}: Bool}

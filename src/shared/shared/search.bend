@@ -64,7 +64,7 @@ type Front<-S: Data, -A: Data> is Data:
 
 # front, with y to visit after rev and d, unless known; k is the key of y
 def Search.push.new(
-  -S: Data,
+  ~S: Data,
   -A: Data,
   known: Bool,
   y: S,
@@ -112,7 +112,7 @@ def Search.push(
         x,
         rev,
         Search.push.new(
-          S,
+          ~S,
           A,
           KeySets.KeySet.has.at(~S, ~same, Crits.Dict.get(S, seen, k), y),
           y,

@@ -3083,6 +3083,12 @@ def Kernel.Rules(-d: Led(), -kern: Kern(d)) -> Type:
 def Kernel(-d: Led()) -> Type:
   &kern: Kern(d) -> Kernel.Rules(d, kern)
 
+# the acts of the rules of Vend stay as the ledger grows: each rule reads the
+# ledger and the tip of its line, and waits for what it lacks
+law Ask.act_stable:
+  for ~d: Led()
+  Replicas.Kernel.Stable(Requests.Ask.machine(), d, l => t => c => i => q => Ask.act(~d, l, t, c, i, q))
+
 # Laws
 # ----
 

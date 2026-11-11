@@ -290,22 +290,6 @@ def Seqs.step(
     Crits.Dict.new(~List<&2, Re<T>>)
   )
 
-# the Seqs that xs becomes after the word w
-def Seqs.walk(
-  ~A: Data,
-  ~T: Data,
-  ~hit: T -> A -> Bool,
-  ~same: T -> T -> Bool,
-  ~key: T -> List<&2, U32>,
-  w: List<&2, A>,
-  xs: List<&2, List<&2, Re<T>>>
-) -> List<&2, List<&2, Re<T>>>:
-  match w:
-    case Nil{}:
-      xs
-    case Con{c, t}:
-      Seqs.walk(~A, ~T, ~hit, ~same, ~key, t, Seqs.step(~A, ~T, ~hit, ~same, ~key, xs, c))
-
 # r matches all of w: Re.matches, at a cost that does not grow with each
 # symbol, as the Seqs stay small
 def Re.accepts(
@@ -317,7 +301,7 @@ def Re.accepts(
   w: List<&2, A>,
   r: Re<T>
 ) -> Bool:
-  Seqs.matches(~A, ~T, ~hit, Seqs.walk(~A, ~T, ~hit, ~same, ~key, w, [[r]]), [])
+  Seqs.matches(~A, ~T, ~hit, List.foldl(~&2, ~A, ~List<&2, List<&2, Re<T>>>, ~Seqs.step(~A, ~T, ~hit, ~same, ~key), w, [[r]]), [])
 
 # Atoms
 # -----
@@ -863,14 +847,6 @@ def Re.cat_assoc(
 # one word as data: the left sides agree on each prefix of the word, the right
 # sides on each suffix.
 
-# what x must still match after it reads w
-def Re.walk(~A: Data, ~T: Data, ~hit: T -> A -> Bool, w: List<&2, A>, x: Re<T>) -> Re<T>:
-  match w:
-    case Nil{}:
-      x
-    case Con{c, t}:
-      Re.walk(~A, ~T, ~hit, t, Re.step(~A, ~T, ~hit, x, c))
-
 # x matches w exactly when what x must match after w matches the empty word
 def Re.walk_null(
   ~A: Data,
@@ -878,7 +854,7 @@ def Re.walk_null(
   ~hit: T -> A -> Bool,
   w: List<&2, A>,
   x: Re<T>
-) -> {Re.matches(~A, ~T, ~hit, w, x) == Re.is_nullable(T, Re.walk(~A, ~T, ~hit, w, x)): Bool}:
+) -> {Re.matches(~A, ~T, ~hit, w, x) == Re.is_nullable(T, List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), w, x)): Bool}:
   match w:
     case Nil{}:
       {==}
@@ -894,14 +870,11 @@ def Re.walk_snoc(
   c: A,
   x: Re<T>
 ) -> {
-  Re.walk(
-    ~A,
-    ~T,
-    ~hit,
+  List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)),
     List.append(&2, A, pre, [c]),
     x
   )
-    == Re.step(~A, ~T, ~hit, Re.walk(~A, ~T, ~hit, pre, x), c): Re<T>
+    == Re.step(~A, ~T, ~hit, List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), pre, x), c): Re<T>
 }:
   match pre:
     case Nil{}:
@@ -923,14 +896,14 @@ def Re.cat_walk(
   +y: Re<T>
 ) -> {
   Bool.or(
-    Re.matches(~A, ~T, ~hit, t, Cat{Re.walk(~A, ~T, ~hit, List.append(&2, A, pre, [c]), x), y}),
+    Re.matches(~A, ~T, ~hit, t, Cat{List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), List.append(&2, A, pre, [c]), x), y}),
     Bool.and(Re.matches(~A, ~T, ~hit, pre, x), Re.matches(~A, ~T, ~hit, c <> t, y))
   )
-    == Re.matches(~A, ~T, ~hit, c <> t, Cat{Re.walk(~A, ~T, ~hit, pre, x), y}): Bool
+    == Re.matches(~A, ~T, ~hit, c <> t, Cat{List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), pre, x), y}): Bool
 }:
-  +wx = Re.walk(~A, ~T, ~hit, pre, x)
+  +wx = List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), pre, x)
   +ny = Re.step(~A, ~T, ~hit, y, c)
-  wc = Re.walk(~A, ~T, ~hit, List.append(&2, A, pre, [c]), x)
+  wc = List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), List.append(&2, A, pre, [c]), x)
   my = Re.matches(~A, ~T, ~hit, t, ny)
   l = Bool.or(
     Re.matches(~A, ~T, ~hit, t, Cat{wc, y}),
@@ -1036,13 +1009,13 @@ def Re.cat_agree.go(
     ~T,
     ~hit,
     suf,
-    Cat{Re.walk(~A, ~T, ~hit, pre, x), y}
+    Cat{List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), pre, x), y}
   )
-    == Re.matches(~A, ~T, ~hit, suf, Cat{Re.walk(~A, ~T, ~hit, pre, x2), y2}): Bool
+    == Re.matches(~A, ~T, ~hit, suf, Cat{List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), pre, x2), y2}): Bool
 }:
   match suf:
     case Nil{}:
-      l = Re.is_nullable(T, Cat{Re.walk(~A, ~T, ~hit, pre, x), y})
+      l = Re.is_nullable(T, Cat{List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), pre, x), y})
       mx = Re.matches(~A, ~T, ~hit, pre, x)
       ny = Re.is_nullable(T, y)
       %Re.walk_null(~A, ~T, ~hit, pre, x2): {l == List.all.if(u => Re.is_nullable(T, y2), _): Bool}
@@ -1061,9 +1034,9 @@ def Re.cat_agree.go(
       (e2, rb) = eb
       +pc = List.append(&2, A, pre, [c])
       mx = Re.matches(~A, ~T, ~hit, pre, x)
-      r2 = Re.matches(~A, ~T, ~hit, t, Cat{Re.walk(~A, ~T, ~hit, pc, x2), y2})
+      r2 = Re.matches(~A, ~T, ~hit, t, Cat{List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), pc, x2), y2})
       l = Bool.or(
-        Re.matches(~A, ~T, ~hit, t, Cat{Re.walk(~A, ~T, ~hit, pc, x), y}),
+        Re.matches(~A, ~T, ~hit, t, Cat{List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), pc, x), y}),
         Bool.and(mx, Re.matches(~A, ~T, ~hit, c <> t, y))
       )
       %Re.cat_walk(
@@ -1075,7 +1048,7 @@ def Re.cat_agree.go(
         pre,
         x,
         y
-      ): {_ == Re.matches(~A, ~T, ~hit, c <> t, Cat{Re.walk(~A, ~T, ~hit, pre, x2), y2}): Bool}
+      ): {_ == Re.matches(~A, ~T, ~hit, c <> t, Cat{List.foldl(~&2, ~A, ~Re<T>, ~(x => c => Re.step(~A, ~T, ~hit, x, c)), pre, x2), y2}): Bool}
       %Re.cat_walk(~A, ~T, ~hit, t, c, pre, x2, y2): {l == _: Bool}
       %e1: {l == Bool.or(r2, Bool.and(_, Re.matches(~A, ~T, ~hit, c <> t, y2))): Bool}
       %e2: {l == Bool.or(r2, Bool.and(mx, _)): Bool}
@@ -1690,7 +1663,7 @@ def Seqs.walk_matches(
     ~A,
     ~T,
     ~hit,
-    Seqs.walk(~A, ~T, ~hit, ~same, ~key, w, xs),
+    List.foldl(~&2, ~A, ~List<&2, List<&2, Re<T>>>, ~Seqs.step(~A, ~T, ~hit, ~same, ~key), w, xs),
     []
   )
     == Seqs.matches(~A, ~T, ~hit, xs, w): Bool
@@ -1710,7 +1683,7 @@ def Seqs.walk_matches(
         xs,
         c,
         t
-      ): {Seqs.matches(~A, ~T, ~hit, Seqs.walk(~A, ~T, ~hit, ~same, ~key, t, xc), []) == _: Bool}
+      ): {Seqs.matches(~A, ~T, ~hit, List.foldl(~&2, ~A, ~List<&2, List<&2, Re<T>>>, ~Seqs.step(~A, ~T, ~hit, ~same, ~key), t, xc), []) == _: Bool}
       Seqs.walk_matches(~A, ~T, ~hit, ~same, ~key, ~laws, t, xc)
 
 # the fast matcher gives the answer of the clear one
