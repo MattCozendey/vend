@@ -5037,6 +5037,388 @@ law Crit.size_le:
 def Crit.size_le(ty, a, b):
   ?TODO
 
+# a number plus one is one more
+def Crit.add_one(+a: Nat) -> {Nat.add(a, 1n) == 1n+a: Nat}:
+  Equal.trans(Nat, Nat.add(a, 1n), 1n+Nat.add(a, 0n), 1n+a, Shared.Nat.add_succ(a, 0n), Equal.cong(Nat, Nat, t => 1n+t, Nat.add(a, 0n), a, Shared.Nat.add_zero(a)))
+
+# a fork of an entry that ends at its bit and a map holds one more entry
+def Crit.join_end_size(-V: Data, +k: List<&2, U32>, +v: V, +y: Crit<V>, +d: Nat, b: Bool) -> {
+  Crit.size(V, Crit.join.end(V, Crit.Leaf{k, v}, y, d, b)) == 1n+Crit.size(V, y): Nat
+}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      Equal.cong(Nat, Nat, t => 1n+t, Nat.add(Crit.size(V, y), 0n), Crit.size(V, y), Shared.Nat.add_zero(Crit.size(V, y)))
+
+# a fork of a map y, whose first key ends at its bit, and an entry holds one
+# more entry
+def Crit.join_end_size2(-V: Data, y: Crit<V>, +k: List<&2, U32>, +v: V, +d: Nat, b: Bool) -> {
+  Crit.size(V, Crit.join.end(V, y, Crit.Leaf{k, v}, d, b)) == 1n+Crit.size(V, y): Nat
+}:
+  match y b:
+    case Crit.Leaf{k2, w} True{}:
+      {==}
+    case Crit.Leaf{k2, w} False{}:
+      {==}
+    case Crit.Tip{} b1:
+      {==}
+    case Crit.Fork{+r, +p, +e, +z, +o} b1:
+      Crit.add_one(Crit.size(V, Crit.Fork{r, p, e, z, o}))
+
+# a fork of an entry and a map holds one more entry than the map
+def Crit.join_size(-V: Data, +k: List<&2, U32>, +v: V, +y: Crit<V>, +d: Nat) -> {Crit.size(V, Crit.join(V, Crit.Leaf{k, v}, y, d)) == 1n+Crit.size(V, y): Nat}:
+  +ky = Crit.rep(V, y, [])
+  Shared.Bool.when_cases(
+    Crit<V>,
+    t => {Crit.size(V, t) == 1n+Crit.size(V, y): Nat},
+    Cur.done(Key.at(k, d)),
+    u => Crit.join.end(V, Crit.Leaf{k, v}, y, d, Cur.bit(Key.at(ky, d))),
+    u => Shared.Bool.when(
+      Crit<V>,
+      Cur.done(Key.at(ky, d)),
+      w => Crit.join.end(V, y, Crit.Leaf{k, v}, d, Cur.bit(Key.at(k, d))),
+      w => Shared.Bool.when(Crit<V>, Cur.bit(Key.at(k, d)), w2 => Crit.Fork{ky, d, None{}, y, Crit.Leaf{k, v}}, w2 => Crit.Fork{k, d, None{}, Crit.Leaf{k, v}, y})
+    ),
+    t1 => Crit.join_end_size(V, k, v, y, d, Cur.bit(Key.at(ky, d))),
+    t1 => Shared.Bool.when_cases(
+      Crit<V>,
+      t => {Crit.size(V, t) == 1n+Crit.size(V, y): Nat},
+      Cur.done(Key.at(ky, d)),
+      w => Crit.join.end(V, y, Crit.Leaf{k, v}, d, Cur.bit(Key.at(k, d))),
+      w => Shared.Bool.when(Crit<V>, Cur.bit(Key.at(k, d)), w2 => Crit.Fork{ky, d, None{}, y, Crit.Leaf{k, v}}, w2 => Crit.Fork{k, d, None{}, Crit.Leaf{k, v}, y}),
+      t2 => Crit.join_end_size2(V, y, k, v, d, Cur.bit(Key.at(k, d))),
+      t2 => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.size(V, t) == 1n+Crit.size(V, y): Nat},
+        Cur.bit(Key.at(k, d)),
+        w2 => Crit.Fork{ky, d, None{}, y, Crit.Leaf{k, v}},
+        w2 => Crit.Fork{k, d, None{}, Crit.Leaf{k, v}, y},
+        t3 => Crit.add_one(Crit.size(V, y)),
+        t3 => {==}
+      )
+    )
+  )
+
+# one more, when a key is new, after a key was added that was not new
+def Crit.add_if_end(-V: Data, e: Maybe<&2, V>, +x: Nat) -> {
+  Shared.Nat.add_if(Maybe.is_none(&2, V, e), Shared.Nat.add_if(Maybe.is_some(&2, V, e), x)) == 1n+x: Nat
+}:
+  match e:
+    case None{}:
+      {==}
+    case Some{v}:
+      {==}
+
+# one more on the right of a sum is one more of the sum
+def Crit.add_if_right(+a: Nat, c: Bool, +x: Nat) -> {Nat.add(a, Shared.Nat.add_if(c, x)) == Shared.Nat.add_if(c, Nat.add(a, x)): Nat}:
+  match c:
+    case True{}:
+      Shared.Nat.add_succ(a, x)
+    case False{}:
+      {==}
+
+# one more on the left of a sum is one more of the sum
+def Crit.add_if_left(c: Bool, +a: Nat, +x: Nat) -> {Nat.add(Shared.Nat.add_if(c, a), x) == Shared.Nat.add_if(c, Nat.add(a, x)): Nat}:
+  match c:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# two conditional additions of one are the same either way round
+def Crit.add_if_swap(s: Bool, c: Bool, +x: Nat) -> {
+  Shared.Nat.add_if(s, Shared.Nat.add_if(c, x)) == Shared.Nat.add_if(c, Shared.Nat.add_if(s, x)): Nat
+}:
+  match s c:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# a fork in its one shape holds as many entries as its parts
+def Crit.mk_size(-V: Data, +r: List<&2, U32>, +pos: Nat, e: Maybe<&2, V>, z: Crit<V>, o: Crit<V>) -> {
+  Crit.size(V, Crit.mk(V, r, pos, e, z, o)) == Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o))): Nat
+}:
+  match e z o:
+    case None{} Crit.Tip{} Crit.Tip{}:
+      {==}
+    case None{} Crit.Tip{} Crit.Leaf{+kl2, +vl2}:
+      {==}
+    case None{} Crit.Tip{} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      {==}
+    case None{} Crit.Leaf{+kl, +vl} Crit.Tip{}:
+      Equal.sym(Nat, Nat.add(Crit.size(V, Crit.Leaf{kl, vl}), 0n), Crit.size(V, Crit.Leaf{kl, vl}), Shared.Nat.add_zero(Crit.size(V, Crit.Leaf{kl, vl})))
+    case None{} Crit.Leaf{+kl, +vl} Crit.Leaf{+kl2, +vl2}:
+      {==}
+    case None{} Crit.Leaf{+kl, +vl} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      {==}
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Tip{}:
+      Equal.sym(Nat, Nat.add(Crit.size(V, Crit.Fork{fr, fp, fe, fz, fo}), 0n), Crit.size(V, Crit.Fork{fr, fp, fe, fz, fo}), Shared.Nat.add_zero(Crit.size(V, Crit.Fork{fr, fp, fe, fz, fo})))
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Leaf{+kl2, +vl2}:
+      {==}
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      {==}
+    case Some{+v} Crit.Tip{} Crit.Tip{}:
+      {==}
+    case Some{+v} Crit.Tip{} Crit.Leaf{+kl2, +vl2}:
+      {==}
+    case Some{+v} Crit.Tip{} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      {==}
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Tip{}:
+      {==}
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Leaf{+kl2, +vl2}:
+      {==}
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      {==}
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Tip{}:
+      {==}
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Leaf{+kl2, +vl2}:
+      {==}
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      {==}
+
+# Crit.put_size at a fork that holds k's place, from the cursor c2 at its
+# bit: pz and po are the writes of its sides
+def Crit.put_size.fork(
+  ~V: Data,
+  ~f: V -> V -> V,
+  +k: List<&2, U32>,
+  +v: V,
+  +rep: List<&2, U32>,
+  +pos: Nat,
+  +e: Maybe<&2, V>,
+  +z: Crit<V>,
+  +o: Crit<V>,
+  +c2: Cur,
+  +pz: Crit<V>,
+  +po: Crit<V>
+) -> ({Cur.done(c2) == True{}: Bool} -> {Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k) == e: Maybe<&2, V>}) -> (
+  {Cur.done(c2) == False{}: Bool} -> {Cur.bit(c2) == False{}: Bool} -> {Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k) == Crit.lookup(V, z, k): Maybe<&2, V>}
+) -> ({Cur.done(c2) == False{}: Bool} -> {Cur.bit(c2) == True{}: Bool} -> {Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k) == Crit.lookup(V, o, k): Maybe<&2, V>}) -> (
+  {Cur.done(c2) == False{}: Bool} -> {Cur.bit(c2) == False{}: Bool} -> {
+    Crit.size(V, pz) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Crit.size(V, z)): Nat
+  }
+) -> (
+  {Cur.done(c2) == False{}: Bool} -> {Cur.bit(c2) == True{}: Bool} -> {
+    Crit.size(V, po) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Crit.size(V, o)): Nat
+  }
+) -> {
+  Crit.size(
+    V,
+    Shared.Bool.when(
+      Crit<V>,
+      Cur.done(c2),
+      u => Crit.mk(V, k, pos, Some{Crit.merge(~V, ~f, e, v)}, z, o),
+      u => Shared.Bool.when(Crit<V>, Cur.bit(c2), w => Crit.mk(V, rep, pos, e, z, po), w => Crit.mk(V, rep, pos, e, pz, o))
+    )
+  )
+    == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))): Nat
+}:
+  hE => hZ => hO => iz => io => Shared.Bool.when_cases(
+    Crit<V>,
+    t => {Crit.size(V, t) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))): Nat},
+    Cur.done(c2),
+    u => Crit.mk(V, k, pos, Some{Crit.merge(~V, ~f, e, v)}, z, o),
+    u => Shared.Bool.when(Crit<V>, Cur.bit(c2), w => Crit.mk(V, rep, pos, e, z, po), w => Crit.mk(V, rep, pos, e, pz, o)),
+    t1 => Equal.trans(
+      Nat,
+      Crit.size(V, Crit.mk(V, k, pos, Some{Crit.merge(~V, ~f, e, v)}, z, o)),
+      1n+Nat.add(Crit.size(V, z), Crit.size(V, o)),
+      Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))),
+      Crit.mk_size(V, k, pos, Some{Crit.merge(~V, ~f, e, v)}, z, o),
+      (
+        %Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), e, hE(t1)): {
+          1n+Nat.add(Crit.size(V, z), Crit.size(V, o)) == Shared.Nat.add_if(Maybe.is_none(&2, V, _), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))): Nat
+        }
+        Equal.sym(Nat, Shared.Nat.add_if(Maybe.is_none(&2, V, e), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), 1n+Nat.add(Crit.size(V, z), Crit.size(V, o)), Crit.add_if_end(V, e, Nat.add(Crit.size(V, z), Crit.size(V, o))))
+      )
+    ),
+    +t1 => Shared.Bool.when_cases(
+      Crit<V>,
+      t => {Crit.size(V, t) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))): Nat},
+      Cur.bit(c2),
+      w => Crit.mk(V, rep, pos, e, z, po),
+      w => Crit.mk(V, rep, pos, e, pz, o),
+      +t2 => Equal.trans(Nat, Crit.size(V, Crit.mk(V, rep, pos, e, z, po)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, po))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Crit.mk_size(V, rep, pos, e, z, po), Equal.trans(Nat, Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, po))), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Crit.size(V, o)))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Equal.cong(Nat, Nat, t => Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), t)), Crit.size(V, po), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Crit.size(V, o)), io(t1)(t2)), Equal.trans(Nat, Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Crit.size(V, o)))), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Equal.cong(Nat, Nat, t => Shared.Nat.add_if(Maybe.is_some(&2, V, e), t), Nat.add(Crit.size(V, z), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Crit.size(V, o))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Nat.add(Crit.size(V, z), Crit.size(V, o))), Crit.add_if_right(Crit.size(V, z), Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Crit.size(V, o))), Equal.trans(Nat, Shared.Nat.add_if(Maybe.is_some(&2, V, e), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Crit.add_if_swap(Maybe.is_some(&2, V, e), Maybe.is_none(&2, V, Crit.lookup(V, o, k)), Nat.add(Crit.size(V, z), Crit.size(V, o))), Equal.cong(Maybe<&2, V>, Nat, t => Shared.Nat.add_if(Maybe.is_none(&2, V, t), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Crit.lookup(V, o, k), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), Crit.lookup(V, o, k), hO(t1)(t2))))))),
+      +t2 => Equal.trans(Nat, Crit.size(V, Crit.mk(V, rep, pos, e, pz, o)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, pz), Crit.size(V, o))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Crit.mk_size(V, rep, pos, e, pz, o), Equal.trans(Nat, Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, pz), Crit.size(V, o))), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Crit.size(V, z)), Crit.size(V, o))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Equal.cong(Nat, Nat, t => Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(t, Crit.size(V, o))), Crit.size(V, pz), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Crit.size(V, z)), iz(t1)(t2)), Equal.trans(Nat, Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Crit.size(V, z)), Crit.size(V, o))), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Equal.cong(Nat, Nat, t => Shared.Nat.add_if(Maybe.is_some(&2, V, e), t), Nat.add(Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Crit.size(V, z)), Crit.size(V, o)), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Nat.add(Crit.size(V, z), Crit.size(V, o))), Crit.add_if_left(Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Crit.size(V, z), Crit.size(V, o))), Equal.trans(Nat, Shared.Nat.add_if(Maybe.is_some(&2, V, e), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Crit.add_if_swap(Maybe.is_some(&2, V, e), Maybe.is_none(&2, V, Crit.lookup(V, z, k)), Nat.add(Crit.size(V, z), Crit.size(V, o))), Equal.cong(Maybe<&2, V>, Nat, t => Shared.Nat.add_if(Maybe.is_none(&2, V, t), Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(Crit.size(V, z), Crit.size(V, o)))), Crit.lookup(V, z, k), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), Crit.lookup(V, z, k), hZ(t1)(t2)))))))
+    )
+  )
+
+# a write of k into a well formed map, read from k's cursor, adds one entry
+# when the map lacks k, else none; n is the key that the read reaches (r when
+# m is empty), and d where k differs from it
+def Crit.put_size(
+  ~V: Data,
+  ~f: V -> V -> V,
+  m: Crit<V>,
+  +lo: Nat,
+  +at: Nat,
+  +c: Cur,
+  +k: List<&2, U32>,
+  +v: V,
+  +d: Maybe<&2, Nat>,
+  +r: Maybe<&2, List<&2, U32>>,
+  +n: List<&2, U32>
+) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {Nat.is_le(at, lo) == True{}: Bool} -> {
+  Cur.bits(c) == List.drop(&2, Bool, Key.bits(k), at): List<&2, Bool>
+} -> {Maybe.or(&2, List<&2, U32>, Crit.near(V, m, at, c), r) == Some{n}: Maybe<&2, List<&2, U32>>} -> {d == Key.diff(k, n): Maybe<&2, Nat>} -> {
+  Crit.size(V, Crit.put(~V, ~f, m, at, c, k, v, d)) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, m, k)), Crit.size(V, m)): Nat
+}:
+  match m:
+    case Crit.Tip{}:
+      h => l => hc => hn => hd => {==}
+    case Crit.Leaf{+k2, +w}:
+      h => l => hc => +hn => +hd => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.size(V, t) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Leaf{k2, w}, k)), 1n): Nat},
+        Maybe.is_none(&2, Nat, d),
+        u => Crit.Leaf{k2, f(w, v)},
+        u => Crit.join(V, Crit.Leaf{k, v}, Crit.Leaf{k2, w}, Maybe.default(&2, Nat, d, 0n)),
+        t1 =>
+          %Equal.sym(Bool, Key.is_eq(k2, k), True{}, Crit.leaf_eq(k, n, k2, d)(hn)(hd)(t1)): {
+            1n == Shared.Nat.add_if(Maybe.is_none(&2, V, Shared.Maybe.when(V, _, u => Some{w})), 1n): Nat
+          }
+          {==},
+        t1 => Equal.trans(
+          Nat,
+          Crit.size(V, Crit.join(V, Crit.Leaf{k, v}, Crit.Leaf{k2, w}, Maybe.default(&2, Nat, d, 0n))),
+          2n,
+          Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Leaf{k2, w}, k)), 1n),
+          Crit.join_size(V, k, v, Crit.Leaf{k2, w}, Maybe.default(&2, Nat, d, 0n)),
+          (
+            %Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.Leaf{k2, w}, k), None{}, Crit.when_false(V, Key.is_eq(k2, k), u => Some{w})(Crit.leaf_ne2(k, n, k2, d)(hn)(hd)(t1))): {
+              2n == Shared.Nat.add_if(Maybe.is_none(&2, V, _), 1n): Nat
+            }
+            {==}
+          )
+        )
+      )
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      +h => +l => +hc => +hn => +hd =>
+        +h2 = Crit.skip_at(k, at, pos, c)(Shared.Nat.le_trans(at, lo, pos)(l)(Crit.wf.le(~V, rep, pos, e, z, o, lo)(h)))(hc)
+        Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.size(V, t) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Crit.size(V, Crit.Fork{rep, pos, e, z, o})): Nat},
+          Crit.above(d, pos),
+          u => Crit.join(V, Crit.Leaf{k, v}, Crit.Fork{rep, pos, e, z, o}, Maybe.default(&2, Nat, d, 0n)),
+          u => Crit.put.fork(
+            ~V,
+            ~f,
+            k,
+            v,
+            rep,
+            pos,
+            e,
+            z,
+            o,
+            Cur.skip(Nat.sub(pos, at), c),
+            z2 => Crit.put(~V, ~f, z, 1n+pos, z2, k, v, d),
+            o2 => Crit.put(~V, ~f, o, 1n+pos, o2, k, v, d)
+          ),
+          +ta => Equal.trans(
+            Nat,
+            Crit.size(V, Crit.join(V, Crit.Leaf{k, v}, Crit.Fork{rep, pos, e, z, o}, Maybe.default(&2, Nat, d, 0n))),
+            1n+Crit.size(V, Crit.Fork{rep, pos, e, z, o}),
+            Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k)), Crit.size(V, Crit.Fork{rep, pos, e, z, o})),
+            Crit.join_size(V, k, v, Crit.Fork{rep, pos, e, z, o}, Maybe.default(&2, Nat, d, 0n)),
+            (
+              %Equal.sym(
+                Maybe<&2, V>,
+                Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k),
+                None{},
+                Crit.not_in_fork(~V, rep, pos, e, z, o, lo, k)(h)(Crit.above_out(~V, rep, pos, e, z, o, lo, at, c, k, d, r, n)(h)(hn)(hd)(ta))
+              ): {1n+Crit.size(V, Crit.Fork{rep, pos, e, z, o}) == Shared.Nat.add_if(Maybe.is_none(&2, V, _), Crit.size(V, Crit.Fork{rep, pos, e, z, o})): Nat}
+              {==}
+            )
+          ),
+          +ta => Crit.put_size.fork(
+            ~V,
+            ~f,
+            k,
+            v,
+            rep,
+            pos,
+            e,
+            z,
+            o,
+            Cur.skip(Nat.sub(pos, at), c),
+            Crit.put(~V, ~f, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d),
+            Crit.put(~V, ~f, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d)
+          )(
+            +t1 =>
+              +nil = Crit.nil_of_done(k, pos, Cur.skip(Nat.sub(pos, at), c))(h2)(t1)
+              Equal.trans(
+                Maybe<&2, V>,
+                Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k),
+                Crit.ended(V, rep, e, k),
+                e,
+                Crit.or_first(V, Crit.ended(V, rep, e, k), Crit.lookup(V, z, k), Crit.lookup(V, o, k))(
+                  Crit.no_side(~V, rep, pos, z, False{}, k)(Crit.wf.all_z(~V, rep, pos, e, z, o, lo)(h))(nil)
+                )(Crit.no_side(~V, rep, pos, o, True{}, k)(Crit.wf.all_o(~V, rep, pos, e, z, o, lo)(h))(nil)),
+                Crit.ended_self(V, rep, pos, e, z, k)(Crit.wf.rep_ok(~V, rep, pos, e, z, o, lo)(h))(nil)(
+                  Crit.done_above(V, rep, pos, e, z, o, at, c, k, d, r, n)(hn)(hd)(ta)(t1)
+                )
+              )
+          )(
+            +t1 => t2 => Crit.or_second(V, Crit.ended(V, rep, e, k), Crit.lookup(V, z, k), Crit.lookup(V, o, k))(Crit.ended_long(V, rep, pos, e, z, k, List.drop(&2, Bool, Key.bits(k), pos))(Crit.wf.rep_ok(~V, rep, pos, e, z, o, lo)(h))({==})(Equal.trans(Bool, List.is_empty(&2, Bool, List.drop(&2, Bool, Key.bits(k), pos)), Cur.done(Cur.skip(Nat.sub(pos, at), c)), False{}, Equal.sym(Bool, Cur.done(Cur.skip(Nat.sub(pos, at), c)), List.is_empty(&2, Bool, List.drop(&2, Bool, Key.bits(k), pos)), Crit.done_of(Cur.skip(Nat.sub(pos, at), c), List.drop(&2, Bool, Key.bits(k), pos))(h2)), t1)))(
+              Crit.off_side(~V, rep, pos, o, True{}, k, Cur.skip(Nat.sub(pos, at), c))(Crit.wf.all_o(~V, rep, pos, e, z, o, lo)(h))(h2)(t1)((
+                %Equal.sym(Bool, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), False{}, t2): {Shared.Bool.is_eq(_, True{}) == False{}: Bool}
+                {==}
+              ))
+            )
+          )(
+            +t1 => t2 => Crit.or_third(V, Crit.ended(V, rep, e, k), Crit.lookup(V, z, k), Crit.lookup(V, o, k))(Crit.ended_long(V, rep, pos, e, z, k, List.drop(&2, Bool, Key.bits(k), pos))(Crit.wf.rep_ok(~V, rep, pos, e, z, o, lo)(h))({==})(Equal.trans(Bool, List.is_empty(&2, Bool, List.drop(&2, Bool, Key.bits(k), pos)), Cur.done(Cur.skip(Nat.sub(pos, at), c)), False{}, Equal.sym(Bool, Cur.done(Cur.skip(Nat.sub(pos, at), c)), List.is_empty(&2, Bool, List.drop(&2, Bool, Key.bits(k), pos)), Crit.done_of(Cur.skip(Nat.sub(pos, at), c), List.drop(&2, Bool, Key.bits(k), pos))(h2)), t1)))(
+              Crit.off_side(~V, rep, pos, z, False{}, k, Cur.skip(Nat.sub(pos, at), c))(Crit.wf.all_z(~V, rep, pos, e, z, o, lo)(h))(h2)(t1)((
+                %Equal.sym(Bool, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), True{}, t2): {Shared.Bool.is_eq(_, False{}) == False{}: Bool}
+                {==}
+              ))
+            )
+          )(
+            +t1 => +t2 => Crit.put_size(~V, ~f, z, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d, Some{rep}, n)(Crit.wf.wf_z(~V, rep, pos, e, z, o, lo)(h))(Shared.Nat.le_refl(1n+pos))(
+              Crit.next_at(k, pos, Cur.skip(Nat.sub(pos, at), c))(h2)
+            )(Crit.near_child(V, rep, pos, e, z, o, at, c, False{}, r, n)(hn)(t1)(t2))(hd)
+          )(
+            +t1 => +t2 => Crit.put_size(~V, ~f, o, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d, Some{rep}, n)(Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h))(Shared.Nat.le_refl(1n+pos))(
+              Crit.next_at(k, pos, Cur.skip(Nat.sub(pos, at), c))(h2)
+            )(Crit.near_child(V, rep, pos, e, z, o, at, c, True{}, r, n)(hn)(t1)(t2))(hd)
+          )
+        )
+
+# Crit.size_upsert, once the key that a read of k reaches is known (nm)
+def Crit.size_upsert.at(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U32>, +v: V, nm: Maybe<&2, List<&2, U32>>) -> {
+  Crit.wf(~V, m, 0n) == True{}: Bool
+} -> {Crit.near(V, m, 0n, Cur.of(k)) == nm: Maybe<&2, List<&2, U32>>} -> {Crit.size(V, Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, nm))) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, m, k)), Crit.size(V, m)): Nat}:
+  match nm:
+    case None{}:
+      h => hm => Crit.put_size(~V, ~f, m, 0n, 0n, Cur.of(k), k, v, None{}, Some{k}, k)(h)({==})(Equal.sym(List<&2, Bool>, List.drop(&2, Bool, Key.bits(k), 0n), Key.bits(k), Shared.List.drop_zero(&2, Bool, Key.bits(k))))(
+        %Equal.sym(Maybe<&2, List<&2, U32>>, Crit.near(V, m, 0n, Cur.of(k)), None{}, hm): {
+          Maybe.or(&2, List<&2, U32>, _, Some{k}) == Some{k}: Maybe<&2, List<&2, U32>>
+        }
+        {==}
+      )(Equal.sym(Maybe<&2, Nat>, Key.diff(k, k), None{}, Key.diff_self(k)))
+    case Some{+x}:
+      h => hm => Crit.put_size(~V, ~f, m, 0n, 0n, Cur.of(k), k, v, Key.diff(k, x), None{}, x)(h)({==})(Equal.sym(List<&2, Bool>, List.drop(&2, Bool, Key.bits(k), 0n), Key.bits(k), Shared.List.drop_zero(&2, Bool, Key.bits(k))))(
+        Equal.trans(
+          Maybe<&2, List<&2, U32>>,
+          Maybe.or(&2, List<&2, U32>, Crit.near(V, m, 0n, Cur.of(k)), None{}),
+          Crit.near(V, m, 0n, Cur.of(k)),
+          Some{x},
+          Shared.Maybe.or_none(List<&2, U32>, Crit.near(V, m, 0n, Cur.of(k))),
+          hm
+        )
+      )({==})
+
+# Crit.size_upsert, with m and k used more than once
+def Crit.size_upsert.go(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U32>, +v: V) -> {Crit.wf(~V, m, 0n) == True{}: Bool} -> {
+  Crit.size(V, Crit.upsert(~V, ~f, m, k, v)) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, m, k)), Crit.size(V, m)): Nat
+}:
+  h => Crit.size_upsert.at(~V, ~f, m, k, v, Crit.near(V, m, 0n, Cur.of(k)))(h)({==})
+
 # a write of a key that a map lacks adds one entry; of one it holds, none
 law Crit.size_upsert:
   for ~V: Data
@@ -5050,4 +5432,4 @@ law Crit.size_upsert:
   }
 
 def Crit.size_upsert(ty, f, m, k, v):
-  ?TODO
+  Crit.size_upsert.go(~ty, ~f, m, k, v)
