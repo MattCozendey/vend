@@ -7218,6 +7218,148 @@ law Crit.union_assoc:
 def Crit.union_assoc(ty, j, assoc, a, b, c):
   ?TODO
 
+# a well formed fork is in its one shape
+def Crit.mk_canon(~V: Data, +r: List<&2, U32>, +pos: Nat, e: Maybe<&2, V>, z: Crit<V>, o: Crit<V>, +lo: Nat) -> {
+  Crit.wf(~V, Crit.Fork{r, pos, e, z, o}, lo) == True{}: Bool
+} -> {Crit.mk(V, r, pos, e, z, o) == Crit.Fork{r, pos, e, z, o}: Crit<V>}:
+  match e z o:
+    case None{} Crit.Tip{} Crit.Tip{}:
+      +h => Empty.absurd({Crit.mk(V, r, pos, None{}, Crit.Tip{}, Crit.Tip{}) == Crit.Fork{r, pos, None{}, Crit.Tip{}, Crit.Tip{}}: Crit<V>}, Shared.Bool.false_ne_true(Crit.wf.shape(~V, r, pos, None{}, Crit.Tip{}, Crit.Tip{}, lo)(h)))
+    case None{} Crit.Tip{} Crit.Leaf{+kl2, +vl2}:
+      +h => Empty.absurd({Crit.mk(V, r, pos, None{}, Crit.Tip{}, Crit.Leaf{kl2, vl2}) == Crit.Fork{r, pos, None{}, Crit.Tip{}, Crit.Leaf{kl2, vl2}}: Crit<V>}, Shared.Bool.false_ne_true(Crit.wf.shape(~V, r, pos, None{}, Crit.Tip{}, Crit.Leaf{kl2, vl2}, lo)(h)))
+    case None{} Crit.Tip{} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +h => Empty.absurd({Crit.mk(V, r, pos, None{}, Crit.Tip{}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}) == Crit.Fork{r, pos, None{}, Crit.Tip{}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}}: Crit<V>}, Shared.Bool.false_ne_true(Crit.wf.shape(~V, r, pos, None{}, Crit.Tip{}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, lo)(h)))
+    case None{} Crit.Leaf{+kl, +vl} Crit.Tip{}:
+      +h => Empty.absurd({Crit.mk(V, r, pos, None{}, Crit.Leaf{kl, vl}, Crit.Tip{}) == Crit.Fork{r, pos, None{}, Crit.Leaf{kl, vl}, Crit.Tip{}}: Crit<V>}, Shared.Bool.false_ne_true(Crit.wf.shape(~V, r, pos, None{}, Crit.Leaf{kl, vl}, Crit.Tip{}, lo)(h)))
+    case None{} Crit.Leaf{+kl, +vl} Crit.Leaf{+kl2, +vl2}:
+      +h =>
+        %Equal.sym(List<&2, U32>, r, kl, Key.is_eq_sound(r, kl)(Crit.wf.rep_ok(~V, r, pos, None{}, Crit.Leaf{kl, vl}, Crit.Leaf{kl2, vl2}, lo)(h))): {
+          Crit.Fork{kl, pos, None{}, Crit.Leaf{kl, vl}, Crit.Leaf{kl2, vl2}} == Crit.Fork{_, pos, None{}, Crit.Leaf{kl, vl}, Crit.Leaf{kl2, vl2}}: Crit<V>
+        }
+        {==}
+    case None{} Crit.Leaf{+kl, +vl} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +h =>
+        %Equal.sym(List<&2, U32>, r, kl, Key.is_eq_sound(r, kl)(Crit.wf.rep_ok(~V, r, pos, None{}, Crit.Leaf{kl, vl}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, lo)(h))): {
+          Crit.Fork{kl, pos, None{}, Crit.Leaf{kl, vl}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}} == Crit.Fork{_, pos, None{}, Crit.Leaf{kl, vl}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}}: Crit<V>
+        }
+        {==}
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Tip{}:
+      +h => Empty.absurd({Crit.mk(V, r, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Tip{}) == Crit.Fork{r, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Tip{}}: Crit<V>}, Shared.Bool.false_ne_true(Crit.wf.shape(~V, r, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Tip{}, lo)(h)))
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Leaf{+kl2, +vl2}:
+      +h =>
+        %Equal.sym(List<&2, U32>, r, fr, Key.is_eq_sound(r, fr)(Crit.wf.rep_ok(~V, r, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Leaf{kl2, vl2}, lo)(h))): {
+          Crit.Fork{fr, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Leaf{kl2, vl2}} == Crit.Fork{_, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Leaf{kl2, vl2}}: Crit<V>
+        }
+        {==}
+    case None{} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      +h =>
+        %Equal.sym(List<&2, U32>, r, fr, Key.is_eq_sound(r, fr)(Crit.wf.rep_ok(~V, r, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}, lo)(h))): {
+          Crit.Fork{fr, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}} == Crit.Fork{_, pos, None{}, Crit.Fork{fr, fp, fe, fz, fo}, Crit.Fork{fr2, fp2, fe2, fz2, fo2}}: Crit<V>
+        }
+        {==}
+    case Some{+v} Crit.Tip{} Crit.Tip{}:
+      +h => Empty.absurd({Crit.mk(V, r, pos, Some{v}, Crit.Tip{}, Crit.Tip{}) == Crit.Fork{r, pos, Some{v}, Crit.Tip{}, Crit.Tip{}}: Crit<V>}, Shared.Bool.false_ne_true(Crit.wf.shape(~V, r, pos, Some{v}, Crit.Tip{}, Crit.Tip{}, lo)(h)))
+    case Some{+v} Crit.Tip{} Crit.Leaf{+kl2, +vl2}:
+      h => {==}
+    case Some{+v} Crit.Tip{} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      h => {==}
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Tip{}:
+      h => {==}
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Leaf{+kl2, +vl2}:
+      h => {==}
+    case Some{+v} Crit.Leaf{+kl, +vl} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      h => {==}
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Tip{}:
+      h => {==}
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Leaf{+kl2, +vl2}:
+      h => {==}
+    case Some{+v} Crit.Fork{+fr, +fp, +fe, +fz, +fo} Crit.Fork{+fr2, +fp2, +fe2, +fz2, +fo2}:
+      h => {==}
+
+# a pick between a value and itself is the value
+def Crit.pick_self(-A: Data, c: Bool, -x: A) -> {Bool.pick(A, c, x, x) == x: A}:
+  match c:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# a number compares equal to itself
+def Crit.cmp_refl(a: Nat) -> {Nat.cmp(a, a) == EQ{}: Cmp}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      Crit.cmp_refl(p)
+
+# a choice whose test is False is its second branch
+def Crit.when_false_eq(-A: Type, b: Bool, -k: Unit -> A, -e: Unit -> A) -> {b == False{}: Bool} -> {Shared.Bool.when(A, b, k, e) == e(Unit{}): A}:
+  match b:
+    case True{}:
+      h => Empty.absurd({k(Unit{}) == e(Unit{}): A}, Shared.Bool.true_ne_false(h))
+    case False{}:
+      h => {==}
+
+# a union of a well formed map with itself is the map, when j is idempotent
+def Crit.union_idem.go(~V: Data, ~j: V -> V -> V, ~idem: @x: V -> {j(x, x) == x: V}, a: Crit<V>, +la: Nat) -> {Crit.wf(~V, a, la) == True{}: Bool} -> {
+  Crit.union(~V, ~j, a, a) == a: Crit<V>
+}:
+  match a:
+    case Crit.Tip{}:
+      h => {==}
+    case Crit.Leaf{+k, +v}:
+      h =>
+        %Equal.sym(Maybe<&2, Nat>, Key.diff(k, k), None{}, Key.diff_self(k)): {
+          Crit.put(~V, ~(w => x => j(x, w)), Crit.Leaf{k, v}, 0n, Cur.of(k), k, v, _) == Crit.Leaf{k, v}: Crit<V>
+        }
+        %Equal.sym(V, j(v, v), v, idem(v)): {Crit.Leaf{k, _} == Crit.Leaf{k, v}: Crit<V>}
+        {==}
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa}:
+      +h => Equal.trans(
+        Crit<V>,
+        Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{ra, pa, ea, za, oa}),
+        Crit.union.at(~V, ~j, Nat.cmp(pa, pa), ra, pa, ea, ra, pa, ea, zs => os => Crit.mk(V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, ra), pa, Shared.Maybe.join(~V, ~j, ea, ea), zs, os), u2 => Crit.union(~V, ~j, za, za), u2 => Crit.union(~V, ~j, oa, oa), u2 => Crit.union(~V, ~j, za, Crit.Fork{ra, pa, ea, za, oa}), u2 => Crit.union(~V, ~j, oa, Crit.Fork{ra, pa, ea, za, oa}), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, za), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, oa), za, oa, za, oa),
+        Crit.Fork{ra, pa, ea, za, oa},
+        Crit.when_false_eq(
+          Crit<V>,
+          Bool.and(Crit.above(Key.diff(ra, ra), pa), Crit.above(Key.diff(ra, ra), pa)),
+          u => Crit.join(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{ra, pa, ea, za, oa}, Maybe.default(&2, Nat, Key.diff(ra, ra), 0n)),
+          u => Crit.union.at(~V, ~j, Nat.cmp(pa, pa), ra, pa, ea, ra, pa, ea, zs => os => Crit.mk(V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, ra), pa, Shared.Maybe.join(~V, ~j, ea, ea), zs, os), u2 => Crit.union(~V, ~j, za, za), u2 => Crit.union(~V, ~j, oa, oa), u2 => Crit.union(~V, ~j, za, Crit.Fork{ra, pa, ea, za, oa}), u2 => Crit.union(~V, ~j, oa, Crit.Fork{ra, pa, ea, za, oa}), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, za), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, oa), za, oa, za, oa)
+        )((
+          %Equal.sym(Maybe<&2, Nat>, Key.diff(ra, ra), None{}, Key.diff_self(ra)): {Bool.and(Crit.above(_, pa), Crit.above(_, pa)) == False{}: Bool}
+          {==}
+        )),
+        Equal.trans(
+          Crit<V>,
+          Crit.union.at(~V, ~j, Nat.cmp(pa, pa), ra, pa, ea, ra, pa, ea, zs => os => Crit.mk(V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, ra), pa, Shared.Maybe.join(~V, ~j, ea, ea), zs, os), u2 => Crit.union(~V, ~j, za, za), u2 => Crit.union(~V, ~j, oa, oa), u2 => Crit.union(~V, ~j, za, Crit.Fork{ra, pa, ea, za, oa}), u2 => Crit.union(~V, ~j, oa, Crit.Fork{ra, pa, ea, za, oa}), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, za), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, oa), za, oa, za, oa),
+          Crit.mk(V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, ra), pa, Shared.Maybe.join(~V, ~j, ea, ea), Crit.union(~V, ~j, za, za), Crit.union(~V, ~j, oa, oa)),
+          Crit.Fork{ra, pa, ea, za, oa},
+          Equal.cong(Cmp, Crit<V>, c => Crit.union.at(~V, ~j, c, ra, pa, ea, ra, pa, ea, zs => os => Crit.mk(V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, ra), pa, Shared.Maybe.join(~V, ~j, ea, ea), zs, os), u2 => Crit.union(~V, ~j, za, za), u2 => Crit.union(~V, ~j, oa, oa), u2 => Crit.union(~V, ~j, za, Crit.Fork{ra, pa, ea, za, oa}), u2 => Crit.union(~V, ~j, oa, Crit.Fork{ra, pa, ea, za, oa}), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, za), u2 => Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, oa), za, oa, za, oa), Nat.cmp(pa, pa), EQ{}, Crit.cmp_refl(pa)),
+          Equal.trans(
+            Crit<V>,
+            Crit.mk(V, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, ra), pa, Shared.Maybe.join(~V, ~j, ea, ea), Crit.union(~V, ~j, za, za), Crit.union(~V, ~j, oa, oa)),
+            Crit.mk(V, ra, pa, ea, za, oa),
+            Crit.Fork{ra, pa, ea, za, oa},
+            (
+              %Equal.sym(List<&2, U32>, Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, ra), ra, Crit.pick_self(List<&2, U32>, Maybe.is_some(&2, V, ea), ra)): {
+                Crit.mk(V, _, pa, Shared.Maybe.join(~V, ~j, ea, ea), Crit.union(~V, ~j, za, za), Crit.union(~V, ~j, oa, oa)) == Crit.mk(V, ra, pa, ea, za, oa): Crit<V>
+              }
+              %Equal.sym(Maybe<&2, V>, Shared.Maybe.join(~V, ~j, ea, ea), ea, Shared.Maybe.join_idem(~V, ~j, ~idem, ea)): {
+                Crit.mk(V, ra, pa, _, Crit.union(~V, ~j, za, za), Crit.union(~V, ~j, oa, oa)) == Crit.mk(V, ra, pa, ea, za, oa): Crit<V>
+              }
+              %Equal.sym(Crit<V>, Crit.union(~V, ~j, za, za), za, Crit.union_idem.go(~V, ~j, ~idem, za, 1n+pa)(Crit.wf.wf_z(~V, ra, pa, ea, za, oa, la)(h))): {
+                Crit.mk(V, ra, pa, ea, _, Crit.union(~V, ~j, oa, oa)) == Crit.mk(V, ra, pa, ea, za, oa): Crit<V>
+              }
+              %Equal.sym(Crit<V>, Crit.union(~V, ~j, oa, oa), oa, Crit.union_idem.go(~V, ~j, ~idem, oa, 1n+pa)(Crit.wf.wf_o(~V, ra, pa, ea, za, oa, la)(h))): {
+                Crit.mk(V, ra, pa, ea, za, _) == Crit.mk(V, ra, pa, ea, za, oa): Crit<V>
+              }
+              {==}
+            ),
+            Crit.mk_canon(~V, ra, pa, ea, za, oa, la)(h)
+          )
+        )
+      )
+
 # a union with itself is the map, when j is
 law Crit.union_idem:
   for ~V: Data
@@ -7227,7 +7369,7 @@ law Crit.union_idem:
   {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.union(~V, ~j, a, a) == a: Crit<V>}
 
 def Crit.union_idem(ty, j, idem, a):
-  ?TODO
+  h => Crit.union_idem.go(~ty, ~j, ~idem, a, 0n)(h)
 
 # a map holds as many entries as it holds keys: a map that holds each key of
 # another is no smaller
