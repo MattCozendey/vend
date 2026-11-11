@@ -4132,6 +4132,82 @@ def Safe.witness(
         Safe.witness(~B, ~same, ~of, t, c)
       )
 
+# two lines that Line.is_eq calls the same are the same
+def Safe.line_sound(a: Ledgers.Line, b: Ledgers.Line) -> {Ledgers.Line.is_eq(a, b) == True{}: Bool} -> {a == b: Ledgers.Line}:
+  match a b:
+    case Ledgers.Line{+i1, +k1} Ledgers.Line{+i2, +k2}:
+      +h => Ledgers.Eq.both(
+        Hashes.Hash,
+        Maybe<&2, String>,
+        Ledgers.Line,
+        x => y => Ledgers.Line{x, y},
+        i1,
+        i2,
+        k1,
+        k2,
+        Hashes.Hash.is_eq_sound(
+          i1,
+          i2
+        )(Shared.List.all.if_hit(Hashes.Hash.is_eq(i1, i2), u => Ledgers.Sub.is_eq(k1, k2))(h)),
+        Shared.Maybe.is_eq_sound(
+          ~String,
+          ~String.eq,
+          x => y => Texts.String.eq_sound(x, y),
+          k1,
+          k2
+        )(Shared.List.all.if_rest(Hashes.Hash.is_eq(i1, i2), u => Ledgers.Sub.is_eq(k1, k2))(h))
+      )
+
+# two places that Place.is_eq calls the same are the same
+def Safe.place_sound(a: Ledgers.Place, b: Ledgers.Place) -> {Ledgers.Place.is_eq(a, b) == True{}: Bool} -> {a == b: Ledgers.Place}:
+  match a b:
+    case Ledgers.Place{+c1, +h1, +r1} Ledgers.Place{+c2, +h2, +r2}:
+      +h =>
+        +x = Shared.List.all.if_rest(
+          Ledgers.Line.is_eq(c1, c2),
+          u => List.all.if(u2 => Nat.is_eq(r1, r2), U32.is_eq(h1, h2))
+        )(h)
+        Ledgers.Eq.three(
+          Ledgers.Line,
+          U32,
+          Nat,
+          Ledgers.Place,
+          x => y => z => Ledgers.Place{x, y, z},
+          c1,
+          c2,
+          h1,
+          h2,
+          r1,
+          r2,
+          Safe.line_sound(
+            c1,
+            c2
+          )(
+            Shared.List.all.if_hit(
+              Ledgers.Line.is_eq(c1, c2),
+              u => List.all.if(u2 => Nat.is_eq(r1, r2), U32.is_eq(h1, h2))
+            )(h)
+          ),
+          Shared.U32.is_eq_sound(h1, h2)(Shared.List.all.if_hit(U32.is_eq(h1, h2), u2 => Nat.is_eq(r1, r2))(x)),
+          Shared.Nat.is_eq_sound(r1, r2)(Shared.List.all.if_rest(U32.is_eq(h1, h2), u2 => Nat.is_eq(r1, r2))(x))
+        )
+
+# a ballot at the place w is at w
+def Safe.at_of(e: Ledgers.Ballot, +w: Ledgers.Place, +voter: String) -> {
+  Ledgers.Ballot.is_at(e, w, voter) == True{}: Bool
+} -> {Ledgers.Ballot.at(e) == w: Ledgers.Place}:
+  match e:
+    case Ledgers.Ballot{Ledgers.Signed{+w2, +n, a}, l}:
+      h => Safe.place_sound(w2, w)(Shared.List.all.if_hit(Ledgers.Place.is_eq(w2, w), u => String.eq(n, voter))(h))
+
+# a ballot of the voter is of the voter
+def Safe.voter_of(e: Ledgers.Ballot, +w: Ledgers.Place, +voter: String) -> {
+  Ledgers.Ballot.is_at(e, w, voter) == True{}: Bool
+} -> {Ledgers.Ballot.voter(e) == voter: String}:
+  match e:
+    case Ledgers.Ballot{Ledgers.Signed{+w2, +n, a}, l}:
+      h => Texts.String.eq_sound(n, voter)(Shared.List.all.if_rest(Ledgers.Place.is_eq(w2, w), u => String.eq(n, voter))(h))
+
 # a height decides the same step in a later ledger
 def Safe.decide(
   ~mach: Machine(),
