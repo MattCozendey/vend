@@ -1,5 +1,6 @@
 import Base
 import ./shared/ledger.bend as Ledgers
+import ./shared/shared/depot.bend as Depots
 import ./shared/shared/shared/code.bend as Codes
 import ./shared/shared/shared/hash.bend as Hashes
 import ./shared/shared/shared/seal.bend as Seals
@@ -549,6 +550,32 @@ def Tip.get(
   k: List<&2, U32>
 ) -> Maybe<&2, List<&2, U32>>:
   Tree.get(~mach, ~d, l, Tip.log(t), k)
+
+# what the log of the tip t holds under the key k, or that it holds nothing
+# there (none: l lacks a node of the log). A run reads with this: it decides
+# only on what it knows, and waits for what it lacks
+def Tip.find(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  l: Led.L(mach, d),
+  t: Tip,
+  k: List<&2, U32>
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+  Tree.find(~mach, ~d, l, Tip.log(t), k)
+
+# the value of A whose code a known read m gives, or that there is none
+# (none: the read cannot tell)
+def Tip.known(
+  ~A: Data,
+  ~enc: A -> List<&2, U32> -> List<&2, U32>,
+  ~dec: List<&2, U32> -> Maybe<&2, Codes.Read<A>>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> Maybe<&2, Maybe<&2, A>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{w}:
+      Some{Codes.Code.whole.of(~A, ~enc, ~dec, w)}
 
 # the outcome of the request ID i at the tip t
 def Tip.out(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), t: Tip, i: Ledgers.Id) -> Maybe<&2, Out>:
@@ -1197,19 +1224,26 @@ def Kernel.follow(-mach: Machine(), -d: Led(mach), k: Kernel(mach, d)) -> Kernel
 
 # a run: the ledger with the data that the run added, and the tip so far
 type Run<-L: Data> is Data:
-  Run{ledger: L, tip: Tip}
+  Run{ledger: L, tip: Tip, added: List<&2, List<&2, U32>>}
 
 # the ledger of the run r
 def Run.ledger(-L: Data, r: Run<L>) -> L:
   match r:
-    case Run{l, t}:
+    case Run{l, t, a}:
       l
 
 # the tip of the run r
 def Run.tip(-L: Data, r: Run<L>) -> Tip:
   match r:
-    case Run{l, t}:
+    case Run{l, t, a}:
       t
+
+# the nodes that the run r added, each as words: a line moves only once its
+# ledger holds them
+def Run.added(-L: Data, r: Run<L>) -> List<&2, List<&2, U32>>:
+  match r:
+    case Run{l, t, a}:
+      a
 
 # the tip t with the log h (none: the empty log)
 def Tip.logged(t: Tip, h: Maybe<&2, Hashes.Hash>) -> Tip:
@@ -1217,33 +1251,43 @@ def Tip.logged(t: Tip, h: Maybe<&2, Hashes.Hash>) -> Tip:
     case Tip{c, old, n, vs}:
       Tip{c, h, n, vs}
 
-# the run on l at the tip t, with the new log p
+# the run on l at the tip t, which added the nodes a, with the new log p
 def Run.logged(
   ~mach: Machine(),
   ~d: Led(mach),
   l: Led.L(mach, d),
   t: Tip,
+  a: List<&2, List<&2, U32>>,
   p: Maybe<&2, Trees.Edit>
 ) -> Maybe<&2, Run<Led.L(mach, d)>>:
   match p:
     case None{}:
       None{}
     case Some{+x}:
-      Some{Run{Led.puts(~mach, ~d, Trees.Edit.nodes(x), l), Tip.logged(t, Trees.Edit.root(x))}}
+      Some{
+        Run{
+          Led.puts(~mach, ~d, Trees.Edit.nodes(x), l),
+          Tip.logged(t, Trees.Edit.root(x)),
+          List.append(&2, List<&2, U32>, Trees.Edit.nodes(x), a)
+        }
+      }
 
-# Run.add once the value m of the key in the log is known
+# Run.add once a read of the key in the log tells what it holds (m; none: the
+# ledger lacks a node, so the run waits)
 def Run.add.at(
   ~mach: Machine(),
   ~d: Led(mach),
   r: Run<Led.L(mach, d)>,
   k: List<&2, U32>,
   x: List<&2, U32>,
-  m: Maybe<&2, List<&2, U32>>
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
 ) -> Maybe<&2, Run<Led.L(mach, d)>>:
   match r m:
-    case Run{+l, +t} None{}:
-      Run.logged(~mach, ~d, l, t, Tree.put(~mach, ~d, l, Tip.log(t), k, Some{x}))
-    case y Some{old}:
+    case Run{+l, +t, a} Some{None{}}:
+      Run.logged(~mach, ~d, l, t, a, Tree.put(~mach, ~d, l, Tip.log(t), k, Some{x}))
+    case y Some{Some{old}}:
+      None{}
+    case y None{}:
       None{}
 
 # the run r with the new key k of its log set to x (none: the log holds k, or
@@ -1261,7 +1305,7 @@ def Run.add(
     r,
     k,
     x,
-    Tip.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), k)
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), k)
   )
 
 # the run r, after it refused the request i, whose entry is a, as stale
@@ -1283,8 +1327,8 @@ def Tip.next(t: Tip, vs: Maybe<&2, List<&2, String>>) -> Tip:
 # the run r one request on (Tip.next)
 def Run.next(-L: Data, r: Run<L>, vs: Maybe<&2, List<&2, String>>) -> Run<L>:
   match r:
-    case Run{l, t}:
-      Run{l, Tip.next(t, vs)}
+    case Run{l, t, a}:
+      Run{l, Tip.next(t, vs), a}
 
 # the run r, after it took the request i, whose entry is a, as the number n:
 # its outcome, its record (the content of r), the count, and the voters that
@@ -1340,12 +1384,12 @@ def Run.over(
   ~mach: Machine(),
   ~d: Led(mach),
   r: Run<Led.L(mach, d)>,
-  ns: List<&2, List<&2, U32>>,
+  +ns: List<&2, List<&2, U32>>,
   h: Maybe<&2, Hashes.Hash>
 ) -> Run<Led.L(mach, d)>:
   match r:
-    case Run{l, t}:
-      Run{Led.puts(~mach, ~d, ns, l), Tip.over(t, h)}
+    case Run{l, t, a}:
+      Run{Led.puts(~mach, ~d, ns, l), Tip.over(t, h), List.append(&2, List<&2, U32>, ns, a)}
 
 # the run r with the label m on the taken request v, then the request i taken
 def Step.labelled(
@@ -1369,6 +1413,33 @@ def Step.labelled(
         r2 => Step.taken(~mach, ~d, r2, i, a, None{})
       )
 
+# Step.label once a read of the label m tells whether the line has it (k;
+# none: the ledger lacks a node, so the run waits)
+def Step.label.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  k: Maybe<&2, Maybe<&2, Ledgers.Id>>
+) -> Maybe<&2, Run<Led.L(mach, d)>>:
+  match k:
+    case None{}:
+      None{}
+    case Some{Some{x}}:
+      Step.stale(~mach, ~d, r, i, a)
+    case Some{None{}}:
+      +l = Run.ledger(Led.L(mach, d), r)
+      +t = Run.tip(Led.L(mach, d), r)
+      +n = Tip.count(t)
+      Shared.Bool.when(
+        Maybe<&2, Run<Led.L(mach, d)>>,
+        U32.is_eq(n, 0),
+        u => Step.stale(~mach, ~d, r, i, a),
+        u => Step.labelled(~mach, ~d, r, i, a, m, Tip.taken(~mach, ~d, l, t, U32.sub(n, 1)))
+      )
+
 # the run r, after a request i for the label m: it names the newest taken
 # request, for good; a label that the line has, or a line that took no
 # request, refuses it
@@ -1380,17 +1451,19 @@ def Step.label(
   +a: Hashes.Hash,
   +m: String
 ) -> Maybe<&2, Run<Led.L(mach, d)>>:
-  +l = Run.ledger(Led.L(mach, d), r)
-  +t = Run.tip(Led.L(mach, d), r)
-  +n = Tip.count(t)
-  Shared.Bool.when(
-    Maybe<&2, Run<Led.L(mach, d)>>,
-    List.all.if(
-      u => Maybe.is_none(&2, Ledgers.Id, Tip.label(~mach, ~d, l, t, m)),
-      Bool.not(U32.is_eq(n, 0))
-    ),
-    u => Step.labelled(~mach, ~d, r, i, a, m, Tip.taken(~mach, ~d, l, t, U32.sub(n, 1))),
-    u => Step.stale(~mach, ~d, r, i, a)
+  Step.label.at(
+    ~mach,
+    ~d,
+    r,
+    i,
+    a,
+    m,
+    Tip.known(
+      ~Ledgers.Id,
+      ~Ledgers.Id.code,
+      ~Ledgers.Id.code.read,
+      Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.label(m))
+    )
   )
 
 # the run r with the first tip t of the new sub line b in its log, and the
@@ -1452,12 +1525,14 @@ def Step.fresh(
   +i: Ledgers.Id,
   a: Hashes.Hash,
   q: Machine.Q(mach),
-  o: Maybe<&2, Out>
+  o: Maybe<&2, Maybe<&2, Out>>
 ) -> Maybe<&2, Run<Led.L(mach, d)>>:
   match o:
-    case Some{x}:
-      Some{r}
     case None{}:
+      None{}
+    case Some{Some{x}}:
+      Some{r}
+    case Some{None{}}:
       Act.run(
         ~mach,
         ~d,
@@ -1489,7 +1564,12 @@ def Step.asked(
         i,
         a,
         q,
-        Tip.out(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), i)
+        Tip.known(
+          ~Out,
+          ~Out.code,
+          ~Out.code.read,
+          Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.out(i))
+        )
       )
     case _:
       None{}
@@ -1552,7 +1632,7 @@ def Step.run(
   t: Tip,
   qs: List<&2, Hashes.Hash>
 ) -> Maybe<&2, Run<Led.L(mach, d)>>:
-  Step.all(~mach, ~d, ~kern, c, qs, Some{Run{l, t}})
+  Step.all(~mach, ~d, ~kern, c, qs, Some{Run{l, t, []}})
 
 # that b grows from a, and its ballots are honest: a later state of a ledger,
 # as the laws of a history read it
@@ -1604,13 +1684,28 @@ def Root.start(
 def Tips.same(a: Maybe<&2, Hashes.Hash>, b: Maybe<&2, Hashes.Hash>) -> Bool:
   Shared.Maybe.is_eq(~Hashes.Hash, ~Hashes.Hash.is_eq, a, b)
 
-# the tip of the run m, when it is the tip that the hash after names
-def Line.landed(-L: Data, m: Maybe<&2, Run<L>>, after: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Tip>:
+# the tip of the run m, when it is the tip that the hash after names and the
+# ledger l holds each node that the run added: what a line reads after a step
+# is data of the ledger, not of a run
+def Line.landed(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  after: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, Tip>:
   match m:
     case None{}:
       None{}
-    case Some{Run{l, +t}}:
-      Shared.Maybe.when(Tip, Tips.same(Some{Tip.hash(t)}, after), u => Some{t})
+    case Some{Run{l2, +t, a}}:
+      Shared.Maybe.when(
+        Tip,
+        Bool.and(
+          Tips.same(Some{Tip.hash(t)}, after),
+          Depots.Depot.holds(~Led.L(mach, d), ~(s => h => Led.fetch(~mach, ~d, s, h)), l, a)
+        ),
+        u => Some{t}
+      )
 
 # the tip of the line c after the step m, from the tip t: the step names t,
 # and its requests run, in l, to the tip that it names. So no replica takes a
@@ -1619,7 +1714,7 @@ def Line.moved(
   ~mach: Machine(),
   ~d: Led(mach),
   ~kern: Kernel(mach, d),
-  l: Led.L(mach, d),
+  +l: Led.L(mach, d),
   c: Ledgers.Line,
   +t: Tip,
   m: Maybe<&2, Ledgers.Step>
@@ -1631,7 +1726,7 @@ def Line.moved(
       Shared.Maybe.when(
         Tip,
         Tips.same(before, Some{Tip.hash(t)}),
-        u => Line.landed(Led.L(mach, d), Step.run(~mach, ~d, ~kern, l, c, t, qs), after)
+        u => Line.landed(~mach, ~d, l, Step.run(~mach, ~d, ~kern, l, c, t, qs), after)
       )
 
 # the tip of the line c after its step at the height h, from the tip t, in l

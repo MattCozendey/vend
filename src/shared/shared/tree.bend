@@ -198,6 +198,15 @@ def Laws.Final(-S: Data, -grows: S -> S -> Type, -o: Tree.Ops(S)) -> Type:
     s => Look.known(Ops.look(S, o)(s)(h)(k))
   )
 
+# a write stays as the depot grows: it reads only nodes on its key's path,
+# and what a read could tell stays
+def Laws.PutFinal(-S: Data, -grows: S -> S -> Type, -o: Tree.Ops(S)) -> Type:
+  @s: S -> @s2: S -> @h: Maybe<&2, Hashes.Hash> -> @k: List<&2, U32> -> @m: Maybe<
+    &2,
+    List<&2, U32>> -> @e: Edit -> {
+    Ops.put(S, o)(s)(h)(k)(m) == Some{e}: Maybe<&2, Edit>
+  } -> grows(s)(s2) -> {Ops.put(S, o)(s2)(h)(k)(m) == Some{e}: Maybe<&2, Edit>}
+
 # a write changes its key and no other: in a depot that grows and holds the
 # new nodes, the new root reads the key as written, and every other key as
 # the old root does
@@ -310,6 +319,9 @@ def Tree.Laws(
   -o: Tree.Ops(S)
 ) -> Type:
   Laws.Final(S, grows, o)
+    & (
+      Laws.PutFinal(S, grows, o)
+    )
     & (
       Laws.Write(S, fetch, grows, o)
         & (Laws.Canon(S, o) & (Laws.Range(S, o) & (Laws.Diff(S, o) & Laws.Whole(S, o))))
