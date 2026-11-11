@@ -6788,6 +6788,87 @@ def Merge.take_value(
   eoth: {o == th: Maybe<&2, Requests.Res>}
 ) -> {x == o: Maybe<&2, Requests.Res>}:
   Merge.take_value.at(~d, l, b, o, th, x, Sides.Side.of(~Maybe<&2, Requests.Res>, ~Res.same, b, o, th), {==}, hp, eoth)
+# the second of a pair
+def Merge.snd(-A: Type, -B: Type, p: A & B) -> B:
+  match p:
+    case Tuple{a, b}:
+      b
+
+# the law of a difference, of the tree of the ledger d
+def Merge.laws_diff(d: Led()) -> Trees.Laws.Diff(L(d), Replicas.Led.tree(Requests.Ask.machine(), d)):
+  match d:
+    case Tuple{x, Tuple{o, Tuple{fin, Tuple{pf, Tuple{wr, Tuple{cn, Tuple{rg, Tuple{df, rest}}}}}}}}:
+      df
+
+# the law of the trees that the ledger d holds whole
+def Merge.laws_whole(d: Led()) -> Trees.Laws.Whole(L(d), Replicas.Led.tree(Requests.Ask.machine(), d)):
+  match d:
+    case Tuple{x, Tuple{o, Tuple{fin, Tuple{pf, Tuple{wr, Tuple{cn, Tuple{rg, Tuple{df, Tuple{wh, kp}}}}}}}}}:
+      wh
+
+# two whole trees differ, by the law of a tree
+def Merge.whole_diff(
+  -S: Data,
+  -o: Trees.Tree.Ops(S),
+  wh: Trees.Laws.Whole(S, o),
+  s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  h2: Maybe<&2, Hashes.Hash>,
+  bs: List<&2, Trees.Binding>,
+  bs2: List<&2, Trees.Binding>,
+  e1: {Trees.Ops.range(S, o)(s)(h)([]) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  e2: {Trees.Ops.range(S, o)(s)(h2)([]) == Some{bs2}: Maybe<&2, List<&2, Trees.Binding>>}
+) -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Trees.Ops.diff(S, o)(s)(h)(h2)) == True{}: Bool}:
+  match wh:
+    case Tuple{empty, w2}:
+      Merge.snd(
+        (@k: List<&2, U32> -> @m: Maybe<&2, List<&2, U32>> -> @p: List<&2, U32> -> {
+          Trees.Look.is_final(Trees.Ops.look(S, o)(s)(h)(k)) == True{}: Bool
+        }
+          & (
+            {Maybe.is_some(&2, Trees.Edit, Trees.Ops.put(S, o)(s)(h)(k)(m)) == True{}: Bool}
+              & {Maybe.is_some(&2, List<&2, Trees.Binding>, Trees.Ops.range(S, o)(s)(h)(p)) == True{}: Bool}
+          )),
+        (@h3: Maybe<&2, Hashes.Hash> -> @bs3: List<&2, Trees.Binding> -> {
+          Trees.Ops.range(S, o)(s)(h3)([]) == Some{bs3}: Maybe<&2, List<&2, Trees.Binding>>
+        } -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Trees.Ops.diff(S, o)(s)(h)(h3)) == True{}: Bool}),
+        w2(s)(h)(bs)(e1)
+      )(h2)(bs2)(e2)
+
+# the tree whose root is h lists whole, once it is kept
+def Merge.kept_range.at(
+  ~d: Led(),
+  l: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  m: Maybe<&2, List<&2, Trees.Binding>>,
+  em: {Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, h, []) == m: Maybe<&2, List<&2, Trees.Binding>>},
+  e: {
+    Maybe.default(
+      &2,
+      Bool,
+      Maybe.bind(&2, List<&2, Trees.Binding>, Bool, m, bs => Some{Res.all_held(~d, l, bs)}),
+      False{}
+    )
+      == True{}: Bool
+  }
+) -> Sigma<&2, &2, List<&2, Trees.Binding>, bs => {Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>}>:
+  match m:
+    case None{}:
+      Empty.absurd(
+        Sigma<&2, &2, List<&2, Trees.Binding>, bs => {Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>}>,
+        Shared.Bool.false_ne_true(e)
+      )
+    case Some{+bs}:
+      (bs, em)
+
+# a tree that is kept lists whole
+def Merge.kept_range(
+  ~d: Led(),
+  +l: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  e: {Tree.kept(~d, l, h) == True{}: Bool}
+) -> Sigma<&2, &2, List<&2, Trees.Binding>, bs => {Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>}>:
+  Merge.kept_range.at(~d, l, h, Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, h, []), {==}, e)
 # TMP-END
 
 # a merge never loses a change that only one side made: when the merge of a
