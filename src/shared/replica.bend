@@ -14654,7 +14654,8 @@ def Line.get_grows(mach, d, kern, c, key):
     x
   )(e)
 
-# a step gives each of its requests an outcome: after a run, the log holds an
+# a step gives each of its requests an outcome: after a run whose ledger
+# holds each node that it added (as a landed step's does), the log holds an
 # outcome of the ID of each request of the step
 law Step.run_outs:
   for ~mach: Machine()
@@ -14670,6 +14671,15 @@ law Step.run_outs:
   for time: String
   for q: Machine.Q(mach)
   {Step.run(~mach, ~d, ~kern, l, c, t, qs) == Some{r}: Maybe<&2, Run<Led.L(mach, d)>>}
+    -> {
+      Depots.Depot.holds(
+        ~Led.L(mach, d),
+        ~(s => h => Led.fetch(~mach, ~d, s, h)),
+        Run.ledger(Led.L(mach, d), r),
+        Run.added(Led.L(mach, d), r)
+      )
+        == True{}: Bool
+    }
     -> {List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, qs, a) == True{}: Bool}
     -> {
       Led.get(~mach, ~d, l, Ledgers.Name.Ask{a}) == Some{Ledgers.Entry.Ask{i, time, q}}: Maybe<&2, Entry(mach)>
