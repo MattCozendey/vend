@@ -11650,6 +11650,440 @@ def Affects.started_in(
     )
   )
 
+# the entry of a branch is of that branch
+def Affects.entry_of(
+  ~d: Led(),
+  +l: L(d),
+  +bb: Branch,
+  m: Maybe<&2, Replicas.Tip>,
+  -e0: BranchEntry,
+  -R: Type,
+  k: @vs: List<&2, String> -> @hv: Maybe<&2, Ledgers.Id> -> {BranchEntry{bb, vs, hv} == e0: BranchEntry} -> R
+) -> {BranchEntry.of(~d, l, bb, m) == Some{e0}: Maybe<&2, BranchEntry>} -> R:
+  match m:
+    case None{}:
+      e => Empty.absurd(R, Shared.Maybe.none_ne_some(BranchEntry, e0, e))
+    case Some{+t}:
+      e => Affects.map_some(
+        Maybe<&2, Ledgers.Id>,
+        BranchEntry,
+        R,
+        v => BranchEntry{bb, Replicas.Tip.voters(t), v},
+        Replicas.Tip.newest(~Requests.Ask.machine(), ~d, l, t),
+        e0,
+        +hv => ehv => eq => k(Replicas.Tip.voters(t))(hv)(eq)
+      )(e)
+
+# Affects.touch_has at the entry of the branch n1, once it is known whether
+# n1 is nf (q)
+def Affects.touch_has.hit(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +n1: String,
+  +rest: List<&2, String>,
+  +st: Hashes.Hash,
+  +nf: String,
+  +b: Branch,
+  +x: Touch,
+  +r0: List<&2, BranchEntry>,
+  q: Bool,
+  eq: {String.eq(n1, nf) == q: Bool},
+  +hn: {List.any.if(w => List.contains(~String, ~String.eq, rest, nf), q) == True{}: Bool},
+  hk: @a: List<&2, Touch> -> {Branch.touches(~d, ~kern, l, view, Branch{st, nf}, b) == Some{a}: Maybe<&2, List<&2, Touch>>}
+    -> {List.contains(~Touch, ~Touch.is_eq, a, x) == True{}: Bool},
+  ih: {List.contains(~String, ~String.eq, rest, nf) == True{}: Bool}
+    -> (
+      @a: List<&2, Touch> -> {Branch.touches(~d, ~kern, l, view, Branch{st, nf}, b) == Some{a}: Maybe<&2, List<&2, Touch>>}
+        -> {List.contains(~Touch, ~Touch.is_eq, a, x) == True{}: Bool}
+    )
+    -> @ts2: List<&2, Touch> -> {Branches.touch(~d, ~kern, l, view, r0, b) == Some{ts2}: Maybe<&2, List<&2, Touch>>}
+    -> {List.contains(~Touch, ~Touch.is_eq, ts2, x) == True{}: Bool},
+  +a: List<&2, Touch>,
+  +ea: {Branch.touches(~d, ~kern, l, view, Branch{st, n1}, b) == Some{a}: Maybe<&2, List<&2, Touch>>},
+  +r: List<&2, Touch>,
+  +er: {Branches.touch(~d, ~kern, l, view, r0, b) == Some{r}: Maybe<&2, List<&2, Touch>>}
+) -> {List.contains(~Touch, ~Touch.is_eq, List.append(&2, Touch, a, r), x) == True{}: Bool}:
+  match q:
+    case True{}:
+      Shared.List.contains_left(
+        ~Touch,
+        ~Touch.is_eq,
+        a,
+        r,
+        x,
+        hk(a)(
+          Affects.cast(
+            String,
+            z => {Branch.touches(~d, ~kern, l, view, Branch{st, z}, b) == Some{a}: Maybe<&2, List<&2, Touch>>},
+            n1,
+            nf,
+            Texts.String.eq_sound(n1, nf)(eq),
+            ea
+          )
+        )
+      )
+    case False{}:
+      Shared.List.contains_right(~Touch, ~Touch.is_eq, a, r, x, ih(hn)(hk)(r)(er))
+
+# Affects.touch_has at the entry of the branch n1
+def Affects.touch_has.at(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +n1: String,
+  +rest: List<&2, String>,
+  +st: Hashes.Hash,
+  +nf: String,
+  +b: Branch,
+  +x: Touch,
+  +vs: List<&2, String>,
+  +hv: Maybe<&2, Ledgers.Id>,
+  +r0: List<&2, BranchEntry>,
+  q: Bool,
+  eq: {String.eq(n1, nf) == q: Bool},
+  +hn: {List.any.if(w => List.contains(~String, ~String.eq, rest, nf), q) == True{}: Bool},
+  hk: @a: List<&2, Touch> -> {Branch.touches(~d, ~kern, l, view, Branch{st, nf}, b) == Some{a}: Maybe<&2, List<&2, Touch>>}
+    -> {List.contains(~Touch, ~Touch.is_eq, a, x) == True{}: Bool},
+  ih: {List.contains(~String, ~String.eq, rest, nf) == True{}: Bool}
+    -> (
+      @a: List<&2, Touch> -> {Branch.touches(~d, ~kern, l, view, Branch{st, nf}, b) == Some{a}: Maybe<&2, List<&2, Touch>>}
+        -> {List.contains(~Touch, ~Touch.is_eq, a, x) == True{}: Bool}
+    )
+    -> @ts2: List<&2, Touch> -> {Branches.touch(~d, ~kern, l, view, r0, b) == Some{ts2}: Maybe<&2, List<&2, Touch>>}
+    -> {List.contains(~Touch, ~Touch.is_eq, ts2, x) == True{}: Bool},
+  +ts: List<&2, Touch>
+) -> {
+  Branches.touch(~d, ~kern, l, view, BranchEntry{Branch{st, n1}, vs, hv} <> r0, b) == Some{ts}: Maybe<&2, List<&2, Touch>>
+} -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}:
+  e => Affects.bind_some(
+    List<&2, Touch>,
+    List<&2, Touch>,
+    {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool},
+    Branch.touches(~d, ~kern, l, view, Branch{st, n1}, b),
+    a => Maybe.map(&2, List<&2, Touch>, List<&2, Touch>, r => List.append(&2, Touch, a, r), Branches.touch(~d, ~kern, l, view, r0, b)),
+    ts,
+    +a => +ea => e2 => Affects.map_some(
+      List<&2, Touch>,
+      List<&2, Touch>,
+      {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool},
+      r => List.append(&2, Touch, a, r),
+      Branches.touch(~d, ~kern, l, view, r0, b),
+      ts,
+      +r => +er => +eapp => Affects.cast(
+        List<&2, Touch>,
+        z => {List.contains(~Touch, ~Touch.is_eq, z, x) == True{}: Bool},
+        List.append(&2, Touch, a, r),
+        ts,
+        eapp,
+        Affects.touch_has.hit(~d, ~kern, l, view, n1, rest, st, nf, b, x, r0, q, eq, hn, hk, ih, a, ea, r, er)
+      )
+    )(e2)
+  )(e)
+
+# Branches.touch gives each touch that the changes of a branch of the names
+# ns give
+def Affects.touch_has(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  ns: List<&2, String>,
+  +st: Hashes.Hash,
+  +nf: String,
+  +b: Branch,
+  +x: Touch,
+  +es: List<&2, BranchEntry>,
+  +ee: {Branches.entries(~d, ~kern, l, Branches.of(st, ns)) == Some{es}: Maybe<&2, List<&2, BranchEntry>>},
+  +hn: {List.contains(~String, ~String.eq, ns, nf) == True{}: Bool},
+  hk: @a: List<&2, Touch> -> {Branch.touches(~d, ~kern, l, view, Branch{st, nf}, b) == Some{a}: Maybe<&2, List<&2, Touch>>}
+    -> {List.contains(~Touch, ~Touch.is_eq, a, x) == True{}: Bool},
+  +ts: List<&2, Touch>
+) -> {Branches.touch(~d, ~kern, l, view, es, b) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}:
+  match ns:
+    case Nil{}:
+      et => Empty.absurd({List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}, Shared.Bool.false_ne_true(hn))
+    case Con{+n1, +rest}:
+      +et => Affects.bind_some(
+        BranchEntry,
+        List<&2, BranchEntry>,
+        {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool},
+        BranchEntry.of(~d, l, Branch{st, n1}, Branch.head(~d, ~kern, l, Branch{st, n1})),
+        e => Maybe.map(
+          &2,
+          List<&2, BranchEntry>,
+          List<&2, BranchEntry>,
+          r => e <> r,
+          Branches.entries(~d, ~kern, l, Branches.of(st, rest))
+        ),
+        es,
+        +e0 => +ee0 => e1 => Affects.map_some(
+          List<&2, BranchEntry>,
+          List<&2, BranchEntry>,
+          {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool},
+          r => e0 <> r,
+          Branches.entries(~d, ~kern, l, Branches.of(st, rest)),
+          es,
+          +r0 => +er0 => +ees => Affects.entry_of(
+            ~d,
+            l,
+            Branch{st, n1},
+            Branch.head(~d, ~kern, l, Branch{st, n1}),
+            e0,
+            {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool},
+            +vs => +hv => +e0eq => Affects.touch_has.at(
+              ~d,
+              ~kern,
+              l,
+              view,
+              n1,
+              rest,
+              st,
+              nf,
+              b,
+              x,
+              vs,
+              hv,
+              r0,
+              String.eq(n1, nf),
+              {==},
+              hn,
+              hk,
+              hn2 => hk2 => +ts2 => et2 => Affects.touch_has(~d, ~kern, l, view, rest, st, nf, b, x, r0, er0, hn2, hk2, ts2)(et2),
+              ts
+            )(
+              Affects.cast(
+                List<&2, BranchEntry>,
+                z => {Branches.touch(~d, ~kern, l, view, z, b) == Some{ts}: Maybe<&2, List<&2, Touch>>},
+                es,
+                BranchEntry{Branch{st, n1}, vs, hv} <> r0,
+                Equal.trans(
+                  List<&2, BranchEntry>,
+                  es,
+                  e0 <> r0,
+                  BranchEntry{Branch{st, n1}, vs, hv} <> r0,
+                  Equal.sym(List<&2, BranchEntry>, e0 <> r0, es, ees),
+                  Equal.cong(
+                    BranchEntry,
+                    List<&2, BranchEntry>,
+                    z => z <> r0,
+                    e0,
+                    BranchEntry{Branch{st, n1}, vs, hv},
+                    Equal.sym(BranchEntry, BranchEntry{Branch{st, n1}, vs, hv}, e0, e0eq)
+                  )
+                ),
+                et
+              )
+            )
+          )(ee0)
+        )(e1)
+      )(ee)
+
+# the changes of another branch, whose tips are known, are those of its tips
+def Affects.touches_at_of(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +from: Branch,
+  +tf: Replicas.Tip,
+  +b: Branch,
+  +tb: Replicas.Tip,
+  +eo: {Branch.other(from, b) == True{}: Bool},
+  +ef: {Branch.head(~d, ~kern, l, from) == Some{tf}: Maybe<&2, Replicas.Tip>},
+  +eb: {Branch.head(~d, ~kern, l, b) == Some{tb}: Maybe<&2, Replicas.Tip>}
+) -> {
+  Branch.touches(~d, ~kern, l, view, from, b) == Branch.touches.at(~d, l, view, from, tf, b, tb): Maybe<&2, List<&2, Touch>>
+}:
+  %Equal.sym(Bool, Branch.other(from, b), True{}, eo): {
+    Shared.Bool.when(
+      Maybe<&2, List<&2, Touch>>,
+      _,
+      u => Maybe.bind(
+        &2,
+        Replicas.Tip,
+        List<&2, Touch>,
+        Branch.head(~d, ~kern, l, from),
+        tf2 => Branch.touches.of(~d, l, view, from, tf2, b, Branch.head(~d, ~kern, l, b))
+      ),
+      u => Some{[]}
+    )
+      == Branch.touches.at(~d, l, view, from, tf, b, tb): Maybe<&2, List<&2, Touch>>
+  }
+  %Equal.sym(Maybe<&2, Replicas.Tip>, Branch.head(~d, ~kern, l, from), Some{tf}, ef): {
+    Maybe.bind(
+      &2,
+      Replicas.Tip,
+      List<&2, Touch>,
+      _,
+      tf2 => Branch.touches.of(~d, l, view, from, tf2, b, Branch.head(~d, ~kern, l, b))
+    )
+      == Branch.touches.at(~d, l, view, from, tf, b, tb): Maybe<&2, List<&2, Touch>>
+  }
+  %Equal.sym(Maybe<&2, Replicas.Tip>, Branch.head(~d, ~kern, l, b), Some{tb}, eb): {
+    Branch.touches.of(~d, l, view, from, tf, b, _) == Branch.touches.at(~d, l, view, from, tf, b, tb): Maybe<&2, List<&2, Touch>>
+  }
+  {==}
+
+# Branch.touches.at gives each touch that holds at the tips tf and tb
+def Affects.at_has(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +from: Branch,
+  +tf: Replicas.Tip,
+  +b: Branch,
+  +tb: Replicas.Tip,
+  +v: Ledgers.Id,
+  +changed: Resources.Name,
+  +used: Resources.Name,
+  +m: U32,
+  +enum: {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v) == Some{m}: Maybe<&2, U32>},
+  +elt: {U32.is_lt(m, Replicas.Tip.count(tf)) == True{}: Bool},
+  +hz: Maybe<&2, Hashes.Hash>,
+  +ebef: {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, m) == Some{hz}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+  +hX: Maybe<&2, Hashes.Hash>,
+  +etk: {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m) == Some{Replicas.Taken{v, hX}}: Maybe<&2, Replicas.Taken>},
+  +d1: {Res.differs(~d, l, hX, hz, changed) == Some{True{}}: Maybe<&2, Bool>},
+  +d2: {Res.differs(~d, l, hX, Replicas.Tip.content(tb), changed) == Some{True{}}: Maybe<&2, Bool>},
+  +r0: Requests.Res,
+  +efind: {Res.find(~d, l, Replicas.Tip.content(tb), used) == Some{Some{r0}}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ereach: {Uses.reaches(~d, l, view, Replicas.Tip.content(tb), used, changed) == Some{True{}}: Maybe<&2, Bool>},
+  +a: List<&2, Touch>
+) -> {Branch.touches.at(~d, l, view, from, tf, b, tb) == Some{a}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, a, Touch{from, v, changed, b, used}) == True{}: Bool}:
+  +hb = Replicas.Tip.content(tb)
+  e => Affects.bind_some(
+    List<&2, Trees.Binding>,
+    List<&2, Touch>,
+    {List.contains(~Touch, ~Touch.is_eq, a, Touch{from, v, changed, b, used}) == True{}: Bool},
+    Tree.range(~d, l, hb, [0]),
+    xs => Maybe.bind(
+      &2,
+      Reaches.Graph,
+      List<&2, Touch>,
+      Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()),
+      users => Maybe.bind(
+        &2,
+        List<&2, Replicas.Taken>,
+        List<&2, Touch>,
+        Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(tf)), l, tf, 0),
+        xs2 => Touches.all(~d, l, from, tf, xs2, 0, None{}, b, hb, Res.names(xs), users)
+      )
+    ),
+    a,
+    +xs => +er => e2 => Affects.bind_some(
+      Reaches.Graph,
+      List<&2, Touch>,
+      {List.contains(~Touch, ~Touch.is_eq, a, Touch{from, v, changed, b, used}) == True{}: Bool},
+      Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()),
+      users => Maybe.bind(
+        &2,
+        List<&2, Replicas.Taken>,
+        List<&2, Touch>,
+        Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(tf)), l, tf, 0),
+        xs2 => Touches.all(~d, l, from, tf, xs2, 0, None{}, b, hb, Res.names(xs), users)
+      ),
+      a,
+      +users => +eu => e3 => Affects.bind_some(
+        List<&2, Replicas.Taken>,
+        List<&2, Touch>,
+        {List.contains(~Touch, ~Touch.is_eq, a, Touch{from, v, changed, b, used}) == True{}: Bool},
+        Replicas.Tip.versions(~Requests.Ask.machine(), ~d, U32.to_nat(Replicas.Tip.count(tf)), l, tf, 0),
+        xs2 => Touches.all(~d, l, from, tf, xs2, 0, None{}, b, hb, Res.names(xs), users),
+        a,
+        +xs2 => +ev => e4 => Affects.all_has(
+          ~d,
+          l,
+          from,
+          tf,
+          xs2,
+          0,
+          None{},
+          b,
+          hb,
+          Res.names(xs),
+          users,
+          U32.to_nat(Replicas.Tip.count(tf)),
+          ev,
+          {==},
+          m,
+          v,
+          hX,
+          hz,
+          changed,
+          used,
+          enum,
+          etk,
+          elt,
+          Shared.Nat.le_zero(U32.to_nat(m)),
+          Equal.trans(
+            Bool,
+            Nat.is_lt(U32.to_nat(m), U32.to_nat(Replicas.Tip.count(tf))),
+            U32.is_lt(m, Replicas.Tip.count(tf)),
+            True{},
+            Equal.sym(
+              Bool,
+              U32.is_lt(m, Replicas.Tip.count(tf)),
+              Nat.is_lt(U32.to_nat(m), U32.to_nat(Replicas.Tip.count(tf))),
+              Shared.U32.is_lt_to_nat(m, Replicas.Tip.count(tf))
+            ),
+            elt
+          ),
+          ebef,
+          d1,
+          d2,
+          Affects.find_names(~d, l, hb, xs, er, used, r0)(efind),
+          Affects.reaches_back(~d, l, view, hb, xs, er, users, eu, used, changed, ereach),
+          a
+        )(e4)
+      )(e3)
+    )(e2)
+  )(e)
+
+# two branches of a touch that holds are of one store
+def Affects.other_store(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +s1: Hashes.Hash,
+  +nf: String,
+  +v: Ledgers.Id,
+  +changed: Resources.Name,
+  +st: Hashes.Hash,
+  +n: String,
+  +used: Resources.Name
+) -> {Touch.holds(~d, ~kern, l, view, Touch{Branch{s1, nf}, v, changed, Branch{st, n}, used}) == Some{True{}}: Maybe<&2, Bool>}
+  -> {s1 == st: Hashes.Hash}:
+  e => Affects.when_is(
+    Maybe<&2, Bool>,
+    {s1 == st: Hashes.Hash},
+    Branch.other(Branch{s1, nf}, Branch{st, n}),
+    u => Maybe.bind(
+      &2,
+      Replicas.Tip,
+      Bool,
+      Branch.head(~d, ~kern, l, Branch{s1, nf}),
+      tf => Maybe.bind(
+        &2,
+        Replicas.Tip,
+        Bool,
+        Branch.head(~d, ~kern, l, Branch{st, n}),
+        tb => Touch.holds.at(~d, l, view, tf, tb, v, changed, used)
+      )
+    ),
+    u => Some{False{}},
+    Some{True{}},
+    eo => e1 => Hashes.Hash.is_eq_sound(s1, st)(
+      Shared.List.all.if_hit(Hashes.Hash.is_eq(s1, st), w => Bool.not(String.eq(nf, n)))(eo)
+    ),
+    eof => e2 => Empty.absurd({s1 == st: Hashes.Hash}, Shared.Bool.false_ne_true(Shared.Maybe.some_inj(Bool, False{}, True{}, e2)))
+  )(e)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
