@@ -6628,6 +6628,547 @@ def Safe.pick(
         h => hp => ha => Safe.pick(~mach, ~d, b, w1, v1, w2, rest, t, v2)(h)(hp)(ha)
       )
 
+# a last vote of the round r1 or later is not none
+def Safe.after_none(y: Maybe<&2, Ledgers.Last>, +r1: Nat, v1: Ledgers.Step) -> {Safe.after(y, r1, v1) == True{}: Bool}
+  -> {Safe.le(y, None{}) == True{}: Bool}
+  -> Empty:
+  match y:
+    case None{}:
+      h1 => h2 => Shared.Bool.false_ne_true(h1)
+    case Some{Ledgers.Last{t, w}}:
+      h1 => h2 => Shared.Bool.false_ne_true(h2)
+
+# the pass to the round 1 + p of a voter that cast v1 in the round r1 below it
+# names a vote of r1 or later, and v1 when of r1
+def Safe.round_safe.after(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  +p: Nat,
+  +q: String,
+  +y: Maybe<&2, Ledgers.Last>,
+  hp: {Led.passed(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, q) == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Last>>},
+  hv: {Led.voted(~mach, ~d, b, Ledgers.Place{c, h, r1}, q) == Some{v1}: Maybe<&2, Ledgers.Step>},
+  hl: {Nat.is_lt(r1, 1n+p) == True{}: Bool}
+) -> {Safe.after(y, r1, v1) == True{}: Bool}:
+  %Equal.sym(
+    Maybe<&2, Ledgers.Last>,
+    y,
+    Last.below(~mach, ~d, q, b, c, h, 1n+p),
+    ll(a)(b)(c)(h)(later)(1n+p)(q)(y)(hp)
+  ): {Safe.after(_, r1, v1) == True{}: Bool}
+  Safe.mine(~mach, ~d, q, b, c, h, p, r1, v1)(hv)(Shared.Nat.lt_succ_le(r1, p)(hl))
+
+# when the passes name no vote, the voter that two majorities share is a
+# contradiction, once its pass is known
+def Safe.round_safe.none2(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  +p: Nat,
+  +from: List<&2, String>,
+  eM: {Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from) == None{}: Maybe<&2, Ledgers.Last>},
+  hl: {Nat.is_lt(r1, 1n+p) == True{}: Bool},
+  +q: String,
+  hv: {Led.voted(~mach, ~d, b, Ledgers.Place{c, h, r1}, q) == Some{v1}: Maybe<&2, Ledgers.Step>},
+  ex: Exists(
+    Maybe<&2, Ledgers.Last>,
+    y => {Led.passed(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, q) == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Last>>}
+      & {Safe.le(y, Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from)) == True{}: Bool}
+  )
+) -> Empty:
+  match ex:
+    case Tuple{+y, Tuple{hp, hle}}:
+      Safe.after_none(y, r1, v1)(Safe.round_safe.after(~mach, ~d, ~ll, a, b, later, c, h, r1, v1, p, q, y, hp, hv, hl))(
+        %eM: {Safe.le(y, _) == True{}: Bool}
+        hle
+      )
+
+# when the passes name no vote, the voter that two majorities share is a
+# contradiction
+def Safe.round_safe.none(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  +p: Nat,
+  +from: List<&2, String>,
+  eM: {Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from) == None{}: Maybe<&2, Ledgers.Last>},
+  hl: {Nat.is_lt(r1, 1n+p) == True{}: Bool},
+  mt: Safe.Met0(mach, d, b, Ledgers.Place{c, h, r1}, v1, Ledgers.Place{c, h, 1n+p}, from)
+) -> Empty:
+  match mt:
+    case Tuple{+q, Tuple{hv, ex}}:
+      Safe.round_safe.none2(~mach, ~d, ~ll, a, b, later, c, h, r1, v1, p, from, eM, hl, q, hv, ex)
+
+# Safe.round_safe in the case of a later round t of the passes, once the act of
+# the first voter whose pass names t is known
+def Safe.round_safe.act(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  +j: Nat,
+  +p: Nat,
+  +v2: Ledgers.Step,
+  +from: List<&2, String>,
+  +t: Nat,
+  m: Maybe<&2, Ledgers.Cast>,
+  cs: {Cast.casts(m, v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)) == True{}: Bool},
+  lt: {Nat.is_lt(r1, t) == True{}: Bool},
+  ih: @t: Nat -> @f: List<&2, String> -> {Nat.is_lt(r1, t) == True{}: Bool}
+    -> {Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f) == True{}: Bool}
+    -> {v2 == v1: Ledgers.Step}
+) -> {v2 == v1: Ledgers.Step}:
+  match m:
+    case Some{Ledgers.Cast.Vote{x, +f}}:
+      ih(t)(f)(lt)(Shared.List.all.if_rest(Ledgers.Step.is_eq(x, v2), u => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f))(cs))
+    case Some{Ledgers.Cast.Pass{q}}:
+      Empty.absurd({v2 == v1: Ledgers.Step}, Shared.Bool.false_ne_true(cs))
+    case None{}:
+      Empty.absurd({v2 == v1: Ledgers.Step}, Shared.Bool.false_ne_true(cs))
+
+# Safe.round_safe once the last vote tq, xq of the shared voter is known, and
+# whether the highest round t that the passes name is r1 (eb)
+def Safe.round_safe.cmp(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  +j: Nat,
+  +p: Nat,
+  +v2: Ledgers.Step,
+  +from: List<&2, String>,
+  +t: Nat,
+  +tq: Nat,
+  +xq: Ledgers.Step,
+  eb: Bool,
+  +ee: {Nat.is_eq(t, r1) == eb: Bool},
+  +aft: {
+    List.all.if(
+      u => List.any.if(u2 => Ledgers.Step.is_eq(xq, v1), Bool.not(Nat.is_eq(tq, r1))),
+      Nat.is_le(r1, tq)
+    )
+      == True{}: Bool
+  },
+  ha: {List.any.if(u => Ledgers.Step.is_eq(xq, v2), Bool.not(Nat.is_eq(tq, t))) == True{}: Bool},
+  +hle: {Nat.is_le(tq, t) == True{}: Bool},
+  cs: {Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)) == True{}: Bool},
+  ih: @t: Nat -> @f: List<&2, String> -> {Nat.is_lt(r1, t) == True{}: Bool}
+    -> {Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f) == True{}: Bool}
+    -> {v2 == v1: Ledgers.Step}
+) -> {v2 == v1: Ledgers.Step}:
+  match eb:
+    case True{}:
+      +etr = Shared.Nat.is_eq_sound(t, r1)(ee)
+      +hr1 = Shared.List.all.if_hit(
+        Nat.is_le(r1, tq),
+        u => List.any.if(u2 => Ledgers.Step.is_eq(xq, v1), Bool.not(Nat.is_eq(tq, r1)))
+      )(aft)
+      +eq1 = Equal.trans(
+        Bool,
+        Nat.is_eq(tq, r1),
+        Bool.and(Nat.is_le(tq, r1), Nat.is_le(r1, tq)),
+        True{},
+        Equal.sym(Bool, Bool.and(Nat.is_le(tq, r1), Nat.is_le(r1, tq)), Nat.is_eq(tq, r1), Shared.Nat.le_both(tq, r1)),
+        Shared.Bool.and_both(Nat.is_le(tq, r1), Nat.is_le(r1, tq))(
+          %etr: {Nat.is_le(tq, _) == True{}: Bool}
+          hle
+        )(hr1)
+      )
+      Equal.trans(
+        Ledgers.Step,
+        v2,
+        xq,
+        v1,
+        Equal.sym(
+          Ledgers.Step,
+          xq,
+          v2,
+          Ledgers.Step.is_eq_sound(
+            xq,
+            v2
+          )(
+            %eq1: {List.any.if(u => Ledgers.Step.is_eq(xq, v2), Bool.not(_)) == True{}: Bool}
+            %etr: {List.any.if(u => Ledgers.Step.is_eq(xq, v2), Bool.not(Nat.is_eq(tq, _))) == True{}: Bool}
+            ha
+          )
+        ),
+        Ledgers.Step.is_eq_sound(
+          xq,
+          v1
+        )(
+          %eq1: {List.any.if(u2 => Ledgers.Step.is_eq(xq, v1), Bool.not(_)) == True{}: Bool}
+          Shared.List.all.if_rest(
+            Nat.is_le(r1, tq),
+            u => List.any.if(u2 => Ledgers.Step.is_eq(xq, v1), Bool.not(Nat.is_eq(tq, r1)))
+          )(aft)
+        )
+      )
+    case False{}:
+      Safe.round_safe.act(
+        ~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from,
+        t,
+        Passes.act(~mach, ~d, b, c, h, 1n+p, from, t),
+        cs,
+        Safe.le_ne_lt(
+          r1,
+          t
+        )(
+          Shared.Nat.le_trans(r1, tq, t)(
+            Shared.List.all.if_hit(
+              Nat.is_le(r1, tq),
+              u => List.any.if(u2 => Ledgers.Step.is_eq(xq, v1), Bool.not(Nat.is_eq(tq, r1)))
+            )(aft)
+          )(hle)
+        )(Equal.trans(Bool, Nat.is_eq(r1, t), Nat.is_eq(t, r1), False{}, Shared.Nat.is_eq_comm(r1, t), ee)),
+        ih
+      )
+
+# Safe.round_safe once the last vote y of the shared voter is known
+def Safe.round_safe.y(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  +j: Nat,
+  +p: Nat,
+  +v2: Ledgers.Step,
+  +from: List<&2, String>,
+  +t: Nat,
+  -x: Ledgers.Step,
+  y: Maybe<&2, Ledgers.Last>,
+  aft: {Safe.after(y, r1, v1) == True{}: Bool},
+  ha: {Last.allows(y, t, v2) == True{}: Bool},
+  hle: {Safe.le(y, Some{Ledgers.Last{t, x}}) == True{}: Bool},
+  cs: {Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)) == True{}: Bool},
+  ih: @t: Nat -> @f: List<&2, String> -> {Nat.is_lt(r1, t) == True{}: Bool}
+    -> {Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f) == True{}: Bool}
+    -> {v2 == v1: Ledgers.Step}
+) -> {v2 == v1: Ledgers.Step}:
+  match y:
+    case None{}:
+      Empty.absurd({v2 == v1: Ledgers.Step}, Shared.Bool.false_ne_true(aft))
+    case Some{Ledgers.Last{+tq, +xq}}:
+      Safe.round_safe.cmp(~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from, t, tq, xq, Nat.is_eq(t, r1), {==}, aft, ha, hle, cs, ih)
+
+# Safe.round_safe once the pass of the shared voter is known
+def Safe.round_safe.some2(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  +j: Nat,
+  +p: Nat,
+  +v2: Ledgers.Step,
+  +from: List<&2, String>,
+  +t: Nat,
+  -x: Ledgers.Step,
+  eM: {Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from) == Some{Ledgers.Last{t, x}}: Maybe<&2, Ledgers.Last>},
+  hl: {Nat.is_lt(r1, 1n+p) == True{}: Bool},
+  cs: {Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)) == True{}: Bool},
+  ih: @t: Nat -> @f: List<&2, String> -> {Nat.is_lt(r1, t) == True{}: Bool}
+    -> {Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f) == True{}: Bool}
+    -> {v2 == v1: Ledgers.Step},
+  +q: String,
+  hv: {Led.voted(~mach, ~d, b, Ledgers.Place{c, h, r1}, q) == Some{v1}: Maybe<&2, Ledgers.Step>},
+  ex: Exists(
+    Maybe<&2, Ledgers.Last>,
+    y => {Led.passed(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, q) == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Last>>}
+      & ({Last.allows(y, t, v2) == True{}: Bool} & {Safe.le(y, Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from)) == True{}: Bool})
+  )
+) -> {v2 == v1: Ledgers.Step}:
+  match ex:
+    case Tuple{+y, Tuple{hp, Tuple{ha, hle}}}:
+      Safe.round_safe.y(
+        ~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from,
+        t,
+        x,
+        y,
+        Safe.round_safe.after(~mach, ~d, ~ll, a, b, later, c, h, r1, v1, p, q, y, hp, hv, hl),
+        ha,
+        %eM: {Safe.le(y, _) == True{}: Bool}
+        hle,
+        cs,
+        ih
+      )
+
+# Safe.round_safe once the voter that two majorities share is known
+def Safe.round_safe.some(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  +j: Nat,
+  +p: Nat,
+  +v2: Ledgers.Step,
+  +from: List<&2, String>,
+  +t: Nat,
+  -x: Ledgers.Step,
+  eM: {Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from) == Some{Ledgers.Last{t, x}}: Maybe<&2, Ledgers.Last>},
+  hl: {Nat.is_lt(r1, 1n+p) == True{}: Bool},
+  cs: {Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)) == True{}: Bool},
+  ih: @t: Nat -> @f: List<&2, String> -> {Nat.is_lt(r1, t) == True{}: Bool}
+    -> {Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f) == True{}: Bool}
+    -> {v2 == v1: Ledgers.Step},
+  mt: Safe.Met(mach, d, b, Ledgers.Place{c, h, r1}, v1, Ledgers.Place{c, h, 1n+p}, from, t, v2)
+) -> {v2 == v1: Ledgers.Step}:
+  match mt:
+    case Tuple{+q, Tuple{hv, ex}}:
+      Safe.round_safe.some2(~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from, t, x, eM, hl, cs, ih, q, hv, ex)
+
+# Safe.round_safe once the highest last vote M that the passes name is known
+def Safe.round_safe.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  +j: Nat,
+  +p: Nat,
+  +v2: Ledgers.Step,
+  +from: List<&2, String>,
+  M: Maybe<&2, Ledgers.Last>,
+  eM: {Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from) == M: Maybe<&2, Ledgers.Last>},
+  lh: {Last.holds(M, +t => List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)), Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v2))) == True{}: Bool},
+  +pall: {Passed.all(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from) == True{}: Bool},
+  +meet: {
+    Nat.is_lt(0n, Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), b, Ledgers.Place{c, h, r1}, from), v1)) == True{}: Bool
+  },
+  hl: {Nat.is_lt(r1, 1n+p) == True{}: Bool},
+  ih: @t: Nat -> @f: List<&2, String> -> {Nat.is_lt(r1, t) == True{}: Bool}
+    -> {Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f) == True{}: Bool}
+    -> {v2 == v1: Ledgers.Step}
+) -> {v2 == v1: Ledgers.Step}:
+  match M:
+    case None{}:
+      Empty.absurd(
+        {v2 == v1: Ledgers.Step},
+        Safe.round_safe.none(
+          ~mach,
+          ~d,
+          ~ll,
+          a,
+          b,
+          later,
+          c,
+          h,
+          r1,
+          v1,
+          p,
+          from,
+          eM,
+          hl,
+          Safe.pick0(~mach, ~d, b, Ledgers.Place{c, h, r1}, v1, Ledgers.Place{c, h, 1n+p}, from)(meet)(pall)
+        )
+      )
+    case Some{Ledgers.Last{+t, x}}:
+      +lh2 = {lh : {List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)), Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v2)) == True{}: Bool}}
+      Safe.round_safe.some(
+        ~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from,
+        t,
+        x,
+        eM,
+        hl,
+        Shared.List.all.if_rest(Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v2), u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)))(lh2),
+        ih,
+        Safe.pick(~mach, ~d, b, Ledgers.Place{c, h, r1}, v1, Ledgers.Place{c, h, 1n+p}, from, t, v2)(meet)(pall)(
+          Shared.List.all.if_hit(Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v2), u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)))(lh2)
+        )
+      )
+
+# safety of rounds: when a majority cast v1 in the round r1, a later round
+# allows no other step than v1. The passes of a majority meet that majority
+# in a voter whose pass names a vote of r1 or later; the highest round t that
+# the passes name is r1, where they name v1, or later, where v2 was allowed
+# by the same argument
+def Safe.round_safe(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~ll: Hist.LaterLast(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +c: Ledgers.Line,
+  +h: U32,
+  +os: List<&2, String>,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  k: Nat,
+  r2: Nat,
+  +v2: Ledgers.Step,
+  +from: List<&2, String>
+) -> {Quorums.Quorum.has(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), b, Ledgers.Place{c, h, r1}, os), v1) == True{}: Bool}
+  -> {Nat.is_lt(r1, r2) == True{}: Bool}
+  -> {Step.allowed.in(~mach, ~d, b, c, h, os, v2, k, r2, from) == True{}: Bool}
+  -> {v2 == v1: Ledgers.Step}:
+  match k r2:
+    case 0n 0n:
+      hq => hl => e => Empty.absurd(
+        {v2 == v1: Ledgers.Step},
+        Shared.Bool.false_ne_true(
+          Equal.trans(Bool, False{}, Nat.is_lt(r1, 0n), True{}, Equal.sym(Bool, Nat.is_lt(r1, 0n), False{}, Safe.lt_zero(r1)), hl)
+        )
+      )
+    case 1n+j 0n:
+      hq => hl => e => Empty.absurd(
+        {v2 == v1: Ledgers.Step},
+        Shared.Bool.false_ne_true(
+          Equal.trans(Bool, False{}, Nat.is_lt(r1, 0n), True{}, Equal.sym(Bool, Nat.is_lt(r1, 0n), False{}, Safe.lt_zero(r1)), hl)
+        )
+      )
+    case 0n 1n+p:
+      hq => hl => e => Empty.absurd({v2 == v1: Ledgers.Step}, Shared.Bool.false_ne_true(e))
+    case 1n+(+j) 1n+(+p):
+      +hq => +hl => +e =>
+        +pm = Shared.List.all.if_hit(
+          Passed.major(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, os, from),
+          u => Last.holds(Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from), +t => List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)), Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v2)))
+        )(e)
+        +prs = Shared.List.all.if_rest(
+          Passed.all(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from),
+          u => List.all.if(u2 => Voters.major(os, from), Voters.sub(os, from))
+        )(pm)
+        Safe.round_safe.at(
+          ~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, p, v2, from,
+          Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from),
+          {==},
+          Shared.List.all.if_rest(
+            Passed.major(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, os, from),
+            u => Last.holds(Passes.last(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from), +t => List.all.if(u2 => Cast.casts(Passes.act(~mach, ~d, b, c, h, 1n+p, from, t), v2, +f => Step.allowed.in(~mach, ~d, b, c, h, os, v2, j, t, f)), Passes.agree(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from, t, v2)))
+          )(e),
+          Shared.List.all.if_hit(
+            Passed.all(~mach, ~d, b, Ledgers.Place{c, h, 1n+p}, from),
+            u => List.all.if(u2 => Voters.major(os, from), Voters.sub(os, from))
+          )(pm),
+          Safe.meet(~mach, ~d, b, Ledgers.Place{c, h, r1}, os, from, v1)(
+            Shared.List.all.if_hit(Voters.sub(os, from), u2 => Voters.major(os, from))(prs)
+          )(Shared.List.all.if_rest(Voters.sub(os, from), u2 => Voters.major(os, from))(prs))(hq),
+          hl,
+          t => f => hlt => ha => Safe.round_safe(~mach, ~d, ~ll, a, b, later, c, h, os, r1, v1, j, t, v2, f)(hq)(hlt)(ha)
+        )
+
 # a height decides the same step in a later ledger
 def Safe.decide(
   ~mach: Machine(),
