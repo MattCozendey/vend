@@ -709,6 +709,18 @@ def Crit.entries.go(-V: Data, m: Crit<V>, rest: List<&2, Bind<V>>) -> List<&2, B
 def Crit.entries(-V: Data, m: Crit<V>) -> List<&2, Bind<V>>:
   Crit.entries.go(V, m, [])
 
+# each key of the entries es is a key of m
+def Crit.within.go(-V: Data, es: List<&2, Bind<V>>, +m: Crit<V>) -> Bool:
+  match es:
+    case Nil{}:
+      True{}
+    case Con{Bind{k, v}, rest}:
+      List.all.if(u => Crit.within.go(V, rest, m), Crit.has(V, m, k))
+
+# each key of a is a key of b
+def Crit.within(-V: Data, a: Crit<V>, b: Crit<V>) -> Bool:
+  Crit.within.go(V, Crit.entries(V, a), b)
+
 # Laws of cursors
 # ---------------
 # A cursor reads exactly the bits that it has yet to read (Cur.bits): each
@@ -7328,12 +7340,15 @@ law Crit.get_lookup:
 def Crit.get_lookup(ty, m, k):
   Crit.get_lookup.at(~ty, m, k)
 
-# two well formed maps that read the same are the same map
+# a map is its entries: two well formed maps with the same entries are the
+# same map, so a map has one shape, and one code, for its content
 law Crit.ext:
   for ~V: Data
   for a: Crit<V>
   for b: Crit<V>
-  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> (@q: List<&2, U32> -> {Crit.lookup(V, a, q) == Crit.lookup(V, b, q): Maybe<&2, V>}) -> {a == b: Crit<V>}
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {
+    Crit.entries(V, a) == Crit.entries(V, b): List<&2, Bind<V>>
+  } -> {a == b: Crit<V>}
 
 def Crit.ext(ty, a, b):
   ?TODO
@@ -7524,9 +7539,9 @@ law Crit.size_le:
   for ~V: Data
   for a: Crit<V>
   for b: Crit<V>
-  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> (@q: List<&2, U32> -> {
-    Maybe.is_some(&2, V, Crit.lookup(V, a, q)) == True{}: Bool
-  } -> {Maybe.is_some(&2, V, Crit.lookup(V, b, q)) == True{}: Bool}) -> {
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {
+    Crit.within(V, a, b) == True{}: Bool
+  } -> {
     Nat.is_le(Crit.size(V, a), Crit.size(V, b)) == True{}: Bool
   }
 
