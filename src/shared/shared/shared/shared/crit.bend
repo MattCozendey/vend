@@ -10052,6 +10052,315 @@ def Crit.under_go_wf(~V: Data, m: Crit<V>, +lo: Nat, +at: Nat, +c: Cur, +p: List
 def Crit.under_wf.go(~V: Data, m: Crit<V>, +p: List<&2, U32>) -> {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.under(V, m, p), 0n) == True{}: Bool}:
   h => Crit.under_go_wf(~V, m, 0n, 0n, Cur.of(p), p)(h)
 
+# the number before n (0 before 0)
+def Crit.pred(n: Nat) -> Nat:
+  match n:
+    case 0n:
+      0n
+    case 1n+q:
+      q
+
+# no successor is zero
+def Crit.zero_ne_succ(-n: Nat, h: {0n == 1n+n: Nat}) -> Empty:
+  Shared.Bool.true_ne_false(Equal.cong(Nat, Bool, t => Nat.is_eq(t, 0n), 0n, 1n+n, h))
+
+# the length of two lists one after the other is the sum of their lengths
+def Bits.length_append(xs: List<&2, Bool>, +ys: List<&2, Bool>) -> {List.length(&2, Bool, List.append(&2, Bool, xs, ys)) == Nat.add(List.length(&2, Bool, xs), List.length(&2, Bool, ys)): Nat}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      Equal.cong(Nat, Nat, t => 1n+t, List.length(&2, Bool, List.append(&2, Bool, r, ys)), Nat.add(List.length(&2, Bool, r), List.length(&2, Bool, ys)), Bits.length_append(r, ys))
+
+# lists of one length, each followed by more, agree as far as both do when
+# both parts do
+def Bits.agree_append(a: List<&2, Bool>, +a2: List<&2, Bool>, b: List<&2, Bool>, +b2: List<&2, Bool>, +m: Nat) -> {List.length(&2, Bool, a) == List.length(&2, Bool, b): Nat} -> {
+  Bits.agree_n(Nat.add(List.length(&2, Bool, a), m), List.append(&2, Bool, a, a2), List.append(&2, Bool, b, b2)) == Bool.and(Bits.agree_n(List.length(&2, Bool, a), a, b), Bits.agree_n(m, a2, b2)): Bool
+}:
+  match a b:
+    case Nil{} Nil{}:
+      h => {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      h => Equal.trans(
+        Bool,
+        Bool.and(Shared.Bool.is_eq(x, y), Bits.agree_n(Nat.add(List.length(&2, Bool, ra), m), List.append(&2, Bool, ra, a2), List.append(&2, Bool, rb, b2))),
+        Bool.and(Shared.Bool.is_eq(x, y), Bool.and(Bits.agree_n(List.length(&2, Bool, ra), ra, rb), Bits.agree_n(m, a2, b2))),
+        Bool.and(Bool.and(Shared.Bool.is_eq(x, y), Bits.agree_n(List.length(&2, Bool, ra), ra, rb)), Bits.agree_n(m, a2, b2)),
+        Equal.cong(Bool, Bool, t => Bool.and(Shared.Bool.is_eq(x, y), t), Bits.agree_n(Nat.add(List.length(&2, Bool, ra), m), List.append(&2, Bool, ra, a2), List.append(&2, Bool, rb, b2)), Bool.and(Bits.agree_n(List.length(&2, Bool, ra), ra, rb), Bits.agree_n(m, a2, b2)), Bits.agree_append(ra, a2, rb, b2, m)(Equal.cong(Nat, Nat, t => Crit.pred(t), 1n+List.length(&2, Bool, ra), 1n+List.length(&2, Bool, rb), h))),
+        Shared.Bool.and_assoc(Shared.Bool.is_eq(x, y), Bits.agree_n(List.length(&2, Bool, ra), ra, rb), Bits.agree_n(m, a2, b2))
+      )
+    case Nil{} Con{y, rb}:
+      h => Empty.absurd({Bits.agree_n(Nat.add(0n, m), a2, List.append(&2, Bool, y <> rb, b2)) == Bool.and(True{}, Bits.agree_n(m, a2, b2)): Bool}, Crit.zero_ne_succ(List.length(&2, Bool, rb), h))
+    case Con{x, ra} Nil{}:
+      h => Empty.absurd({Bits.agree_n(Nat.add(1n+List.length(&2, Bool, ra), m), List.append(&2, Bool, x <> ra, a2), b2) == Bool.and(Bits.agree_n(1n+List.length(&2, Bool, ra), x <> ra, []), Bits.agree_n(m, a2, b2)): Bool}, Crit.zero_ne_succ(List.length(&2, Bool, ra), Equal.sym(Nat, 1n+List.length(&2, Bool, ra), 0n, h)))
+
+# Word.cmp.fin is EQ exactly when the first bits are the same and the rest is
+def Crit.cmp_fin_eq(t: Cmp, ab: Bool, bb: Bool) -> {Cmp.is_eq(Word.cmp.fin(ab, bb, t)) == Bool.and(Shared.Bool.is_eq(ab, bb), Cmp.is_eq(t)): Bool}:
+  match t ab bb:
+    case LT{} True{} True{}:
+      {==}
+    case LT{} True{} False{}:
+      {==}
+    case LT{} False{} True{}:
+      {==}
+    case LT{} False{} False{}:
+      {==}
+    case EQ{} True{} True{}:
+      {==}
+    case EQ{} True{} False{}:
+      {==}
+    case EQ{} False{} True{}:
+      {==}
+    case EQ{} False{} False{}:
+      {==}
+    case GT{} True{} True{}:
+      {==}
+    case GT{} True{} False{}:
+      {==}
+    case GT{} False{} True{}:
+      {==}
+    case GT{} False{} False{}:
+      {==}
+
+# words are equal exactly when their bits agree
+def Crit.word_eq_bits(n: Nat, a: Word(n), b: Word(n)) -> {Cmp.is_eq(Word.cmp(n, a, b)) == Bits.agree_n(n, Word.bits(n, a), Word.bits(n, b)): Bool}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+(+q):
+      match a b:
+        case WCon{+ab, +at} WCon{+bb, +bt}:
+          Equal.trans(
+            Bool,
+            Cmp.is_eq(Word.cmp.fin(ab, bb, Word.cmp(q, at, bt))),
+            Bool.and(Shared.Bool.is_eq(ab, bb), Cmp.is_eq(Word.cmp(q, at, bt))),
+            Bool.and(Shared.Bool.is_eq(ab, bb), Bits.agree_n(q, Word.bits(q, at), Word.bits(q, bt))),
+            Crit.cmp_fin_eq(Word.cmp(q, at, bt), ab, bb),
+            Equal.cong(Bool, Bool, t => Bool.and(Shared.Bool.is_eq(ab, bb), t), Cmp.is_eq(Word.cmp(q, at, bt)), Bits.agree_n(q, Word.bits(q, at), Word.bits(q, bt)), Crit.word_eq_bits(q, at, bt))
+          )
+
+# a key starts with the words p exactly when its bits start with those of p
+def Key.starts_bits(+p: List<&2, U32>, +k: List<&2, U32>) -> {Key.starts(p, k) == Bits.agree_n(List.length(&2, Bool, Key.bits(p)), Key.bits(p), Key.bits(k)): Bool}:
+  match p k:
+    case Nil{} y:
+      {==}
+    case Con{U32{WCon{b, t}}, rp} Nil{}:
+      {==}
+    case Con{U32{+w}, +rp} Con{U32{+v}, +rk}:
+      %Equal.sym(Nat, List.length(&2, Bool, List.append(&2, Bool, Word.bits(32n, w), Key.bits(rp))), Nat.add(List.length(&2, Bool, Word.bits(32n, w)), List.length(&2, Bool, Key.bits(rp))), Bits.length_append(Word.bits(32n, w), Key.bits(rp))): {
+        Bool.and(U32.is_eq(U32{w}, U32{v}), Key.starts(rp, rk)) == Bits.agree_n(_, List.append(&2, Bool, Word.bits(32n, w), Key.bits(rp)), List.append(&2, Bool, Word.bits(32n, v), Key.bits(rk))): Bool
+      }
+      %Equal.sym(Bool, Bits.agree_n(Nat.add(List.length(&2, Bool, Word.bits(32n, w)), List.length(&2, Bool, Key.bits(rp))), List.append(&2, Bool, Word.bits(32n, w), Key.bits(rp)), List.append(&2, Bool, Word.bits(32n, v), Key.bits(rk))), Bool.and(Bits.agree_n(List.length(&2, Bool, Word.bits(32n, w)), Word.bits(32n, w), Word.bits(32n, v)), Bits.agree_n(List.length(&2, Bool, Key.bits(rp)), Key.bits(rp), Key.bits(rk))), Bits.agree_append(Word.bits(32n, w), Key.bits(rp), Word.bits(32n, v), Key.bits(rk), List.length(&2, Bool, Key.bits(rp)))(
+        Equal.trans(Nat, List.length(&2, Bool, Word.bits(32n, w)), 32n, List.length(&2, Bool, Word.bits(32n, v)), Word.bits_length(32n, w), Equal.sym(Nat, List.length(&2, Bool, Word.bits(32n, v)), 32n, Word.bits_length(32n, v)))
+      )): {Bool.and(U32.is_eq(U32{w}, U32{v}), Key.starts(rp, rk)) == _: Bool}
+      %Equal.sym(Nat, List.length(&2, Bool, Word.bits(32n, w)), 32n, Word.bits_length(32n, w)): {
+        Bool.and(U32.is_eq(U32{w}, U32{v}), Key.starts(rp, rk)) == Bool.and(Bits.agree_n(_, Word.bits(32n, w), Word.bits(32n, v)), Bits.agree_n(List.length(&2, Bool, Key.bits(rp)), Key.bits(rp), Key.bits(rk))): Bool
+      }
+      %Equal.sym(Bool, Cmp.is_eq(Word.cmp(32n, w, v)), Bits.agree_n(32n, Word.bits(32n, w), Word.bits(32n, v)), Crit.word_eq_bits(32n, w, v)): {
+        Bool.and(_, Key.starts(rp, rk)) == Bool.and(Bits.agree_n(32n, Word.bits(32n, w), Word.bits(32n, v)), Bits.agree_n(List.length(&2, Bool, Key.bits(rp)), Key.bits(rp), Key.bits(rk))): Bool
+      }
+      %Equal.sym(Bool, Key.starts(rp, rk), Bits.agree_n(List.length(&2, Bool, Key.bits(rp)), Key.bits(rp), Key.bits(rk)), Key.starts_bits(rp, rk)): {
+        Bool.and(Bits.agree_n(32n, Word.bits(32n, w), Word.bits(32n, v)), _) == Bool.and(Bits.agree_n(32n, Word.bits(32n, w), Word.bits(32n, v)), Bits.agree_n(List.length(&2, Bool, Key.bits(rp)), Key.bits(rp), Key.bits(rk))): Bool
+      }
+      {==}
+
+# tests that each imply the other are equal
+def Crit.iff_eq(a: Bool, b: Bool) -> ({a == True{}: Bool} -> {b == True{}: Bool}) -> ({b == True{}: Bool} -> {a == True{}: Bool}) -> {a == b: Bool}:
+  match a b:
+    case True{} True{}:
+      f => g => {==}
+    case False{} False{}:
+      f => g => {==}
+    case True{} False{}:
+      f => g => Empty.absurd({True{} == False{}: Bool}, Shared.Bool.false_ne_true(f({==})))
+    case False{} True{}:
+      f => g => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(g({==})))
+
+# keys that agree before pos, past the end of p, both start with p or neither
+def Key.starts_agree(+p: List<&2, U32>, +k: List<&2, U32>, +r: List<&2, U32>, +pos: Nat) -> {List.drop(&2, Bool, Key.bits(p), pos) == []: List<&2, Bool>} -> {Key.agree(k, r, pos) == True{}: Bool} -> {
+  Key.starts(p, k) == Key.starts(p, r): Bool
+}:
+  hd => ha =>
+    +le = Crit.drop_nil_len(Key.bits(p), pos)(hd)
+    +kr = Bits.agree_n_le(Key.bits(k), Key.bits(r), List.length(&2, Bool, Key.bits(p)), pos)(le)(Equal.trans(Bool, Bits.agree_n(pos, Key.bits(k), Key.bits(r)), Key.agree(k, r, pos), True{}, Equal.sym(Bool, Key.agree(k, r, pos), Bits.agree_n(pos, Key.bits(k), Key.bits(r)), Key.agree_bits(k, r, pos)), ha))
+    %Equal.sym(Bool, Key.starts(p, k), Bits.agree_n(List.length(&2, Bool, Key.bits(p)), Key.bits(p), Key.bits(k)), Key.starts_bits(p, k)): {_ == Key.starts(p, r): Bool}
+    %Equal.sym(Bool, Key.starts(p, r), Bits.agree_n(List.length(&2, Bool, Key.bits(p)), Key.bits(p), Key.bits(r)), Key.starts_bits(p, r)): {Bits.agree_n(List.length(&2, Bool, Key.bits(p)), Key.bits(p), Key.bits(k)) == _: Bool}
+    Crit.iff_eq(Bits.agree_n(List.length(&2, Bool, Key.bits(p)), Key.bits(p), Key.bits(k)), Bits.agree_n(List.length(&2, Bool, Key.bits(p)), Key.bits(p), Key.bits(r)))(
+      t => Bits.agree_n_trans(Key.bits(p), Key.bits(k), Key.bits(r), List.length(&2, Bool, Key.bits(p)))(t)(kr)
+    )(t => Bits.agree_n_trans(Key.bits(p), Key.bits(r), Key.bits(k), List.length(&2, Bool, Key.bits(p)))(t)(Equal.trans(Bool, Bits.agree_n(List.length(&2, Bool, Key.bits(p)), Key.bits(r), Key.bits(k)), Bits.agree_n(List.length(&2, Bool, Key.bits(p)), Key.bits(k), Key.bits(r)), True{}, Bits.agree_n_sym(Key.bits(r), Key.bits(k), List.length(&2, Bool, Key.bits(p))), kr)))
+
+# a list with bits from n on is longer than n
+def Crit.drop_some_lt(xs: List<&2, Bool>, +n: Nat) -> {List.is_empty(&2, Bool, List.drop(&2, Bool, xs, n)) == False{}: Bool} -> {Nat.is_le(1n+n, List.length(&2, Bool, xs)) == True{}: Bool}:
+  match xs n:
+    case Nil{} m:
+      h => Empty.absurd({Nat.is_le(1n+m, 0n) == True{}: Bool}, Shared.Bool.true_ne_false(h))
+    case Con{x, t} 0n:
+      h => Shared.Nat.le_zero(List.length(&2, Bool, t))
+    case Con{x, t} 1n+q:
+      h => Crit.drop_some_lt(t, q)(h)
+
+# a key that starts with p has p's bit at pos, while p goes on past pos
+def Key.starts_side(+p: List<&2, U32>, +k: List<&2, U32>, +pos: Nat, +c2: Cur) -> {Cur.bits(c2) == List.drop(&2, Bool, Key.bits(p), pos): List<&2, Bool>} -> {Cur.done(c2) == False{}: Bool} -> {
+  Key.starts(p, k) == True{}: Bool
+} -> {Key.side(k, pos) == Some{Cur.bit(c2)}: Maybe<&2, Bool>}:
+  +h2 => +t1 => st =>
+    +lt = Crit.drop_some_lt(Key.bits(p), pos)(
+      Equal.trans(Bool, List.is_empty(&2, Bool, List.drop(&2, Bool, Key.bits(p), pos)), Cur.done(c2), False{}, Equal.sym(Bool, Cur.done(c2), List.is_empty(&2, Bool, List.drop(&2, Bool, Key.bits(p), pos)), Crit.done_of(c2, List.drop(&2, Bool, Key.bits(p), pos))(h2)), t1)
+    )
+    +ag = Bits.agree_n_le(Key.bits(p), Key.bits(k), 1n+pos, List.length(&2, Bool, Key.bits(p)))(lt)(Equal.trans(Bool, Bits.agree_n(List.length(&2, Bool, Key.bits(p)), Key.bits(p), Key.bits(k)), Key.starts(p, k), True{}, Equal.sym(Bool, Key.starts(p, k), Bits.agree_n(List.length(&2, Bool, Key.bits(p)), Key.bits(p), Key.bits(k)), Key.starts_bits(p, k)), st))
+    Equal.trans(
+      Maybe<&2, Bool>,
+      Key.side(k, pos),
+      Bits.at(Key.bits(k), pos),
+      Some{Cur.bit(c2)},
+      Key.side_bits(k, pos),
+      Equal.trans(
+        Maybe<&2, Bool>,
+        Bits.at(Key.bits(k), pos),
+        Bits.at(Key.bits(p), pos),
+        Some{Cur.bit(c2)},
+        Equal.sym(Maybe<&2, Bool>, Bits.at(Key.bits(p), pos), Bits.at(Key.bits(k), pos), Key.at_eq(p, k, pos)(Equal.trans(Bool, Key.agree(p, k, 1n+pos), Bits.agree_n(1n+pos, Key.bits(p), Key.bits(k)), True{}, Key.agree_bits(p, k, 1n+pos), ag))),
+        Equal.trans(Maybe<&2, Bool>, Bits.at(Key.bits(p), pos), Key.side(p, pos), Some{Cur.bit(c2)}, Equal.sym(Maybe<&2, Bool>, Key.side(p, pos), Bits.at(Key.bits(p), pos), Key.side_bits(p, pos)), Crit.side_cur(p, pos, c2)(h2)(t1))
+      )
+    )
+
+# a read that is kept where it is some
+def Crit.pick_keep(-V: Data, mv: Maybe<&2, V>, +c: Bool) -> ({Maybe.is_some(&2, V, mv) == True{}: Bool} -> {c == True{}: Bool}) -> {mv == Bool.pick(Maybe<&2, V>, c, mv, None{}): Maybe<&2, V>}:
+  match mv:
+    case None{}:
+      f => Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, c, None{}, None{}), None{}, Crit.pick_none(V, c))
+    case Some{u}:
+      f =>
+        %Equal.sym(Bool, c, True{}, f({==})): {Some{u} == Bool.pick(Maybe<&2, V>, _, Some{u}, None{}): Maybe<&2, V>}
+        {==}
+
+# a read that is dropped where it is some
+def Crit.pick_drop(-V: Data, mv: Maybe<&2, V>, +c: Bool) -> ({Maybe.is_some(&2, V, mv) == True{}: Bool} -> {c == False{}: Bool}) -> {None{} == Bool.pick(Maybe<&2, V>, c, mv, None{}): Maybe<&2, V>}:
+  match mv:
+    case None{}:
+      f => Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, c, None{}, None{}), None{}, Crit.pick_none(V, c))
+    case Some{u}:
+      f =>
+        %Equal.sym(Bool, c, False{}, f({==})): {None{} == Bool.pick(Maybe<&2, V>, _, Some{u}, None{}): Maybe<&2, V>}
+        {==}
+
+# reads that are the same where c holds are picked the same
+def Crit.pick_when_eq(-V: Data, c: Bool, a: Maybe<&2, V>, b: Maybe<&2, V>) -> ({c == True{}: Bool} -> {a == b: Maybe<&2, V>}) -> {Bool.pick(Maybe<&2, V>, c, a, None{}) == Bool.pick(Maybe<&2, V>, c, b, None{}): Maybe<&2, V>}:
+  match c:
+    case True{}:
+      f => f({==})
+    case False{}:
+      f => {==}
+
+# Crit.under_go_lookup at an entry that starts with p, once the test of its
+# key and k is known (cb)
+def Crit.under_leaf_t(-V: Data, +k2: List<&2, U32>, -w: V, +k: List<&2, U32>, +p: List<&2, U32>, cb: Bool) -> {Key.is_eq(k2, k) == cb: Bool} -> {Key.starts(p, k2) == True{}: Bool} -> {
+  Shared.Maybe.when(V, cb, u => Some{w}) == Bool.pick(Maybe<&2, V>, Key.starts(p, k), Shared.Maybe.when(V, cb, u => Some{w}), None{}): Maybe<&2, V>
+}:
+  match cb:
+    case True{}:
+      e => st =>
+        %Key.is_eq_sound(k2, k)(e): {Some{w} == Bool.pick(Maybe<&2, V>, Key.starts(p, _), Some{w}, None{}): Maybe<&2, V>}
+        %Equal.sym(Bool, Key.starts(p, k2), True{}, st): {Some{w} == Bool.pick(Maybe<&2, V>, _, Some{w}, None{}): Maybe<&2, V>}
+        {==}
+    case False{}:
+      e => st => Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Key.starts(p, k), None{}, None{}), None{}, Crit.pick_none(V, Key.starts(p, k)))
+
+# Crit.under_go_lookup at an entry that does not start with p, once the test
+# of its key and k is known (cb)
+def Crit.under_leaf_f(-V: Data, +k2: List<&2, U32>, -w: V, +k: List<&2, U32>, +p: List<&2, U32>, cb: Bool) -> {Key.is_eq(k2, k) == cb: Bool} -> {Key.starts(p, k2) == False{}: Bool} -> {
+  None{} == Bool.pick(Maybe<&2, V>, Key.starts(p, k), Shared.Maybe.when(V, cb, u => Some{w}), None{}): Maybe<&2, V>
+}:
+  match cb:
+    case True{}:
+      e => st =>
+        %Key.is_eq_sound(k2, k)(e): {None{} == Bool.pick(Maybe<&2, V>, Key.starts(p, _), Some{w}, None{}): Maybe<&2, V>}
+        %Equal.sym(Bool, Key.starts(p, k2), False{}, st): {None{} == Bool.pick(Maybe<&2, V>, _, Some{w}, None{}): Maybe<&2, V>}
+        {==}
+    case False{}:
+      e => st => Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Key.starts(p, k), None{}, None{}), None{}, Crit.pick_none(V, Key.starts(p, k)))
+
+# the part of a well formed map under p, read from the cursor of p, holds what
+# the map holds under each key that starts with p
+def Crit.under_go_lookup(~V: Data, m: Crit<V>, +lo: Nat, +at: Nat, +c: Cur, +p: List<&2, U32>, +k: List<&2, U32>) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {Nat.is_le(at, lo) == True{}: Bool} -> {
+  Cur.bits(c) == List.drop(&2, Bool, Key.bits(p), at): List<&2, Bool>
+} -> {Crit.lookup(V, Crit.under.go(V, m, at, c, p), k) == Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, m, k), None{}): Maybe<&2, V>}:
+  match m:
+    case Crit.Tip{}:
+      h => l => hc => Equal.sym(Maybe<&2, V>, Bool.pick(Maybe<&2, V>, Key.starts(p, k), None{}, None{}), None{}, Crit.pick_none(V, Key.starts(p, k)))
+    case Crit.Leaf{+k2, +w}:
+      h => l => hc => Shared.Bool.when_cases(
+        Crit<V>,
+        t => {Crit.lookup(V, t, k) == Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, Crit.Leaf{k2, w}, k), None{}): Maybe<&2, V>},
+        Key.starts(p, k2),
+        u => Crit.Leaf{k2, w},
+        u => Crit.Tip{},
+        t => Crit.under_leaf_t(V, k2, w, k, p, Key.is_eq(k2, k))({==})(t),
+        t => Crit.under_leaf_f(V, k2, w, k, p, Key.is_eq(k2, k))({==})(t)
+      )
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      +h => +l => +hc =>
+        +h2 = Crit.skip_at(p, at, pos, c)(Shared.Nat.le_trans(at, lo, pos)(l)(Crit.wf.le(~V, rep, pos, e, z, o, lo)(h)))(hc)
+        Shared.Bool.when_cases(
+          Crit<V>,
+          t => {Crit.lookup(V, t, k) == Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), None{}): Maybe<&2, V>},
+          Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+          u => Shared.Bool.when(Crit<V>, Key.starts(p, rep), q1 => Crit.Fork{rep, pos, e, z, o}, q1 => Crit.Tip{}),
+          u => Shared.Bool.when(Crit<V>, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), q1 => Crit.under.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p), q1 => Crit.under.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p)),
+          +t1 =>
+            +nil = Crit.nil_of_done(p, pos, Cur.skip(Nat.sub(pos, at), c))(h2)(t1)
+            Shared.Bool.when_cases(
+              Crit<V>,
+              t => {Crit.lookup(V, t, k) == Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), None{}): Maybe<&2, V>},
+              Key.starts(p, rep),
+              q1 => Crit.Fork{rep, pos, e, z, o},
+              q1 => Crit.Tip{},
+              +t2 => Crit.pick_keep(V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), Key.starts(p, k))(
+                s1 => Equal.trans(Bool, Key.starts(p, k), Key.starts(p, rep), True{}, Key.starts_agree(p, k, rep, pos)(nil)(Crit.in_fork_agree(~V, rep, pos, e, z, o, lo, k)(h)(s1)), t2)
+              ),
+              +t2 => Crit.pick_drop(V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), Key.starts(p, k))(
+                s1 => Equal.trans(Bool, Key.starts(p, k), Key.starts(p, rep), False{}, Key.starts_agree(p, k, rep, pos)(nil)(Crit.in_fork_agree(~V, rep, pos, e, z, o, lo, k)(h)(s1)), t2)
+              )
+            ),
+          +t1 => Shared.Bool.when_cases(
+            Crit<V>,
+            t => {Crit.lookup(V, t, k) == Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), None{}): Maybe<&2, V>},
+            Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+            q1 => Crit.under.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p),
+            q1 => Crit.under.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p),
+            +t3 => Equal.trans(
+              Maybe<&2, V>,
+              Crit.lookup(V, Crit.under.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p), k),
+              Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, o, k), None{}),
+              Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), None{}),
+              Crit.under_go_lookup(~V, o, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p, k)(Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h))(Shared.Nat.le_refl(1n+pos))(Crit.next_at(p, pos, Cur.skip(Nat.sub(pos, at), c))(h2)),
+              Crit.pick_when_eq(V, Key.starts(p, k), Crit.lookup(V, o, k), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k))(
+                st => Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), Crit.lookup(V, o, k), Crit.route_side(~V, rep, pos, e, z, o, lo, k, True{})(h)(
+                  Equal.trans(Maybe<&2, Bool>, Key.side(k, pos), Some{Cur.bit(Cur.skip(Nat.sub(pos, at), c))}, Some{True{}}, Key.starts_side(p, k, pos, Cur.skip(Nat.sub(pos, at), c))(h2)(t1)(st), Equal.cong(Bool, Maybe<&2, Bool>, b => Some{b}, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), True{}, t3))
+                ))
+              )
+            ),
+            +t3 => Equal.trans(
+              Maybe<&2, V>,
+              Crit.lookup(V, Crit.under.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p), k),
+              Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, z, k), None{}),
+              Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), None{}),
+              Crit.under_go_lookup(~V, z, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), p, k)(Crit.wf.wf_z(~V, rep, pos, e, z, o, lo)(h))(Shared.Nat.le_refl(1n+pos))(Crit.next_at(p, pos, Cur.skip(Nat.sub(pos, at), c))(h2)),
+              Crit.pick_when_eq(V, Key.starts(p, k), Crit.lookup(V, z, k), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k))(
+                st => Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k), Crit.lookup(V, z, k), Crit.route_side(~V, rep, pos, e, z, o, lo, k, False{})(h)(
+                  Equal.trans(Maybe<&2, Bool>, Key.side(k, pos), Some{Cur.bit(Cur.skip(Nat.sub(pos, at), c))}, Some{False{}}, Key.starts_side(p, k, pos, Cur.skip(Nat.sub(pos, at), c))(h2)(t1)(st), Equal.cong(Bool, Maybe<&2, Bool>, b => Some{b}, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), False{}, t3))
+                ))
+              )
+            )
+          )
+        )
+
+# Crit.under_lookup, with p and k used more than once
+def Crit.under_lookup.go(~V: Data, m: Crit<V>, +p: List<&2, U32>, +k: List<&2, U32>) -> {Crit.wf(~V, m, 0n) == True{}: Bool} -> {
+  Crit.lookup(V, Crit.under(V, m, p), k) == Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, m, k), None{}): Maybe<&2, V>
+}:
+  h => Crit.under_go_lookup(~V, m, 0n, 0n, Cur.of(p), p, k)(h)({==})(Equal.sym(List<&2, Bool>, List.drop(&2, Bool, Key.bits(p), 0n), Key.bits(p), Shared.List.drop_zero(&2, Bool, Key.bits(p))))
+
 # Laws of prefixes and order
 
 # a part under a prefix is well formed
@@ -10077,7 +10386,7 @@ law Crit.under_lookup:
   }
 
 def Crit.under_lookup(ty, m, p, k):
-  ?TODO
+  Crit.under_lookup.go(~ty, m, p, k)
 
 # the last entry of a map is an entry of it, and no key of it comes after it
 law Crit.last_max:
