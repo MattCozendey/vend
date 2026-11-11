@@ -3645,7 +3645,6 @@ law Node.answer_follows:
   )
 
 
-# MERGE-HELPERS-BEGIN
 # Merging, one tree at a time
 # ---------------------------
 # Lemmas for the two laws below. They read the ledger d only by its laws: a
@@ -5312,8 +5311,6 @@ def Merge.all_step(
     e,
     Merge.all_from(~d, l, hb, ho, ht, k, rest, Merge.step(~d, l, hb, ho, ht, k, x, w), Wf, e)
   )
-
-# MERGE-HELPERS-END
 
 # a merge never loses a change that only one side made: when the merge of a
 # resource takes the content of one side (Pick.merge: theirs when ours is the
