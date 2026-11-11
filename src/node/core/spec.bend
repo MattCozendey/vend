@@ -3169,6 +3169,288 @@ law Merge.act_clashes:
         }
     )
 
+# Touches, proven
+# -----------------
+# The helpers of Node.affects_holds and Node.affects_complete.
+
+# a bind that gives y: its read gives some a, and its rest gives y from a
+def Affects.bind_some(
+  -A: Data,
+  -B: Data,
+  -P: Type,
+  m: Maybe<&2, A>,
+  -f: A -> Maybe<&2, B>,
+  -y: B,
+  k: @a: A -> {m == Some{a}: Maybe<&2, A>} -> {f(a) == Some{y}: Maybe<&2, B>} -> P
+) -> {Maybe.bind(&2, A, B, m, f) == Some{y}: Maybe<&2, B>} -> P:
+  match m:
+    case None{}:
+      e => Empty.absurd(P, Shared.Maybe.none_ne_some(B, y, e))
+    case Some{+a}:
+      e => k(a)({==})(e)
+
+# a map that gives y: its read gives some a, and y is f of a
+def Affects.map_some(
+  -A: Data,
+  -B: Data,
+  -P: Type,
+  -f: A -> B,
+  m: Maybe<&2, A>,
+  -y: B,
+  k: @a: A -> {m == Some{a}: Maybe<&2, A>} -> {f(a) == y: B} -> P
+) -> {Maybe.map(&2, A, B, f, m) == Some{y}: Maybe<&2, B>} -> P:
+  match m:
+    case None{}:
+      e => Empty.absurd(P, Shared.Maybe.none_ne_some(B, y, e))
+    case Some{+a}:
+      e => k(a)({==})(Shared.Maybe.some_inj(B, f(a), y, e))
+
+# a choice that gives z: the test is True and the first gives z, or it is
+# False and the second does
+def Affects.when_is(
+  -A: Type,
+  -P: Type,
+  b: Bool,
+  -k: Unit -> A,
+  -e: Unit -> A,
+  -z: A,
+  kt: {b == True{}: Bool} -> {k(Unit{}) == z: A} -> P,
+  kf: {b == False{}: Bool} -> {e(Unit{}) == z: A} -> P
+) -> {Shared.Bool.when(A, b, k, e) == z: A} -> P:
+  match b:
+    case True{}:
+      h => kt({==})(h)
+    case False{}:
+      h => kf({==})(h)
+
+# a branch is the same as itself
+def Affects.branch_refl(a: Branch) -> {Branch.is_eq(a, a) == True{}: Bool}:
+  match a:
+    case Branch{+s, +n}:
+      Shared.List.all.if_both(
+        Hashes.Hash.is_eq(s, s),
+        u => String.eq(n, n)
+      )(Hashes.Hash.is_eq_refl(s))(Texts.String.eq_refl(n))
+
+# branches that are the same are equal
+def Affects.branch_sound(a: Branch, b: Branch) -> {Branch.is_eq(a, b) == True{}: Bool} -> {a == b: Branch}:
+  match a b:
+    case Branch{+s1, +n1} Branch{+s2, +n2}:
+      +h =>
+        %Equal.sym(
+          Hashes.Hash,
+          s1,
+          s2,
+          Hashes.Hash.is_eq_sound(s1, s2)(Shared.List.all.if_hit(Hashes.Hash.is_eq(s1, s2), u => String.eq(n1, n2))(h))
+        ): {Branch{_, n1} == Branch{s2, n2}: Branch}
+        %Equal.sym(
+          String,
+          n1,
+          n2,
+          Texts.String.eq_sound(n1, n2)(Shared.List.all.if_rest(Hashes.Hash.is_eq(s1, s2), u => String.eq(n1, n2))(h))
+        ): {Branch{s2, _} == Branch{s2, n2}: Branch}
+        {==}
+
+# a touch is the same as itself
+def Affects.touch_refl(a: Touch) -> {Touch.is_eq(a, a) == True{}: Bool}:
+  match a:
+    case Touch{+f, +v, +c, +b, +u}:
+      +r4 = List.all.if(w4 => Resources.Name.is_eq(u, u), Branch.is_eq(b, b))
+      +r3 = List.all.if(w3 => r4, Resources.Name.is_eq(c, c))
+      +r2 = List.all.if(w2 => r3, Ledgers.Id.is_eq(v, v))
+      Shared.List.all.if_both(Branch.is_eq(f, f), w => r2)(Affects.branch_refl(f))(
+        Shared.List.all.if_both(Ledgers.Id.is_eq(v, v), w2 => r3)(Ledgers.Id.is_eq_refl(v))(
+          Shared.List.all.if_both(Resources.Name.is_eq(c, c), w3 => r4)(Resources.Name.is_eq_refl(c))(
+            Shared.List.all.if_both(Branch.is_eq(b, b), w4 => Resources.Name.is_eq(u, u))(Affects.branch_refl(b))(
+              Resources.Name.is_eq_refl(u)
+            )
+          )
+        )
+      )
+
+# touches that are the same are equal
+def Affects.touch_sound(a: Touch, b: Touch) -> {Touch.is_eq(a, b) == True{}: Bool} -> {a == b: Touch}:
+  match a b:
+    case Touch{+f1, +v1, +c1, +b1, +u1} Touch{+f2, +v2, +c2, +b2, +u2}:
+      +h =>
+        +r4 = List.all.if(w4 => Resources.Name.is_eq(u1, u2), Branch.is_eq(b1, b2))
+        +r3 = List.all.if(w3 => r4, Resources.Name.is_eq(c1, c2))
+        +r2 = List.all.if(w2 => r3, Ledgers.Id.is_eq(v1, v2))
+        +h2 = Shared.List.all.if_rest(Branch.is_eq(f1, f2), w => r2)(h)
+        +h3 = Shared.List.all.if_rest(Ledgers.Id.is_eq(v1, v2), w2 => r3)(h2)
+        +h4 = Shared.List.all.if_rest(Resources.Name.is_eq(c1, c2), w3 => r4)(h3)
+        %Affects.branch_sound(f1, f2)(Shared.List.all.if_hit(Branch.is_eq(f1, f2), w => r2)(h)):
+          {Touch{f1, v1, c1, b1, u1} == Touch{_, v2, c2, b2, u2}: Touch}
+        %Ledgers.Id.is_eq_sound(v1, v2)(Shared.List.all.if_hit(Ledgers.Id.is_eq(v1, v2), w2 => r3)(h2)):
+          {Touch{f1, v1, c1, b1, u1} == Touch{f1, _, c2, b2, u2}: Touch}
+        %Resources.Name.is_eq_sound(c1, c2)(Shared.List.all.if_hit(Resources.Name.is_eq(c1, c2), w3 => r4)(h3)):
+          {Touch{f1, v1, c1, b1, u1} == Touch{f1, v1, _, b2, u2}: Touch}
+        %Affects.branch_sound(b1, b2)(Shared.List.all.if_hit(Branch.is_eq(b1, b2), w4 => Resources.Name.is_eq(u1, u2))(h4)):
+          {Touch{f1, v1, c1, b1, u1} == Touch{f1, v1, c1, _, u2}: Touch}
+        %Resources.Name.is_eq_sound(u1, u2)(Shared.List.all.if_rest(Branch.is_eq(b1, b2), w4 => Resources.Name.is_eq(u1, u2))(h4)):
+          {Touch{f1, v1, c1, b1, u1} == Touch{f1, v1, c1, b1, _}: Touch}
+        {==}
+
+# the laws of Touch.is_eq
+def Affects.touch_laws() -> Shared.Eq.Laws(Touch, Touch.is_eq):
+  (a => Affects.touch_refl(a), a => b => Affects.touch_sound(a, b))
+
+# a binding is the same as itself
+def Affects.binding_refl(a: Trees.Binding) -> {Trees.Binding.is_eq(a, a) == True{}: Bool}:
+  match a:
+    case Trees.Binding{+k, +v}:
+      Shared.List.all.if_both(
+        Shared.List.is_eq(~U32, ~U32.is_eq, k, k),
+        u => Shared.List.is_eq(~U32, ~U32.is_eq, v, v)
+      )(Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), k))(
+        Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), v)
+      )
+
+# bindings that are the same are equal
+def Affects.binding_sound(a: Trees.Binding, b: Trees.Binding) -> {Trees.Binding.is_eq(a, b) == True{}: Bool} -> {a == b: Trees.Binding}:
+  match a b:
+    case Trees.Binding{+k1, +v1} Trees.Binding{+k2, +v2}:
+      +h =>
+        +hk = Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2)
+        +hv = Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2)
+        %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), k1, k2)(Shared.List.all.if_hit(hk, u => hv)(h)):
+          {Trees.Binding{k1, v1} == Trees.Binding{_, v2}: Trees.Binding}
+        %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), v1, v2)(Shared.List.all.if_rest(hk, u => hv)(h)):
+          {Trees.Binding{k1, v1} == Trees.Binding{k1, _}: Trees.Binding}
+        {==}
+
+# the law of a listing, of a tree t
+def Affects.range_of(
+  -S: Data,
+  -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -grows: S -> S -> Type,
+  t: Trees.Tree(S, fetch, grows)
+) -> Trees.Laws.Range(S, Trees.Tree.ops(S, fetch, grows, t)):
+  match t:
+    case Tuple{o, Tuple{f, Tuple{p, Tuple{w, Tuple{c, Tuple{r, rest}}}}}}:
+      r
+
+# the law of a difference, of a tree t
+def Affects.diff_of(
+  -S: Data,
+  -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -grows: S -> S -> Type,
+  t: Trees.Tree(S, fetch, grows)
+) -> Trees.Laws.Diff(S, Trees.Tree.ops(S, fetch, grows, t)):
+  match t:
+    case Tuple{o, Tuple{f, Tuple{p, Tuple{w, Tuple{c, Tuple{r, Tuple{df, wh}}}}}}}:
+      df
+
+# the law of a listing, of the tree of the ledger d
+def Affects.range(d: Led()) -> Trees.Laws.Range(L(d), Replicas.Led.tree(Requests.Ask.machine(), d)):
+  match d:
+    case Tuple{x, t}:
+      Affects.range_of(
+        Ledgers.Kind.L(
+          Replicas.Machine.Q(Requests.Ask.machine()),
+          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x)
+        ),
+        Ledgers.Kind.data(
+          Replicas.Machine.Q(Requests.Ask.machine()),
+          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x)
+        ),
+        a => b => Ledgers.Kind.Grows(
+          Replicas.Machine.Q(Requests.Ask.machine()),
+          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x),
+          a,
+          b
+        ),
+        t
+      )
+
+# the law of a difference, of the tree of the ledger d
+def Affects.diff(d: Led()) -> Trees.Laws.Diff(L(d), Replicas.Led.tree(Requests.Ask.machine(), d)):
+  match d:
+    case Tuple{x, t}:
+      Affects.diff_of(
+        Ledgers.Kind.L(
+          Replicas.Machine.Q(Requests.Ask.machine()),
+          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x)
+        ),
+        Ledgers.Kind.data(
+          Replicas.Machine.Q(Requests.Ask.machine()),
+          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x)
+        ),
+        a => b => Ledgers.Kind.Grows(
+          Replicas.Machine.Q(Requests.Ask.machine()),
+          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x),
+          a,
+          b
+        ),
+        t
+      )
+
+# a known read gives the value of the read
+def Affects.known_value(l: Trees.Look, -m: Maybe<&2, List<&2, U32>>) -> {
+  Trees.Look.known(l) == Some{m}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {Trees.Look.value(l) == m: Maybe<&2, List<&2, U32>>}:
+  match l:
+    case Trees.Look.Found{v}:
+      e => Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, Some{v}, m, e)
+    case Trees.Look.Absent{}:
+      e => Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, None{}, m, e)
+    case Trees.Look.Missing{h}:
+      e => Empty.absurd({None{} == m: Maybe<&2, List<&2, U32>>}, Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, m, e))
+
+# a read that found a value knows it
+def Affects.value_known(l: Trees.Look, -v: List<&2, U32>) -> {
+  Trees.Look.value(l) == Some{v}: Maybe<&2, List<&2, U32>>
+} -> {Trees.Look.known(l) == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match l:
+    case Trees.Look.Found{w}:
+      e =>
+        %Shared.Maybe.some_inj(List<&2, U32>, w, v, e): {Some{Some{w}} == Some{Some{_}}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        {==}
+    case Trees.Look.Absent{}:
+      e => Empty.absurd({Some{None{}} == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>}, Shared.Maybe.none_ne_some(List<&2, U32>, v, e))
+    case Trees.Look.Missing{h}:
+      e => Empty.absurd({None{} == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>}, Shared.Maybe.none_ne_some(List<&2, U32>, v, e))
+
+# a known taken request of a listing is what Tip.taken reads, for the read l
+def Affects.known_taken.of(l: Trees.Look, -x: Replicas.Taken) -> {
+  Replicas.Tip.known(~Replicas.Taken, ~Replicas.Taken.code, ~Replicas.Taken.code.read, Trees.Look.known(l))
+    == Some{Some{x}}: Maybe<&2, Maybe<&2, Replicas.Taken>>
+} -> {
+  Codes.Code.whole.of(~Replicas.Taken, ~Replicas.Taken.code, ~Replicas.Taken.code.read, Trees.Look.value(l))
+    == Some{x}: Maybe<&2, Replicas.Taken>
+}:
+  match l:
+    case Trees.Look.Found{v}:
+      e => Shared.Maybe.some_inj(
+        Maybe<&2, Replicas.Taken>,
+        Codes.Code.whole.of(~Replicas.Taken, ~Replicas.Taken.code, ~Replicas.Taken.code.read, Some{v}),
+        Some{x},
+        e
+      )
+    case Trees.Look.Absent{}:
+      e => Empty.absurd(
+        {None{} == Some{x}: Maybe<&2, Replicas.Taken>},
+        Shared.Maybe.none_ne_some(Replicas.Taken, x, Shared.Maybe.some_inj(Maybe<&2, Replicas.Taken>, None{}, Some{x}, e))
+      )
+    case Trees.Look.Missing{h}:
+      e => Empty.absurd({None{} == Some{x}: Maybe<&2, Replicas.Taken>}, Shared.Maybe.none_ne_some(Maybe<&2, Replicas.Taken>, Some{x}, e))
+
+# the taken request that a listing reads at the number n is what Tip.taken
+# reads there
+def Affects.known_taken(~d: Led(), l: L(d), t: Replicas.Tip, n: U32, -x: Replicas.Taken) -> {
+  Replicas.Tip.known(
+    ~Replicas.Taken,
+    ~Replicas.Taken.code,
+    ~Replicas.Taken.code.read,
+    Replicas.Tip.find(~Requests.Ask.machine(), ~d, l, t, Replicas.Log.taken(n))
+  )
+    == Some{Some{x}}: Maybe<&2, Maybe<&2, Replicas.Taken>>
+} -> {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, t, n) == Some{x}: Maybe<&2, Replicas.Taken>}:
+  Affects.known_taken.of(
+    Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, Replicas.Tip.log(t), Replicas.Log.taken(n)),
+    x
+  )
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
