@@ -945,10 +945,6 @@ def Plain.not_nul(x: U32) -> Bool:
 def Plain.is_text(b: Texts.Bytes()) -> Bool:
   List.all(~&2, ~U32, ~Plain.not_nul, b)
 
-# the patch of the lines of a cut
-def Lines.patch(c: Cut) -> Patch:
-  Patch.Lines{Cut.hunks(c)}
-
 # the patch from a to b, as lines when both are text (text)
 def Plain.diff.by(text: Bool, a: Texts.Bytes(), b: Texts.Bytes()) -> Patch:
   match text:
@@ -970,24 +966,6 @@ def Plain.apply(a: Texts.Bytes(), p: Patch) -> Texts.Bytes():
       x
     case Patch.Pieces{sh, ts, rs}:
       a
-
-# the patch of a cut c of the lines of a, applied to a, gives the bytes of the
-# new lines lb of c
-def Plain.apply_patch(
-  c: Cut,
-  a: Texts.Bytes(),
-  lb: List<&2, Texts.Bytes()>,
-  hl: {Cut.left(c) == Lines.list(a): List<&2, Texts.Bytes()>},
-  hr: {Cut.right(c) == lb: List<&2, Texts.Bytes()>}
-) -> {Plain.apply(a, Lines.patch(c)) == Lines.bytes(lb): Texts.Bytes()}:
-  Equal.cong(
-    List<&2, Texts.Bytes()>,
-    Texts.Bytes(),
-    z => Lines.bytes(z),
-    Lines.apply.all(Cut.hunks(c), Lines.list(a)),
-    lb,
-    Lines.apply_cut_hunks(c, Lines.list(a), lb, hl, hr)
-  )
 
 # Plain.apply_diff, by whether both are text (text)
 def Plain.apply_diff.by(
