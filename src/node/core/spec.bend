@@ -2,6 +2,7 @@ import Base
 import ../../shared/replica.bend as Replicas
 import ../../shared/shared/formats.bend as Formats
 import ../../shared/shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/depot.bend as Depots
 import ../../shared/shared/rope.bend as Ropes
 import ../../shared/shared/shared/keyset.bend as KeySets
 import ../../shared/shared/shared/pack.bend as Packs
@@ -520,13 +521,19 @@ def Work.clash(~d: Led(), w: Work<L(d)>, +k: Ledgers.Id, n: Resources.Name) -> M
         Clash.value(Clash.put(n, Clash.names(~d, l, h, k)))
       )
 
-# the act that takes the work m as the content, with the owners vs if any
-def Work.act(-L: Data, vs: Maybe<&2, List<&2, String>>, m: Maybe<&2, Work<L>>) -> Maybe<&2, Replicas.Act>:
+# the act that takes the work m as the content, with the owners vs if any,
+# once each node that the work adds reads back from its ledger: a node whose
+# hash another one holds waits, so what an act writes is what a read finds
+def Work.act(~d: Led(), vs: Maybe<&2, List<&2, String>>, m: Maybe<&2, Work<L(d)>>) -> Maybe<&2, Replicas.Act>:
   match m:
     case None{}:
       None{}
-    case Some{Work{l, h, ns}}:
-      Some{Replicas.Act.Taken{vs, h, ns}}
+    case Some{Work{l, h, +ns}}:
+      Shared.Maybe.when(
+        Replicas.Act,
+        Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, ns),
+        u => Some{Replicas.Act.Taken{vs, h, ns}}
+      )
 
 # what a resolve of the resource n of the merge k, with the content x, does
 # at the tip t: while the clash is open, and once l holds the bytes, the
@@ -546,7 +553,7 @@ def Resolve.act.of(
       Maybe<&2, Replicas.Act>,
       Res.kept(~d, l, new),
       v => Work.act(
-        L(d),
+        ~d,
         None{},
         Maybe.bind(
           &2,
@@ -990,7 +997,7 @@ def Merge.act(
     Maybe<&2, Replicas.Act>,
     List.all.if(u => Tree.kept(~d, l, hb), Tree.kept(~d, l, ht)),
     u => Work.act(
-      L(d),
+      ~d,
       None{},
       Merge.all(
         ~d,
@@ -2197,31 +2204,27 @@ def Node.log(
     []
   )
 
-# the version of the outcome o, at the tip t, wrote the resource n: the
-# resource holds after it what it did not hold before it
-def Out.wrote(~d: Led(), +l: L(d), +t: Replicas.Tip, o: Replicas.Out, +n: Resources.Name) -> Bool:
-  match o:
-    case Replicas.Out.Stale{a}:
-      False{}
-    case Replicas.Out.Taken{a, +m}:
-      Maybe.default(
+# the version that the line took as the number m, at the tip t, wrote the
+# resource n: the resource holds after it what it did not hold before it
+def Version.wrote(~d: Led(), +l: L(d), +t: Replicas.Tip, +m: U32, +n: Resources.Name) -> Bool:
+  Maybe.default(
+    &2,
+    Bool,
+    Maybe.bind(
+      &2,
+      Maybe<&2, Hashes.Hash>,
+      Bool,
+      Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, t, m),
+      h0 => Maybe.bind(
         &2,
+        Replicas.Taken,
         Bool,
-        Maybe.bind(
-          &2,
-          Maybe<&2, Hashes.Hash>,
-          Bool,
-          Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, t, m),
-          h0 => Maybe.bind(
-            &2,
-            Replicas.Taken,
-            Bool,
-            Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, t, m),
-            x => Some{Res.differs(~d, l, Replicas.Taken.root(x), h0, n)}
-          )
-        ),
-        False{}
+        Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, t, m),
+        x => Some{Res.differs(~d, l, Replicas.Taken.root(x), h0, n)}
       )
+    ),
+    False{}
+  )
 
 # Touch.holds once the newest tips tf of the branch from and tb of the branch
 # are known
@@ -2259,10 +2262,10 @@ def Touch.holds.at(
       Bool,
       Maybe.bind(
         &2,
-        Replicas.Out,
+        U32,
         Bool,
-        Replicas.Tip.out(~Requests.Ask.machine(), ~d, l, tf, v),
-        o => Some{Out.wrote(~d, l, tf, o, changed)}
+        Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v),
+        m => Some{Version.wrote(~d, l, tf, m, changed)}
       ),
       False{}
     )
@@ -3314,7 +3317,7 @@ law Node.answer_follows:
   for q: Requests.Ask
   Shared.Read.Forward(
     L(d),
-    a => b => Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
+    a => b => Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
     Answer,
     x => m => {Answer.follows(x, m) == True{}: Bool},
     l => Node.answer(~d, ~kern, l, i, time, q)
