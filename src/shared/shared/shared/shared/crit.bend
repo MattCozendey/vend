@@ -1,4 +1,5 @@
 import Base
+import ./code.bend as Codes
 import ./shared.bend as Shared
 
 # Crit-bit maps
@@ -9566,6 +9567,196 @@ law Crit.size_upsert:
 
 def Crit.size_upsert(ty, f, m, k, v):
   Crit.size_upsert.go(~ty, ~f, m, k, v)
+
+# Prefixes and order
+# ------------------
+# A map keeps its entries in the order of the bits of their keys, so the
+# keys that start with some words are one part of it, and its last entry is
+# its greatest key. A key whose words hold numbers with their bits reversed
+# (Key.ord) is then in the order of the numbers.
+
+# the key k starts with the words p
+def Key.starts(p: List<&2, U32>, k: List<&2, U32>) -> Bool:
+  match p k:
+    case Nil{} y:
+      True{}
+    case Con{x, rp} Nil{}:
+      False{}
+    case Con{+x, rp} Con{+y, rk}:
+      Bool.and(U32.is_eq(x, y), Key.starts(rp, rk))
+
+# the bits a come before the bits b: they differ first where a has a zero,
+# or a ends before b does
+def Bits.lt(a: List<&2, Bool>, b: List<&2, Bool>) -> Bool:
+  match a b:
+    case x Nil{}:
+      False{}
+    case Nil{} Con{y, rb}:
+      True{}
+    case Con{+x, ra} Con{+y, rb}:
+      Bool.or(Bool.and(Bool.not(x), y), Bool.and(Shared.Bool.is_eq(x, y), Bits.lt(ra, rb)))
+
+# the entries of m whose keys start with the words p, read from the cursor c
+# of p at the bit at. Past the end of p, the keys of a fork share the bits of
+# its rep, so they start with p when its rep does
+def Crit.under.go(-V: Data, m: Crit<V>, +at: Nat, +c: Cur, +p: List<&2, U32>) -> Crit<V>:
+  match m:
+    case Crit.Tip{}:
+      Crit.Tip{}
+    case Crit.Leaf{+k, +v}:
+      Shared.Bool.when(Crit<V>, Key.starts(p, k), u => Crit.Leaf{k, v}, u => Crit.Tip{})
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      +c2 = Cur.skip(Nat.sub(pos, at), c)
+      Shared.Bool.when(
+        Crit<V>,
+        Cur.done(c2),
+        u => Shared.Bool.when(Crit<V>, Key.starts(p, rep), w => Crit.Fork{rep, pos, e, z, o}, w => Crit.Tip{}),
+        u => Shared.Bool.when(
+          Crit<V>,
+          Cur.bit(c2),
+          w => Crit.under.go(V, o, 1n+pos, Cur.next(c2), p),
+          w => Crit.under.go(V, z, 1n+pos, Cur.next(c2), p)
+        )
+      )
+
+# the entries of m whose keys start with the words p: a part of m, found in
+# the bits of p
+def Crit.under(-V: Data, m: Crit<V>, +p: List<&2, U32>) -> Crit<V>:
+  Crit.under.go(V, m, 0n, Cur.of(p), p)
+
+# the entry m, else the one that go finds
+def Crit.last.or(-V: Data, m: Maybe<&2, Bind<V>>, go: Unit -> Maybe<&2, Bind<V>>) -> Maybe<&2, Bind<V>>:
+  match m:
+    case Some{b}:
+      Some{b}
+    case None{}:
+      go(Unit{})
+
+# the entry of the key that ends at a fork of the rep rep, if any
+def Crit.end.bind(-V: Data, rep: List<&2, U32>, e: Maybe<&2, V>) -> Maybe<&2, Bind<V>>:
+  match e:
+    case None{}:
+      None{}
+    case Some{v}:
+      Some{Bind{rep, v}}
+
+# the last entry of m, in the order of its keys: of a fork, the last of its
+# one side, else of its zero side, else the key that ends there
+def Crit.last(-V: Data, m: Crit<V>) -> Maybe<&2, Bind<V>>:
+  match m:
+    case Crit.Tip{}:
+      None{}
+    case Crit.Leaf{k, v}:
+      Some{Bind{k, v}}
+    case Crit.Fork{rep, pos, e, z, o}:
+      Crit.last.or(V, Crit.last(V, o), u => Crit.last.or(V, Crit.last(V, z), w => Crit.end.bind(V, rep, e)))
+
+# the bits of x, the lowest first, put into r from its low end: n of them
+def U32.rev.go(n: Nat, +x: U32, +r: U32) -> U32:
+  match n:
+    case 0n:
+      r
+    case 1n+p:
+      U32.rev.go(p, U32.shr(x), U32.add(U32.mul(r, 2), U32.and(x, 1)))
+
+# x with its bits in the other order, so that a map reads its highest first
+def U32.rev(x: U32) -> U32:
+  U32.rev.go(32n, x, 0)
+
+# the words ws, each with its bits in the other order, then r
+def Words.rev(ws: List<&2, U32>, r: List<&2, U32>) -> List<&2, U32>:
+  match ws:
+    case Nil{}:
+      r
+    case Con{w, rest}:
+      U32.rev(w) <> Words.rev(rest, r)
+
+# the key of the number n, then r: its count (Codes.Code.count) with the
+# bits of each word in the other order, so that the keys of numbers are in
+# the order of the numbers, and none starts another
+def Key.ord(n: Nat, r: List<&2, U32>) -> List<&2, U32>:
+  Words.rev(Codes.Code.count(n, []), r)
+
+# the number that the read m gives
+def Key.ord.of(m: Maybe<&2, Codes.Read<Nat>>) -> Maybe<&2, Nat>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Codes.Read{n, r}}:
+      Some{n}
+
+# the number at the front of the key ws (Key.ord)
+def Key.ord.value(ws: List<&2, U32>) -> Maybe<&2, Nat>:
+  Key.ord.of(Codes.Code.count.read(Words.rev(ws, [])))
+
+# Laws of prefixes and order
+
+# a part under a prefix is well formed
+law Crit.under_wf:
+  for ~V: Data
+  for m: Crit<V>
+  for p: List<&2, U32>
+  {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.under(V, m, p), 0n) == True{}: Bool}
+
+# a part under a prefix holds what the map holds under each key that starts
+# with the prefix, and nothing else
+law Crit.under_lookup:
+  for ~V: Data
+  for m: Crit<V>
+  for p: List<&2, U32>
+  for k: List<&2, U32>
+  {Crit.wf(~V, m, 0n) == True{}: Bool} -> {
+    Crit.lookup(V, Crit.under(V, m, p), k)
+      == Bool.pick(Maybe<&2, V>, Key.starts(p, k), Crit.lookup(V, m, k), None{}): Maybe<&2, V>
+  }
+
+# the last entry of a map is an entry of it, and no key of it comes after it
+law Crit.last_max:
+  for ~V: Data
+  for m: Crit<V>
+  for k: List<&2, U32>
+  for v: V
+  {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.last(V, m) == Some{Bind{k, v}}: Maybe<&2, Bind<V>>} -> (
+    {Crit.lookup(V, m, k) == Some{v}: Maybe<&2, V>}
+      & (
+        @q: List<&2, U32> -> {Maybe.is_some(&2, V, Crit.lookup(V, m, q)) == True{}: Bool} -> {
+          Bits.lt(Key.bits(k), Key.bits(q)) == False{}: Bool
+        }
+      )
+  )
+
+# a map with no last entry holds nothing
+law Crit.last_none:
+  for ~V: Data
+  for m: Crit<V>
+  for q: List<&2, U32>
+  {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.last(V, m) == None{}: Maybe<&2, Bind<V>>} -> {
+    Crit.lookup(V, m, q) == None{}: Maybe<&2, V>
+  }
+
+# the key of a number gives the number back
+law Key.ord_value:
+  for n: Nat
+  for r: List<&2, U32>
+  {Key.ord.value(Key.ord(n, r)) == Some{n}: Maybe<&2, Nat>}
+
+# the keys of numbers are in the order of the numbers, whatever follows them
+law Key.ord_lt:
+  for a: Nat
+  for b: Nat
+  for x: List<&2, U32>
+  for y: List<&2, U32>
+  {Nat.is_lt(a, b) == True{}: Bool} -> {Bits.lt(Key.bits(Key.ord(a, x)), Key.bits(Key.ord(b, y))) == True{}: Bool}
+
+# keys that start with the same words are in the order of what follows
+law Key.lt_after:
+  for p: List<&2, U32>
+  for a: List<&2, U32>
+  for b: List<&2, U32>
+  {
+    Bits.lt(Key.bits(List.append(&2, U32, p, a)), Key.bits(List.append(&2, U32, p, b)))
+      == Bits.lt(Key.bits(a), Key.bits(b)): Bool
+  }
 
 # Dicts
 # -----
