@@ -7696,6 +7696,427 @@ def Crit.sub_of_entries(~V: Data, +a: Crit<V>, +b: Crit<V>, +lb: Nat) -> {Crit.w
     Crit.sub_to_list(V, b, [], b)(Crit.sub_self(~V, b, lb)(h))(Unit{})
   ))
 
+# the sides of two keys at pos differ, once each is known
+def Crit.mis_of(+q1: List<&2, U32>, +q2: List<&2, U32>, +pos: Nat, +b1: Maybe<&2, Bool>, +b2: Maybe<&2, Bool>) -> {Key.side(q1, pos) == b1: Maybe<&2, Bool>} -> {Key.side(q2, pos) == b2: Maybe<&2, Bool>} -> {
+  Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, b1, b2) == False{}: Bool
+} -> {Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(q1, pos), Key.side(q2, pos)) == False{}: Bool}:
+  e1 => e2 => h =>
+    %Equal.sym(Maybe<&2, Bool>, Key.side(q1, pos), b1, e1): {Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, _, Key.side(q2, pos)) == False{}: Bool}
+    %Equal.sym(Maybe<&2, Bool>, Key.side(q2, pos), b2, e2): {Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, b1, _) == False{}: Bool}
+    h
+
+# the first key of a side b of a well formed fork, with an entry, has that side
+def Crit.in_side_side(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat, b: Bool) -> {Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool} -> {
+  Crit.is_tip(V, Bool.pick(Crit<V>, b, o, z)) == False{}: Bool
+} -> {Key.side(Crit.rep(V, Bool.pick(Crit<V>, b, o, z), rep), pos) == Some{b}: Maybe<&2, Bool>}:
+  match b:
+    case True{}:
+      +h => nt => Place.has_side(rep, pos, True{}, Crit.rep(V, o, rep))(
+        Crit.rep_pass(~V, ~Place, ~Place.has, o, 1n+pos, Place{rep, pos, True{}}, rep)(Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h))(Crit.wf.all_o(~V, rep, pos, e, z, o, lo)(h))(nt)
+      )
+    case False{}:
+      +h => nt => Place.has_side(rep, pos, False{}, Crit.rep(V, z, rep))(
+        Crit.rep_pass(~V, ~Place, ~Place.has, z, 1n+pos, Place{rep, pos, False{}}, rep)(Crit.wf.wf_z(~V, rep, pos, e, z, o, lo)(h))(Crit.wf.all_z(~V, rep, pos, e, z, o, lo)(h))(nt)
+      )
+
+# the first key of a side b of a well formed fork, with an entry, is a key of
+# the fork
+def Crit.in_side_some(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat, b: Bool) -> {Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool} -> {
+  Crit.is_tip(V, Bool.pick(Crit<V>, b, o, z)) == False{}: Bool
+} -> {Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, Crit.rep(V, Bool.pick(Crit<V>, b, o, z), rep))) == True{}: Bool}:
+  match b:
+    case True{}:
+      +h => +nt => Equal.trans(
+        Bool,
+        Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, Crit.rep(V, o, rep))),
+        Maybe.is_some(&2, V, Crit.lookup(V, o, Crit.rep(V, o, rep))),
+        True{},
+        Equal.cong(Maybe<&2, V>, Bool, x => Maybe.is_some(&2, V, x), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, Crit.rep(V, o, rep)), Crit.lookup(V, o, Crit.rep(V, o, rep)), Crit.route_side(~V, rep, pos, e, z, o, lo, Crit.rep(V, o, rep), True{})(h)(Crit.in_side_side(~V, rep, pos, e, z, o, lo, True{})(h)(nt))),
+        Crit.rep_in(~V, o, 1n+pos, rep)(Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h))(nt)
+      )
+    case False{}:
+      +h => +nt => Equal.trans(
+        Bool,
+        Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, Crit.rep(V, z, rep))),
+        Maybe.is_some(&2, V, Crit.lookup(V, z, Crit.rep(V, z, rep))),
+        True{},
+        Equal.cong(Maybe<&2, V>, Bool, x => Maybe.is_some(&2, V, x), Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, Crit.rep(V, z, rep)), Crit.lookup(V, z, Crit.rep(V, z, rep)), Crit.route_side(~V, rep, pos, e, z, o, lo, Crit.rep(V, z, rep), False{})(h)(Crit.in_side_side(~V, rep, pos, e, z, o, lo, False{})(h)(nt))),
+        Crit.rep_in(~V, z, 1n+pos, rep)(Crit.wf.wf_z(~V, rep, pos, e, z, o, lo)(h))(nt)
+      )
+
+# a well formed fork with an end has two keys whose sides at its bit differ
+def Crit.two.some(~V: Data, +rep: List<&2, U32>, +pos: Nat, +v: V, z: Crit<V>, +o: Crit<V>, +lo: Nat, -T: Type) -> {
+  Crit.wf(~V, Crit.Fork{rep, pos, Some{v}, z, o}, lo) == True{}: Bool
+} -> (@q1: List<&2, U32> -> @q2: List<&2, U32> -> {Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, Some{v}, z, o}, q1)) == True{}: Bool} -> {Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, Some{v}, z, o}, q2)) == True{}: Bool} -> {Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(q1, pos), Key.side(q2, pos)) == False{}: Bool} -> T) -> T:
+  match z:
+    case Crit.Tip{}:
+      +h => f =>
+        +nt = Crit.shape_some_o(V, v, o)(Crit.wf.shape(~V, rep, pos, Some{v}, Crit.Tip{}, o, lo)(h))
+        f(rep)(Crit.rep(V, o, rep))(Crit.rep_in(~V, Crit.Fork{rep, pos, Some{v}, Crit.Tip{}, o}, lo, [])(h)({==}))(
+          Crit.in_side_some(~V, rep, pos, Some{v}, Crit.Tip{}, o, lo, True{})(h)(nt)
+        )(
+          Crit.mis_of(rep, Crit.rep(V, o, rep), pos, None{}, Some{True{}})(Crit.side_len(rep, pos)(Crit.wf.rep_ok(~V, rep, pos, Some{v}, Crit.Tip{}, o, lo)(h)))(
+            Crit.in_side_side(~V, rep, pos, Some{v}, Crit.Tip{}, o, lo, True{})(h)(nt)
+          )({==})
+        )
+    case Crit.Leaf{+k3, +w3}:
+      +h => f => f(rep)(k3)(Crit.rep_in(~V, Crit.Fork{rep, pos, Some{v}, Crit.Leaf{k3, w3}, o}, lo, [])(h)({==}))(
+        Crit.in_side_some(~V, rep, pos, Some{v}, Crit.Leaf{k3, w3}, o, lo, False{})(h)({==})
+      )(
+        Crit.mis_of(rep, k3, pos, None{}, Some{False{}})(Crit.side_len(rep, pos)(Crit.wf.rep_ok(~V, rep, pos, Some{v}, Crit.Leaf{k3, w3}, o, lo)(h)))(
+          Crit.in_side_side(~V, rep, pos, Some{v}, Crit.Leaf{k3, w3}, o, lo, False{})(h)({==})
+        )({==})
+      )
+    case Crit.Fork{+r3, +p3, +e3, +z3, +o3}:
+      +h => f => f(rep)(r3)(Crit.rep_in(~V, Crit.Fork{rep, pos, Some{v}, Crit.Fork{r3, p3, e3, z3, o3}, o}, lo, [])(h)({==}))(
+        Crit.in_side_some(~V, rep, pos, Some{v}, Crit.Fork{r3, p3, e3, z3, o3}, o, lo, False{})(h)({==})
+      )(
+        Crit.mis_of(rep, r3, pos, None{}, Some{False{}})(Crit.side_len(rep, pos)(Crit.wf.rep_ok(~V, rep, pos, Some{v}, Crit.Fork{r3, p3, e3, z3, o3}, o, lo)(h)))(
+          Crit.in_side_side(~V, rep, pos, Some{v}, Crit.Fork{r3, p3, e3, z3, o3}, o, lo, False{})(h)({==})
+        )({==})
+      )
+
+# a well formed fork has two keys whose sides at its bit differ
+def Crit.two(~V: Data, +rep: List<&2, U32>, +pos: Nat, e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat, -T: Type) -> {Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool} -> (@q1: List<&2, U32> -> @q2: List<&2, U32> -> {Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, q1)) == True{}: Bool} -> {Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, q2)) == True{}: Bool} -> {Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(q1, pos), Key.side(q2, pos)) == False{}: Bool} -> T) -> T:
+  match e:
+    case None{}:
+      +h => f =>
+        +nz = Crit.shape_none_z(V, z, o)(Crit.wf.shape(~V, rep, pos, None{}, z, o, lo)(h))
+        +no = Crit.shape_none_o(V, z, o)(Crit.wf.shape(~V, rep, pos, None{}, z, o, lo)(h))
+        f(Crit.rep(V, z, rep))(Crit.rep(V, o, rep))(Crit.in_side_some(~V, rep, pos, None{}, z, o, lo, False{})(h)(nz))(
+          Crit.in_side_some(~V, rep, pos, None{}, z, o, lo, True{})(h)(no)
+        )(
+          Crit.mis_of(Crit.rep(V, z, rep), Crit.rep(V, o, rep), pos, Some{False{}}, Some{True{}})(Crit.in_side_side(~V, rep, pos, None{}, z, o, lo, False{})(h)(nz))(
+            Crit.in_side_side(~V, rep, pos, None{}, z, o, lo, True{})(h)(no)
+          )({==})
+        )
+    case Some{+v}:
+      h => f => Crit.two.some(~V, rep, pos, v, z, o, lo, T)(h)(f)
+
+# a key of a well formed fork has the side of its rep before the fork's bit
+def Crit.same_side(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat, +q: List<&2, U32>, +x: Nat) -> {Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool} -> {
+  Nat.is_lt(x, pos) == True{}: Bool
+} -> {Maybe.is_some(&2, V, Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, q)) == True{}: Bool} -> {Key.side(q, x) == Key.side(rep, x): Maybe<&2, Bool>}:
+  h => lt => s => Equal.trans(
+    Maybe<&2, Bool>,
+    Key.side(q, x),
+    Bits.at(Key.bits(q), x),
+    Key.side(rep, x),
+    Key.side_bits(q, x),
+    Equal.trans(
+      Maybe<&2, Bool>,
+      Bits.at(Key.bits(q), x),
+      Bits.at(Key.bits(rep), x),
+      Key.side(rep, x),
+      Key.at_eq(q, rep, x)(Key.agree_le(q, rep, 1n+x, pos)(Crit.lt_le_succ(x, pos)(lt))(Crit.in_fork_agree(~V, rep, pos, e, z, o, lo, q)(h)(s))),
+      Equal.sym(Maybe<&2, Bool>, Key.side(rep, x), Bits.at(Key.bits(rep), x), Key.side_bits(rep, x))
+    )
+  )
+
+# keys with the same side do not have different sides
+def Crit.same_contra(+q1: List<&2, U32>, +q2: List<&2, U32>, +x: Nat) -> {Key.side(q1, x) == Key.side(q2, x): Maybe<&2, Bool>} -> {Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(q1, x), Key.side(q2, x)) == False{}: Bool} -> Empty:
+  e => ne => Shared.Bool.false_ne_true(
+    Equal.trans(
+      Bool,
+      False{},
+      Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(q1, x), Key.side(q2, x)),
+      True{},
+      Equal.sym(Bool, Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(q1, x), Key.side(q2, x)), False{}, ne),
+      (
+        %Equal.sym(Maybe<&2, Bool>, Key.side(q1, x), Key.side(q2, x), e): {Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, _, Key.side(q2, x)) == True{}: Bool}
+        Crit.mis_refl(Key.side(q2, x))
+      )
+    )
+  )
+
+# Crit.sub_has, once the read of m at k is known (mv)
+def Crit.sub_has.at(-V: Data, m: Crit<V>, +x: Crit<V>, +k: List<&2, U32>, mv: Maybe<&2, V>) -> {Crit.lookup(V, m, k) == mv: Maybe<&2, V>} -> Crit.sub(V, m, x) -> {Maybe.is_some(&2, V, mv) == True{}: Bool} -> {
+  Maybe.is_some(&2, V, Crit.lookup(V, x, k)) == True{}: Bool
+}:
+  match mv:
+    case None{}:
+      e => c => s => Empty.absurd({Maybe.is_some(&2, V, Crit.lookup(V, x, k)) == True{}: Bool}, Shared.Bool.false_ne_true(s))
+    case Some{v}:
+      e => c => s => Equal.cong(Maybe<&2, V>, Bool, y => Maybe.is_some(&2, V, y), Crit.lookup(V, x, k), Some{v}, Crit.sub_pick(V, m, x, k, v)(c)(e))
+
+# a key of m is a key of x, when each entry of m is an entry of x
+def Crit.sub_has(-V: Data, +m: Crit<V>, +x: Crit<V>, +k: List<&2, U32>) -> Crit.sub(V, m, x) -> {Maybe.is_some(&2, V, Crit.lookup(V, m, k)) == True{}: Bool} -> {Maybe.is_some(&2, V, Crit.lookup(V, x, k)) == True{}: Bool}:
+  c => s => Crit.sub_has.at(V, m, x, k, Crit.lookup(V, m, k))({==})(c)(s)
+
+# entries of the same key are the same entry
+def Crit.leaf_same(-V: Data, +k2: List<&2, U32>, -w: V, +k: List<&2, U32>, -v: V, b: Bool) -> {Key.is_eq(k2, k) == b: Bool} -> {Shared.Maybe.when(V, b, u => Some{w}) == Some{v}: Maybe<&2, V>} -> {
+  Crit.Leaf{k, v} == Crit.Leaf{k2, w}: Crit<V>
+}:
+  match b:
+    case True{}:
+      eb => hw =>
+        %Equal.sym(List<&2, U32>, k2, k, Key.is_eq_sound(k2, k)(eb)): {Crit.Leaf{k, v} == Crit.Leaf{_, w}: Crit<V>}
+        %Equal.sym(V, w, v, Shared.Maybe.some_inj(V, w, v, hw)): {Crit.Leaf{k, v} == Crit.Leaf{k, _}: Crit<V>}
+        {==}
+    case False{}:
+      eb => hw => Empty.absurd({Crit.Leaf{k, v} == Crit.Leaf{k2, w}: Crit<V>}, Shared.Maybe.none_ne_some(V, v, hw))
+
+# an end read at a key that is some is the end of that key
+def Crit.ws_key(-V: Data, +rb: List<&2, U32>, -w: V, +ra: List<&2, U32>, -u: V, b: Bool) -> {Key.is_eq(rb, ra) == b: Bool} -> {Shared.Maybe.when(V, b, x => Some{w}) == Some{u}: Maybe<&2, V>} -> {
+  rb == ra: List<&2, U32>
+}:
+  match b:
+    case True{}:
+      eb => hw => Key.is_eq_sound(rb, ra)(eb)
+    case False{}:
+      eb => hw => Empty.absurd({rb == ra: List<&2, U32>}, Shared.Maybe.none_ne_some(V, u, hw))
+
+# an end read at a key that is some u has the value u
+def Crit.ws_val(-V: Data, -w: V, -u: V, b: Bool) -> {Shared.Maybe.when(V, b, x => Some{w}) == Some{u}: Maybe<&2, V>} -> {w == u: V}:
+  match b:
+    case True{}:
+      hw => Shared.Maybe.some_inj(V, w, u, hw)
+    case False{}:
+      hw => Empty.absurd({w == u: V}, Shared.Maybe.none_ne_some(V, u, hw))
+
+# forks of equal parts are equal
+def Crit.fork_cong(-V: Data, -ra: List<&2, U32>, -rb: List<&2, U32>, -pa: Nat, -pb: Nat, -ea: Maybe<&2, V>, -eb: Maybe<&2, V>, -za: Crit<V>, -zb: Crit<V>, -oa: Crit<V>, -ob: Crit<V>) -> {ra == rb: List<&2, U32>} -> {
+  pa == pb: Nat
+} -> {ea == eb: Maybe<&2, V>} -> {za == zb: Crit<V>} -> {oa == ob: Crit<V>} -> {Crit.Fork{ra, pa, ea, za, oa} == Crit.Fork{rb, pb, eb, zb, ob}: Crit<V>}:
+  e1 => e2 => e3 => e4 => e5 =>
+    %e1: {Crit.Fork{ra, pa, ea, za, oa} == Crit.Fork{_, pb, eb, zb, ob}: Crit<V>}
+    %e2: {Crit.Fork{ra, pa, ea, za, oa} == Crit.Fork{ra, _, eb, zb, ob}: Crit<V>}
+    %e3: {Crit.Fork{ra, pa, ea, za, oa} == Crit.Fork{ra, pa, _, zb, ob}: Crit<V>}
+    %e4: {Crit.Fork{ra, pa, ea, za, oa} == Crit.Fork{ra, pa, ea, _, ob}: Crit<V>}
+    %e5: {Crit.Fork{ra, pa, ea, za, oa} == Crit.Fork{ra, pa, ea, za, _}: Crit<V>}
+    {==}
+
+# two well formed forks at one bit, with equal sides, whose entries are each
+# other's, are equal
+def Crit.det_fork(~V: Data, +ra: List<&2, U32>, +pa: Nat, ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +la: Nat, +lb: Nat) -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, la) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rb, pb, eb, zb, ob}, lb) == True{}: Bool} -> {pa == pb: Nat} -> {
+  za == zb: Crit<V>
+} -> {oa == ob: Crit<V>} -> Crit.sub(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}) -> Crit.sub(V, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}) -> {Crit.Fork{ra, pa, ea, za, oa} == Crit.Fork{rb, pb, eb, zb, ob}: Crit<V>}:
+  match ea eb:
+    case None{} None{}:
+      +ha => +hb => eqp => +ez => eo => c1 => c2 => Crit.fork_cong(V, ra, rb, pa, pb, None{}, None{}, za, zb, oa, ob)(
+        Equal.trans(
+          List<&2, U32>,
+          ra,
+          Crit.rep(V, za, ra),
+          rb,
+          Key.is_eq_sound(ra, Crit.rep(V, za, ra))(Crit.wf.rep_ok(~V, ra, pa, None{}, za, oa, la)(ha)),
+          Equal.trans(
+            List<&2, U32>,
+            Crit.rep(V, za, ra),
+            Crit.rep(V, za, rb),
+            rb,
+            Crit.rep_irr(V, za, ra, rb)(Crit.shape_none_z(V, za, oa)(Crit.wf.shape(~V, ra, pa, None{}, za, oa, la)(ha))),
+            Equal.trans(
+              List<&2, U32>,
+              Crit.rep(V, za, rb),
+              Crit.rep(V, zb, rb),
+              rb,
+              Equal.cong(Crit<V>, List<&2, U32>, m => Crit.rep(V, m, rb), za, zb, ez),
+              Equal.sym(List<&2, U32>, rb, Crit.rep(V, zb, rb), Key.is_eq_sound(rb, Crit.rep(V, zb, rb))(Crit.wf.rep_ok(~V, rb, pb, None{}, zb, ob, lb)(hb)))
+            )
+          )
+        )
+      )(eqp)({==})(ez)(eo)
+    case Some{+u} Some{+w}:
+      +ha => +hb => +eqp => ez => eo => +c1 => c2 =>
+        +hw = Equal.trans(
+          Maybe<&2, V>,
+          Shared.Maybe.when(V, Key.is_eq(rb, ra), x => Some{w}),
+          Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, ra),
+          Some{u},
+          Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.Fork{rb, pb, eb, zb, ob}, ra), Shared.Maybe.when(V, Key.is_eq(rb, ra), x => Some{w}), Crit.route_end(~V, rb, pb, Some{w}, zb, ob, lb, ra)(hb)(Crit.side_len(ra, pb)((
+          %eqp: {Nat.is_eq(List.length(&2, Bool, Key.bits(ra)), _) == True{}: Bool}
+          Crit.wf.rep_ok(~V, ra, pa, Some{u}, za, oa, la)(ha)
+        )))),
+          Crit.sub_pick(V, Crit.Fork{ra, pa, Some{u}, za, oa}, Crit.Fork{rb, pb, Some{w}, zb, ob}, ra, u)(c1)(Crit.self_end(V, ra, pa, Some{u}, za, oa))
+        )
+        Crit.fork_cong(V, ra, rb, pa, pb, Some{u}, Some{w}, za, zb, oa, ob)(Equal.sym(List<&2, U32>, rb, ra, Crit.ws_key(V, rb, w, ra, u, Key.is_eq(rb, ra))({==})(hw)))(eqp)(
+          Equal.cong(V, Maybe<&2, V>, y => Some{y}, u, w, Equal.sym(V, w, u, Crit.ws_val(V, w, u, Key.is_eq(rb, ra))(hw)))
+        )(ez)(eo)
+    case Some{+u} None{}:
+      +ha => +hb => +eqp => ez => eo => +c1 => c2 => Empty.absurd(
+        {Crit.Fork{ra, pa, Some{u}, za, oa} == Crit.Fork{rb, pb, None{}, zb, ob}: Crit<V>},
+        Shared.Maybe.none_ne_some(
+          V,
+          u,
+          Equal.trans(
+            Maybe<&2, V>,
+            None{},
+            Crit.lookup(V, Crit.Fork{rb, pb, None{}, zb, ob}, ra),
+            Some{u},
+            Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.Fork{rb, pb, None{}, zb, ob}, ra), None{}, Crit.route_end(~V, rb, pb, None{}, zb, ob, lb, ra)(hb)(Crit.side_len(ra, pb)((
+          %eqp: {Nat.is_eq(List.length(&2, Bool, Key.bits(ra)), _) == True{}: Bool}
+          Crit.wf.rep_ok(~V, ra, pa, Some{u}, za, oa, la)(ha)
+        )))),
+            Crit.sub_pick(V, Crit.Fork{ra, pa, Some{u}, za, oa}, Crit.Fork{rb, pb, None{}, zb, ob}, ra, u)(c1)(Crit.self_end(V, ra, pa, Some{u}, za, oa))
+          )
+        )
+      )
+    case None{} Some{+w}:
+      +ha => +hb => +eqp => ez => eo => c1 => +c2 => Empty.absurd(
+        {Crit.Fork{ra, pa, None{}, za, oa} == Crit.Fork{rb, pb, Some{w}, zb, ob}: Crit<V>},
+        Shared.Maybe.none_ne_some(
+          V,
+          w,
+          Equal.trans(
+            Maybe<&2, V>,
+            None{},
+            Crit.lookup(V, Crit.Fork{ra, pa, None{}, za, oa}, rb),
+            Some{w},
+            Equal.sym(Maybe<&2, V>, Crit.lookup(V, Crit.Fork{ra, pa, None{}, za, oa}, rb), None{}, Crit.route_end(~V, ra, pa, None{}, za, oa, la, rb)(ha)(Crit.side_len(rb, pa)((
+          %Equal.sym(Nat, pa, pb, eqp): {Nat.is_eq(List.length(&2, Bool, Key.bits(rb)), _) == True{}: Bool}
+          Crit.wf.rep_ok(~V, rb, pb, Some{w}, zb, ob, lb)(hb)
+        )))),
+            Crit.sub_pick(V, Crit.Fork{rb, pb, Some{w}, zb, ob}, Crit.Fork{ra, pa, None{}, za, oa}, rb, w)(c2)(Crit.self_end(V, rb, pb, Some{w}, zb, ob))
+          )
+        )
+      )
+
+# two well formed forks whose entries are each other's, by how their bits
+# compare (c); iz and io give equal sides once the bits are equal
+def Crit.det_cmp(~V: Data, +ra: List<&2, U32>, +pa: Nat, +ea: Maybe<&2, V>, +za: Crit<V>, +oa: Crit<V>, +rb: List<&2, U32>, +pb: Nat, +eb: Maybe<&2, V>, +zb: Crit<V>, +ob: Crit<V>, +la: Nat, +lb: Nat, c: Cmp) -> {Nat.cmp(pa, pb) == c: Cmp} -> {Crit.wf(~V, Crit.Fork{ra, pa, ea, za, oa}, la) == True{}: Bool} -> {Crit.wf(~V, Crit.Fork{rb, pb, eb, zb, ob}, lb) == True{}: Bool} -> Crit.sub(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}) -> Crit.sub(V, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}) -> (
+  {pa == pb: Nat} -> {za == zb: Crit<V>}
+) -> ({pa == pb: Nat} -> {oa == ob: Crit<V>}) -> {Crit.Fork{ra, pa, ea, za, oa} == Crit.Fork{rb, pb, eb, zb, ob}: Crit<V>}:
+  match c:
+    case EQ{}:
+      hc => ha => hb => c1 => c2 => iz => io =>
+        +eqp = Crit.cmp_eq(pa, pb)(hc)
+        Crit.det_fork(~V, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, la, lb)(ha)(hb)(eqp)(iz(eqp))(io(eqp))(c1)(c2)
+    case LT{}:
+      hc => +ha => +hb => +c1 => c2 => iz => io =>
+        +lt = Crit.cmp_lt(pa, pb)(hc)
+        Empty.absurd(
+          {Crit.Fork{ra, pa, ea, za, oa} == Crit.Fork{rb, pb, eb, zb, ob}: Crit<V>},
+          Crit.two(~V, ra, pa, ea, za, oa, la, Empty)(ha)(
+            +q1 => +q2 => s1 => s2 => ne => Crit.same_contra(q1, q2, pa)(
+              Equal.trans(
+                Maybe<&2, Bool>,
+                Key.side(q1, pa),
+                Key.side(rb, pa),
+                Key.side(q2, pa),
+                Crit.same_side(~V, rb, pb, eb, zb, ob, lb, q1, pa)(hb)(lt)(Crit.sub_has(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}, q1)(c1)(s1)),
+                Equal.sym(Maybe<&2, Bool>, Key.side(q2, pa), Key.side(rb, pa), Crit.same_side(~V, rb, pb, eb, zb, ob, lb, q2, pa)(hb)(lt)(Crit.sub_has(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Fork{rb, pb, eb, zb, ob}, q2)(c1)(s2)))
+              )
+            )(ne)
+          )
+        )
+    case GT{}:
+      hc => +ha => +hb => c1 => +c2 => iz => io =>
+        +gt = Crit.cmp_gt(pa, pb)(hc)
+        Empty.absurd(
+          {Crit.Fork{ra, pa, ea, za, oa} == Crit.Fork{rb, pb, eb, zb, ob}: Crit<V>},
+          Crit.two(~V, rb, pb, eb, zb, ob, lb, Empty)(hb)(
+            +q1 => +q2 => s1 => s2 => ne => Crit.same_contra(q1, q2, pb)(
+              Equal.trans(
+                Maybe<&2, Bool>,
+                Key.side(q1, pb),
+                Key.side(ra, pb),
+                Key.side(q2, pb),
+                Crit.same_side(~V, ra, pa, ea, za, oa, la, q1, pb)(ha)(gt)(Crit.sub_has(V, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}, q1)(c2)(s1)),
+                Equal.sym(Maybe<&2, Bool>, Key.side(q2, pb), Key.side(ra, pb), Crit.same_side(~V, ra, pa, ea, za, oa, la, q2, pb)(ha)(gt)(Crit.sub_has(V, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Fork{ra, pa, ea, za, oa}, q2)(c2)(s2)))
+              )
+            )(ne)
+          )
+        )
+
+# two well formed maps whose entries are each other's are equal
+def Crit.det(~V: Data, +a: Crit<V>, +b: Crit<V>, +la: Nat, +lb: Nat) -> {Crit.wf(~V, a, la) == True{}: Bool} -> {Crit.wf(~V, b, lb) == True{}: Bool} -> Crit.sub(V, a, b) -> Crit.sub(V, b, a) -> {
+  a == b: Crit<V>
+}:
+  match a b:
+    case Crit.Tip{} Crit.Tip{}:
+      ha => hb => c1 => c2 => {==}
+    case Crit.Tip{} Crit.Leaf{k, w}:
+      ha => hb => c1 => c2 => Empty.absurd({Crit.Tip{} == Crit.Leaf{k, w}: Crit<V>}, Shared.Maybe.none_ne_some(V, w, c2))
+    case Crit.Tip{} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      ha => +hb => c1 => c2 => Empty.absurd({Crit.Tip{} == Crit.Fork{rb, pb, eb, zb, ob}: Crit<V>}, Shared.Bool.false_ne_true(Crit.sub_has(V, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Tip{}, rb)(c2)(Crit.rep_in(~V, Crit.Fork{rb, pb, eb, zb, ob}, lb, [])(hb)({==}))))
+    case Crit.Leaf{k, v} Crit.Tip{}:
+      ha => hb => c1 => c2 => Empty.absurd({Crit.Leaf{k, v} == Crit.Tip{}: Crit<V>}, Shared.Maybe.none_ne_some(V, v, c1))
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Tip{}:
+      +ha => hb => c1 => c2 => Empty.absurd({Crit.Fork{ra, pa, ea, za, oa} == Crit.Tip{}: Crit<V>}, Shared.Bool.false_ne_true(Crit.sub_has(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Tip{}, ra)(c1)(Crit.rep_in(~V, Crit.Fork{ra, pa, ea, za, oa}, la, [])(ha)({==}))))
+    case Crit.Leaf{+k, +v} Crit.Leaf{+k2, +w}:
+      ha => hb => c1 => c2 => Crit.leaf_same(V, k2, w, k, v, Key.is_eq(k2, k))({==})(c1)
+    case Crit.Leaf{+k, +v} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      ha => +hX => c1 => +c2 => Empty.absurd(
+        {Crit.Leaf{k, v} == Crit.Fork{rb, pb, eb, zb, ob}: Crit<V>},
+        Crit.two(~V, rb, pb, eb, zb, ob, lb, Empty)(hX)(
+          +q1 => +q2 => s1 => s2 => ne => Crit.same_contra(q1, q2, pb)(
+            Equal.cong(
+              List<&2, U32>,
+              Maybe<&2, Bool>,
+              t => Key.side(t, pb),
+              q1,
+              q2,
+              Equal.trans(
+                List<&2, U32>,
+                q1,
+                k,
+                q2,
+                Key.is_eq_sound(q1, k)(Equal.trans(Bool, Key.is_eq(q1, k), Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q1), u => Some{v})), True{}, Equal.sym(Bool, Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q1), u => Some{v})), Key.is_eq(q1, k), Crit.is_some_when(V, k, q1, v)), Crit.sub_has(V, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Leaf{k, v}, q1)(c2)(s1))),
+                Equal.sym(List<&2, U32>, q2, k, Key.is_eq_sound(q2, k)(Equal.trans(Bool, Key.is_eq(q2, k), Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q2), u => Some{v})), True{}, Equal.sym(Bool, Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q2), u => Some{v})), Key.is_eq(q2, k), Crit.is_some_when(V, k, q2, v)), Crit.sub_has(V, Crit.Fork{rb, pb, eb, zb, ob}, Crit.Leaf{k, v}, q2)(c2)(s2))))
+              )
+            )
+          )(ne)
+        )
+      )
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Leaf{+k, +v}:
+      +hX => hb => +c1 => c2 => Empty.absurd(
+        {Crit.Fork{ra, pa, ea, za, oa} == Crit.Leaf{k, v}: Crit<V>},
+        Crit.two(~V, ra, pa, ea, za, oa, la, Empty)(hX)(
+          +q1 => +q2 => s1 => s2 => ne => Crit.same_contra(q1, q2, pa)(
+            Equal.cong(
+              List<&2, U32>,
+              Maybe<&2, Bool>,
+              t => Key.side(t, pa),
+              q1,
+              q2,
+              Equal.trans(
+                List<&2, U32>,
+                q1,
+                k,
+                q2,
+                Key.is_eq_sound(q1, k)(Equal.trans(Bool, Key.is_eq(q1, k), Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q1), u => Some{v})), True{}, Equal.sym(Bool, Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q1), u => Some{v})), Key.is_eq(q1, k), Crit.is_some_when(V, k, q1, v)), Crit.sub_has(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Leaf{k, v}, q1)(c1)(s1))),
+                Equal.sym(List<&2, U32>, q2, k, Key.is_eq_sound(q2, k)(Equal.trans(Bool, Key.is_eq(q2, k), Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q2), u => Some{v})), True{}, Equal.sym(Bool, Maybe.is_some(&2, V, Shared.Maybe.when(V, Key.is_eq(k, q2), u => Some{v})), Key.is_eq(q2, k), Crit.is_some_when(V, k, q2, v)), Crit.sub_has(V, Crit.Fork{ra, pa, ea, za, oa}, Crit.Leaf{k, v}, q2)(c1)(s2))))
+              )
+            )
+          )(ne)
+        )
+      )
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      +ha => +hb => +c1 => +c2 => Crit.det_cmp(~V, ra, pa, ea, za, oa, rb, pb, eb, zb, ob, la, lb, Nat.cmp(pa, pb))({==})(ha)(hb)(c1)(c2)(
+        +eqp => Crit.det(~V, za, zb, 1n+pa, 1n+pb)(Crit.wf.wf_z(~V, ra, pa, ea, za, oa, la)(ha))(Crit.wf.wf_z(~V, rb, pb, eb, zb, ob, lb)(hb))(
+          Crit.sub_down(~V, za, rb, pb, eb, zb, ob, lb, ra, False{})(Crit.sub.z(V, ra, pa, ea, za, oa, Crit.Fork{rb, pb, eb, zb, ob}, c1))((
+            %eqp: {Crit.all(~V, ~Place, ~Place.has, za, Place{ra, _, False{}}) == True{}: Bool}
+            Crit.wf.all_z(~V, ra, pa, ea, za, oa, la)(ha)
+          ))(hb)
+        )(
+          Crit.sub_down(~V, zb, ra, pa, ea, za, oa, la, rb, False{})(Crit.sub.z(V, rb, pb, eb, zb, ob, Crit.Fork{ra, pa, ea, za, oa}, c2))((
+            %Equal.sym(Nat, pa, pb, eqp): {Crit.all(~V, ~Place, ~Place.has, zb, Place{rb, _, False{}}) == True{}: Bool}
+            Crit.wf.all_z(~V, rb, pb, eb, zb, ob, lb)(hb)
+          ))(ha)
+        )
+      )(
+        +eqp => Crit.det(~V, oa, ob, 1n+pa, 1n+pb)(Crit.wf.wf_o(~V, ra, pa, ea, za, oa, la)(ha))(Crit.wf.wf_o(~V, rb, pb, eb, zb, ob, lb)(hb))(
+          Crit.sub_down(~V, oa, rb, pb, eb, zb, ob, lb, ra, True{})(Crit.sub.o(V, ra, pa, ea, za, oa, Crit.Fork{rb, pb, eb, zb, ob}, c1))((
+            %eqp: {Crit.all(~V, ~Place, ~Place.has, oa, Place{ra, _, True{}}) == True{}: Bool}
+            Crit.wf.all_o(~V, ra, pa, ea, za, oa, la)(ha)
+          ))(hb)
+        )(
+          Crit.sub_down(~V, ob, ra, pa, ea, za, oa, la, rb, True{})(Crit.sub.o(V, rb, pb, eb, zb, ob, Crit.Fork{ra, pa, ea, za, oa}, c2))((
+            %Equal.sym(Nat, pa, pb, eqp): {Crit.all(~V, ~Place, ~Place.has, ob, Place{rb, _, True{}}) == True{}: Bool}
+            Crit.wf.all_o(~V, rb, pb, eb, zb, ob, lb)(hb)
+          ))(ha)
+        )
+      )
+
+# Crit.ext, with a and b used more than once
+def Crit.ext.go(~V: Data, +a: Crit<V>, +b: Crit<V>) -> {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {
+  Crit.entries(V, a) == Crit.entries(V, b): List<&2, Bind<V>>
+} -> {a == b: Crit<V>}:
+  +ha => +hb => +en => Crit.det(~V, a, b, 0n, 0n)(ha)(hb)(Crit.sub_of_entries(~V, a, b, 0n)(hb)(en))(
+    Crit.sub_of_entries(~V, b, a, 0n)(ha)(Equal.sym(List<&2, Bind<V>>, Crit.entries(V, a), Crit.entries(V, b), en))
+  )
+
 # a map is its entries: two well formed maps with the same entries are the
 # same map, so a map has one shape, and one code, for its content
 law Crit.ext:
@@ -7707,7 +8128,7 @@ law Crit.ext:
   } -> {a == b: Crit<V>}
 
 def Crit.ext(ty, a, b):
-  ?TODO
+  Crit.ext.go(~ty, a, b)
 
 # a union is the same either way round, when j is
 law Crit.union_comm:
