@@ -666,15 +666,190 @@ def Lines.bytes_list(b: Texts.Bytes()) -> {Lines.bytes(Lines.list(b)) == b: Text
     Lines.read_back(b)
   )
 
+# Hunks
+# -----
+# A patch of lines is hunks, each after the last: keep some lines, drop some,
+# put some in their place. A diff finds the fewest lines to drop and put
+# (Myers): it walks the two lists of lines on each diagonal at once, so each
+# step reads the next line of each, and its cost is the lines times the size
+# of the change. Its hunks are checked against the new lines; a diff that
+# does not check is the one cut of Lines.cut.
+
+# a hunk: keep the next keep lines, drop the next drop, put the lines put
+type Hunk is Data:
+  Hunk{keep: Nat, drop: Nat, put: List<&2, Texts.Bytes()>}
+
+# the lines a after the hunks hs, each after the last
+def Lines.apply.all(hs: List<&2, Hunk>, +a: List<&2, Texts.Bytes()>) -> List<&2, Texts.Bytes()>:
+  match hs:
+    case Nil{}:
+      a
+    case Con{Hunk{+k, +d, put}, rest}:
+      List.append(
+        &2,
+        Texts.Bytes(),
+        List.take(&2, Texts.Bytes(), a, k),
+        List.append(&2, Texts.Bytes(), put, Lines.apply.all(rest, List.drop(&2, Texts.Bytes(), a, Nat.add(k, d))))
+      )
+
+# a step of an edit: keep a line of both, drop a line of the old, or put a
+# line of the new
+type Op is Data:
+  Op.Keep{}
+  Op.Drop{}
+  Op.Put{line: Texts.Bytes()}
+
+# a walk of a diff: how many old lines it read (x), the old lines a and the
+# new lines b left, and its steps, last first
+type Walk is Data:
+  Walk{x: Nat, a: List<&2, Texts.Bytes()>, b: List<&2, Texts.Bytes()>, ops: List<&2, Op>}
+
+# the walk of x lines, on, while the next lines of a and b are the same
+def Walk.snake(a: List<&2, Texts.Bytes()>, b: List<&2, Texts.Bytes()>, +x: Nat, +ops: List<&2, Op>) -> Walk:
+  match a b:
+    case Con{+la, +ra} Con{+lb, +rb}:
+      Shared.Bool.when(
+        Walk,
+        Shared.List.is_eq(~U32, ~U32.is_eq, la, lb),
+        u => Walk.snake(ra, rb, 1n+x, Op.Keep{} <> ops),
+        u => Walk{x, la <> ra, lb <> rb, ops}
+      )
+    case xs ys:
+      Walk{x, xs, ys, ops}
+
+# the walk m with one old line dropped, then on as far as the lines agree
+def Walk.drop(m: Maybe<&2, Walk>) -> Maybe<&2, Walk>:
+  match m:
+    case Some{Walk{x, Con{l, ra}, b, ops}}:
+      Some{Walk.snake(ra, b, 1n+x, Op.Drop{} <> ops)}
+    case _:
+      None{}
+
+# the walk m with one new line put, then on as far as the lines agree
+def Walk.put(m: Maybe<&2, Walk>) -> Maybe<&2, Walk>:
+  match m:
+    case Some{Walk{x, a, Con{l, rb}, ops}}:
+      Some{Walk.snake(a, rb, x, Op.Put{l} <> ops)}
+    case _:
+      None{}
+
+# the walk of the two that read more old lines (a drop when they tie)
+def Walk.best(d: Maybe<&2, Walk>, p: Maybe<&2, Walk>) -> Maybe<&2, Walk>:
+  match d p:
+    case Some{Walk{+x1, a1, b1, o1}} Some{Walk{+x2, a2, b2, o2}}:
+      Shared.Bool.when(
+        Maybe<&2, Walk>,
+        Nat.is_lt(x1, x2),
+        u => Some{Walk{x2, a2, b2, o2}},
+        u => Some{Walk{x1, a1, b1, o1}}
+      )
+    case None{} q:
+      q
+    case q None{}:
+      q
+
+# the walks one step further, on each diagonal, from the walks ws of the
+# diagonals below and the walk prev of the one before
+def Walks.next(ws: List<&2, Maybe<&2, Walk>>, +prev: Maybe<&2, Walk>) -> List<&2, Maybe<&2, Walk>>:
+  match ws:
+    case Nil{}:
+      [Walk.drop(prev)]
+    case Con{+w, rest}:
+      Walk.best(Walk.drop(prev), Walk.put(w)) <> Walks.next(rest, w)
+
+# the steps of a walk among ws that read all of both lists
+def Walks.done(ws: List<&2, Maybe<&2, Walk>>) -> Maybe<&2, List<&2, Op>>:
+  match ws:
+    case Nil{}:
+      None{}
+    case Con{Some{Walk{x, Nil{}, Nil{}, ops}}, rest}:
+      Some{List.reverse(&2, Op, ops)}
+    case Con{w, rest}:
+      Walks.done(rest)
+
+# Walks.go once it is known whether a walk is done (m)
+def Walks.go.at(m: Maybe<&2, List<&2, Op>>, go: Unit -> Maybe<&2, List<&2, Op>>) -> Maybe<&2, List<&2, Op>>:
+  match m:
+    case Some{ops}:
+      Some{ops}
+    case None{}:
+      go(Unit{})
+
+# the steps of the first walks among ws, one step further at a time, that read
+# all of both lists, at most f steps further
+def Walks.go(f: Nat, +ws: List<&2, Maybe<&2, Walk>>) -> Maybe<&2, List<&2, Op>>:
+  match f:
+    case 0n:
+      None{}
+    case 1n+p:
+      Walks.go.at(Walks.done(ws), u => Walks.go(p, Walks.next(ws, None{})))
+
+# the fewest steps from the lines a to the lines b
+def Lines.ops(+a: List<&2, Texts.Bytes()>, +b: List<&2, Texts.Bytes()>) -> Maybe<&2, List<&2, Op>>:
+  Walks.go(
+    1n+Nat.add(List.length(&2, Texts.Bytes(), a), List.length(&2, Texts.Bytes(), b)),
+    [Some{Walk.snake(a, b, 0n, [])}]
+  )
+
+# the hunks of the steps ops, after k kept lines, d dropped lines and the put
+# lines ps, last first
+def Ops.hunks(ops: List<&2, Op>, +k: Nat, +d: Nat, +ps: List<&2, Texts.Bytes()>) -> List<&2, Hunk>:
+  match ops:
+    case Nil{}:
+      Shared.Bool.when(
+        List<&2, Hunk>,
+        Bool.and(Nat.is_eq(d, 0n), List.is_empty(&2, Texts.Bytes(), ps)),
+        u => [],
+        u => [Hunk{k, d, List.reverse(&2, Texts.Bytes(), ps)}]
+      )
+    case Con{Op.Keep{}, +rest}:
+      Shared.Bool.when(
+        List<&2, Hunk>,
+        Bool.and(Nat.is_eq(d, 0n), List.is_empty(&2, Texts.Bytes(), ps)),
+        u => Ops.hunks(rest, 1n+k, 0n, []),
+        u => Hunk{k, d, List.reverse(&2, Texts.Bytes(), ps)} <> Ops.hunks(rest, 1n, 0n, [])
+      )
+    case Con{Op.Drop{}, rest}:
+      Ops.hunks(rest, k, 1n+d, ps)
+    case Con{Op.Put{l}, rest}:
+      Ops.hunks(rest, k, d, l <> ps)
+
+# the hunks of a cut
+def Cut.hunks(c: Cut) -> List<&2, Hunk>:
+  match c:
+    case Cut{s, o, n, e}:
+      [Hunk{List.length(&2, Texts.Bytes(), s), List.length(&2, Texts.Bytes(), o), n}]
+
+# the hunks m, when they make b of a; else the one cut of a and b
+def Lines.diff.check(m: Maybe<&2, List<&2, Hunk>>, +a: List<&2, Texts.Bytes()>, +b: List<&2, Texts.Bytes()>) -> List<&2, Hunk>:
+  match m:
+    case Some{+hs}:
+      Shared.Bool.when(
+        List<&2, Hunk>,
+        Shared.List.is_eq(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), Lines.apply.all(hs, a), b),
+        u => hs,
+        u => Cut.hunks(Lines.cut(a, b))
+      )
+    case None{}:
+      Cut.hunks(Lines.cut(a, b))
+
+# the hunks from the lines a to the lines b, with the fewest lines dropped and
+# put
+def Lines.diff(+a: List<&2, Texts.Bytes()>, +b: List<&2, Texts.Bytes()>) -> List<&2, Hunk>:
+  Lines.diff.check(
+    Maybe.map(&2, List<&2, Op>, List<&2, Hunk>, ops => Ops.hunks(ops, 0n, 0n, []), Lines.ops(a, b)),
+    a,
+    b
+  )
+
 # Formats
 # -------
 
-# a change between two versions: Lines keeps the first keep lines, drops the
-# next drop lines and puts the lines put in their place; Whole is the new
+# a change between two versions: Lines is hunks of lines; Whole is the new
 # content; Pieces is the new shape of an embedding, with a patch for each of
 # its texts and each of its regions
 type Patch is Data:
-  Patch.Lines{keep: Nat, drop: Nat, put: List<&2, Texts.Bytes()>}
+  Patch.Lines{hunks: List<&2, Hunk>}
   Patch.Whole{bytes: Texts.Bytes()}
   Patch.Pieces{shape: List<&2, Shape>, texts: List<&2, Patch>, regions: List<&2, Patch>}
 
@@ -688,15 +863,13 @@ def Plain.is_text(b: Texts.Bytes()) -> Bool:
 
 # the patch of the lines of a cut
 def Lines.patch(c: Cut) -> Patch:
-  match c:
-    case Cut{s, o, n, e}:
-      Patch.Lines{List.length(&2, Texts.Bytes(), s), List.length(&2, Texts.Bytes(), o), n}
+  Patch.Lines{Cut.hunks(c)}
 
 # the patch from a to b, as lines when both are text (text)
 def Plain.diff.by(text: Bool, a: Texts.Bytes(), b: Texts.Bytes()) -> Patch:
   match text:
     case True{}:
-      Lines.patch(Lines.cut(Lines.list(a), Lines.list(b)))
+      Patch.Lines{Lines.diff(Lines.list(a), Lines.list(b))}
     case False{}:
       Patch.Whole{b}
 
@@ -707,8 +880,8 @@ def Plain.diff(+a: Texts.Bytes(), +b: Texts.Bytes()) -> Patch:
 # a after the patch p; a patch of an embedding leaves a as it is
 def Plain.apply(a: Texts.Bytes(), p: Patch) -> Texts.Bytes():
   match p:
-    case Patch.Lines{k, d, put}:
-      Lines.bytes(Lines.apply(k, Lines.list(a), d, put))
+    case Patch.Lines{hs}:
+      Lines.bytes(Lines.apply.all(hs, Lines.list(a)))
     case Patch.Whole{x}:
       x
     case Patch.Pieces{sh, ts, rs}:
@@ -777,58 +950,95 @@ def Plain.apply_diff(
 # takes the one change when only one side changed, or when both made the same
 # change; so these merges hold for every format (Format.merge_*). A format
 # merges only what both sides changed, differently. Plain text merges by
-# lines: two hunks merge when one ends before the other starts.
+# lines (diff3): a hunk of either side that ends before the other side's next
+# hunk starts is taken.
 
 # a merge: its bytes, or a clash
 type Merged is Data:
   Merged.Clean{bytes: Texts.Bytes()}
   Merged.Clash{}
 
-# the lines lb after two patches, x's first when it ends before y's starts
-# (x_first), y's first when it ends before x's starts (y_first)
-def Plain.merge.order(
-  x_first: Bool,
-  y_first: Bool,
-  lb: List<&2, Texts.Bytes()>,
-  kx: Nat,
-  dx: Nat,
-  nx: List<&2, Texts.Bytes()>,
-  ky: Nat,
-  dy: Nat,
-  ny: List<&2, Texts.Bytes()>
-) -> Merged:
-  match x_first y_first:
-    case True{} w:
-      Merged.Clean{Lines.bytes(Lines.apply(kx, Lines.apply(ky, lb, dy, ny), dx, nx))}
-    case False{} True{}:
-      Merged.Clean{Lines.bytes(Lines.apply(ky, Lines.apply(kx, lb, dx, nx), dy, ny))}
-    case False{} False{}:
-      Merged.Clash{}
+# a hunk where it is in its base: the lines from from to to are replaced by
+# put
+type Range is Data:
+  Range{from: Nat, to: Nat, put: List<&2, Texts.Bytes()>}
 
-# the merge of the cuts cx and cy of the lines lb
-def Plain.merge.cuts(lb: List<&2, Texts.Bytes()>, cx: Cut, cy: Cut) -> Merged:
-  match cx cy:
-    case Cut{sx, ox, nx, ex} Cut{sy, oy, ny, ey}:
-      +kx = List.length(&2, Texts.Bytes(), sx)
-      +dx = List.length(&2, Texts.Bytes(), ox)
-      +ky = List.length(&2, Texts.Bytes(), sy)
-      +dy = List.length(&2, Texts.Bytes(), oy)
-      Plain.merge.order(
-        Nat.is_lt(Nat.add(kx, dx), ky),
-        Nat.is_lt(Nat.add(ky, dy), kx),
-        lb,
-        kx,
-        dx,
-        nx,
-        ky,
-        dy,
-        ny
+# the ranges of the hunks hs, after the line at
+def Hunks.ranges(hs: List<&2, Hunk>, +at: Nat) -> List<&2, Range>:
+  match hs:
+    case Nil{}:
+      []
+    case Con{Hunk{k, d, put}, rest}:
+      +f = Nat.add(at, k)
+      +t = Nat.add(f, d)
+      Range{f, t, put} <> Hunks.ranges(rest, t)
+
+# the hunks of the ranges rs, after the line at
+def Ranges.hunks(rs: List<&2, Range>, +at: Nat) -> List<&2, Hunk>:
+  match rs:
+    case Nil{}:
+      []
+    case Con{Range{+f, +t, put}, rest}:
+      Hunk{Nat.sub(f, at), Nat.sub(t, f), put} <> Ranges.hunks(rest, t)
+
+# a and b are the same range
+def Range.is_eq(a: Range, b: Range) -> Bool:
+  match a b:
+    case Range{f1, t1, p1} Range{f2, t2, p2}:
+      Bool.and(
+        Bool.and(Nat.is_eq(f1, f2), Nat.is_eq(t1, t2)),
+        Shared.List.is_eq(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), p1, p2)
       )
 
-# the merge of two text changes, by their lines
+# the end of the range a comes before the start of b, with a line between
+def Range.before(a: Range, b: Range) -> Bool:
+  match a b:
+    case Range{f1, t1, p1} Range{f2, t2, p2}:
+      Nat.is_lt(t1, f2)
+
+# the ranges of two changes of one base, in order: each where it is when it
+# stands apart from the other side's, one when both made the same; none: two
+# ranges meet and differ, a clash
+def Ranges.merge(xs: List<&2, Range>, ys: List<&2, Range>) -> Maybe<&2, List<&2, Range>>:
+  match xs ys:
+    case Nil{} b:
+      Some{b}
+    case a Nil{}:
+      Some{a}
+    case Con{+x, +rx} Con{+y, +ry}:
+      Shared.Bool.when(
+        Maybe<&2, List<&2, Range>>,
+        Range.before(x, y),
+        u => Maybe.map(&2, List<&2, Range>, List<&2, Range>, m => x <> m, Ranges.merge(rx, Con{y, ry})),
+        u => Shared.Bool.when(
+          Maybe<&2, List<&2, Range>>,
+          Range.before(y, x),
+          w => Maybe.map(&2, List<&2, Range>, List<&2, Range>, m => y <> m, Ranges.merge(Con{x, rx}, ry)),
+          w => Shared.Bool.when(
+            Maybe<&2, List<&2, Range>>,
+            Range.is_eq(x, y),
+            v => Maybe.map(&2, List<&2, Range>, List<&2, Range>, m => x <> m, Ranges.merge(rx, ry)),
+            v => None{}
+          )
+        )
+      )
+
+# the lines lb after the merged ranges m (none: a clash)
+def Ranges.apply(m: Maybe<&2, List<&2, Range>>, lb: List<&2, Texts.Bytes()>) -> Merged:
+  match m:
+    case None{}:
+      Merged.Clash{}
+    case Some{rs}:
+      Merged.Clean{Lines.bytes(Lines.apply.all(Ranges.hunks(rs, 0n), lb))}
+
+# the merge of two text changes, by their lines: each hunk of either side
+# that stands apart from the other side's hunks is taken (diff3)
 def Plain.merge.lines(b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.Bytes()) -> Merged:
   +lb = Lines.list(b)
-  Plain.merge.cuts(lb, Lines.cut(lb, Lines.list(x)), Lines.cut(lb, Lines.list(y)))
+  Ranges.apply(
+    Ranges.merge(Hunks.ranges(Lines.diff(lb, Lines.list(x)), 0n), Hunks.ranges(Lines.diff(lb, Lines.list(y)), 0n)),
+    lb
+  )
 
 # the merge of two different changes, as lines when all three are text (text)
 def Plain.merge.text(text: Bool, b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.Bytes()) -> Merged:
@@ -1427,20 +1637,31 @@ def Plain.changes.whole(held: Bool, a: Texts.Bytes(), b: Texts.Bytes()) -> List<
     case False{}:
       [Change.Removed{Item{"content", [], 0n, a, []}}, Change.Added{Item{"content", [], 0n, b, []}}]
 
-# the changes of the patch p of a
-def Plain.changes.of(+a: Texts.Bytes(), p: Patch) -> List<&2, Change>:
-  match p:
-    case Patch.Lines{+k, d, put}:
+# the changes of the hunks hs of the old lines ls, the first of which is the
+# line at
+def Hunks.changes(hs: List<&2, Hunk>, +ls: List<&2, Texts.Bytes()>, +at: Nat) -> List<&2, Change>:
+  match hs:
+    case Nil{}:
+      []
+    case Con{Hunk{+k, +d, put}, rest}:
+      +p = Nat.add(at, k)
       List.append(
         &2,
         Change,
-        Lines.changes(
-          ~(i => Change.Removed{i}),
-          List.take(&2, Texts.Bytes(), List.drop(&2, Texts.Bytes(), Lines.list(a), k), d),
-          1n+k
-        ),
-        Lines.changes(~(i => Change.Added{i}), put, 1n+k)
+        Lines.changes(~(i => Change.Removed{i}), List.take(&2, Texts.Bytes(), List.drop(&2, Texts.Bytes(), ls, k), d), 1n+p),
+        List.append(
+          &2,
+          Change,
+          Lines.changes(~(i => Change.Added{i}), put, 1n+p),
+          Hunks.changes(rest, List.drop(&2, Texts.Bytes(), ls, Nat.add(k, d)), Nat.add(p, d))
+        )
       )
+
+# the changes of the patch p of a
+def Plain.changes.of(+a: Texts.Bytes(), p: Patch) -> List<&2, Change>:
+  match p:
+    case Patch.Lines{hs}:
+      Hunks.changes(hs, Lines.list(a), 0n)
     case Patch.Whole{+x}:
       Plain.changes.whole(Shared.List.is_eq(~U32, ~U32.is_eq, a, x), a, x)
     case Patch.Pieces{sh, ts, rs}:
