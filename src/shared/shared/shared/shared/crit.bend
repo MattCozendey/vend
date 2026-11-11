@@ -1420,3 +1420,106 @@ def Crit.wf(~V: Data, m: Crit<V>, +lo: Nat) -> Bool:
         ),
         Nat.is_le(lo, pos)
       )
+
+# Agreement of bits
+# -----------------
+# Two lists of bits agree on their first n when both have them and they are
+# the same, or both end before; a first difference is where they stop
+# agreeing. Agreement is an equivalence on each n, so differences obey the
+# laws of a tree of prefixes.
+
+# the bits a and b agree on their first n
+def Bits.agree_n(n: Nat, a: List<&2, Bool>, b: List<&2, Bool>) -> Bool:
+  match n a b:
+    case 0n x y:
+      True{}
+    case 1n+p Nil{} Nil{}:
+      True{}
+    case 1n+p Con{x, ra} Con{y, rb}:
+      Bool.and(Shared.Bool.is_eq(x, y), Bits.agree_n(p, ra, rb))
+    case 1n+p x y:
+      False{}
+
+# the first of the bits bs (none: there is none)
+def Bits.head(bs: List<&2, Bool>) -> Maybe<&2, Bool>:
+  match bs:
+    case Nil{}:
+      None{}
+    case Con{x, r}:
+      Some{x}
+
+# the bit of bs at n (none: bs ends before)
+def Bits.at(bs: List<&2, Bool>, n: Nat) -> Maybe<&2, Bool>:
+  Bits.head(List.drop(&2, Bool, bs, n))
+
+# a first difference is at n or after exactly when the bits agree on their
+# first n
+law Bits.agree_diff:
+  for a: List<&2, Bool>
+  for b: List<&2, Bool>
+  for n: Nat
+  {Bits.agree(Bits.diff(a, b), n) == Bits.agree_n(n, a, b): Bool}
+
+def Bits.agree_diff(a, b, n):
+  ?TODO
+
+# agreement is the same either way round
+law Bits.agree_n_sym:
+  for a: List<&2, Bool>
+  for b: List<&2, Bool>
+  for n: Nat
+  {Bits.agree_n(n, a, b) == Bits.agree_n(n, b, a): Bool}
+
+def Bits.agree_n_sym(a, b, n):
+  ?TODO
+
+# what agrees with what agrees with c agrees with c
+law Bits.agree_n_trans:
+  for a: List<&2, Bool>
+  for b: List<&2, Bool>
+  for c: List<&2, Bool>
+  for n: Nat
+  {Bits.agree_n(n, a, b) == True{}: Bool}
+    -> {Bits.agree_n(n, b, c) == True{}: Bool}
+    -> {Bits.agree_n(n, a, c) == True{}: Bool}
+
+def Bits.agree_n_trans(a, b, c, n):
+  ?TODO
+
+# bits that agree on their first n agree on fewer
+law Bits.agree_n_le:
+  for a: List<&2, Bool>
+  for b: List<&2, Bool>
+  for m: Nat
+  for n: Nat
+  {Nat.is_le(m, n) == True{}: Bool}
+    -> {Bits.agree_n(n, a, b) == True{}: Bool}
+    -> {Bits.agree_n(m, a, b) == True{}: Bool}
+
+def Bits.agree_n_le(a, b, m, n):
+  ?TODO
+
+# bits agree on n + 1 exactly when they agree on n and have the same bit at n
+law Bits.agree_n_succ:
+  for a: List<&2, Bool>
+  for b: List<&2, Bool>
+  for n: Nat
+  {
+    Bits.agree_n(1n+n, a, b)
+      == Bool.and(
+        Bits.agree_n(n, a, b),
+        Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(a, n), Bits.at(b, n))
+      ): Bool
+  }
+
+def Bits.agree_n_succ(a, b, n):
+  ?TODO
+
+# the side of a key at pos is its bit there
+law Key.side_bits:
+  for k: List<&2, U32>
+  for pos: Nat
+  {Key.side(k, pos) == Bits.at(Key.bits(k), pos): Maybe<&2, Bool>}
+
+def Key.side_bits(k, pos):
+  ?TODO
