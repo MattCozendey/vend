@@ -277,51 +277,10 @@ def Cell.is_eq_sound(ty, same, laws, a, b):
     case Many{} Many{}:
       h => {==}
 
-# Cell.is_eq is True for a cell and itself
-def Cell.is_eq_refl(
-  ~V: Data,
-  ~same: V -> V -> Bool,
-  ~laws: Shared.Eq.Laws(V, same),
-  a: Cell<V>
-) -> {Cell.is_eq(~V, ~same, a, a) == True{}: Bool}:
-  match a:
-    case One{x}:
-      Shared.Eq.refl(~V, ~same, laws, x)
-    case Many{}:
-      {==}
-
 # Keeping
 # -------
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# a slot that keeps the value x holds x
-def Cell.keeps_value(
-  ~V: Data,
-  ~same: V -> V -> Bool,
-  ~laws: Shared.Eq.Laws(V, same),
-  x: V,
-  b: Maybe<&2, Cell<V>>
-) -> {
-  Cell.keeps(~V, ~same, Some{One{x}}, b) == True{}: Bool
-} -> {b == Some{One{x}}: Maybe<&2, Cell<V>>}:
-  match b:
-    case Some{One{z}}:
-      h =>
-        %Equal.sym(
-          V,
-          x,
-          z,
-          Shared.Eq.sound(~V, ~same, laws, x, z)(h)
-        ): {Some{One{z}} == Some{One{_}}: Maybe<&2, Cell<V>>}
-        {==}
-    case Some{Many{}}:
-      h => Empty.absurd(
-        {Some{Many{}} == Some{One{x}}: Maybe<&2, Cell<V>>},
-        Shared.Bool.false_ne_true(h)
-      )
-    case None{}:
-      h => Empty.absurd({None{} == Some{One{x}}: Maybe<&2, Cell<V>>}, Shared.Bool.false_ne_true(h))
-
 # Takes
 # -----
 # A holder that takes a slot in keeps its own cell where it holds one.

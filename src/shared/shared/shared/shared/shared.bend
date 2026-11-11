@@ -559,17 +559,6 @@ def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bo
     case True{}:
       h => Empty.absurd({True{} == False{}: Bool}, Bool.false_ne_true(h))
 
-# a is true when its "not" is false
-def Bool.not_false(a: Bool) -> {Bool.not(a) == False{}: Bool} -> {a == True{}: Bool}:
-  match a:
-    case True{}:
-      h => {==}
-    case False{}:
-      h => Empty.absurd(
-        {False{} == True{}: Bool},
-        Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
-      )
-
 # both sides are true, so their "and" is
 def Bool.and_both(
   a: Bool,
@@ -996,10 +985,6 @@ def Nat.is_eq_comm(a: Nat, b: Nat) -> {Nat.is_eq(a, b) == Nat.is_eq(b, a): Bool}
         {_ == Nat.is_eq(bp, ap): Bool}
       {==}
 
-# the laws of Nat.is_eq
-def Nat.laws() -> Eq.Laws(Nat, Nat.is_eq):
-  (a => Nat.is_eq_refl(a), a => b => Nat.is_eq_sound(a, b))
-
 # a list with one more item at its end is one longer
 def List.length_snoc(
   -A: Data,
@@ -1340,19 +1325,6 @@ def Maybe.is_eq_sound(
       h =>
         %eqs(x)(y)(h): {Some{x} == Some{_}: Maybe<&2, A>}
         {==}
-
-# Maybe.is_eq is True for a value and itself
-def Maybe.is_eq_refl(
-  ~A: Data,
-  ~eq: A -> A -> Bool,
-  ~laws: Eq.Laws(A, eq),
-  a: Maybe<&2, A>
-) -> {Maybe.is_eq(~A, ~eq, a, a) == True{}: Bool}:
-  match a:
-    case None{}:
-      {==}
-    case Some{x}:
-      Eq.refl(~A, ~eq, laws, x)
 
 # a read m then k that gives x still gives x when m and each k keep what they
 # give (m2 and k2): a kept read of a kept read is kept

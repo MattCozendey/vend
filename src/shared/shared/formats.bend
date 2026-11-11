@@ -1,5 +1,6 @@
 import Base
 import ./shared/shared/code.bend as Codes
+import ./shared/shared/side.bend as Sides
 import ./shared/shared/shared.bend as Shared
 import ./shared/text.bend as Texts
 
@@ -837,142 +838,27 @@ def Plain.merge.text(text: Bool, b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.By
     case False{}:
       Merged.Clash{}
 
-# what a merge takes: y when x is b (theirs), x when y is b or x is y (ours),
-# else both changes, piece by piece when they are an embedding of one shape
-# (pieces)
+# what a merge takes: the side of a three-way choice (Sides.Side.of), or both
+# changes piece by piece, when they are an embedding of one shape (pieces)
 type Decision is Data:
-  Decision.Theirs{}
-  Decision.Ours{}
-  Decision.Both{}
+  Decision.Side{side: Sides.Side}
   Decision.Pieces{}
 
-# ours when x is y (held), else both
-def Merge.decide.same(held: Bool) -> Decision:
-  match held:
-    case True{}:
-      Decision.Ours{}
-    case False{}:
-      Decision.Both{}
-
-# ours when y is b (held), else as x and y are the same or not
-def Merge.decide.right(held: Bool, x: Texts.Bytes(), y: Texts.Bytes()) -> Decision:
-  match held:
-    case True{}:
-      Decision.Ours{}
-    case False{}:
-      Merge.decide.same(Shared.List.is_eq(~U32, ~U32.is_eq, x, y))
-
-# theirs when x is b (held), else as y is b or not
-def Merge.decide.left(
-  held: Bool,
-  b: Texts.Bytes(),
-  x: Texts.Bytes(),
-  +y: Texts.Bytes()
-) -> Decision:
-  match held:
-    case True{}:
-      Decision.Theirs{}
-    case False{}:
-      Merge.decide.right(Shared.List.is_eq(~U32, ~U32.is_eq, y, b), x, y)
-
 # what a merge of x and y, two changes of b, takes before any format looks
-def Merge.decide(+b: Texts.Bytes(), +x: Texts.Bytes(), y: Texts.Bytes()) -> Decision:
-  Merge.decide.left(Shared.List.is_eq(~U32, ~U32.is_eq, x, b), b, x, y)
+def Merge.decide(+b: Texts.Bytes(), +x: Texts.Bytes(), +y: Texts.Bytes()) -> Decision:
+  Decision.Side{Sides.Side.of(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), b, x, y)}
 
 # the change that the decision d takes of x and y, none for both
 def Decision.take(d: Decision, x: Texts.Bytes(), y: Texts.Bytes()) -> Maybe<&2, Texts.Bytes()>:
   match d:
-    case Decision.Theirs{}:
-      Some{y}
-    case Decision.Ours{}:
-      Some{x}
-    case Decision.Both{}:
-      None{}
+    case Decision.Side{s}:
+      Sides.Side.take(Texts.Bytes(), s, x, y)
     case Decision.Pieces{}:
       None{}
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# Merge.left_only once x is known to be b or not (held)
-def Merge.left_only.at(
-  held: Bool,
-  b: Texts.Bytes(),
-  x: Texts.Bytes(),
-  e: {Shared.List.is_eq(~U32, ~U32.is_eq, x, b) == held: Bool}
-) -> {Decision.take(Merge.decide.left(held, b, x, b), x, b) == Some{x}: Maybe<&2, Texts.Bytes()>}:
-  match held:
-    case True{}:
-      %Equal.sym(
-        Texts.Bytes(),
-        x,
-        b,
-        Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), x, b)(e)
-      ): {Some{b} == Some{_}: Maybe<&2, Texts.Bytes()>}
-      {==}
-    case False{}:
-      %Equal.sym(
-        Bool,
-        Shared.List.is_eq(~U32, ~U32.is_eq, b, b),
-        True{},
-        Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), b)
-      ):
-        {Decision.take(Merge.decide.right(_, x, b), x, b) == Some{x}: Maybe<&2, Texts.Bytes()>}
-      {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# when only x changed b, the decision takes x
-def Merge.left_only(
-  +b: Texts.Bytes(),
-  +x: Texts.Bytes()
-) -> {Decision.take(Merge.decide(b, x, b), x, b) == Some{x}: Maybe<&2, Texts.Bytes()>}:
-  Merge.left_only.at(Shared.List.is_eq(~U32, ~U32.is_eq, x, b), b, x, {==})
-
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# when only y changed b, the decision takes y
-def Merge.right_only(
-  b: Texts.Bytes(),
-  y: Texts.Bytes()
-) -> {Decision.take(Merge.decide(b, b, y), b, y) == Some{y}: Maybe<&2, Texts.Bytes()>}:
-  %Equal.sym(
-    Bool,
-    Shared.List.is_eq(~U32, ~U32.is_eq, b, b),
-    True{},
-    Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), b)
-  ):
-    {Decision.take(Merge.decide.left(_, b, b, y), b, y) == Some{y}: Maybe<&2, Texts.Bytes()>}
-  {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# Merge.same once x is known to be b or not (held)
-def Merge.same.at(
-  held: Bool,
-  b: Texts.Bytes(),
-  x: Texts.Bytes(),
-  e: {Shared.List.is_eq(~U32, ~U32.is_eq, x, b) == held: Bool}
-) -> {Decision.take(Merge.decide.left(held, b, x, x), x, x) == Some{x}: Maybe<&2, Texts.Bytes()>}:
-  match held:
-    case True{}:
-      {==}
-    case False{}:
-      %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, x, b), False{}, e):
-        {Decision.take(Merge.decide.right(_, x, x), x, x) == Some{x}: Maybe<&2, Texts.Bytes()>}
-      %Equal.sym(
-        Bool,
-        Shared.List.is_eq(~U32, ~U32.is_eq, x, x),
-        True{},
-        Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), x)
-      ):
-        {Decision.take(Merge.decide.same(_), x, x) == Some{x}: Maybe<&2, Texts.Bytes()>}
-      {==}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# when both made the same change, the decision takes it
-def Merge.same(
-  +b: Texts.Bytes(),
-  +x: Texts.Bytes()
-) -> {Decision.take(Merge.decide(b, x, x), x, x) == Some{x}: Maybe<&2, Texts.Bytes()>}:
-  Merge.same.at(Shared.List.is_eq(~U32, ~U32.is_eq, x, b), b, x, {==})
-
 # Embedding
 # ---------
 # An embedding holds regions of another format between an opening and a
@@ -2019,7 +1905,7 @@ def Embed.shape(op: Texts.Bytes(), cl: Texts.Bytes(), b: Texts.Bytes()) -> List<
 def Format.decide.both(f: Format, b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.Bytes()) -> Decision:
   match f:
     case Format.Leaf{k}:
-      Decision.Both{}
+      Decision.Side{Sides.Side.Both{}}
     case Format.Embed{o, +op, +cl, i}:
       +sb = Embed.shape(op, cl, b)
       Bool.pick(
@@ -2029,7 +1915,7 @@ def Format.decide.both(f: Format, b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.B
           Shared.List.is_eq(~Shape, ~Shape.is_eq, sb, Embed.shape(op, cl, x))
         ),
         Decision.Pieces{},
-        Decision.Both{}
+        Decision.Side{Sides.Side.Both{}}
       )
     case Format.Code{base, r, im}:
       Format.decide.both(base, b, x, y)
@@ -2043,7 +1929,7 @@ def Format.decide.on(
   y: Texts.Bytes()
 ) -> Decision:
   match d:
-    case Decision.Both{}:
+    case Decision.Side{Sides.Side.Both{}}:
       Format.decide.both(f, b, x, y)
     case e:
       e
@@ -2082,9 +1968,9 @@ def Jobs.of(
 # the change that the decision d takes of x and y, a clash for both
 def Merge.taken(d: Decision, x: Texts.Bytes(), y: Texts.Bytes()) -> Merged:
   match d:
-    case Decision.Theirs{}:
+    case Decision.Side{Sides.Side.Theirs{}}:
       Merged.Clean{y}
-    case Decision.Ours{}:
+    case Decision.Side{Sides.Side.Ours{}}:
       Merged.Clean{x}
     case e:
       Merged.Clash{}
@@ -2092,9 +1978,9 @@ def Merge.taken(d: Decision, x: Texts.Bytes(), y: Texts.Bytes()) -> Merged:
 # the merge of x and y, two changes of b, by lines, with the decision d
 def Merge.plain(d: Decision, +b: Texts.Bytes(), +x: Texts.Bytes(), +y: Texts.Bytes()) -> Merged:
   match d:
-    case Decision.Theirs{}:
+    case Decision.Side{Sides.Side.Theirs{}}:
       Merged.Clean{y}
-    case Decision.Ours{}:
+    case Decision.Side{Sides.Side.Ours{}}:
       Merged.Clean{x}
     case e:
       Plain.merge.text(
@@ -2186,7 +2072,7 @@ def Format.merges(f: Format, js: List<&2, Job>) -> List<&2, Merged>:
         jt
       ) Format.merges(i, jr2) Format.merges(Format.Embed{o, op, cl, i}, jr)
       Merge.pieces(op, cl, Pieces.shape(pb), Merged.all(mt), Merged.all(mr)) <> rest
-    case Format.Embed{+o, +op, +cl, +i} Con{Job{+b, +x, +y, Decision.Both{}}, jr}:
+    case Format.Embed{+o, +op, +cl, +i} Con{Job{+b, +x, +y, Decision.Side{Sides.Side.Both{}}}, jr}:
       m rest = Format.merges(o, [Job.of(o, b, x, y)]) Format.merges(Format.Embed{o, op, cl, i}, jr)
       Merged.head(m) <> rest
     case Format.Embed{+o, +op, +cl, +i} Con{Job{b, x, y, d}, jr}:
@@ -2209,7 +2095,7 @@ def Merge.plain_taken(
   h: {Decision.take(d, x, y) == Some{z}: Maybe<&2, Texts.Bytes()>}
 ) -> {Merge.plain(d, b, x, y) == Merged.Clean{z}: Merged}:
   match d:
-    case Decision.Theirs{}:
+    case Decision.Side{Sides.Side.Theirs{}}:
       %Equal.sym(
         Texts.Bytes(),
         y,
@@ -2217,7 +2103,7 @@ def Merge.plain_taken(
         Shared.Maybe.some_inj(Texts.Bytes(), y, z, h)
       ): {Merged.Clean{_} == Merged.Clean{z}: Merged}
       {==}
-    case Decision.Ours{}:
+    case Decision.Side{Sides.Side.Ours{}}:
       %Equal.sym(
         Texts.Bytes(),
         x,
@@ -2225,9 +2111,9 @@ def Merge.plain_taken(
         Shared.Maybe.some_inj(Texts.Bytes(), x, z, h)
       ): {Merged.Clean{_} == Merged.Clean{z}: Merged}
       {==}
-    case Decision.Both{}:
+    case Decision.Side{Sides.Side.Both{}}:
       Empty.absurd(
-        {Merge.plain(Decision.Both{}, b, x, y) == Merged.Clean{z}: Merged},
+        {Merge.plain(Decision.Side{Sides.Side.Both{}}, b, x, y) == Merged.Clean{z}: Merged},
         Shared.Maybe.none_ne_some(Texts.Bytes(), z, h)
       )
     case Decision.Pieces{}:
@@ -2245,7 +2131,7 @@ def Merge.taken_taken(
   h: {Decision.take(d, x, y) == Some{z}: Maybe<&2, Texts.Bytes()>}
 ) -> {Merge.taken(d, x, y) == Merged.Clean{z}: Merged}:
   match d:
-    case Decision.Theirs{}:
+    case Decision.Side{Sides.Side.Theirs{}}:
       %Equal.sym(
         Texts.Bytes(),
         y,
@@ -2253,7 +2139,7 @@ def Merge.taken_taken(
         Shared.Maybe.some_inj(Texts.Bytes(), y, z, h)
       ): {Merged.Clean{_} == Merged.Clean{z}: Merged}
       {==}
-    case Decision.Ours{}:
+    case Decision.Side{Sides.Side.Ours{}}:
       %Equal.sym(
         Texts.Bytes(),
         x,
@@ -2261,9 +2147,9 @@ def Merge.taken_taken(
         Shared.Maybe.some_inj(Texts.Bytes(), x, z, h)
       ): {Merged.Clean{_} == Merged.Clean{z}: Merged}
       {==}
-    case Decision.Both{}:
+    case Decision.Side{Sides.Side.Both{}}:
       Empty.absurd(
-        {Merge.taken(Decision.Both{}, x, y) == Merged.Clean{z}: Merged},
+        {Merge.taken(Decision.Side{Sides.Side.Both{}}, x, y) == Merged.Clean{z}: Merged},
         Shared.Maybe.none_ne_some(Texts.Bytes(), z, h)
       )
     case Decision.Pieces{}:
@@ -2311,7 +2197,7 @@ def Format.merges_taken(
         Merged.Clean{z},
         Leaf.merge_taken(k, b, x, y, z, e, h)
       )
-    case Format.Embed{o, op, cl, i} Decision.Theirs{}:
+    case Format.Embed{o, op, cl, i} Decision.Side{Sides.Side.Theirs{}}:
       %Equal.sym(
         Texts.Bytes(),
         y,
@@ -2319,7 +2205,7 @@ def Format.merges_taken(
         Shared.Maybe.some_inj(Texts.Bytes(), y, z, h)
       ): {[Merged.Clean{_}] == [Merged.Clean{z}]: List<&2, Merged>}
       {==}
-    case Format.Embed{o, op, cl, i} Decision.Ours{}:
+    case Format.Embed{o, op, cl, i} Decision.Side{Sides.Side.Ours{}}:
       %Equal.sym(
         Texts.Bytes(),
         x,
@@ -2327,12 +2213,12 @@ def Format.merges_taken(
         Shared.Maybe.some_inj(Texts.Bytes(), x, z, h)
       ): {[Merged.Clean{_}] == [Merged.Clean{z}]: List<&2, Merged>}
       {==}
-    case Format.Embed{o, op, cl, i} Decision.Both{}:
+    case Format.Embed{o, op, cl, i} Decision.Side{Sides.Side.Both{}}:
       Empty.absurd(
         {
           Format.merges(
             Format.Embed{o, op, cl, i},
-            [Job{b, x, y, Decision.Both{}}]
+            [Job{b, x, y, Decision.Side{Sides.Side.Both{}}}]
           )
             == [Merged.Clean{z}]: List<&2, Merged>
         },
@@ -2364,15 +2250,15 @@ def Format.decide.on_taken(
   h: {Decision.take(d, x, y) == Some{z}: Maybe<&2, Texts.Bytes()>}
 ) -> {Decision.take(Format.decide.on(d, f, b, x, y), x, y) == Some{z}: Maybe<&2, Texts.Bytes()>}:
   match d:
-    case Decision.Theirs{}:
+    case Decision.Side{Sides.Side.Theirs{}}:
       h
-    case Decision.Ours{}:
+    case Decision.Side{Sides.Side.Ours{}}:
       h
-    case Decision.Both{}:
+    case Decision.Side{Sides.Side.Both{}}:
       Empty.absurd(
         {
           Decision.take(
-            Format.decide.on(Decision.Both{}, f, b, x, y),
+            Format.decide.on(Decision.Side{Sides.Side.Both{}}, f, b, x, y),
             x,
             y
           )
@@ -2383,15 +2269,27 @@ def Format.decide.on_taken(
     case Decision.Pieces{}:
       h
 
-# the merge of a job whose base decision takes z is z, in every format
-def Format.merge_taken(
-  +f: Format,
-  +b: Texts.Bytes(),
-  +x: Texts.Bytes(),
-  +y: Texts.Bytes(),
-  -z: Texts.Bytes(),
-  h: {Decision.take(Merge.decide(b, x, y), x, y) == Some{z}: Maybe<&2, Texts.Bytes()>}
-) -> {Format.merge(f, b, x, y) == Merged.Clean{z}: Merged}:
+# a merge loses no change that only one side made, in every format: when the
+# three-way choice of the change takes z (Sides.Side.keeps_changes says
+# which), the merge of the format is z
+law Format.merge_takes:
+  for +f: Format
+  for +b: Texts.Bytes()
+  for +x: Texts.Bytes()
+  for +y: Texts.Bytes()
+  for -z: Texts.Bytes()
+  for h: {
+    Sides.Side.take(
+      Texts.Bytes(),
+      Sides.Side.of(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), b, x, y),
+      x,
+      y
+    )
+      == Some{z}: Maybe<&2, Texts.Bytes()>
+  }
+  {Format.merge(f, b, x, y) == Merged.Clean{z}: Merged}
+
+def Format.merge_takes(f, b, x, y, z, h):
   Equal.cong(
     List<&2, Merged>,
     Merged,
@@ -2408,36 +2306,6 @@ def Format.merge_taken(
       Format.decide.on_taken(Merge.decide(b, x, y), f, b, x, y, z, h)
     )
   )
-
-# when only x changed b, a merge takes x, in every format
-law Format.merge_left_only:
-  for +f: Format
-  for +b: Texts.Bytes()
-  for +x: Texts.Bytes()
-  {Format.merge(f, b, x, b) == Merged.Clean{x}: Merged}
-
-def Format.merge_left_only(f, b, x):
-  Format.merge_taken(f, b, x, b, x, Merge.left_only(b, x))
-
-# when only y changed b, a merge takes y, in every format
-law Format.merge_right_only:
-  for +f: Format
-  for +b: Texts.Bytes()
-  for +y: Texts.Bytes()
-  {Format.merge(f, b, b, y) == Merged.Clean{y}: Merged}
-
-def Format.merge_right_only(f, b, y):
-  Format.merge_taken(f, b, b, y, y, Merge.right_only(b, y))
-
-# when both made the same change, a merge takes it, in every format
-law Format.merge_same:
-  for +f: Format
-  for +b: Texts.Bytes()
-  for +x: Texts.Bytes()
-  {Format.merge(f, b, x, x) == Merged.Clean{x}: Merged}
-
-def Format.merge_same(f, b, x):
-  Format.merge_taken(f, b, x, x, x, Merge.same(b, x))
 
 # What a format reads
 # -------------------

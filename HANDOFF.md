@@ -12,8 +12,9 @@ last rounds: the work was to state laws and to construct types.
 | --- | --- |
 | `src/shared/shared/shared/shared/side.bend` | 2 open laws |
 | `src/shared/shared/shared/pack.bend` | 2 open laws |
-| `src/shared/shared/rope.bend` | 1 open law |
+| `src/shared/shared/rope.bend` | 1 open law, 2 open lemmas that rest on it |
 | `src/shared/shared/formats.bend` | 1 open law |
+| `src/shared/shared/shared/quorum.bend` | 1 open law |
 | Every other file under `src/shared` but `replica.bend` | ALL PROOFS CHECK |
 | `src/shared/replica.bend` | 3 open laws |
 | `src/node/core/spec.bend` | 6 open laws (and the ones that it imports) |
@@ -70,8 +71,12 @@ as records (below).
     history, final logs and answers that move forward are each one instance.
 14. **One concept for a three-way choice.** `Sides.Side.of` takes theirs, ours or both;
     `Side.keeps_changes` and `Side.both_changed` say that it loses no change that only one side
-    made. A merge of a resource is `Side.of`, and only both changes need a format.
-15. **A key signs one ballot.** `Replicas.Key.secret` is a hash of the seed of a replica, the root
+    made. A merge of a resource, and a merge in a format (`Formats.Decision`), is `Side.of`; only
+    both changes need a format. `Formats.Format.merge_takes` (proven) says that a format merges
+    to what the choice takes.
+15. **One cut.** `Ropes.Rope.cut.with` cuts a list after each element where a test of a state
+    holds; a cut by elements alone has no state. Ropes of words and of bytes both cut with it.
+16. **A key signs one ballot.** `Replicas.Key.secret` is a hash of the seed of a replica, the root
     and the number of the ballot. A replica keeps only its seed.
 
 ## What must be built
@@ -163,8 +168,9 @@ each change to its rule, on the line where it belongs, and refuses any other.
 | `Sides.Side.keeps_changes` | A three-way choice keeps each change that only one side made. |
 | `Sides.Side.both_changed` | It leaves both only when both changed, and differently. |
 | `Packs.Pack.read_pieces` | Packed pieces read back as their bytes. |
+| `Quorums.Quorum.major_kept` | A majority stays while every ballot is kept: a stable read. Its proof was for the old statement. |
 | `Packs.Pack.words_unpack` | Words as bytes pack back to the words. |
-| `Ropes.Rope.cut_with_flat` | The pieces of a cut by content, one after the other, are what was cut. |
+| `Ropes.Rope.cut_with_flat` | The pieces of a cut, one after the other, are what was cut. Two lemmas of `Ropes.Rope.read_put` rest on it (`Rope.leaves_flat`, `Rope.put.step_reads`). |
 | `Formats.Format.code_read` | A format reads back from its code. |
 | `Core.Pointer.code_read` | A submodule pointer reads back from its code. |
 | `Replicas.Line.at_grows` | One history: the tip of a line after k steps stays as the ledger grows, while the ballots are honest. |
@@ -258,13 +264,6 @@ Defs that state a meaning, and are slow by design. A cache or a faster structure
 | `Core.Import.under` | It lists the resources of a tree. | A listing by path order under a place. |
 | `Core.Node.affects` | The history of each other branch. | A mark of how far a reader is. |
 
-Concepts that have two representations, to unify when their proofs are open again:
-
-1. `Ropes.Rope.cut` is `Ropes.Rope.cut.with` with no state.
-2. `Formats.Merge.decide` is `Sides.Side.of` on bytes, with one more choice (pieces).
-3. `Quorums.Quorum.major_kept` is a `Shared.Read.Stable` read: a majority stays as ballots are
-   kept.
-
 ## Costs and open items
 
 1. **A new node replays the history of each line that it uses.** No checkpoint: a checkpoint
@@ -294,3 +293,6 @@ Concepts that have two representations, to unify when their proofs are open agai
 `shared`, `code`, `hash`, `seal`, `cell`, `trie`, `depot`, `text`, `spans`, `keyset`, `quorum`,
 `reach`, `regex`, `search`, `rope`, `tree`, `formats`, the types and codes of `ledger`, `requests`,
 `resources`, `uris`, and `glob`.
+
+Lemmas that only finished proofs used were deleted when those proofs were opened again. They are in
+commit `af0f75e`, for whoever proves the open laws.

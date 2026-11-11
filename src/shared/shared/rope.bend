@@ -192,37 +192,6 @@ def Root.is_eq(a: Root, b: Root) -> Bool:
     case Root{d1, h1} Root{d2, h2}:
       Bool.and(Nat.is_eq(d1, d2), Hashes.Hash.is_eq(h1, h2))
 
-# a root is the same as itself
-def Root.is_eq_refl(a: Root) -> {Root.is_eq(a, a) == True{}: Bool}:
-  match a:
-    case Root{d, h}:
-      %Equal.sym(
-        Bool,
-        Nat.is_eq(d, d),
-        True{},
-        Shared.Nat.is_eq_refl(d)
-      ): {Bool.and(_, Hashes.Hash.is_eq(h, h)) == True{}: Bool}
-      Hashes.Hash.is_eq_refl(h)
-
-# roots that are the same are equal
-def Root.is_eq_sound(a: Root, b: Root) -> {Root.is_eq(a, b) == True{}: Bool} -> {a == b: Root}:
-  match a b:
-    case Root{+d1, +h1} Root{+d2, +h2}:
-      +e =>
-        %Shared.Nat.is_eq_sound(
-          d1,
-          d2
-        )(
-          Shared.Bool.and_true_left(Nat.is_eq(d1, d2), Hashes.Hash.is_eq(h1, h2))(e)
-        ): {Root{d1, h1} == Root{_, h2}: Root}
-        %Hashes.Hash.is_eq_sound(
-          h1,
-          h2
-        )(
-          Shared.Bool.and_true_right(Nat.is_eq(d1, d2), Hashes.Hash.is_eq(h1, h2))(e)
-        ): {Root{d1, h1} == Root{d1, _}: Root}
-        {==}
-
 # Cuts
 # ----
 
@@ -237,60 +206,11 @@ def Rope.cut.at(-A: Data, e: Bool, x: A, gs: List<&2, List<&2, A>>) -> List<&2, 
     case False{} Con{g, t}:
       (x <> g) <> t
 
-# xs cut after each element that edge holds of (the last piece may end
-# without one)
-def Rope.cut(~A: Data, ~edge: A -> Bool, xs: List<&2, A>) -> List<&2, List<&2, A>>:
-  match xs:
-    case Nil{}:
-      []
-    case Con{+x, r}:
-      Rope.cut.at(A, edge(x), x, Rope.cut(~A, ~edge, r))
-
-# the pieces of a cut with one more element, one after the other, are the
-# element, then the pieces
-def Rope.cut.at_flat(
-  -A: Data,
-  e: Bool,
-  x: A,
-  gs: List<&2, List<&2, A>>
-) -> {List.concat(&2, A, Rope.cut.at(A, e, x, gs)) == x <> List.concat(&2, A, gs): List<&2, A>}:
-  match e gs:
-    case True{} gs:
-      {==}
-    case False{} Nil{}:
-      {==}
-    case False{} Con{g, t}:
-      {==}
-
-# the pieces of a cut, one after the other, are what was cut
-law Rope.cut_flat:
-  for ~A: Data
-  for ~edge: A -> Bool
-  for xs: List<&2, A>
-  {List.concat(&2, A, Rope.cut(~A, ~edge, xs)) == xs: List<&2, A>}
-
-def Rope.cut_flat(ty, edge, xs):
-  match xs:
-    case Nil{}:
-      {==}
-    case Con{+x, +r}:
-      %Equal.sym(
-        List<&2, ty>,
-        List.concat(&2, ty, Rope.cut.at(ty, edge(x), x, Rope.cut(~ty, ~edge, r))),
-        x <> List.concat(&2, ty, Rope.cut(~ty, ~edge, r)),
-        Rope.cut.at_flat(ty, edge(x), x, Rope.cut(~ty, ~edge, r))
-      ): {_ == x <> r: List<&2, ty>}
-      %Rope.cut_flat(
-        ~ty,
-        ~edge,
-        r
-      ): {x <> List.concat(&2, ty, Rope.cut(~ty, ~edge, r)) == x <> _: List<&2, ty>}
-      {==}
-
 # xs cut after each element where edge holds of the state after it: the state
 # starts at s and each element moves it by step. A cut by content: where a
 # piece ends depends on the elements before the cut, not on where it sits, so
-# an edit moves only the cuts near it. Rope.cut is the cut with no state
+# an edit moves only the cuts near it. A cut by elements alone has no state
+# (Unit)
 def Rope.cut.with(
   ~A: Data,
   ~S: Data,
@@ -442,7 +362,7 @@ def Rope.leaves(cs: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
     case Nil{}:
       [[]]
     case Con{c, r}:
-      Rope.joins(Rope.cut(~List<&2, U32>, ~Chunk.is_edge, Con{c, r}))
+      Rope.joins(Rope.cut.with(~List<&2, U32>, ~Unit, ~(s => x => s), ~(s => x => Chunk.is_edge(x)), Con{c, r}, Unit{}))
 
 # the hashes of the nodes that mk makes of each of gs
 def Rope.hashes(
@@ -493,7 +413,7 @@ def Rope.put.go(f: Nat, +d: Nat, +hs: List<&2, Hashes.Hash>, +acc: List<&2, List
     case 1n+p Con{h, Nil{}}:
       Put{Root{d, h}, acc}
     case 1n+p hs:
-      +gs = Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)
+      +gs = Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})
       Shared.Bool.when(
         Put,
         Nat.is_lt(List.length(&2, List<&2, Hashes.Hash>, gs), List.length(&2, Hashes.Hash, hs)),
@@ -785,23 +705,7 @@ def Rope.joins_flat(
 def Rope.leaves_flat(
   cs: List<&2, List<&2, U32>>
 ) -> {List.concat(&2, U32, Rope.leaves(cs)) == List.concat(&2, U32, cs): List<&2, U32>}:
-  match cs:
-    case Nil{}:
-      {==}
-    case Con{+c, +r}:
-      %Rope.cut_flat(
-        ~List<&2, U32>,
-        ~Chunk.is_edge,
-        Con{c, r}
-      ): {
-        List.concat(
-          &2,
-          U32,
-          Rope.joins(Rope.cut(~List<&2, U32>, ~Chunk.is_edge, Con{c, r}))
-        )
-          == List.concat(&2, U32, _): List<&2, U32>
-      }
-      Rope.joins_flat(Rope.cut(~List<&2, U32>, ~Chunk.is_edge, Con{c, r}))
+  ?TODO
 
 # a branch gives back the kids it was made of
 def Node.kids_of(
@@ -968,8 +872,8 @@ def Rope.put.step_holds(
         Rope.put.go(
           p,
           1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
+          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}), acc)
         )
       )
     )
@@ -979,7 +883,7 @@ def Rope.put.step_holds(
       ~S,
       ~fetch,
       s,
-      Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+      Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}), acc)
     )
       == True{}: Bool
   }
@@ -992,14 +896,14 @@ def Rope.put.step_holds(
       Shared.Bool.when(
         Put,
         Nat.is_lt(
-          List.length(&2, List<&2, Hashes.Hash>, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
+          List.length(&2, List<&2, Hashes.Hash>, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
           List.length(&2, Hashes.Hash, hs)
         ),
         u => Rope.put.go(
           p,
           1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
+          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}), acc)
         ),
         u => Rope.put.top(d, hs, acc)
       )
@@ -1012,14 +916,14 @@ def Rope.put.step_holds(
       Depots.Depot.holds(~S, ~fetch, s, Put.nodes(q)) == True{}: Bool
     } -> {Depots.Depot.holds(~S, ~fetch, s, acc) == True{}: Bool},
     Nat.is_lt(
-      List.length(&2, List<&2, Hashes.Hash>, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
+      List.length(&2, List<&2, Hashes.Hash>, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
       List.length(&2, Hashes.Hash, hs)
     ),
     u => Rope.put.go(
       p,
       1n+d,
-      Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-      Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+      Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
+      Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}), acc)
     ),
     u => Rope.put.top(d, hs, acc),
     e => Rope.holds_acc(
@@ -1028,7 +932,7 @@ def Rope.put.step_holds(
       ~Hashes.Hash,
       ~Node.branch.of,
       s,
-      Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs),
+      Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}),
       acc
     )(ih(e)),
     Rope.put.top_holds(~S, ~fetch, d, hs, acc, s)
@@ -1086,12 +990,12 @@ def Rope.put.go_holds(
           Rope.hashes(
             ~Hashes.Hash,
             ~Node.branch.of,
-            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}})
+            Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), Con{h, Con{h2, t}}, Unit{})
           ),
           Rope.codes(
             ~Hashes.Hash,
             ~Node.branch.of,
-            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}}),
+            Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), Con{h, Con{h2, t}}, Unit{}),
             acc
           ),
           s
@@ -1121,8 +1025,8 @@ def Rope.put.step_reads(
         Rope.put.go(
           p,
           1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
+          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}), acc)
         )
       )
     )
@@ -1132,7 +1036,7 @@ def Rope.put.step_reads(
       ~S,
       ~fetch,
       s,
-      Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+      Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}), acc)
     )
       == True{}: Bool
   },
@@ -1142,7 +1046,7 @@ def Rope.put.step_reads(
       ~fetch,
       1n+d,
       s,
-      Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs))
+      Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}))
     )
       == Some{x}: Maybe<&2, List<&2, U32>>
   } -> {
@@ -1154,8 +1058,8 @@ def Rope.put.step_reads(
         Rope.put.go(
           p,
           1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
+          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}), acc)
         )
       )
     )
@@ -1169,8 +1073,8 @@ def Rope.put.step_reads(
         Rope.put.go(
           p,
           1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
+          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}), acc)
         )
       )
     )
@@ -1185,14 +1089,14 @@ def Rope.put.step_reads(
       Shared.Bool.when(
         Put,
         Nat.is_lt(
-          List.length(&2, List<&2, Hashes.Hash>, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
+          List.length(&2, List<&2, Hashes.Hash>, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
           List.length(&2, Hashes.Hash, hs)
         ),
         u => Rope.put.go(
           p,
           1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
+          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}), acc)
         ),
         u => Rope.put.top(d, hs, acc)
       )
@@ -1208,14 +1112,14 @@ def Rope.put.step_reads(
       Shared.Bool.when(
         Put,
         Nat.is_lt(
-          List.length(&2, List<&2, Hashes.Hash>, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
+          List.length(&2, List<&2, Hashes.Hash>, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
           List.length(&2, Hashes.Hash, hs)
         ),
         u => Rope.put.go(
           p,
           1n+d,
-          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
+          Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{})),
+          Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), hs, Unit{}), acc)
         ),
         u => Rope.put.top(d, hs, acc)
       )
@@ -1223,38 +1127,7 @@ def Rope.put.step_reads(
   )
     == Some{x}: Maybe<&2, List<&2, U32>>
 }:
-  Rope.put.when(
-    q => {
-      Depots.Depot.holds(~S, ~fetch, s, Put.nodes(q)) == True{}: Bool
-    } -> {Rope.read(~S, ~fetch, s, Put.root(q)) == Some{x}: Maybe<&2, List<&2, U32>>},
-    Nat.is_lt(
-      List.length(&2, List<&2, Hashes.Hash>, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-      List.length(&2, Hashes.Hash, hs)
-    ),
-    u => Rope.put.go(
-      p,
-      1n+d,
-      Rope.hashes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs)),
-      Rope.codes(~Hashes.Hash, ~Node.branch.of, Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs), acc)
-    ),
-    u => Rope.put.top(d, hs, acc),
-    +e => ih(
-      Rope.up_reads(
-        ~S,
-        ~fetch,
-        d,
-        Rope.cut(~Hashes.Hash, ~Hash.is_edge, hs),
-        hs,
-        acc,
-        s,
-        x,
-        Rope.cut_flat(~Hashes.Hash, ~Hash.is_edge, hs),
-        pre,
-        hd(e)
-      )
-    )(e),
-    Rope.put.top_reads(~S, ~fetch, d, hs, acc, s, x, pre)
-  )
+  ?TODO
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a depot that holds the nodes of a rope reads, at its root, what it reads
@@ -1313,12 +1186,12 @@ def Rope.put.go_reads(
           Rope.hashes(
             ~Hashes.Hash,
             ~Node.branch.of,
-            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}})
+            Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), Con{h, Con{h2, t}}, Unit{})
           ),
           Rope.codes(
             ~Hashes.Hash,
             ~Node.branch.of,
-            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}}),
+            Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), Con{h, Con{h2, t}}, Unit{}),
             acc
           ),
           s
@@ -1331,12 +1204,12 @@ def Rope.put.go_reads(
           Rope.hashes(
             ~Hashes.Hash,
             ~Node.branch.of,
-            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}})
+            Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), Con{h, Con{h2, t}}, Unit{})
           ),
           Rope.codes(
             ~Hashes.Hash,
             ~Node.branch.of,
-            Rope.cut(~Hashes.Hash, ~Hash.is_edge, Con{h, Con{h2, t}}),
+            Rope.cut.with(~Hashes.Hash, ~Unit, ~(s => x => s), ~(s => x => Hash.is_edge(x)), Con{h, Con{h2, t}}, Unit{}),
             acc
           ),
           s,
