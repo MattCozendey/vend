@@ -5159,6 +5159,385 @@ def Keep.found_back(
         Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, Some{v}, h)
       )
 
+# Logs that keep their keys
+# -------------------------
+# A run whose nodes a ledger l holds keeps, in l, each key that its log holds.
+
+# that the log of the run r reads the value val under key in l, once l holds
+# what r added
+def Keep.Has(
+  -mach: Machine(),
+  -d: Led(mach),
+  -l: Led.L(mach, d),
+  -key: List<&2, U32>,
+  -val: List<&2, U32>,
+  -r: Run<Led.L(mach, d)>
+) -> Type:
+  {Ext.holds(~mach, ~d, l, Run.added(Led.L(mach, d), r)) == True{}: Bool}
+    -> {Tip.get(~mach, ~d, l, Run.tip(Led.L(mach, d), r), key) == Some{val}: Maybe<&2, List<&2, U32>>}
+
+# Keep.Has of the result m of a run, when there is one
+def Keep.Out(
+  -mach: Machine(),
+  -d: Led(mach),
+  -l: Led.L(mach, d),
+  -key: List<&2, U32>,
+  -val: List<&2, U32>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{r2}:
+      Keep.Has(mach, d, l, key, val, r2)
+
+# a key that the log holds is not the key of a write that found nothing there
+def Keep.ne.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +lr: Led.L(mach, d),
+  +t: Tip,
+  +k: List<&2, U32>,
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +a: List<&2, List<&2, U32>>,
+  +bd: Ext.Based(mach, d, l, Run{lr, t, a}),
+  +ha: {Ext.holds(~mach, ~d, l, a) == True{}: Bool},
+  b: Bool,
+  eb: {Shared.List.is_eq(~U32, ~U32.is_eq, k, key) == b: Bool},
+  em: {Tip.find(~mach, ~d, lr, t, k) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  hg: {Tip.get(~mach, ~d, l, t, key) == Some{val}: Maybe<&2, List<&2, U32>>}
+) -> {b == False{}: Bool}:
+  match b:
+    case False{}:
+      {==}
+    case True{}:
+      Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Maybe.none_ne_some(
+          List<&2, U32>,
+          val,
+          Shared.Maybe.some_inj(
+            Maybe<&2, List<&2, U32>>,
+            None{},
+            Some{val},
+            Equal.trans(
+              Maybe<&2, Maybe<&2, List<&2, U32>>>,
+              Some{None{}},
+              Tip.find(~mach, ~d, l, t, key),
+              Some{Some{val}},
+              Equal.sym(
+                Maybe<&2, Maybe<&2, List<&2, U32>>>,
+                Tip.find(~mach, ~d, l, t, key),
+                Some{None{}},
+                Equal.trans(
+                  Maybe<&2, Maybe<&2, List<&2, U32>>>,
+                  Tip.find(~mach, ~d, l, t, key),
+                  Tip.find(~mach, ~d, l, t, k),
+                  Some{None{}},
+                  Equal.cong(
+                    List<&2, U32>,
+                    Maybe<&2, Maybe<&2, List<&2, U32>>>,
+                    z => Tip.find(~mach, ~d, l, t, z),
+                    key,
+                    k,
+                    Equal.sym(
+                      List<&2, U32>,
+                      k,
+                      key,
+                      Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), k, key)(eb)
+                    )
+                  ),
+                  Hist.find(
+                    ~mach,
+                    ~d,
+                    lr,
+                    l,
+                    Tip.log(t),
+                    k,
+                    None{},
+                    Ext.based_grows(~mach, ~d, l, Run{lr, t, a}, bd, ha)
+                  )(em)
+                )
+              ),
+              Keep.found(
+                Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(key),
+                val,
+                hg
+              )
+            )
+          )
+        )
+      )
+
+# after a write that the ledger l holds, the log reads each other key as
+# before, in l (w: the law of the write)
+def Keep.fin.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +t: Tip,
+  +k: List<&2, U32>,
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +x: List<&2, U32>,
+  +e: Trees.Edit,
+  ne: {Shared.List.is_eq(~U32, ~U32.is_eq, k, key) == False{}: Bool},
+  hg: {Tip.get(~mach, ~d, l, t, key) == Some{val}: Maybe<&2, List<&2, U32>>},
+  w: {
+    Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Trees.Edit.root(e))(k)
+      == Trees.Look.of(Some{x}): Trees.Look
+  }
+    & (
+      @k2: List<&2, U32> -> {
+        Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool
+      } -> {
+        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Trees.Edit.root(e))(k2)
+          == Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(k2): Trees.Look
+      }
+    )
+) -> {Tip.get(~mach, ~d, l, Tip.logged(t, Trees.Edit.root(e)), key) == Some{val}: Maybe<&2, List<&2, U32>>}:
+  match w:
+    case Tuple{w1, w2}:
+      %Equal.sym(
+        Maybe<&2, Hashes.Hash>,
+        Tip.log(Tip.logged(t, Trees.Edit.root(e))),
+        Trees.Edit.root(e),
+        Keep.log_logged(t, Trees.Edit.root(e))
+      ): {Tree.get(~mach, ~d, l, _, key) == Some{val}: Maybe<&2, List<&2, U32>>}
+      %Equal.sym(
+        Trees.Look,
+        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Trees.Edit.root(e))(key),
+        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(key),
+        w2(key)(ne)
+      ): {Trees.Look.value(_) == Some{val}: Maybe<&2, List<&2, U32>>}
+      hg
+
+# after a write of an absent key, whose nodes l holds, the log reads key as before
+def Keep.fin(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +lr: Led.L(mach, d),
+  +t: Tip,
+  +a: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +e: Trees.Edit,
+  ep: {Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}) == Some{e}: Maybe<&2, Trees.Edit>},
+  em: {Tip.find(~mach, ~d, lr, t, k) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  +bd: Ext.Based(mach, d, l, Run{lr, t, a}),
+  +hg: {Tip.get(~mach, ~d, l, t, key) == Some{val}: Maybe<&2, List<&2, U32>>},
+  hn: {Ext.holds(~mach, ~d, l, Trees.Edit.nodes(e)) == True{}: Bool},
+  +ha: {Ext.holds(~mach, ~d, l, a) == True{}: Bool}
+) -> {Tip.get(~mach, ~d, l, Tip.logged(t, Trees.Edit.root(e)), key) == Some{val}: Maybe<&2, List<&2, U32>>}:
+  Keep.fin.of(
+    ~mach,
+    ~d,
+    l,
+    t,
+    k,
+    key,
+    val,
+    x,
+    e,
+    Keep.ne.at(
+      ~mach,
+      ~d,
+      l,
+      lr,
+      t,
+      k,
+      key,
+      val,
+      a,
+      bd,
+      ha,
+      Shared.List.is_eq(~U32, ~U32.is_eq, k, key),
+      {==},
+      em,
+      hg
+    ),
+    hg,
+    Hist.write(mach, d)(lr)(l)(Tip.log(t))(k)(Some{x})(e)(ep)(Ext.based_grows(~mach, ~d, l, Run{lr, t, a}, bd, ha))(
+      Ext.held(~mach, ~d, l, e, hn)
+    )
+  )
+
+# a write of an absent key keeps each other key
+def Keep.logged(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +lr: Led.L(mach, d),
+  +t: Tip,
+  +a: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  p: Maybe<&2, Trees.Edit>,
+  ep: {Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}) == p: Maybe<&2, Trees.Edit>},
+  em: {Tip.find(~mach, ~d, lr, t, k) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  +bd: Ext.Based(mach, d, l, Run{lr, t, a}),
+  kh: Keep.Has(mach, d, l, key, val, Run{lr, t, a})
+) -> Keep.Out(mach, d, l, key, val, Run.logged(~mach, ~d, lr, t, a, p)):
+  match p:
+    case None{}:
+      Unit{}
+    case Some{+e}:
+      +hh => Keep.fin(
+        ~mach,
+        ~d,
+        l,
+        lr,
+        t,
+        a,
+        k,
+        x,
+        key,
+        val,
+        e,
+        ep,
+        em,
+        bd,
+        kh(Ext.holds_right(~mach, ~d, l, Trees.Edit.nodes(e), a)(hh)),
+        Ext.holds_left(~mach, ~d, l, Trees.Edit.nodes(e), a)(hh),
+        Ext.holds_right(~mach, ~d, l, Trees.Edit.nodes(e), a)(hh)
+      )
+
+# Run.add.at keeps each other key
+def Keep.add.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  r: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  em: {
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), k) == m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  },
+  bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Run.add.at(~mach, ~d, r, k, x, m)):
+  match r m:
+    case Run{+lr, +t, +a} Some{None{}}:
+      Keep.logged(~mach, ~d, l, key, val, lr, t, a, k, x, Tree.put(~mach, ~d, lr, Tip.log(t), k, Some{x}), {==}, em, bd, kh)
+    case y Some{Some{old}}:
+      Unit{}
+    case y None{}:
+      Unit{}
+
+# Run.add keeps each other key
+def Keep.add(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +k: List<&2, U32>,
+  +x: List<&2, U32>,
+  bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Run.add(~mach, ~d, r, k, x)):
+  Keep.add.at(
+    ~mach,
+    ~d,
+    l,
+    key,
+    val,
+    r,
+    k,
+    x,
+    Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), k),
+    {==},
+    bd,
+    kh
+  )
+
+# a refusal keeps each key
+def Keep.stale(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Step.stale(~mach, ~d, r, i, a)):
+  Keep.add(~mach, ~d, l, key, val, r, Log.out(i), Out.code(Out.Stale{a}, []), bd, kh)
+
+# one request on keeps each key
+def Keep.step_next(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  r: Run<Led.L(mach, d)>,
+  +vs: Maybe<&2, List<&2, String>>,
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Has(mach, d, l, key, val, Run.next(Led.L(mach, d), r, vs)):
+  match r:
+    case Run{lr, +t, a}:
+      hh =>
+        %Equal.sym(Maybe<&2, Hashes.Hash>, Tip.log(Tip.next(t, vs)), Tip.log(t), Keep.log_next(t, vs)): {
+          Tree.get(~mach, ~d, l, _, key) == Some{val}: Maybe<&2, List<&2, U32>>
+        }
+        kh(hh)
+
+# new content keeps each key
+def Keep.over(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  r: Run<Led.L(mach, d)>,
+  +ns: List<&2, List<&2, U32>>,
+  +h: Maybe<&2, Hashes.Hash>,
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Has(mach, d, l, key, val, Run.over(~mach, ~d, r, ns, h)):
+  match r:
+    case Run{lr, +t, +a}:
+      hh =>
+        %Equal.sym(Maybe<&2, Hashes.Hash>, Tip.log(Tip.over(t, h)), Tip.log(t), Keep.log_over(t, h)): {
+          Tree.get(~mach, ~d, l, _, key) == Some{val}: Maybe<&2, List<&2, U32>>
+        }
+        kh(Ext.holds_right(~mach, ~d, l, ns, a)(hh))
+
+# a run then a step that keeps each key keeps each key
+def Keep.bind(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  -key: List<&2, U32>,
+  -val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  g: Run<Led.L(mach, d)> -> Maybe<&2, Run<Led.L(mach, d)>>,
+  hm: Keep.Out(mach, d, l, key, val, m),
+  gm: Ext.GainM(mach, d, l, r, m),
+  bd: Ext.Based(mach, d, l, r),
+  hg: @r1: Run<Led.L(mach, d)> -> Ext.Based(mach, d, l, r1) -> Keep.Has(mach, d, l, key, val, r1)
+    -> Keep.Out(mach, d, l, key, val, g(r1))
+) -> Keep.Out(mach, d, l, key, val, Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, g)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+r1}:
+      hg(r1)(Ext.based(~mach, ~d, l, r, r1, bd, gm))(hm)
+
 # a step lands on the same tip in a later ledger
 def Sim.moved(
   ~mach: Machine(),
