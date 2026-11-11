@@ -2,6 +2,7 @@ import Base
 import ../../shared/replica.bend as Replicas
 import ../../shared/shared/formats.bend as Formats
 import ../../shared/shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/depot.bend as Depots
 import ../../shared/shared/rope.bend as Ropes
 import ../../shared/shared/shared/keyset.bend as KeySets
 import ../../shared/shared/shared/pack.bend as Packs
@@ -520,13 +521,19 @@ def Work.clash(~d: Led(), w: Work<L(d)>, +k: Ledgers.Id, n: Resources.Name) -> M
         Clash.value(Clash.put(n, Clash.names(~d, l, h, k)))
       )
 
-# the act that takes the work m as the content, with the owners vs if any
-def Work.act(-L: Data, vs: Maybe<&2, List<&2, String>>, m: Maybe<&2, Work<L>>) -> Maybe<&2, Replicas.Act>:
+# the act that takes the work m as the content, with the owners vs if any,
+# once each node that the work adds reads back from its ledger: a node whose
+# hash another one holds waits, so what an act writes is what a read finds
+def Work.act(~d: Led(), vs: Maybe<&2, List<&2, String>>, m: Maybe<&2, Work<L(d)>>) -> Maybe<&2, Replicas.Act>:
   match m:
     case None{}:
       None{}
-    case Some{Work{l, h, ns}}:
-      Some{Replicas.Act.Taken{vs, h, ns}}
+    case Some{Work{l, h, +ns}}:
+      Shared.Maybe.when(
+        Replicas.Act,
+        Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, ns),
+        u => Some{Replicas.Act.Taken{vs, h, ns}}
+      )
 
 # what a resolve of the resource n of the merge k, with the content x, does
 # at the tip t: while the clash is open, and once l holds the bytes, the
@@ -546,7 +553,7 @@ def Resolve.act.of(
       Maybe<&2, Replicas.Act>,
       Res.kept(~d, l, new),
       v => Work.act(
-        L(d),
+        ~d,
         None{},
         Maybe.bind(
           &2,
@@ -990,7 +997,7 @@ def Merge.act(
     Maybe<&2, Replicas.Act>,
     List.all.if(u => Tree.kept(~d, l, hb), Tree.kept(~d, l, ht)),
     u => Work.act(
-      L(d),
+      ~d,
       None{},
       Merge.all(
         ~d,
