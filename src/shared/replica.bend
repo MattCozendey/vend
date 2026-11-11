@@ -4891,6 +4891,22 @@ law Line.at_grows:
     l => Line.at(~mach, ~d, ~kern, k, l, c)
   )
 
+def Line.at_grows(mach, d, kern, k, c):
+  +a => +b => +x => later => e => Hist.at(
+    ~mach,
+    ~d,
+    ~kern,
+    ~(x => y => z => Led.later_grows(~mach, ~d, x, y)(z)),
+    ~(x => y => z => Led.later_single(~mach, ~d, x, y)(z)),
+    ~(x => y => c2 => h2 => z => Led.later_last(~mach, ~d, x, y, c2, h2)(z)),
+    k,
+    a,
+    b,
+    later,
+    c,
+    x
+  )(e)
+
 # what a line knows is final: what the log of a line holds under a key, it
 # holds for good, as the ledger grows and while its ballots are honest. An
 # outcome, a taken request, a label and the first tip of a sub line are each
@@ -4907,6 +4923,22 @@ law Line.get_grows:
     List<&2, U32>,
     l => Line.get(~mach, ~d, ~kern, l, c, key)
   )
+
+def Line.get_grows(mach, d, kern, c, key):
+  +a => +b => +x => later => e => Hist.get(
+    ~mach,
+    ~d,
+    ~kern,
+    ~(x => y => z => Led.later_grows(~mach, ~d, x, y)(z)),
+    ~(x => y => z => Led.later_single(~mach, ~d, x, y)(z)),
+    ~(x => y => c2 => h2 => z => Led.later_last(~mach, ~d, x, y, c2, h2)(z)),
+    a,
+    b,
+    later,
+    c,
+    key,
+    x
+  )(e)
 
 # a step gives each of its requests an outcome: after a run, the log holds an
 # outcome of the ID of each request of the step
