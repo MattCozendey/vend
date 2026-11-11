@@ -7487,19 +7487,45 @@ def Merge.keys_def(
   ): {Maybe.default(&2, List<&2, List<&2, U32>>, _, []) == ks: List<&2, List<&2, U32>>}
   {==}
 
-# Merge.takes_final once the act of the merge is known to be of a work
-def Merge.takes_acted(
+# what a merge that gives an act has gone through: from the keys of the
+# difference ks, the work W that it ends in, whose root is h2 and whose nodes
+# are ns
+def Merge.Facts.work(
   ~d: Led(),
   +l: L(d),
   +hb: Maybe<&2, Hashes.Hash>,
   +ho: Maybe<&2, Hashes.Hash>,
   +ht: Maybe<&2, Hashes.Hash>,
   +k: Ledgers.Id,
-  +n: Resources.Name,
-  +b: Maybe<&2, Requests.Res>,
-  +o: Maybe<&2, Requests.Res>,
-  +th: Maybe<&2, Requests.Res>,
-  +x: Maybe<&2, Requests.Res>,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +ks: List<&2, List<&2, U32>>,
+  W: Work<L(d)>
+) -> Data:
+  Merge.And({Merge.all(~d, l, hb, ho, ht, k, ks, Some{Work{l, ho, []}}) == Some{W}: Maybe<&2, Work<L(d)>>}, Merge.And({Merge.root(~d, W) == h2: Maybe<&2, Hashes.Hash>}, Merge.And({Merge.nodes(~d, W) == ns: List<&2, List<&2, U32>>}, Merge.And({Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, ho, ht) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>}, Merge.Held(~d, Merge.ledger(~d, W), Merge.nodes(~d, W))))))
+
+# what a merge that gives an act has gone through
+def Merge.Facts(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>
+) -> Data:
+  Sigma<&2, &2, List<&2, List<&2, U32>>, ks => Sigma<&2, &2, Work<L(d)>, W => Merge.Facts.work(~d, l, hb, ho, ht, k, h2, ns, ks, W)>>
+
+# what a merge has gone through, once the act of the merge is known to be of a
+# work
+def Merge.facts_acted(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
   +ks: List<&2, List<&2, U32>>,
   +h2: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, List<&2, U32>>,
@@ -7518,62 +7544,39 @@ def Merge.takes_acted(
     h2,
     ns
   ),
-  +hb0: {Res.find(~d, l, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +ho0: {Res.find(~d, l, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +ht0: {Res.find(~d, l, ht, n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +hp: {Pick.merge(~d, l, b, o, th) == Some{Pick.Take{x}}: Maybe<&2, Pick>},
   +ediff: {Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, ho, ht) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>}
-) -> {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{x}: Maybe<&2, Maybe<&2, Requests.Res>>}:
+) -> Merge.Facts(~d, l, hb, ho, ht, k, h2, ns):
   (+W, st) = acted
   (+eall0, st2) = st
   (+eroot, st3) = st2
   (+enodes, held) = st3
-  Merge.takes_final(
-    ~d,
-    l,
-    hb,
-    ho,
-    ht,
-    k,
-    n,
-    b,
-    o,
-    th,
-    x,
+  (
     ks,
-    W,
-    h2,
-    ns,
-    %Merge.keys_def(~d, l, ho, ht, ks, ediff): {
-      Merge.all(~d, l, hb, ho, ht, k, _, Some{Work{l, ho, []}}) == Some{W}: Maybe<&2, Work<L(d)>>
-    }
-    eall0,
-    eroot,
-    enodes,
-    held,
-    hb0,
-    ho0,
-    ht0,
-    hp,
-    ediff
+    (
+      W,
+      (
+        %Merge.keys_def(~d, l, ho, ht, ks, ediff): {
+          Merge.all(~d, l, hb, ho, ht, k, _, Some{Work{l, ho, []}}) == Some{W}: Maybe<&2, Work<L(d)>>
+        }
+        eall0,
+        (eroot, (enodes, (ediff, held)))
+      )
+    )
   )
+
 # the bindings that a tree lists whole
 def Merge.Listed(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>) -> Data:
   Sigma<&2, &2, List<&2, Trees.Binding>, bs => {Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>}>
 
-# Merge.takes_acted once the difference of the trees is known to be there (md)
-def Merge.takes_ks(
+# what a merge has gone through, once the difference of the trees is known to be
+# there (md)
+def Merge.facts_ks(
   ~d: Led(),
   +l: L(d),
   +hb: Maybe<&2, Hashes.Hash>,
   +ho: Maybe<&2, Hashes.Hash>,
   +ht: Maybe<&2, Hashes.Hash>,
   +k: Ledgers.Id,
-  +n: Resources.Name,
-  +b: Maybe<&2, Requests.Res>,
-  +o: Maybe<&2, Requests.Res>,
-  +th: Maybe<&2, Requests.Res>,
-  +x: Maybe<&2, Requests.Res>,
   +h2: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, List<&2, U32>>,
   md: Maybe<&2, List<&2, List<&2, U32>>>,
@@ -7593,34 +7596,22 @@ def Merge.takes_ks(
     ),
     h2,
     ns
-  ),
-  +hb0: {Res.find(~d, l, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +ho0: {Res.find(~d, l, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +ht0: {Res.find(~d, l, ht, n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +hp: {Pick.merge(~d, l, b, o, th) == Some{Pick.Take{x}}: Maybe<&2, Pick>}
-) -> {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{x}: Maybe<&2, Maybe<&2, Requests.Res>>}:
+  )
+) -> Merge.Facts(~d, l, hb, ho, ht, k, h2, ns):
   match md:
     case None{}:
-      Empty.absurd(
-        {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{x}: Maybe<&2, Maybe<&2, Requests.Res>>},
-        Shared.Bool.false_ne_true(hs)
-      )
+      Empty.absurd(Merge.Facts(~d, l, hb, ho, ht, k, h2, ns), Shared.Bool.false_ne_true(hs))
     case Some{+ks}:
-      Merge.takes_acted(~d, l, hb, ho, ht, k, n, b, o, th, x, ks, h2, ns, acted, hb0, ho0, ht0, hp, emd)
+      Merge.facts_acted(~d, l, hb, ho, ht, k, ks, h2, ns, acted, emd)
 
-# Merge.takes_ks once the two trees are known to list whole
-def Merge.takes_r2(
+# what a merge has gone through, once the two trees are known to list whole
+def Merge.facts_r2(
   ~d: Led(),
   +l: L(d),
   +hb: Maybe<&2, Hashes.Hash>,
   +ho: Maybe<&2, Hashes.Hash>,
   +ht: Maybe<&2, Hashes.Hash>,
   +k: Ledgers.Id,
-  +n: Resources.Name,
-  +b: Maybe<&2, Requests.Res>,
-  +o: Maybe<&2, Requests.Res>,
-  +th: Maybe<&2, Requests.Res>,
-  +x: Maybe<&2, Requests.Res>,
   +h2: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, List<&2, U32>>,
   r1: Merge.Listed(~d, l, ho),
@@ -7639,26 +7630,17 @@ def Merge.takes_r2(
     ),
     h2,
     ns
-  ),
-  +hb0: {Res.find(~d, l, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +ho0: {Res.find(~d, l, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +ht0: {Res.find(~d, l, ht, n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +hp: {Pick.merge(~d, l, b, o, th) == Some{Pick.Take{x}}: Maybe<&2, Pick>}
-) -> {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{x}: Maybe<&2, Maybe<&2, Requests.Res>>}:
+  )
+) -> Merge.Facts(~d, l, hb, ho, ht, k, h2, ns):
   (+bs1, e1) = r1
   (+bs2, e2) = r2
-  Merge.takes_ks(
+  Merge.facts_ks(
     ~d,
     l,
     hb,
     ho,
     ht,
     k,
-    n,
-    b,
-    o,
-    th,
-    x,
     h2,
     ns,
     Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, ho, ht),
@@ -7675,11 +7657,7 @@ def Merge.takes_r2(
       e1,
       e2
     ),
-    acted,
-    hb0,
-    ho0,
-    ht0,
-    hp
+    acted
   )
 
 # the act of a merge is the act once its trees are checked
@@ -7739,9 +7717,8 @@ def Merge.act_go_of(
     e0
   )
 
-# a merge that gives an act, and whose pick of a resource takes a side, gives a
-# tree that reads the resource as that side
-def Merge.takes_go(
+# what a merge that gives an act has gone through
+def Merge.facts_go(
   ~d: Led(),
   +l: L(d),
   +t: Replicas.Tip,
@@ -7751,29 +7728,15 @@ def Merge.takes_go(
   +vs: Maybe<&2, List<&2, String>>,
   +h2: Maybe<&2, Hashes.Hash>,
   +ns: List<&2, List<&2, U32>>,
-  +n: Resources.Name,
-  +b: Maybe<&2, Requests.Res>,
-  +o: Maybe<&2, Requests.Res>,
-  +th: Maybe<&2, Requests.Res>,
-  +x: Maybe<&2, Requests.Res>,
-  +e0: {Merge.act(~d, l, t, k, from, base) == Some{Replicas.Act.Taken{vs, h2, ns}}: Maybe<&2, Replicas.Act>},
-  +hb0: {Res.find(~d, l, Base.tree(base), n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +ho0: {Res.find(~d, l, Replicas.Tip.content(t), n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +ht0: {Res.find(~d, l, Source.root(from), n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
-  +hp: {Pick.merge(~d, l, b, o, th) == Some{Pick.Take{x}}: Maybe<&2, Pick>}
-) -> {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{x}: Maybe<&2, Maybe<&2, Requests.Res>>}:
-  Merge.takes_r2(
+  +e0: {Merge.act(~d, l, t, k, from, base) == Some{Replicas.Act.Taken{vs, h2, ns}}: Maybe<&2, Replicas.Act>}
+) -> Merge.Facts(~d, l, Base.tree(base), Replicas.Tip.content(t), Source.root(from), k, h2, ns):
+  Merge.facts_r2(
     ~d,
     l,
     Base.tree(base),
     Replicas.Tip.content(t),
     Source.root(from),
     k,
-    n,
-    b,
-    o,
-    th,
-    x,
     h2,
     ns,
     Merge.kept_range(
@@ -7868,13 +7831,83 @@ def Merge.takes_go(
           == Some{Replicas.Act.Taken{vs, h2, ns}}: Maybe<&2, Replicas.Act>
       }
       Merge.act_go_of(~d, l, t, k, from, base, vs, h2, ns, e0)
-    ),
+    )
+  )
+
+# a merge whose pick of a resource takes a side, once it is known what it has
+# gone through, gives a tree that reads the resource as that side
+def Merge.takes_facts(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +th: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  fs: Merge.Facts(~d, l, hb, ho, ht, k, h2, ns),
+  +hb0: {Res.find(~d, l, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, ht, n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hp: {Pick.merge(~d, l, b, o, th) == Some{Pick.Take{x}}: Maybe<&2, Pick>}
+) -> {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{x}: Maybe<&2, Maybe<&2, Requests.Res>>}:
+  (+ks, r1) = fs
+  (+W, r2) = r1
+  (+eall, r3) = r2
+  (+eroot, r4) = r3
+  (+enodes, r5) = r4
+  (+ediff, held) = r5
+  Merge.takes_final(~d, l, hb, ho, ht, k, n, b, o, th, x, ks, W, h2, ns, eall, eroot, enodes, held, hb0, ho0, ht0, hp, ediff)
+
+# a merge that gives an act, and whose pick of a resource takes a side, gives a
+# tree that reads the resource as that side
+def Merge.takes_go(
+  ~d: Led(),
+  +l: L(d),
+  +t: Replicas.Tip,
+  +k: Ledgers.Id,
+  +from: Requests.Source,
+  +base: Maybe<&2, Requests.Source>,
+  +vs: Maybe<&2, List<&2, String>>,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +th: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  +e0: {Merge.act(~d, l, t, k, from, base) == Some{Replicas.Act.Taken{vs, h2, ns}}: Maybe<&2, Replicas.Act>},
+  +hb0: {Res.find(~d, l, Base.tree(base), n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, Replicas.Tip.content(t), n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, Source.root(from), n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hp: {Pick.merge(~d, l, b, o, th) == Some{Pick.Take{x}}: Maybe<&2, Pick>}
+) -> {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{x}: Maybe<&2, Maybe<&2, Requests.Res>>}:
+  Merge.takes_facts(
+    ~d,
+    l,
+    Base.tree(base),
+    Replicas.Tip.content(t),
+    Source.root(from),
+    k,
+    h2,
+    ns,
+    n,
+    b,
+    o,
+    th,
+    x,
+    Merge.facts_go(~d, l, t, k, from, base, vs, h2, ns, e0),
     hb0,
     ho0,
     ht0,
     hp
   )
-# TMP-BEGIN
+
 # the pick of the merge of a resource, as the premises say, gave the work W1
 def Merge.one_pick(
   ~d: Led(),
@@ -9670,7 +9703,358 @@ def Merge.all_inv(
         Merge.all_step(~d, l, hb, ho, ht, k, x, rest, Work{lc, hc, P}, Work{lf, hf, N}, e),
         lc1 => hc1 => P1 => e1 => wc1 => inv1 => Merge.all_inv(~d, l, hb, ho, ht, k, n, b0, o0, t0, v, rest, lc1, hc1, P1, lf, hf, N, e1, wc1, wf, held, hb0, ho0, ht0, hpc, inv1)
       )
-# TMP-END
+# a clash that is open after all the keys of a merge, or whose key is among no
+# keys, is open
+def Merge.open_final(
+  ~d: Led(),
+  +lf: L(d),
+  +hf: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +k: Ledgers.Id,
+  orr: Merge.Open(~d, lf, hf, n, k, [])
+) -> {Clash.open(~d, lf, hf, n, k) == Some{True{}}: Maybe<&2, Bool>}:
+  match orr:
+    case Merge.Or.Left{+op}:
+      op
+    case Merge.Or.Right{+c}:
+      Empty.absurd({Clash.open(~d, lf, hf, n, k) == Some{True{}}: Maybe<&2, Bool>}, Shared.Bool.false_ne_true(c))
+
+# a merge that keeps a resource as the value mo, and opens its clash, gives a
+# tree that reads the resource that mo holds, and has the clash open
+def Merge.clashes_inv(
+  ~d: Led(),
+  +lf: L(d),
+  +hf: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +k: Ledgers.Id,
+  +o: Maybe<&2, Requests.Res>,
+  +mo: Maybe<&2, List<&2, U32>>,
+  eo2: {Res.found(mo) == o: Maybe<&2, Requests.Res>},
+  inv: Merge.Inv(~d, lf, hf, n, k, mo, [])
+) -> Merge.And(
+  {Res.find(~d, lf, hf, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  {Clash.open(~d, lf, hf, n, k) == Some{True{}}: Maybe<&2, Bool>}
+):
+  (+fin, orr) = inv
+  (
+    %eo2: {Res.find(~d, lf, hf, n) == Some{_}: Maybe<&2, Maybe<&2, Requests.Res>>}
+    Merge.find_res(~d, lf, hf, n, mo, fin),
+    Merge.open_final(~d, lf, hf, n, k, orr)
+  )
+
+# the merge of the keys of a difference, among which is the key of a resource
+# whose pick clashes, once the read of ours is known (fo)
+def Merge.clashes_core.at(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +th: Maybe<&2, Requests.Res>,
+  +ks: List<&2, List<&2, U32>>,
+  +lf: L(d),
+  +hf: Maybe<&2, Hashes.Hash>,
+  +N: List<&2, List<&2, U32>>,
+  +eall: {Merge.all(~d, l, hb, ho, ht, k, ks, Some{Work{l, ho, []}}) == Some{Work{lf, hf, N}}: Maybe<&2, Work<L(d)>>},
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes([], N),
+  +hb0: {Res.find(~d, l, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, ht, n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hpc: {Pick.merge(~d, l, b, o, th) == Some{Pick.Clash{}}: Maybe<&2, Pick>},
+  +hin: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, Key.res(n)) == True{}: Bool},
+  fo: Merge.Found(~d, l, ho, n, o)
+) -> Merge.And(
+  {Res.find(~d, lf, hf, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  {Clash.open(~d, lf, hf, n, k) == Some{True{}}: Maybe<&2, Bool>}
+):
+  (+mo, r1) = fo
+  (+eo1, +eo2) = r1
+  Merge.clashes_inv(
+    ~d,
+    lf,
+    hf,
+    n,
+    k,
+    o,
+    mo,
+    eo2,
+    Merge.all_inv(
+      ~d,
+      l,
+      hb,
+      ho,
+      ht,
+      k,
+      n,
+      b,
+      o,
+      th,
+      mo,
+      ks,
+      l,
+      ho,
+      [],
+      lf,
+      hf,
+      N,
+      eall,
+      {==},
+      wf,
+      held,
+      hb0,
+      ho0,
+      ht0,
+      hpc,
+      (
+        Replicas.Hist.find(~Requests.Ask.machine(), ~d, l, lf, ho, Key.res(n), mo, Merge.grows_of(~d, l, l, lf, [], N, {==}, wf, nd))(eo1),
+        Merge.Or.Right{hin}
+      )
+    )
+  )
+
+# the merge of the keys of a difference, among which is the key of a resource
+# whose pick clashes
+def Merge.clashes_core(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +th: Maybe<&2, Requests.Res>,
+  +ks: List<&2, List<&2, U32>>,
+  +lf: L(d),
+  +hf: Maybe<&2, Hashes.Hash>,
+  +N: List<&2, List<&2, U32>>,
+  +eall: {Merge.all(~d, l, hb, ho, ht, k, ks, Some{Work{l, ho, []}}) == Some{Work{lf, hf, N}}: Maybe<&2, Work<L(d)>>},
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes([], N),
+  +hb0: {Res.find(~d, l, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, ht, n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hpc: {Pick.merge(~d, l, b, o, th) == Some{Pick.Clash{}}: Maybe<&2, Pick>},
+  +ediff: {Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, ho, ht) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>}
+) -> Merge.And(
+  {Res.find(~d, lf, hf, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  {Clash.open(~d, lf, hf, n, k) == Some{True{}}: Maybe<&2, Bool>}
+):
+  Merge.clashes_core.at(
+    ~d,
+    l,
+    hb,
+    ho,
+    ht,
+    k,
+    n,
+    b,
+    o,
+    th,
+    ks,
+    lf,
+    hf,
+    N,
+    eall,
+    wf,
+    held,
+    nd,
+    hb0,
+    ho0,
+    ht0,
+    hpc,
+    Merge.clash_in_diff(
+      ~d,
+      l,
+      ho,
+      ht,
+      n,
+      ks,
+      o,
+      th,
+      ediff,
+      Merge.clash_diff(~d, l, b, o, th, hpc),
+      Merge.find_some(~d, l, ho, n, o, ho0),
+      Merge.find_some(~d, l, ht, n, th, ht0)
+    ),
+    Merge.find_some(~d, l, ho, n, o, ho0)
+  )
+
+# the merge of a resource whose pick clashes, as the work that the merge ends
+# in, keeps ours and opens the clash in the ledger of its nodes
+def Merge.clashes_final(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +th: Maybe<&2, Requests.Res>,
+  +ks: List<&2, List<&2, U32>>,
+  W: Work<L(d)>,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +eall: {Merge.all(~d, l, hb, ho, ht, k, ks, Some{Work{l, ho, []}}) == Some{W}: Maybe<&2, Work<L(d)>>},
+  +eroot: {Merge.root(~d, W) == h2: Maybe<&2, Hashes.Hash>},
+  +enodes: {Merge.nodes(~d, W) == ns: List<&2, List<&2, U32>>},
+  +held: Merge.Held(~d, Merge.ledger(~d, W), Merge.nodes(~d, W)),
+  +hb0: {Res.find(~d, l, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, ht, n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hpc: {Pick.merge(~d, l, b, o, th) == Some{Pick.Clash{}}: Maybe<&2, Pick>},
+  +ediff: {Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, ho, ht) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>}
+) -> Merge.And(
+  {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  {Clash.open(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n, k) == Some{True{}}: Maybe<&2, Bool>}
+):
+  match W:
+    case Work{+lf, +hf, +N}:
+      %enodes: Merge.And(
+        {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, _, l), h2, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+        {Clash.open(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, _, l), h2, n, k) == Some{True{}}: Maybe<&2, Bool>}
+      )
+      %eroot: Merge.And(
+        {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, N, l), _, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+        {Clash.open(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, N, l), _, n, k) == Some{True{}}: Maybe<&2, Bool>}
+      )
+      %Merge.And.left(
+        Merge.Puts(~d, l, lf, N),
+        Merge.Nodes([], N),
+        Merge.all_puts(~d, l, hb, ho, ht, k, ks, l, ho, [], lf, hf, N, eall, {==})
+      ): Merge.And(
+        {Res.find(~d, _, hf, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+        {Clash.open(~d, _, hf, n, k) == Some{True{}}: Maybe<&2, Bool>}
+      )
+      Merge.clashes_core(
+        ~d,
+        l,
+        hb,
+        ho,
+        ht,
+        k,
+        n,
+        b,
+        o,
+        th,
+        ks,
+        lf,
+        hf,
+        N,
+        eall,
+        Merge.And.left(
+          Merge.Puts(~d, l, lf, N),
+          Merge.Nodes([], N),
+          Merge.all_puts(~d, l, hb, ho, ht, k, ks, l, ho, [], lf, hf, N, eall, {==})
+        ),
+        held,
+        Merge.And.right(
+          Merge.Puts(~d, l, lf, N),
+          Merge.Nodes([], N),
+          Merge.all_puts(~d, l, hb, ho, ht, k, ks, l, ho, [], lf, hf, N, eall, {==})
+        ),
+        hb0,
+        ho0,
+        ht0,
+        hpc,
+        ediff
+      )
+
+# a merge that gives an act, and whose pick of a resource clashes, once it is
+# known what it has gone through, keeps ours, and opens the clash
+def Merge.clashes_facts(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +th: Maybe<&2, Requests.Res>,
+  fs: Merge.Facts(~d, l, hb, ho, ht, k, h2, ns),
+  +hb0: {Res.find(~d, l, hb, n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, ho, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, ht, n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hpc: {Pick.merge(~d, l, b, o, th) == Some{Pick.Clash{}}: Maybe<&2, Pick>}
+) -> Merge.And(
+  {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  {Clash.open(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n, k) == Some{True{}}: Maybe<&2, Bool>}
+):
+  (+ks, r1) = fs
+  (+W, r2) = r1
+  (+eall, r3) = r2
+  (+eroot, r4) = r3
+  (+enodes, r5) = r4
+  (+ediff, held) = r5
+  Merge.clashes_final(~d, l, hb, ho, ht, k, n, b, o, th, ks, W, h2, ns, eall, eroot, enodes, held, hb0, ho0, ht0, hpc, ediff)
+
+# the pair of two Data
+def Merge.to_pair(-A: Data, -B: Data, p: Merge.And(A, B)) -> A & B:
+  match p:
+    case Tuple{a, b}:
+      (a, b)
+# a merge that gives an act, and whose pick of a resource clashes, keeps ours
+# for it, and opens its clash
+def Merge.clashes_go(
+  ~d: Led(),
+  +l: L(d),
+  +t: Replicas.Tip,
+  +k: Ledgers.Id,
+  +from: Requests.Source,
+  +base: Maybe<&2, Requests.Source>,
+  +vs: Maybe<&2, List<&2, String>>,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +n: Resources.Name,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +th: Maybe<&2, Requests.Res>,
+  +e0: {Merge.act(~d, l, t, k, from, base) == Some{Replicas.Act.Taken{vs, h2, ns}}: Maybe<&2, Replicas.Act>},
+  +hb0: {Res.find(~d, l, Base.tree(base), n) == Some{b}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, Replicas.Tip.content(t), n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, Source.root(from), n) == Some{th}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hpc: {Pick.merge(~d, l, b, o, th) == Some{Pick.Clash{}}: Maybe<&2, Pick>}
+) -> {
+  Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>
+}
+  & {Clash.open(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n, k) == Some{True{}}: Maybe<&2, Bool>}:
+  Merge.to_pair(
+    {Res.find(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>},
+    {Clash.open(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n, k) == Some{True{}}: Maybe<&2, Bool>},
+    Merge.clashes_facts(
+      ~d,
+      l,
+      Base.tree(base),
+      Replicas.Tip.content(t),
+      Source.root(from),
+      k,
+      h2,
+      ns,
+      n,
+      b,
+      o,
+      th,
+      Merge.facts_go(~d, l, t, k, from, base, vs, h2, ns, e0),
+      hb0,
+      ho0,
+      ht0,
+      hpc
+    )
+  )
 
 # a merge never loses a change that only one side made: when the merge of a
 # resource takes the content of one side (Pick.merge: theirs when ours is the
@@ -9739,6 +10123,9 @@ law Merge.act_clashes:
           Clash.open(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), h2, n, k) == Some{True{}}: Maybe<&2, Bool>
         }
     )
+
+def Merge.act_clashes(d, l, t, k, from, base, vs, h2, ns, n, b, o, th):
+  e0 => hb0 => ho0 => ht0 => hpc => Merge.clashes_go(~d, l, t, k, from, base, vs, h2, ns, n, b, o, th, e0, hb0, ho0, ht0, hpc)
 
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
