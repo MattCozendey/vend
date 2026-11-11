@@ -5922,6 +5922,338 @@ def Safe.decide_kept(
     )
   )
 
+# a cell that counts for the step v holds v
+def Safe.hit_value(m: Maybe<&2, Cells.Cell<Ledgers.Step>>, +v: Ledgers.Step) -> {
+  Quorums.Quorum.hit(~Ledgers.Step, ~Ledgers.Step.is_eq, m, v) == True{}: Bool
+} -> {Cells.Cell.value(Ledgers.Step, m) == Some{v}: Maybe<&2, Ledgers.Step>}:
+  match m:
+    case Some{Cells.One{+x}}:
+      h => Equal.cong(Ledgers.Step, Maybe<&2, Ledgers.Step>, z => Some{z}, x, v, Ledgers.Step.is_eq_sound(x, v)(h))
+    case Some{Cells.Many{}}:
+      h => Empty.absurd({None{} == Some{v}: Maybe<&2, Ledgers.Step>}, Shared.Bool.false_ne_true(h))
+    case None{}:
+      h => Empty.absurd({None{} == Some{v}: Maybe<&2, Ledgers.Step>}, Shared.Bool.false_ne_true(h))
+
+# the last vote m is of the round r1 or later, and for v1 when of r1
+def Safe.after(m: Maybe<&2, Ledgers.Last>, +r1: Nat, v1: Ledgers.Step) -> Bool:
+  match m:
+    case Some{Ledgers.Last{+t, x}}:
+      List.all.if(
+        u => List.any.if(u2 => Ledgers.Step.is_eq(x, v1), Bool.not(Nat.is_eq(t, r1))),
+        Nat.is_le(r1, t)
+      )
+    case None{}:
+      False{}
+
+# no number is below 0
+def Safe.lt_zero(a: Nat) -> {Nat.is_lt(a, 0n) == False{}: Bool}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
+
+# a number at most 0 is 0
+def Safe.le_zero_eq(a: Nat) -> {Nat.is_le(a, 0n) == True{}: Bool} -> {a == 0n: Nat}:
+  match a:
+    case 0n:
+      h => {==}
+    case 1n+p:
+      h => Empty.absurd({1n+p == 0n: Nat}, Shared.Bool.false_ne_true(h))
+
+# a number at most b, and not b, is below b
+def Safe.le_ne_lt(a: Nat, b: Nat) -> {Nat.is_le(a, b) == True{}: Bool}
+  -> {Nat.is_eq(a, b) == False{}: Bool}
+  -> {Nat.is_lt(a, b) == True{}: Bool}:
+  match a b:
+    case 0n 0n:
+      h1 => h2 => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.true_ne_false(h2))
+    case 0n 1n+q:
+      h1 => h2 => {==}
+    case 1n+p 0n:
+      h1 => h2 => h1
+    case 1n+p 1n+q:
+      Safe.le_ne_lt(p, q)
+
+# Safe.mine when the voter cast no vote in the round k, once it is known
+# whether k is r1 (eb)
+def Safe.mine.none(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +n: String,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +k: Nat,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  -rest: Maybe<&2, Ledgers.Last>,
+  eb: Bool,
+  ee: {Nat.is_eq(r1, k) == eb: Bool},
+  em: {Led.voted(~mach, ~d, l, Ledgers.Place{c, h, k}, n) == None{}: Maybe<&2, Ledgers.Step>},
+  hv: {Led.voted(~mach, ~d, l, Ledgers.Place{c, h, r1}, n) == Some{v1}: Maybe<&2, Ledgers.Step>},
+  ih: {Nat.is_eq(r1, k) == False{}: Bool} -> {Safe.after(rest, r1, v1) == True{}: Bool}
+) -> {Safe.after(rest, r1, v1) == True{}: Bool}:
+  match eb:
+    case True{}:
+      Empty.absurd(
+        {Safe.after(rest, r1, v1) == True{}: Bool},
+        Shared.Maybe.none_ne_some(
+          Ledgers.Step,
+          v1,
+          Equal.trans(
+            Maybe<&2, Ledgers.Step>,
+            None{},
+            Led.voted(~mach, ~d, l, Ledgers.Place{c, h, k}, n),
+            Some{v1},
+            Equal.sym(Maybe<&2, Ledgers.Step>, Led.voted(~mach, ~d, l, Ledgers.Place{c, h, k}, n), None{}, em),
+            %Shared.Nat.is_eq_sound(r1, k)(ee): {Led.voted(~mach, ~d, l, Ledgers.Place{c, h, _}, n) == Some{v1}: Maybe<&2, Ledgers.Step>}
+            hv
+          )
+        )
+      )
+    case False{}:
+      ih(ee)
+
+# Safe.mine when the voter cast y in the round k, once it is known whether k
+# is r1 (eb)
+def Safe.mine.some(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +n: String,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +k: Nat,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  +y: Ledgers.Step,
+  eb: Bool,
+  ee: {Nat.is_eq(k, r1) == eb: Bool},
+  em: {Led.voted(~mach, ~d, l, Ledgers.Place{c, h, k}, n) == Some{y}: Maybe<&2, Ledgers.Step>},
+  hv: {Led.voted(~mach, ~d, l, Ledgers.Place{c, h, r1}, n) == Some{v1}: Maybe<&2, Ledgers.Step>}
+) -> {List.any.if(u2 => Ledgers.Step.is_eq(y, v1), Bool.not(eb)) == True{}: Bool}:
+  match eb:
+    case True{}:
+      %Shared.Maybe.some_inj(
+        Ledgers.Step,
+        y,
+        v1,
+        Equal.trans(
+          Maybe<&2, Ledgers.Step>,
+          Some{y},
+          Led.voted(~mach, ~d, l, Ledgers.Place{c, h, k}, n),
+          Some{v1},
+          Equal.sym(Maybe<&2, Ledgers.Step>, Led.voted(~mach, ~d, l, Ledgers.Place{c, h, k}, n), Some{y}, em),
+          %Equal.sym(Nat, k, r1, Shared.Nat.is_eq_sound(k, r1)(ee)): {Led.voted(~mach, ~d, l, Ledgers.Place{c, h, _}, n) == Some{v1}: Maybe<&2, Ledgers.Step>}
+          hv
+        )
+      ): {Ledgers.Step.is_eq(y, _) == True{}: Bool}
+      Ledgers.Step.is_eq_refl(y)
+    case False{}:
+      {==}
+
+# Safe.mine once the vote m of the voter in the round k is known
+def Safe.mine.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +n: String,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +k: Nat,
+  +r1: Nat,
+  +v1: Ledgers.Step,
+  m: Maybe<&2, Ledgers.Step>,
+  em: {Led.voted(~mach, ~d, l, Ledgers.Place{c, h, k}, n) == m: Maybe<&2, Ledgers.Step>},
+  +hv: {Led.voted(~mach, ~d, l, Ledgers.Place{c, h, r1}, n) == Some{v1}: Maybe<&2, Ledgers.Step>},
+  hle: {Nat.is_le(r1, k) == True{}: Bool},
+  -rest: Unit -> Maybe<&2, Ledgers.Last>,
+  ih: {Nat.is_eq(r1, k) == False{}: Bool} -> {Safe.after(rest(Unit{}), r1, v1) == True{}: Bool}
+) -> {Safe.after(Last.or(k, m, rest), r1, v1) == True{}: Bool}:
+  match m:
+    case Some{+y}:
+      Shared.List.all.if_both(
+        Nat.is_le(r1, k),
+        u => List.any.if(u2 => Ledgers.Step.is_eq(y, v1), Bool.not(Nat.is_eq(k, r1)))
+      )(hle)(Safe.mine.some(~mach, ~d, n, l, c, h, k, r1, v1, y, Nat.is_eq(k, r1), {==}, em, hv))
+    case None{}:
+      Safe.mine.none(~mach, ~d, n, l, c, h, k, r1, v1, rest(Unit{}), Nat.is_eq(r1, k), {==}, em, hv, ih)
+
+# the last vote of a voter up to the round k, when it cast v1 in a round r1
+# up to k, is of r1 or later, and for v1 when of r1
+def Safe.mine(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +n: String,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +h: U32,
+  k: Nat,
+  +r1: Nat,
+  +v1: Ledgers.Step
+) -> {Led.voted(~mach, ~d, l, Ledgers.Place{c, h, r1}, n) == Some{v1}: Maybe<&2, Ledgers.Step>}
+  -> {Nat.is_le(r1, k) == True{}: Bool}
+  -> {Safe.after(Last.mine(~mach, ~d, n, l, c, h, k), r1, v1) == True{}: Bool}:
+  match k:
+    case 0n:
+      +hv => +hle => Safe.mine.at(
+        ~mach,
+        ~d,
+        n,
+        l,
+        c,
+        h,
+        0n,
+        r1,
+        v1,
+        Led.voted(~mach, ~d, l, Ledgers.Place{c, h, 0n}, n),
+        {==},
+        hv,
+        hle,
+        u => None{},
+        ne => Empty.absurd(
+          {Safe.after(None{}, r1, v1) == True{}: Bool},
+          Shared.Bool.true_ne_false(
+            %Safe.le_zero_eq(r1)(hle): {Nat.is_eq(_, 0n) == False{}: Bool}
+            ne
+          )
+        )
+      )
+    case 1n+(+p):
+      +hv => +hle => Safe.mine.at(
+        ~mach,
+        ~d,
+        n,
+        l,
+        c,
+        h,
+        1n+p,
+        r1,
+        v1,
+        Led.voted(~mach, ~d, l, Ledgers.Place{c, h, 1n+p}, n),
+        {==},
+        hv,
+        hle,
+        u => Last.mine(~mach, ~d, n, l, c, h, p),
+        ne => Safe.mine(~mach, ~d, n, l, c, h, p, r1, v1)(hv)(Shared.Nat.le_step(r1, p)(hle)(ne))
+      )
+
+# the last vote a is of a round at most that of b
+def Safe.le(a: Maybe<&2, Ledgers.Last>, b: Maybe<&2, Ledgers.Last>) -> Bool:
+  match a b:
+    case None{} y:
+      True{}
+    case Some{x} None{}:
+      False{}
+    case Some{Ledgers.Last{r1, v1}} Some{Ledgers.Last{r2, v2}}:
+      Nat.is_le(r1, r2)
+
+# a last vote is at most the newer of it and another
+def Safe.le_newer_left(x: Maybe<&2, Ledgers.Last>, y: Maybe<&2, Ledgers.Last>) -> {
+  Safe.le(x, Last.newer(x, y)) == True{}: Bool
+}:
+  match x y:
+    case None{} y:
+      {==}
+    case Some{Ledgers.Last{+r, v}} None{}:
+      Shared.Nat.le_refl(r)
+    case Some{Ledgers.Last{+r1, +v1}} Some{Ledgers.Last{+r2, +v2}}:
+      Shared.Bool.when_cases(
+        Maybe<&2, Ledgers.Last>,
+        m => {Safe.le(Some{Ledgers.Last{r1, v1}}, m) == True{}: Bool},
+        Nat.is_lt(r1, r2),
+        u => Some{Ledgers.Last{r2, v2}},
+        u => Some{Ledgers.Last{r1, v1}},
+        e => Shared.Nat.lt_weak(r1, r2)(e),
+        e => Shared.Nat.le_refl(r1)
+      )
+
+# a last vote at most y is at most the newer of x and y
+def Safe.le_newer_right(z: Maybe<&2, Ledgers.Last>, x: Maybe<&2, Ledgers.Last>, y: Maybe<&2, Ledgers.Last>) -> {
+  Safe.le(z, y) == True{}: Bool
+} -> {Safe.le(z, Last.newer(x, y)) == True{}: Bool}:
+  match z x y:
+    case None{} x y:
+      h => {==}
+    case Some{q} None{} y:
+      h => h
+    case Some{q} Some{p} None{}:
+      h => Empty.absurd({Safe.le(Some{q}, Some{p}) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Some{Ledgers.Last{+rz, vz}} Some{Ledgers.Last{+r1, +v1}} Some{Ledgers.Last{+r2, +v2}}:
+      +h => Shared.Bool.when_cases(
+        Maybe<&2, Ledgers.Last>,
+        m => {Safe.le(Some{Ledgers.Last{rz, vz}}, m) == True{}: Bool},
+        Nat.is_lt(r1, r2),
+        u => Some{Ledgers.Last{r2, v2}},
+        u => Some{Ledgers.Last{r1, v1}},
+        e => h,
+        e => Shared.Nat.le_trans(rz, r2, r1)(h)(Shared.Nat.nlt_le(r1, r2)(e))
+      )
+
+# Safe.meet once the count of voters of from for v is known
+def Safe.meet.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +w: Ledgers.Place,
+  +os: List<&2, String>,
+  +from: List<&2, String>,
+  +v: Ledgers.Step,
+  y: Nat,
+  +ey: {Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, from), v) == y: Nat}
+) -> {Voters.sub(os, from) == True{}: Bool}
+  -> {Voters.major(os, from) == True{}: Bool}
+  -> {Quorums.Quorum.has(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v) == True{}: Bool}
+  -> {Nat.is_lt(0n, Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, from), v)) == True{}: Bool}:
+  match y:
+    case 0n:
+      hs => hm => hh => Empty.absurd(
+        {Nat.is_lt(0n, Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, from), v)) == True{}: Bool},
+        Shared.Nat.pigeon(
+          List.length(&2, String, from),
+          Quorums.Quorum.no(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v),
+          Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v),
+          List.length(&2, String, os)
+        )(
+          %Shared.Nat.add_zero(Quorums.Quorum.no(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v)): {
+            Nat.is_le(List.length(&2, String, from), _) == True{}: Bool
+          }
+          %ey: {
+            Nat.is_le(List.length(&2, String, from), Nat.add(Quorums.Quorum.no(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v), _)) == True{}: Bool
+          }
+          Safe.sub_count(~mach, ~d, l, w, os, from, v)(hs)
+        )(hh)(
+          %Equal.sym(
+            Nat,
+            Nat.add(Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v), Quorums.Quorum.no(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v)),
+            List.length(&2, String, os),
+            Safe.yes_no(~mach, ~d, l, w, os, v)
+          ): {Nat.is_le(_, List.length(&2, String, os)) == True{}: Bool}
+          Shared.Nat.le_refl(List.length(&2, String, os))
+        )(hm)
+      )
+    case 1n+p:
+      hs => hm => hh =>
+        %Equal.sym(Nat, Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, from), v), 1n+p, ey): {Nat.is_lt(0n, _) == True{}: Bool}
+        {==}
+
+# a majority of the voters that the rules count meets a majority that cast v:
+# some of them cast v
+def Safe.meet(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +w: Ledgers.Place,
+  +os: List<&2, String>,
+  +from: List<&2, String>,
+  +v: Ledgers.Step
+) -> {Voters.sub(os, from) == True{}: Bool}
+  -> {Voters.major(os, from) == True{}: Bool}
+  -> {Quorums.Quorum.has(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, os), v) == True{}: Bool}
+  -> {Nat.is_lt(0n, Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, from), v)) == True{}: Bool}:
+  Safe.meet.at(~mach, ~d, l, w, os, from, v, Quorums.Quorum.yes(~Ledgers.Step, ~Ledgers.Step.is_eq, Ledgers.Kind.cells(~Machine.Q(mach), ~Led.kind(mach, d), l, w, from), v), {==})
+
 # a height decides the same step in a later ledger
 def Safe.decide(
   ~mach: Machine(),
