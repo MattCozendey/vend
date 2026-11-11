@@ -1294,16 +1294,28 @@ type Act is Data:
 def Kernel.Change(-mach: Machine(), -d: Led(mach)) -> Type:
   Led.L(mach, d) -> Tip -> Ledgers.Line -> Ledgers.Id -> Machine.Q(mach) -> Maybe<&2, Act>
 
+# the ledger l holds each node that the act x adds, under its hash
+def Act.held(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), x: Act) -> Bool:
+  match x:
+    case Act.Taken{vs, h, ns}:
+      Depots.Depot.holds(~Led.L(mach, d), ~(s => h2 => Led.fetch(~mach, ~d, s, h2)), l, ns)
+    case Act.Opens{b, t, ns}:
+      Depots.Depot.holds(~Led.L(mach, d), ~(s => h2 => Led.fetch(~mach, ~d, s, h2)), l, ns)
+    case _:
+      True{}
+
 # that an act stays as the ledger grows: a kernel reads the ledger and the
 # tip that it is given, waits for what it lacks, and does not answer on what
-# it cannot read. So every replica that runs a request gets the same act
+# it cannot read. So every replica that runs a request gets the same act, in
+# a ledger that holds the nodes that the act adds (as a ledger where its step
+# landed does: a node of another content under one of their hashes would
+# change what reads them)
 def Kernel.Stable(-mach: Machine(), -d: Led(mach), -f: Kernel.Change(mach, d)) -> Type:
-  @t: Tip -> @c: Ledgers.Line -> @i: Ledgers.Id -> @q: Machine.Q(mach) -> Shared.Read.Stable(
-    Led.L(mach, d),
-    a => b => Led.Grows(mach, d, a, b),
-    Act,
-    l => f(l)(t)(c)(i)(q)
-  )
+  @t: Tip -> @c: Ledgers.Line -> @i: Ledgers.Id -> @q: Machine.Q(mach) -> @a: Led.L(mach, d) -> @b: Led.L(
+    mach,
+    d) -> @x: Act -> Led.Grows(mach, d, a, b) -> {f(a)(t)(c)(i)(q) == Some{x}: Maybe<&2, Act>} -> {
+    Act.held(~mach, ~d, b, x) == True{}: Bool
+  } -> {f(b)(t)(c)(i)(q) == Some{x}: Maybe<&2, Act>}
 
 # a request, with its ID and its time
 type Request<-Q: Data> is Data:
