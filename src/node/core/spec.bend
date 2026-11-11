@@ -10332,6 +10332,478 @@ def Affects.versions_nil(
         )
       )(e)
 
+# Affects.all_has at the version i of the number n, once it is known whether
+# n is the number m of the touch (q)
+def Affects.all_has.at(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +tf: Replicas.Tip,
+  +i: Ledgers.Id,
+  +hy: Maybe<&2, Hashes.Hash>,
+  +n: U32,
+  +h0: Maybe<&2, Hashes.Hash>,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  +p: Nat,
+  +m: U32,
+  +v: Ledgers.Id,
+  +hX: Maybe<&2, Hashes.Hash>,
+  +hz: Maybe<&2, Hashes.Hash>,
+  +c: Resources.Name,
+  +u: Resources.Name,
+  +enum: {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v) == Some{m}: Maybe<&2, U32>},
+  +etk: {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m) == Some{Replicas.Taken{v, hX}}: Maybe<&2, Replicas.Taken>},
+  +ele: {Nat.is_le(U32.to_nat(n), U32.to_nat(m)) == True{}: Bool},
+  +eltk: {Nat.is_lt(U32.to_nat(m), Nat.add(U32.to_nat(n), 1n+p)) == True{}: Bool},
+  +ebef: {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, m) == Some{hz}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+  +d1: {Res.differs(~d, l, hX, hz, c) == Some{True{}}: Maybe<&2, Bool>},
+  +d2: {Res.differs(~d, l, hX, hb, c) == Some{True{}}: Maybe<&2, Bool>},
+  +ein: {List.contains(~Resources.Name, ~Resources.Name.is_eq, used, u) == True{}: Bool},
+  +econd: {
+    List.any.if(w => Crits.Dict.has(Unit, Reaches.Graph.reach(users, Name.key(c)), Name.key(u)), Resources.Name.is_eq(u, c))
+      == True{}: Bool
+  },
+  +eltn: {U32.is_lt(n, Replicas.Tip.count(tf)) == True{}: Bool},
+  +etkn: {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, n) == Some{Replicas.Taken{i, hy}}: Maybe<&2, Replicas.Taken>},
+  +eb: {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, n) == Some{h0}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+  +ks: List<&2, List<&2, U32>>,
+  +eks: {Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, h0, hy) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>},
+  +m2: U32,
+  +enum2: {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i) == Some{m2}: Maybe<&2, U32>},
+  +a: List<&2, Touch>,
+  +ewa: {
+    Shared.Bool.when(
+      Maybe<&2, List<&2, Touch>>,
+      U32.is_eq(m2, n),
+      w => Touches.each(~d, l, from, i, h0, hy, Keys.names(ks), b, hb, used, users),
+      w => Some{[]}
+    )
+      == Some{a}: Maybe<&2, List<&2, Touch>>
+  },
+  +r: List<&2, Touch>,
+  q: Bool,
+  eq: {U32.is_eq(m, n) == q: Bool},
+  ih: {Nat.is_le(U32.to_nat(U32.inc(n)), U32.to_nat(m)) == True{}: Bool}
+    -> {Nat.is_lt(U32.to_nat(m), Nat.add(U32.to_nat(U32.inc(n)), p)) == True{}: Bool}
+    -> {List.contains(~Touch, ~Touch.is_eq, r, Touch{from, v, c, b, u}) == True{}: Bool}
+) -> {List.contains(~Touch, ~Touch.is_eq, List.append(&2, Touch, a, r), Touch{from, v, c, b, u}) == True{}: Bool}:
+  match q:
+    case True{}:
+      +emn = Shared.U32.is_eq_sound(m, n)(eq)
+      +ex = Shared.Maybe.some_inj(
+        Replicas.Taken,
+        Replicas.Taken{i, hy},
+        Replicas.Taken{v, hX},
+        Equal.trans(
+          Maybe<&2, Replicas.Taken>,
+          Some{Replicas.Taken{i, hy}},
+          Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, n),
+          Some{Replicas.Taken{v, hX}},
+          Equal.sym(Maybe<&2, Replicas.Taken>, Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, n), Some{Replicas.Taken{i, hy}}, etkn),
+          Affects.cast(
+            U32,
+            z => {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, z) == Some{Replicas.Taken{v, hX}}: Maybe<&2, Replicas.Taken>},
+            m,
+            n,
+            emn,
+            etk
+          )
+        )
+      )
+      +eiv = Equal.cong(Replicas.Taken, Ledgers.Id, Replicas.Taken.id, Replicas.Taken{i, hy}, Replicas.Taken{v, hX}, ex)
+      +ehy = Equal.cong(Replicas.Taken, Maybe<&2, Hashes.Hash>, Replicas.Taken.root, Replicas.Taken{i, hy}, Replicas.Taken{v, hX}, ex)
+      +em2 = Shared.Maybe.some_inj(
+        U32,
+        m2,
+        m,
+        Equal.trans(
+          Maybe<&2, U32>,
+          Some{m2},
+          Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i),
+          Some{m},
+          Equal.sym(Maybe<&2, U32>, Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i), Some{m2}, enum2),
+          Affects.cast(
+            Ledgers.Id,
+            z => {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, z) == Some{m}: Maybe<&2, U32>},
+            v,
+            i,
+            Equal.sym(Ledgers.Id, i, v, eiv),
+            enum
+          )
+        )
+      )
+      +eh0 = Shared.Maybe.some_inj(
+        Maybe<&2, Hashes.Hash>,
+        h0,
+        hz,
+        Equal.trans(
+          Maybe<&2, Maybe<&2, Hashes.Hash>>,
+          Some{h0},
+          Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, n),
+          Some{hz},
+          Equal.sym(Maybe<&2, Maybe<&2, Hashes.Hash>>, Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, n), Some{h0}, eb),
+          Affects.cast(
+            U32,
+            z => {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, z) == Some{hz}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+            m,
+            n,
+            emn,
+            ebef
+          )
+        )
+      )
+      +d1y = Affects.cast(
+        Maybe<&2, Hashes.Hash>,
+        z => {Res.differs(~d, l, hy, z, c) == Some{True{}}: Maybe<&2, Bool>},
+        hz,
+        h0,
+        Equal.sym(Maybe<&2, Hashes.Hash>, h0, hz, eh0),
+        Affects.cast(
+          Maybe<&2, Hashes.Hash>,
+          z => {Res.differs(~d, l, z, hz, c) == Some{True{}}: Maybe<&2, Bool>},
+          hX,
+          hy,
+          Equal.sym(Maybe<&2, Hashes.Hash>, hy, hX, ehy),
+          d1
+        )
+      )
+      +d2y = Affects.cast(
+        Maybe<&2, Hashes.Hash>,
+        z => {Res.differs(~d, l, z, hb, c) == Some{True{}}: Maybe<&2, Bool>},
+        hX,
+        hy,
+        Equal.sym(Maybe<&2, Hashes.Hash>, hy, hX, ehy),
+        d2
+      )
+      +ewa2 = Affects.cast(
+        Bool,
+        z => {
+          Shared.Bool.when(
+            Maybe<&2, List<&2, Touch>>,
+            z,
+            w => Touches.each(~d, l, from, i, h0, hy, Keys.names(ks), b, hb, used, users),
+            w => Some{[]}
+          )
+            == Some{a}: Maybe<&2, List<&2, Touch>>
+        },
+        U32.is_eq(m2, n),
+        True{},
+        Affects.cast(
+          U32,
+          z => {U32.is_eq(z, n) == True{}: Bool},
+          n,
+          m2,
+          Equal.sym(U32, m2, n, Equal.trans(U32, m2, m, n, em2, emn)),
+          Shared.U32.is_eq_refl(n)
+        ),
+        ewa
+      )
+      Shared.List.contains_left(
+        ~Touch,
+        ~Touch.is_eq,
+        a,
+        r,
+        Touch{from, v, c, b, u},
+        Affects.cast(
+          Ledgers.Id,
+          z => {List.contains(~Touch, ~Touch.is_eq, a, Touch{from, z, c, b, u}) == True{}: Bool},
+          i,
+          v,
+          eiv,
+          Affects.each_has(
+            ~d,
+            l,
+            from,
+            i,
+            h0,
+            hy,
+            Keys.names(ks),
+            b,
+            hb,
+            used,
+            users,
+            c,
+            u,
+            Affects.diff_names(~d, l, h0, hy, ks, eks, c)(d1y),
+            d1y,
+            d2y,
+            ein,
+            econd,
+            a
+          )(ewa2)
+        )
+      )
+    case False{}:
+      +inc = Affects.inc_nat(n, Replicas.Tip.count(tf))(eltn)
+      Shared.List.contains_right(
+        ~Touch,
+        ~Touch.is_eq,
+        a,
+        r,
+        Touch{from, v, c, b, u},
+        ih(
+          Affects.cast(
+            Nat,
+            z => {Nat.is_le(z, U32.to_nat(m)) == True{}: Bool},
+            1n+U32.to_nat(n),
+            U32.to_nat(U32.inc(n)),
+            Equal.sym(Nat, U32.to_nat(U32.inc(n)), 1n+U32.to_nat(n), inc),
+            Affects.step_le(n, m, ele, eq)
+          )
+        )(
+          Affects.cast(
+            Nat,
+            z => {Nat.is_lt(U32.to_nat(m), Nat.add(z, p)) == True{}: Bool},
+            1n+U32.to_nat(n),
+            U32.to_nat(U32.inc(n)),
+            Equal.sym(Nat, U32.to_nat(U32.inc(n)), 1n+U32.to_nat(n), inc),
+            Affects.cast(
+              Nat,
+              z => {Nat.is_lt(U32.to_nat(m), z) == True{}: Bool},
+              Nat.add(U32.to_nat(n), 1n+p),
+              1n+Nat.add(U32.to_nat(n), p),
+              Shared.Nat.add_succ(U32.to_nat(n), p),
+              eltk
+            )
+          )
+        )
+      )
+
+# Touches.all gives each touch of the version m of the listing, when m is
+# from n on and within k versions of n
+def Affects.all_has(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +tf: Replicas.Tip,
+  xs: List<&2, Replicas.Taken>,
+  +n: U32,
+  +h0: Maybe<&2, Hashes.Hash>,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  k: Nat,
+  +ev: {Replicas.Tip.versions(~Requests.Ask.machine(), ~d, k, l, tf, n) == Some{xs}: Maybe<&2, List<&2, Replicas.Taken>>},
+  +eb: {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, n) == Some{h0}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+  +m: U32,
+  +v: Ledgers.Id,
+  +hX: Maybe<&2, Hashes.Hash>,
+  +hz: Maybe<&2, Hashes.Hash>,
+  +c: Resources.Name,
+  +u: Resources.Name,
+  +enum: {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, v) == Some{m}: Maybe<&2, U32>},
+  +etk: {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m) == Some{Replicas.Taken{v, hX}}: Maybe<&2, Replicas.Taken>},
+  +elt: {U32.is_lt(m, Replicas.Tip.count(tf)) == True{}: Bool},
+  +ele: {Nat.is_le(U32.to_nat(n), U32.to_nat(m)) == True{}: Bool},
+  +eltk: {Nat.is_lt(U32.to_nat(m), Nat.add(U32.to_nat(n), k)) == True{}: Bool},
+  +ebef: {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, m) == Some{hz}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+  +d1: {Res.differs(~d, l, hX, hz, c) == Some{True{}}: Maybe<&2, Bool>},
+  +d2: {Res.differs(~d, l, hX, hb, c) == Some{True{}}: Maybe<&2, Bool>},
+  +ein: {List.contains(~Resources.Name, ~Resources.Name.is_eq, used, u) == True{}: Bool},
+  +econd: {
+    List.any.if(w => Crits.Dict.has(Unit, Reaches.Graph.reach(users, Name.key(c)), Name.key(u)), Resources.Name.is_eq(u, c))
+      == True{}: Bool
+  },
+  +ts: List<&2, Touch>
+) -> {Touches.all(~d, l, from, tf, xs, n, h0, b, hb, used, users) == Some{ts}: Maybe<&2, List<&2, Touch>>}
+  -> {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool}:
+  match xs k:
+    case Nil{} j:
+      ea => Empty.absurd(
+        {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool},
+        Affects.versions_nil(~d, l, tf, j, n, m, ele, eltk, elt)(ev)
+      )
+    case Con{Replicas.Taken{+i, +hy}, +rest} 0n:
+      ea => Empty.absurd(
+        {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool},
+        Affects.nil_ne_cons(
+          Replicas.Taken,
+          Replicas.Taken{i, hy},
+          rest,
+          Shared.Maybe.some_inj(List<&2, Replicas.Taken>, [], Replicas.Taken{i, hy} <> rest, ev)
+        )
+      )
+    case Con{Replicas.Taken{+i, +hy}, +rest} 1n+(+p):
+      ea => Affects.versions_cons(
+        ~d,
+        l,
+        tf,
+        p,
+        n,
+        Replicas.Taken{i, hy},
+        rest,
+        {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool},
+        +eltn => +etkn => +evr => Affects.bind_some(
+          List<&2, List<&2, U32>>,
+          List<&2, Touch>,
+          {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool},
+          Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, h0, hy),
+          ks => Maybe.bind(
+            &2,
+            U32,
+            List<&2, Touch>,
+            Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i),
+            m2 => Maybe.bind(
+              &2,
+              List<&2, Touch>,
+              List<&2, Touch>,
+              Shared.Bool.when(
+                Maybe<&2, List<&2, Touch>>,
+                U32.is_eq(m2, n),
+                w => Touches.each(~d, l, from, i, h0, hy, Keys.names(ks), b, hb, used, users),
+                w => Some{[]}
+              ),
+              a => Maybe.map(
+                &2,
+                List<&2, Touch>,
+                List<&2, Touch>,
+                r => List.append(&2, Touch, a, r),
+                Touches.all(~d, l, from, tf, rest, U32.inc(n), hy, b, hb, used, users)
+              )
+            )
+          ),
+          ts,
+          +ks => +eks => e1 => Affects.bind_some(
+            U32,
+            List<&2, Touch>,
+            {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool},
+            Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i),
+            m2 => Maybe.bind(
+              &2,
+              List<&2, Touch>,
+              List<&2, Touch>,
+              Shared.Bool.when(
+                Maybe<&2, List<&2, Touch>>,
+                U32.is_eq(m2, n),
+                w => Touches.each(~d, l, from, i, h0, hy, Keys.names(ks), b, hb, used, users),
+                w => Some{[]}
+              ),
+              a => Maybe.map(
+                &2,
+                List<&2, Touch>,
+                List<&2, Touch>,
+                r => List.append(&2, Touch, a, r),
+                Touches.all(~d, l, from, tf, rest, U32.inc(n), hy, b, hb, used, users)
+              )
+            ),
+            ts,
+            +m2 => +enum2 => e2 => Affects.bind_some(
+              List<&2, Touch>,
+              List<&2, Touch>,
+              {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool},
+              Shared.Bool.when(
+                Maybe<&2, List<&2, Touch>>,
+                U32.is_eq(m2, n),
+                w => Touches.each(~d, l, from, i, h0, hy, Keys.names(ks), b, hb, used, users),
+                w => Some{[]}
+              ),
+              a => Maybe.map(
+                &2,
+                List<&2, Touch>,
+                List<&2, Touch>,
+                r => List.append(&2, Touch, a, r),
+                Touches.all(~d, l, from, tf, rest, U32.inc(n), hy, b, hb, used, users)
+              ),
+              ts,
+              +a => +ewa => e3 => Affects.map_some(
+                List<&2, Touch>,
+                List<&2, Touch>,
+                {List.contains(~Touch, ~Touch.is_eq, ts, Touch{from, v, c, b, u}) == True{}: Bool},
+                r => List.append(&2, Touch, a, r),
+                Touches.all(~d, l, from, tf, rest, U32.inc(n), hy, b, hb, used, users),
+                ts,
+                +r => +er => +eapp => Affects.cast(
+                  List<&2, Touch>,
+                  z => {List.contains(~Touch, ~Touch.is_eq, z, Touch{from, v, c, b, u}) == True{}: Bool},
+                  List.append(&2, Touch, a, r),
+                  ts,
+                  eapp,
+                  Affects.all_has.at(
+                    ~d,
+                    l,
+                    from,
+                    tf,
+                    i,
+                    hy,
+                    n,
+                    h0,
+                    b,
+                    hb,
+                    used,
+                    users,
+                    p,
+                    m,
+                    v,
+                    hX,
+                    hz,
+                    c,
+                    u,
+                    enum,
+                    etk,
+                    ele,
+                    eltk,
+                    ebef,
+                    d1,
+                    d2,
+                    ein,
+                    econd,
+                    eltn,
+                    etkn,
+                    eb,
+                    ks,
+                    eks,
+                    m2,
+                    enum2,
+                    a,
+                    ewa,
+                    r,
+                    U32.is_eq(m, n),
+                    {==},
+                    ele2 => eltk2 => Affects.all_has(
+                      ~d,
+                      l,
+                      from,
+                      tf,
+                      rest,
+                      U32.inc(n),
+                      hy,
+                      b,
+                      hb,
+                      used,
+                      users,
+                      p,
+                      evr,
+                      Affects.before_next(~d, l, tf, n, Replicas.Taken{i, hy}, eltn, etkn),
+                      m,
+                      v,
+                      hX,
+                      hz,
+                      c,
+                      u,
+                      enum,
+                      etk,
+                      elt,
+                      ele2,
+                      eltk2,
+                      ebef,
+                      d1,
+                      d2,
+                      ein,
+                      econd,
+                      r
+                    )(er)
+                  )
+                )
+              )(e3)
+            )(e2)
+          )(e1)
+        )(ea)
+      )(ev)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
