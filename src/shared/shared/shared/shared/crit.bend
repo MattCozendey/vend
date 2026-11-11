@@ -8113,6 +8113,32 @@ def Dict.get_set(V, d, k0, v, k):
     case Tuple{m, w}:
       Dict.get_set.at(~V, m, k0, v, k)(w)
 
+# Dict.get_drop on the map m of a dict, with its proof w
+def Dict.get_drop.at(~V: Data, +m: Crit<V>, +k0: List<&2, U32>, +k: List<&2, U32>) -> {
+  Crit.wf(~V, m, 0n) == True{}: Bool
+} -> {
+  Crit.get(V, Crit.drop(V, m, k0), k)
+    == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), None{}, Crit.get(V, m, k)): Maybe<&2, V>
+}:
+  +w =>
+    %Equal.sym(
+      Maybe<&2, V>,
+      Crit.get(V, Crit.drop(V, m, k0), k),
+      Crit.lookup(V, Crit.drop(V, m, k0), k),
+      Crit.get_lookup(~V, Crit.drop(V, m, k0), k)(Crit.drop_wf(~V, m, k0)(w))
+    ): {_ == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), None{}, Crit.get(V, m, k)): Maybe<&2, V>}
+    %Equal.sym(
+      Maybe<&2, V>,
+      Crit.lookup(V, Crit.drop(V, m, k0), k),
+      Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), None{}, Crit.lookup(V, m, k)),
+      Crit.drop_lookup(~V, m, k0, k)(w)
+    ): {_ == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), None{}, Crit.get(V, m, k)): Maybe<&2, V>}
+    %Equal.sym(Maybe<&2, V>, Crit.get(V, m, k), Crit.lookup(V, m, k), Crit.get_lookup(~V, m, k)(w)): {
+      Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), None{}, Crit.lookup(V, m, k))
+        == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), None{}, _): Maybe<&2, V>
+    }
+    {==}
+
 # a drop unbinds its key, and no other key
 law Dict.get_drop:
   for ~V: Data
@@ -8125,7 +8151,39 @@ law Dict.get_drop:
   }
 
 def Dict.get_drop(V, d, k0, k):
-  ?TODO
+  match d:
+    case Tuple{m, w}:
+      Dict.get_drop.at(~V, m, k0, k)(w)
+
+# Dict.get_minus on the maps ma and mb of two dicts, with their proofs wa and wb
+def Dict.get_minus.at(~V: Data, +ma: Crit<V>, +mb: Crit<V>, +k: List<&2, U32>) -> {
+  Crit.wf(~V, ma, 0n) == True{}: Bool
+} -> {Crit.wf(~V, mb, 0n) == True{}: Bool} -> {
+  Crit.get(V, Crit.minus(V, ma, mb), k)
+    == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.get(V, mb, k)), None{}, Crit.get(V, ma, k)): Maybe<&2, V>
+}:
+  +wa => +wb =>
+    %Equal.sym(
+      Maybe<&2, V>,
+      Crit.get(V, Crit.minus(V, ma, mb), k),
+      Crit.lookup(V, Crit.minus(V, ma, mb), k),
+      Crit.get_lookup(~V, Crit.minus(V, ma, mb), k)(Crit.minus_wf(~V, ma, mb)(wa)(wb))
+    ): {_ == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.get(V, mb, k)), None{}, Crit.get(V, ma, k)): Maybe<&2, V>}
+    %Equal.sym(
+      Maybe<&2, V>,
+      Crit.lookup(V, Crit.minus(V, ma, mb), k),
+      Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, mb, k)), None{}, Crit.lookup(V, ma, k)),
+      Crit.minus_lookup(~V, ma, mb, k)(wa)(wb)
+    ): {_ == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.get(V, mb, k)), None{}, Crit.get(V, ma, k)): Maybe<&2, V>}
+    %Equal.sym(Maybe<&2, V>, Crit.get(V, mb, k), Crit.lookup(V, mb, k), Crit.get_lookup(~V, mb, k)(wb)): {
+      Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, mb, k)), None{}, Crit.lookup(V, ma, k))
+        == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, _), None{}, Crit.get(V, ma, k)): Maybe<&2, V>
+    }
+    %Equal.sym(Maybe<&2, V>, Crit.get(V, ma, k), Crit.lookup(V, ma, k), Crit.get_lookup(~V, ma, k)(wa)): {
+      Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, mb, k)), None{}, Crit.lookup(V, ma, k))
+        == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, mb, k)), None{}, _): Maybe<&2, V>
+    }
+    {==}
 
 # a difference holds what a holds under each key that b lacks
 law Dict.get_minus:
@@ -8139,7 +8197,29 @@ law Dict.get_minus:
   }
 
 def Dict.get_minus(V, a, b, k):
-  ?TODO
+  match a b:
+    case Tuple{ma, wa} Tuple{mb, wb}:
+      Dict.get_minus.at(~V, ma, mb, k)(wa)(wb)
+
+# Dict.size_set on the map m of a dict, with its proof w
+def Dict.size_set.at(~V: Data, +m: Crit<V>, +k: List<&2, U32>, +v: V) -> {
+  Crit.wf(~V, m, 0n) == True{}: Bool
+} -> {
+  Crit.size(V, Crit.set(~V, m, k, v))
+    == Shared.Nat.add_if(Bool.not(Maybe.is_some(&2, V, Crit.get(V, m, k))), Crit.size(V, m)): Nat
+}:
+  +w =>
+    %Equal.sym(
+      Nat,
+      Crit.size(V, Crit.set(~V, m, k, v)),
+      Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, m, k)), Crit.size(V, m)),
+      Crit.size_upsert(~V, ~(a => b => b), m, k, v)(w)
+    ): {_ == Shared.Nat.add_if(Bool.not(Maybe.is_some(&2, V, Crit.get(V, m, k))), Crit.size(V, m)): Nat}
+    %Equal.sym(Maybe<&2, V>, Crit.get(V, m, k), Crit.lookup(V, m, k), Crit.get_lookup(~V, m, k)(w)): {
+      Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, m, k)), Crit.size(V, m))
+        == Shared.Nat.add_if(Bool.not(Maybe.is_some(&2, V, _)), Crit.size(V, m)): Nat
+    }
+    {==}
 
 # a write adds one entry exactly when its key was not there
 law Dict.size_set:
@@ -8153,7 +8233,9 @@ law Dict.size_set:
   }
 
 def Dict.size_set(V, d, k, v):
-  ?TODO
+  match d:
+    case Tuple{m, w}:
+      Dict.size_set.at(~V, m, k, v)(w)
 
 # a dict is its entries: two dicts with the same entries are the same dict
 law Dict.ext:
