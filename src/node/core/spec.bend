@@ -3108,8 +3108,18 @@ def Answer.at_follows.tip(
         keep
       )
 
+# what Replicas.Line.get_grows says of the ledger d and the kernel kern: what
+# the log of a line holds under a key, it holds for good
+def Answer.Stays(-d: Led(), -kern: Kern(d)) -> Type:
+  @c: Ledgers.Line -> @key: List<&2, U32> -> Shared.Read.Stable(
+    L(d),
+    a => b => Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
+    List<&2, U32>,
+    l => Replicas.Line.get(~Requests.Ask.machine(), ~d, ~kern, l, c, key)
+  )
+
 # the log of the head of the line c holds, at a later ledger, what it holds
-# under the key of the outcome of i (Line.get_grows)
+# under the key of the outcome of i (Answer.Stays)
 def Answer.at_follows.keep(
   ~d: Led(),
   ~kern: Kern(d),
@@ -3120,6 +3130,7 @@ def Answer.at_follows.keep(
   +t: Replicas.Tip,
   +m2: Maybe<&2, Replicas.Tip>,
   g: Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
+  stays: Answer.Stays(d, kern),
   e1: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == Some{t}: Maybe<&2, Replicas.Tip>},
   e2: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c) == m2: Maybe<&2, Replicas.Tip>},
   +ws: List<&2, U32>,
@@ -3144,16 +3155,7 @@ def Answer.at_follows.keep(
     )
       == Some{ws}: Maybe<&2, List<&2, U32>>
   }
-  Replicas.Line.get_grows(
-    ~Requests.Ask.machine(),
-    ~d,
-    ~kern,
-    c,
-    Replicas.Log.out(i),
-    a,
-    b,
-    ws,
-    g,
+  stays(c)(Replicas.Log.out(i))(a)(b)(ws)(g)(
     %Equal.sym(
       Maybe<&2, Replicas.Tip>,
       Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
@@ -3184,6 +3186,7 @@ def Answer.at_follows.head(
   +q: Requests.Ask,
   +h: Hashes.Hash,
   g: Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
+  stays: Answer.Stays(d, kern),
   m1: Maybe<&2, Replicas.Tip>,
   +m2: Maybe<&2, Replicas.Tip>,
   +e1: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == m1: Maybe<&2, Replicas.Tip>},
@@ -3202,7 +3205,7 @@ def Answer.at_follows.head(
         i,
         q,
         h,
-        ws => hw => Answer.at_follows.keep(~d, ~kern, a, b, c, i, t, m2, g, e1, e2, ws, hw)
+        ws => hw => Answer.at_follows.keep(~d, ~kern, a, b, c, i, t, m2, g, stays, e1, e2, ws, hw)
       )
 
 # Answer.of follows itself in a later state of the ledger
@@ -3215,6 +3218,7 @@ def Answer.of_follows(
   +q: Requests.Ask,
   +h: Hashes.Hash,
   g: Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
+  stays: Answer.Stays(d, kern),
   w: Replicas.Arrival
 ) -> {Answer.follows(Answer.of(~d, ~kern, a, i, q, h, w), Some{Answer.of(~d, ~kern, b, i, q, h, w)}) == True{}: Bool}:
   match w:
@@ -3231,6 +3235,7 @@ def Answer.of_follows(
         q,
         h,
         g,
+        stays,
         Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
         Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c),
         {==},
