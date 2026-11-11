@@ -6869,6 +6869,128 @@ def Merge.kept_range(
   e: {Tree.kept(~d, l, h) == True{}: Bool}
 ) -> Sigma<&2, &2, List<&2, Trees.Binding>, bs => {Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>}>:
   Merge.kept_range.at(~d, l, h, Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, h, []), {==}, e)
+# the root that an act takes
+def Merge.act_root(a: Replicas.Act) -> Maybe<&2, Hashes.Hash>:
+  match a:
+    case Replicas.Act.Taken{vs, h, ns}:
+      h
+    case _:
+      None{}
+
+# the nodes that an act takes
+def Merge.act_nodes(a: Replicas.Act) -> List<&2, List<&2, U32>>:
+  match a:
+    case Replicas.Act.Taken{vs, h, ns}:
+      ns
+    case _:
+      []
+
+# the act of a work, once it is known whether the ledger of the work holds its
+# nodes (p)
+def Merge.work_act.at(
+  ~d: Led(),
+  +lw: L(d),
+  +hw: Maybe<&2, Hashes.Hash>,
+  +nsw: List<&2, List<&2, U32>>,
+  +vs: Maybe<&2, List<&2, String>>,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +p: Bool,
+  +ep: {
+    Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), lw, nsw) == p: Bool
+  },
+  +e: {
+    Shared.Maybe.when(Replicas.Act, p, u => Some{Replicas.Act.Taken{None{}, hw, nsw}})
+      == Some{Replicas.Act.Taken{vs, h2, ns}}: Maybe<&2, Replicas.Act>
+  }
+) -> Merge.And({hw == h2: Maybe<&2, Hashes.Hash>}, Merge.And({nsw == ns: List<&2, List<&2, U32>>}, Merge.Held(~d, lw, nsw))):
+  match p:
+    case True{}:
+      (
+        Equal.cong(
+          Replicas.Act,
+          Maybe<&2, Hashes.Hash>,
+          a => Merge.act_root(a),
+          Replicas.Act.Taken{None{}, hw, nsw},
+          Replicas.Act.Taken{vs, h2, ns},
+          Shared.Maybe.some_inj(Replicas.Act, Replicas.Act.Taken{None{}, hw, nsw}, Replicas.Act.Taken{vs, h2, ns}, e)
+        ),
+        (
+          Equal.cong(
+            Replicas.Act,
+            List<&2, List<&2, U32>>,
+            a => Merge.act_nodes(a),
+            Replicas.Act.Taken{None{}, hw, nsw},
+            Replicas.Act.Taken{vs, h2, ns},
+            Shared.Maybe.some_inj(Replicas.Act, Replicas.Act.Taken{None{}, hw, nsw}, Replicas.Act.Taken{vs, h2, ns}, e)
+          ),
+          ep
+        )
+      )
+    case False{}:
+      Empty.absurd(
+        Merge.And({hw == h2: Maybe<&2, Hashes.Hash>}, Merge.And({nsw == ns: List<&2, List<&2, U32>>}, Merge.Held(~d, lw, nsw))),
+        Shared.Maybe.none_ne_some(Replicas.Act, Replicas.Act.Taken{vs, h2, ns}, e)
+      )
+
+# the work that an act is of: its root and nodes are those of the act, and its
+# ledger holds its nodes
+def Merge.Acted(
+  ~d: Led(),
+  m: Maybe<&2, Work<L(d)>>,
+  h2: Maybe<&2, Hashes.Hash>,
+  ns: List<&2, List<&2, U32>>
+) -> Data:
+  Sigma<&2, &2, Work<L(d)>, W => Merge.And({m == Some{W}: Maybe<&2, Work<L(d)>>}, Merge.And({Merge.root(~d, W) == h2: Maybe<&2, Hashes.Hash>}, Merge.And({Merge.nodes(~d, W) == ns: List<&2, List<&2, U32>>}, Merge.Held(~d, Merge.ledger(~d, W), Merge.nodes(~d, W)))))>
+
+# the facts of the act of a work give the work that the act is of
+def Merge.work_act.acted(
+  ~d: Led(),
+  +lw: L(d),
+  +hw: Maybe<&2, Hashes.Hash>,
+  +nsw: List<&2, List<&2, U32>>,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  f: Merge.And({hw == h2: Maybe<&2, Hashes.Hash>}, Merge.And({nsw == ns: List<&2, List<&2, U32>>}, Merge.Held(~d, lw, nsw)))
+) -> Merge.Acted(~d, Some{Work{lw, hw, nsw}}, h2, ns):
+  (+a, r1) = f
+  (+b, held) = r1
+  (Work{lw, hw, nsw}, ({==}, (a, (b, held))))
+
+# the act that takes a work is taken, with the nodes of the work, once the work
+# is known
+def Merge.work_act(
+  ~d: Led(),
+  m: Maybe<&2, Work<L(d)>>,
+  +vs: Maybe<&2, List<&2, String>>,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  e: {Work.act(~d, None{}, m) == Some{Replicas.Act.Taken{vs, h2, ns}}: Maybe<&2, Replicas.Act>}
+) -> Merge.Acted(~d, m, h2, ns):
+  match m:
+    case None{}:
+      Empty.absurd(Merge.Acted(~d, None{}, h2, ns), Shared.Maybe.none_ne_some(Replicas.Act, Replicas.Act.Taken{vs, h2, ns}, e))
+    case Some{Work{+lw, +hw, +nsw}}:
+      Merge.work_act.acted(
+        ~d,
+        lw,
+        hw,
+        nsw,
+        h2,
+        ns,
+        Merge.work_act.at(
+          ~d,
+          lw,
+          hw,
+          nsw,
+          vs,
+          h2,
+          ns,
+          Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), lw, nsw),
+          {==},
+          e
+        )
+      )
 # TMP-END
 
 # a merge never loses a change that only one side made: when the merge of a
