@@ -1320,6 +1320,7 @@ def Crit.join_lookup(-V: Data, +x: Crit<V>, +y: Crit<V>, +d: Nat, +q: List<&2, U
       )
     )
 
+
 # Shape
 # -----
 # A map that the writes build is well formed (Crit.wf): each fork splits its
@@ -1420,6 +1421,206 @@ def Crit.wf(~V: Data, m: Crit<V>, +lo: Nat) -> Bool:
         ),
         Nat.is_le(lo, pos)
       )
+
+# Laws of maps
+# ------------
+# The laws of a map are stated by the clear read (Crit.lookup), for maps that
+# the writes build (Crit.wf): each write is the same write on the clear read,
+# a read is the clear read, and two maps that read the same are equal.
+
+# a map with no entry is well formed
+law Crit.new_wf:
+  for ~V: Data
+  {Crit.wf(~V, Crit.new(V), 0n) == True{}: Bool}
+
+def Crit.new_wf(ty):
+  ?TODO
+
+# a write keeps a map well formed
+law Crit.upsert_wf:
+  for ~V: Data
+  for ~f: V -> V -> V
+  for m: Crit<V>
+  for k: List<&2, U32>
+  for v: V
+  {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.upsert(~V, ~f, m, k, v), 0n) == True{}: Bool}
+
+def Crit.upsert_wf(ty, f, m, k, v):
+  ?TODO
+
+# a write binds its key, to f of the old value and v when there was one, and
+# no other key
+law Crit.upsert_lookup:
+  for ~V: Data
+  for ~f: V -> V -> V
+  for m: Crit<V>
+  for k: List<&2, U32>
+  for v: V
+  for q: List<&2, U32>
+  {Crit.wf(~V, m, 0n) == True{}: Bool} -> {
+    Crit.lookup(V, Crit.upsert(~V, ~f, m, k, v), q)
+      == Bool.pick(Maybe<&2, V>, Key.is_eq(q, k), Some{Crit.merge(~V, ~f, Crit.lookup(V, m, k), v)}, Crit.lookup(V, m, q)): Maybe<&2, V>
+  }
+
+def Crit.upsert_lookup(ty, f, m, k, v, q):
+  ?TODO
+
+# a drop keeps a map well formed
+law Crit.drop_wf:
+  for ~V: Data
+  for m: Crit<V>
+  for k: List<&2, U32>
+  {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.drop(V, m, k), 0n) == True{}: Bool}
+
+def Crit.drop_wf(ty, m, k):
+  ?TODO
+
+# a drop unbinds its key and no other
+law Crit.drop_lookup:
+  for ~V: Data
+  for m: Crit<V>
+  for k: List<&2, U32>
+  for q: List<&2, U32>
+  {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.lookup(V, Crit.drop(V, m, k), q) == Bool.pick(Maybe<&2, V>, Key.is_eq(q, k), None{}, Crit.lookup(V, m, q)): Maybe<&2, V>}
+
+def Crit.drop_lookup(ty, m, k, q):
+  ?TODO
+
+# a union keeps maps well formed
+law Crit.union_wf:
+  for ~V: Data
+  for ~j: V -> V -> V
+  for a: Crit<V>
+  for b: Crit<V>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.union(~V, ~j, a, b), 0n) == True{}: Bool}
+
+def Crit.union_wf(ty, j, a, b):
+  ?TODO
+
+# a union holds what either holds, and j of both where both hold a key
+law Crit.union_lookup:
+  for ~V: Data
+  for ~j: V -> V -> V
+  for a: Crit<V>
+  for b: Crit<V>
+  for q: List<&2, U32>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {
+    Crit.lookup(V, Crit.union(~V, ~j, a, b), q) == Shared.Maybe.join(~V, ~j, Crit.lookup(V, a, q), Crit.lookup(V, b, q)): Maybe<&2, V>
+  }
+
+def Crit.union_lookup(ty, j, a, b, q):
+  ?TODO
+
+# a difference keeps maps well formed
+law Crit.minus_wf:
+  for ~V: Data
+  for a: Crit<V>
+  for b: Crit<V>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {Crit.wf(~V, Crit.minus(V, a, b), 0n) == True{}: Bool}
+
+def Crit.minus_wf(ty, a, b):
+  ?TODO
+
+# a difference holds what a holds under the keys that b lacks
+law Crit.minus_lookup:
+  for ~V: Data
+  for a: Crit<V>
+  for b: Crit<V>
+  for q: List<&2, U32>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {
+    Crit.lookup(V, Crit.minus(V, a, b), q) == Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, Crit.lookup(V, b, q)), None{}, Crit.lookup(V, a, q)): Maybe<&2, V>
+  }
+
+def Crit.minus_lookup(ty, a, b, q):
+  ?TODO
+
+# a read of a well formed map is its clear read
+law Crit.get_lookup:
+  for ~V: Data
+  for m: Crit<V>
+  for k: List<&2, U32>
+  {Crit.wf(~V, m, 0n) == True{}: Bool} -> {Crit.get(V, m, k) == Crit.lookup(V, m, k): Maybe<&2, V>}
+
+def Crit.get_lookup(ty, m, k):
+  ?TODO
+
+# two well formed maps that read the same are the same map
+law Crit.ext:
+  for ~V: Data
+  for a: Crit<V>
+  for b: Crit<V>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> (@q: List<&2, U32> -> {Crit.lookup(V, a, q) == Crit.lookup(V, b, q): Maybe<&2, V>}) -> {a == b: Crit<V>}
+
+def Crit.ext(ty, a, b):
+  ?TODO
+
+# a union is the same either way round, when j is
+law Crit.union_comm:
+  for ~V: Data
+  for ~j: V -> V -> V
+  for ~comm: @x: V -> @y: V -> {j(x, y) == j(y, x): V}
+  for a: Crit<V>
+  for b: Crit<V>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {Crit.union(~V, ~j, a, b) == Crit.union(~V, ~j, b, a): Crit<V>}
+
+def Crit.union_comm(ty, j, comm, a, b):
+  ?TODO
+
+# a union of three is the same however it is grouped, when j is
+law Crit.union_assoc:
+  for ~V: Data
+  for ~j: V -> V -> V
+  for ~assoc: @x: V -> @y: V -> @z: V -> {j(j(x, y), z) == j(x, j(y, z)): V}
+  for a: Crit<V>
+  for b: Crit<V>
+  for c: Crit<V>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> {Crit.wf(~V, c, 0n) == True{}: Bool} -> {
+    Crit.union(~V, ~j, Crit.union(~V, ~j, a, b), c) == Crit.union(~V, ~j, a, Crit.union(~V, ~j, b, c)): Crit<V>
+  }
+
+def Crit.union_assoc(ty, j, assoc, a, b, c):
+  ?TODO
+
+# a union with itself is the map, when j is
+law Crit.union_idem:
+  for ~V: Data
+  for ~j: V -> V -> V
+  for ~idem: @x: V -> {j(x, x) == x: V}
+  for a: Crit<V>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.union(~V, ~j, a, a) == a: Crit<V>}
+
+def Crit.union_idem(ty, j, idem, a):
+  ?TODO
+
+# a map holds as many entries as it holds keys: a map that holds each key of
+# another is no smaller
+law Crit.size_le:
+  for ~V: Data
+  for a: Crit<V>
+  for b: Crit<V>
+  {Crit.wf(~V, a, 0n) == True{}: Bool} -> {Crit.wf(~V, b, 0n) == True{}: Bool} -> (@q: List<&2, U32> -> {
+    Maybe.is_some(&2, V, Crit.lookup(V, a, q)) == True{}: Bool
+  } -> {Maybe.is_some(&2, V, Crit.lookup(V, b, q)) == True{}: Bool}) -> {
+    Nat.is_le(Crit.size(V, a), Crit.size(V, b)) == True{}: Bool
+  }
+
+def Crit.size_le(ty, a, b):
+  ?TODO
+
+# a write of a key that a map lacks adds one entry; of one it holds, none
+law Crit.size_upsert:
+  for ~V: Data
+  for ~f: V -> V -> V
+  for m: Crit<V>
+  for k: List<&2, U32>
+  for v: V
+  {Crit.wf(~V, m, 0n) == True{}: Bool} -> {
+    Crit.size(V, Crit.upsert(~V, ~f, m, k, v))
+      == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, m, k)), Crit.size(V, m)): Nat
+  }
+
+def Crit.size_upsert(ty, f, m, k, v):
+  ?TODO
 
 # Agreement of bits
 # -----------------
