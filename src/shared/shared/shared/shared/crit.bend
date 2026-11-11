@@ -2525,6 +2525,577 @@ def Crit.end_is(+rep: List<&2, U32>, +pos: Nat, +k: List<&2, U32>) -> {
 }:
   Crit.end_is.at(rep, pos, k, Key.diff(k, rep))({==})
 
+# a cursor whose bits are d is done exactly when d is empty
+def Crit.done_of(+c: Cur, +d: List<&2, Bool>) -> {Cur.bits(c) == d: List<&2, Bool>} -> {Cur.done(c) == List.is_empty(&2, Bool, d): Bool}:
+  h => Equal.trans(
+    Bool,
+    Cur.done(c),
+    List.is_empty(&2, Bool, Cur.bits(c)),
+    List.is_empty(&2, Bool, d),
+    Cur.done_bits(c),
+    Equal.cong(List<&2, Bool>, Bool, l => List.is_empty(&2, Bool, l), Cur.bits(c), d, h)
+  )
+
+# the bit of a cursor whose bits are d is the head of d
+def Crit.bit_of(+c: Cur, +d: List<&2, Bool>) -> {Cur.bits(c) == d: List<&2, Bool>} -> {
+  Cur.bit(c) == Shared.List.head_or(Bool, d, False{}): Bool
+}:
+  h => Equal.trans(
+    Bool,
+    Cur.bit(c),
+    Shared.List.head_or(Bool, Cur.bits(c), False{}),
+    Shared.List.head_or(Bool, d, False{}),
+    Cur.bit_bits(c),
+    Equal.cong(List<&2, Bool>, Bool, l => Shared.List.head_or(Bool, l, False{}), Cur.bits(c), d, h)
+  )
+
+# two answers of one test that differ: no such test
+def Crit.clash(+b: Bool, +x: Bool, +y: Bool, hx: {b == x: Bool}, hy: {b == y: Bool}, n: {x == y: Bool} -> Empty) -> Empty:
+  n(Equal.trans(Bool, x, b, y, Equal.sym(Bool, b, x, hx), hy))
+
+# the bits of a cursor at the bit pos, read from a cursor at the bit at of k,
+# are k's bits from pos
+def Crit.skip_at(+k: List<&2, U32>, +at: Nat, +pos: Nat, +c: Cur) -> {Nat.is_le(at, pos) == True{}: Bool} -> {
+  Cur.bits(c) == List.drop(&2, Bool, Key.bits(k), at): List<&2, Bool>
+} -> {Cur.bits(Cur.skip(Nat.sub(pos, at), c)) == List.drop(&2, Bool, Key.bits(k), pos): List<&2, Bool>}:
+  l => hc => Equal.trans(
+    List<&2, Bool>,
+    Cur.bits(Cur.skip(Nat.sub(pos, at), c)),
+    List.drop(&2, Bool, Cur.bits(c), Nat.sub(pos, at)),
+    List.drop(&2, Bool, Key.bits(k), pos),
+    Cur.skip_bits(Nat.sub(pos, at), c),
+    Equal.trans(
+      List<&2, Bool>,
+      List.drop(&2, Bool, Cur.bits(c), Nat.sub(pos, at)),
+      List.drop(&2, Bool, List.drop(&2, Bool, Key.bits(k), at), Nat.sub(pos, at)),
+      List.drop(&2, Bool, Key.bits(k), pos),
+      Equal.cong(List<&2, Bool>, List<&2, Bool>, l2 => List.drop(&2, Bool, l2, Nat.sub(pos, at)), Cur.bits(c), List.drop(&2, Bool, Key.bits(k), at), hc),
+      Crit.drop_drop(Key.bits(k), at, pos)(l)
+    )
+  )
+
+# the bits of a cursor one on from one at the bit pos of k are k's bits from
+# the bit after
+def Crit.next_at(+k: List<&2, U32>, +pos: Nat, +c2: Cur) -> {Cur.bits(c2) == List.drop(&2, Bool, Key.bits(k), pos): List<&2, Bool>} -> {
+  Cur.bits(Cur.next(c2)) == List.drop(&2, Bool, Key.bits(k), 1n+pos): List<&2, Bool>
+}:
+  hc => Equal.trans(
+    List<&2, Bool>,
+    Cur.bits(Cur.next(c2)),
+    List.drop(&2, Bool, Cur.bits(c2), 1n),
+    List.drop(&2, Bool, Key.bits(k), 1n+pos),
+    Cur.next_bits(c2),
+    Equal.trans(
+      List<&2, Bool>,
+      List.drop(&2, Bool, Cur.bits(c2), 1n),
+      List.drop(&2, Bool, List.drop(&2, Bool, Key.bits(k), pos), 1n),
+      List.drop(&2, Bool, Key.bits(k), 1n+pos),
+      Equal.cong(List<&2, Bool>, List<&2, Bool>, l2 => List.drop(&2, Bool, l2, 1n), Cur.bits(c2), List.drop(&2, Bool, Key.bits(k), pos), hc),
+      Crit.drop_drop_one(Key.bits(k), pos)
+    )
+  )
+
+# the end of a fork whose keys pass p passes p, or there is none
+def Crit.all.hit(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +g: G) -> {
+  Crit.all(~V, ~G, ~p, Crit.Fork{rep, pos, e, z, o}, g) == True{}: Bool
+} -> {Bool.or(Maybe.is_none(&2, V, e), p(g)(rep)) == True{}: Bool}:
+  h => Shared.List.all.if_hit(Bool.or(Maybe.is_none(&2, V, e), p(g)(rep)), u => List.all.if(u2 => Crit.all(~V, ~G, ~p, o, g), Crit.all(~V, ~G, ~p, z, g)))(h)
+
+# the zero side of a fork whose keys pass p passes p
+def Crit.all.z(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +g: G) -> {
+  Crit.all(~V, ~G, ~p, Crit.Fork{rep, pos, e, z, o}, g) == True{}: Bool
+} -> {Crit.all(~V, ~G, ~p, z, g) == True{}: Bool}:
+  h => Shared.List.all.if_hit(Crit.all(~V, ~G, ~p, z, g), u2 => Crit.all(~V, ~G, ~p, o, g))(
+    Shared.List.all.if_rest(Bool.or(Maybe.is_none(&2, V, e), p(g)(rep)), u => List.all.if(u2 => Crit.all(~V, ~G, ~p, o, g), Crit.all(~V, ~G, ~p, z, g)))(h)
+  )
+
+# the one side of a fork whose keys pass p passes p
+def Crit.all.o(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +g: G) -> {
+  Crit.all(~V, ~G, ~p, Crit.Fork{rep, pos, e, z, o}, g) == True{}: Bool
+} -> {Crit.all(~V, ~G, ~p, o, g) == True{}: Bool}:
+  h => Shared.List.all.if_rest(Crit.all(~V, ~G, ~p, z, g), u2 => Crit.all(~V, ~G, ~p, o, g))(
+    Shared.List.all.if_rest(Bool.or(Maybe.is_none(&2, V, e), p(g)(rep)), u => List.all.if(u2 => Crit.all(~V, ~G, ~p, o, g), Crit.all(~V, ~G, ~p, z, g)))(h)
+  )
+
+# a choice of a, else some y, is some
+def Crit.or_some_is_some(-A: Data, a: Maybe<&2, A>, -y: A) -> {Maybe.is_some(&2, A, Maybe.or(&2, A, a, Some{y})) == True{}: Bool}:
+  match a:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# a choice of a that is some, else r, is a
+def Crit.or_of_some(-A: Data, a: Maybe<&2, A>, -r: Maybe<&2, A>) -> {Maybe.is_some(&2, A, a) == True{}: Bool} -> {
+  Maybe.or(&2, A, a, r) == a: Maybe<&2, A>
+}:
+  match a:
+    case None{}:
+      h => Empty.absurd({r == None{}: Maybe<&2, A>}, Shared.Bool.false_ne_true(h))
+    case Some{x}:
+      h => {==}
+
+# a choice of a, else some y, takes no more choices
+def Crit.or_absorb(-A: Data, a: Maybe<&2, A>, -y: A, -r: Maybe<&2, A>) -> {
+  Maybe.or(&2, A, Maybe.or(&2, A, a, Some{y}), r) == Maybe.or(&2, A, a, Some{y}): Maybe<&2, A>
+}:
+  match a:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# a choice x of a, else some y, that is some n after the choice r, is some n
+def Crit.or_step(-A: Data, +x: Maybe<&2, A>, +a: Maybe<&2, A>, +y: A, +r: Maybe<&2, A>, +n: A) -> {
+  x == Maybe.or(&2, A, a, Some{y}): Maybe<&2, A>
+} -> {Maybe.or(&2, A, x, r) == Some{n}: Maybe<&2, A>} -> {Maybe.or(&2, A, a, Some{y}) == Some{n}: Maybe<&2, A>}:
+  h1 => h2 => Equal.trans(
+    Maybe<&2, A>,
+    Maybe.or(&2, A, a, Some{y}),
+    Maybe.or(&2, A, x, r),
+    Some{n},
+    Equal.trans(
+      Maybe<&2, A>,
+      Maybe.or(&2, A, a, Some{y}),
+      Maybe.or(&2, A, Maybe.or(&2, A, a, Some{y}), r),
+      Maybe.or(&2, A, x, r),
+      Equal.sym(Maybe<&2, A>, Maybe.or(&2, A, Maybe.or(&2, A, a, Some{y}), r), Maybe.or(&2, A, a, Some{y}), Crit.or_absorb(A, a, y, r)),
+      Equal.cong(Maybe<&2, A>, Maybe<&2, A>, t => Maybe.or(&2, A, t, r), Maybe.or(&2, A, a, Some{y}), x, Equal.sym(Maybe<&2, A>, x, Maybe.or(&2, A, a, Some{y}), h1))
+    ),
+    h2
+  )
+
+# a choice x that is some y, and some n after the choice r: y is n
+def Crit.or_done(-A: Data, +x: Maybe<&2, A>, +y: A, +r: Maybe<&2, A>, +n: A) -> {x == Some{y}: Maybe<&2, A>} -> {
+  Maybe.or(&2, A, x, r) == Some{n}: Maybe<&2, A>
+} -> {y == n: A}:
+  h1 => h2 => Shared.Maybe.some_inj(
+    A,
+    y,
+    n,
+    Equal.trans(
+      Maybe<&2, A>,
+      Some{y},
+      Maybe.or(&2, A, x, r),
+      Some{n},
+      Equal.cong(Maybe<&2, A>, Maybe<&2, A>, t => Maybe.or(&2, A, t, r), Some{y}, x, Equal.sym(Maybe<&2, A>, x, Some{y}, h1)),
+      h2
+    )
+  )
+
+# a choice of a, else some y, that is some n: a is some n, or y is n
+def Crit.or_pick(-A: Data, -T: Type, a: Maybe<&2, A>, +y: A, +n: A) -> ({a == Some{n}: Maybe<&2, A>} -> T) -> ({y == n: A} -> T) -> {
+  Maybe.or(&2, A, a, Some{y}) == Some{n}: Maybe<&2, A>
+} -> T:
+  match a:
+    case None{}:
+      ha => hy => s => hy(Shared.Maybe.some_inj(A, y, n, s))
+    case Some{x}:
+      ha => hy => s => ha(s)
+
+# the key that a read reaches at a fork where it is done is the rep
+def Crit.near_done(-V: Data, +rep: List<&2, U32>, +pos: Nat, -e: Maybe<&2, V>, -z: Crit<V>, -o: Crit<V>, +at: Nat, +c: Cur) -> {
+  Cur.done(Cur.skip(Nat.sub(pos, at), c)) == True{}: Bool
+} -> {Crit.near(V, Crit.Fork{rep, pos, e, z, o}, at, c) == Some{rep}: Maybe<&2, List<&2, U32>>}:
+  h => Shared.Bool.when_cases(
+    Maybe<&2, List<&2, U32>>,
+    t => {t == Some{rep}: Maybe<&2, List<&2, U32>>},
+    Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+    u => Some{rep},
+    u => Shared.Bool.when(
+      Maybe<&2, List<&2, U32>>,
+      Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+      u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+      u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep})
+    ),
+    t1 => {==},
+    t1 => Empty.absurd(
+      {
+        Shared.Bool.when(
+          Maybe<&2, List<&2, U32>>,
+          Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+          u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+          u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep})
+        )
+          == Some{rep}: Maybe<&2, List<&2, U32>>
+      },
+      Crit.clash(Cur.done(Cur.skip(Nat.sub(pos, at), c)), True{}, False{}, h, t1, Shared.Bool.true_ne_false)
+    )
+  )
+
+# the key that a read reaches at a fork where it goes on to the side b
+def Crit.near_side(
+  -V: Data,
+  +rep: List<&2, U32>,
+  +pos: Nat,
+  -e: Maybe<&2, V>,
+  +z: Crit<V>,
+  +o: Crit<V>,
+  +at: Nat,
+  +c: Cur,
+  b: Bool
+) -> {Cur.done(Cur.skip(Nat.sub(pos, at), c)) == False{}: Bool} -> {Cur.bit(Cur.skip(Nat.sub(pos, at), c)) == b: Bool} -> {
+  Crit.near(V, Crit.Fork{rep, pos, e, z, o}, at, c)
+    == Maybe.or(&2, List<&2, U32>, Crit.near(V, Bool.pick(Crit<V>, b, o, z), 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}): Maybe<&2, List<&2, U32>>
+}:
+  match b:
+    case True{}:
+      h => hb =>
+        %Equal.sym(Bool, Cur.done(Cur.skip(Nat.sub(pos, at), c)), False{}, h): {
+          Shared.Bool.when(
+            Maybe<&2, List<&2, U32>>,
+            _,
+            u => Some{rep},
+            u => Shared.Bool.when(
+              Maybe<&2, List<&2, U32>>,
+              Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+              u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+              u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep})
+            )
+          )
+            == Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}): Maybe<&2, List<&2, U32>>
+        }
+        %Equal.sym(Bool, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), True{}, hb): {
+          Shared.Bool.when(
+            Maybe<&2, List<&2, U32>>,
+            _,
+            u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+            u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep})
+          )
+            == Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}): Maybe<&2, List<&2, U32>>
+        }
+        {==}
+    case False{}:
+      h => hb =>
+        %Equal.sym(Bool, Cur.done(Cur.skip(Nat.sub(pos, at), c)), False{}, h): {
+          Shared.Bool.when(
+            Maybe<&2, List<&2, U32>>,
+            _,
+            u => Some{rep},
+            u => Shared.Bool.when(
+              Maybe<&2, List<&2, U32>>,
+              Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+              u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+              u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep})
+            )
+          )
+            == Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}): Maybe<&2, List<&2, U32>>
+        }
+        %Equal.sym(Bool, Cur.bit(Cur.skip(Nat.sub(pos, at), c)), False{}, hb): {
+          Shared.Bool.when(
+            Maybe<&2, List<&2, U32>>,
+            _,
+            u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+            u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep})
+          )
+            == Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}): Maybe<&2, List<&2, U32>>
+        }
+        {==}
+
+# a read of a fork reaches some key
+def Crit.near_some(-V: Data, +rep: List<&2, U32>, +pos: Nat, -e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +at: Nat, +c: Cur) -> {
+  Maybe.is_some(&2, List<&2, U32>, Crit.near(V, Crit.Fork{rep, pos, e, z, o}, at, c)) == True{}: Bool
+}:
+  Shared.Bool.when_cases(
+    Maybe<&2, List<&2, U32>>,
+    t => {Maybe.is_some(&2, List<&2, U32>, t) == True{}: Bool},
+    Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+    u => Some{rep},
+    u => Shared.Bool.when(
+      Maybe<&2, List<&2, U32>>,
+      Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+      u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+      u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep})
+    ),
+    t1 => {==},
+    t1 => Shared.Bool.when_cases(
+      Maybe<&2, List<&2, U32>>,
+      t => {Maybe.is_some(&2, List<&2, U32>, t) == True{}: Bool},
+      Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+      u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+      u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+      t2 => Crit.or_some_is_some(List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), rep),
+      t2 => Crit.or_some_is_some(List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), rep)
+    )
+  )
+
+# m has no entry
+def Crit.is_tip(-V: Data, m: Crit<V>) -> Bool:
+  match m:
+    case Crit.Tip{}:
+      True{}
+    case Crit.Leaf{k, v}:
+      False{}
+    case Crit.Fork{r, p, e, z, o}:
+      False{}
+
+# a fork of two entries at least, with no end, has a zero side
+def Crit.shape_none_z(-V: Data, z: Crit<V>, o: Crit<V>) -> {Crit.shape(V, None{}, z, o) == True{}: Bool} -> {Crit.is_tip(V, z) == False{}: Bool}:
+  match z o:
+    case Crit.Tip{} Crit.Tip{}:
+      h => Empty.absurd({True{} == False{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Crit.Tip{} Crit.Leaf{k, v}:
+      h => Empty.absurd({True{} == False{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Crit.Tip{} Crit.Fork{r, p, e, z1, o1}:
+      h => Empty.absurd({True{} == False{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Crit.Leaf{k, v} o2:
+      h => {==}
+    case Crit.Fork{r, p, e, z1, o1} o2:
+      h => {==}
+
+# Crit.rep_pass at a fork, by its end e; ih is the claim for its zero side
+def Crit.rep_pass.fork(
+  ~V: Data,
+  ~G: Data,
+  ~p: G -> List<&2, U32> -> Bool,
+  +rep: List<&2, U32>,
+  +pos: Nat,
+  e: Maybe<&2, V>,
+  +z: Crit<V>,
+  +o: Crit<V>,
+  +lo: Nat,
+  +g: G,
+  ih: {Crit.wf(~V, z, 1n+pos) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, z, g) == True{}: Bool} -> {Crit.is_tip(V, z) == False{}: Bool} -> {
+    p(g)(Crit.rep(V, z, rep)) == True{}: Bool
+  }
+) -> {Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool} -> {Crit.all(~V, ~G, ~p, Crit.Fork{rep, pos, e, z, o}, g) == True{}: Bool} -> {
+  p(g)(rep) == True{}: Bool
+}:
+  match e:
+    case None{}:
+      +h => a =>
+        %Equal.sym(List<&2, U32>, rep, Crit.rep(V, z, rep), Key.is_eq_sound(rep, Crit.rep(V, z, rep))(Crit.wf.rep_ok(~V, rep, pos, None{}, z, o, lo)(h))): {
+          p(g)(_) == True{}: Bool
+        }
+        ih(Crit.wf.wf_z(~V, rep, pos, None{}, z, o, lo)(h))(Crit.all.z(~V, ~G, ~p, rep, pos, None{}, z, o, g)(a))(
+          Crit.shape_none_z(V, z, o)(Crit.wf.shape(~V, rep, pos, None{}, z, o, lo)(h))
+        )
+    case Some{v}:
+      h => a => Crit.all.hit(~V, ~G, ~p, rep, pos, Some{v}, z, o, g)(a)
+
+# the first key of a well formed map with an entry, whose keys pass p, passes p
+def Crit.rep_pass(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, m: Crit<V>, +lo: Nat, +g: G, +d: List<&2, U32>) -> {
+  Crit.wf(~V, m, lo) == True{}: Bool
+} -> {Crit.all(~V, ~G, ~p, m, g) == True{}: Bool} -> {Crit.is_tip(V, m) == False{}: Bool} -> {p(g)(Crit.rep(V, m, d)) == True{}: Bool}:
+  match m:
+    case Crit.Tip{}:
+      h => a => t => Empty.absurd({p(g)(d) == True{}: Bool}, Shared.Bool.true_ne_false(t))
+    case Crit.Leaf{k, v}:
+      h => a => t => a
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      h => a => t => Crit.rep_pass.fork(~V, ~G, ~p, rep, pos, e, z, o, lo, g, Crit.rep_pass(~V, ~G, ~p, z, 1n+pos, g, rep))(h)(a)
+
+# the key that a read of a well formed map reaches, when its keys pass p,
+# passes p
+def Crit.near_pass(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, m: Crit<V>, +lo: Nat, +at: Nat, +c: Cur, +g: G, +n: List<&2, U32>) -> {
+  Crit.wf(~V, m, lo) == True{}: Bool
+} -> {Crit.all(~V, ~G, ~p, m, g) == True{}: Bool} -> {Crit.near(V, m, at, c) == Some{n}: Maybe<&2, List<&2, U32>>} -> {p(g)(n) == True{}: Bool}:
+  match m:
+    case Crit.Tip{}:
+      h => a => s => Empty.absurd({p(g)(n) == True{}: Bool}, Shared.Maybe.none_ne_some(List<&2, U32>, n, s))
+    case Crit.Leaf{+k, v}:
+      h => a => s =>
+        %Shared.Maybe.some_inj(List<&2, U32>, k, n, s): {p(g)(_) == True{}: Bool}
+        a
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      +h => +a => Shared.Bool.when_cases(
+        Maybe<&2, List<&2, U32>>,
+        t => {t == Some{n}: Maybe<&2, List<&2, U32>>} -> {p(g)(n) == True{}: Bool},
+        Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+        u => Some{rep},
+        u => Shared.Bool.when(
+          Maybe<&2, List<&2, U32>>,
+          Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+          u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+          u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep})
+        ),
+        t1 => s =>
+          %Shared.Maybe.some_inj(List<&2, U32>, rep, n, s): {p(g)(_) == True{}: Bool}
+          Crit.rep_pass(~V, ~G, ~p, Crit.Fork{rep, pos, e, z, o}, lo, g, [])(h)(a)({==}),
+        t1 => Shared.Bool.when_cases(
+          Maybe<&2, List<&2, U32>>,
+          t => {t == Some{n}: Maybe<&2, List<&2, U32>>} -> {p(g)(n) == True{}: Bool},
+          Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+          u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+          u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+          t2 => Crit.or_pick(List<&2, U32>, {p(g)(n) == True{}: Bool}, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), rep, n)(
+            Crit.near_pass(~V, ~G, ~p, o, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), g, n)(Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h))(
+              Crit.all.o(~V, ~G, ~p, rep, pos, e, z, o, g)(a)
+            )
+          )(
+            eq => (
+              %eq: {p(g)(_) == True{}: Bool}
+              Crit.rep_pass(~V, ~G, ~p, Crit.Fork{rep, pos, e, z, o}, lo, g, [])(h)(a)({==})
+            )
+          ),
+          t2 => Crit.or_pick(List<&2, U32>, {p(g)(n) == True{}: Bool}, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), rep, n)(
+            Crit.near_pass(~V, ~G, ~p, z, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), g, n)(Crit.wf.wf_z(~V, rep, pos, e, z, o, lo)(h))(
+              Crit.all.z(~V, ~G, ~p, rep, pos, e, z, o, g)(a)
+            )
+          )(
+            eq => (
+              %eq: {p(g)(_) == True{}: Bool}
+              Crit.rep_pass(~V, ~G, ~p, Crit.Fork{rep, pos, e, z, o}, lo, g, [])(h)(a)({==})
+            )
+          )
+        )
+      )
+
+# a key on a side of a fork agrees with its rep before its bit
+def Place.has_agree(+rep: List<&2, U32>, +pos: Nat, +b: Bool, +k: List<&2, U32>) -> {Place.has(Place{rep, pos, b}, k) == True{}: Bool} -> {
+  Key.agree(k, rep, pos) == True{}: Bool
+}:
+  h => Shared.List.all.if_hit(Key.agree(k, rep, pos), u => Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(k, pos), Some{b}))(h)
+
+# a key that does not agree with the rep of a fork before its bit is on no side
+def Place.has_not_agree(+rep: List<&2, U32>, +pos: Nat, +b: Bool, +k: List<&2, U32>) -> {Key.agree(k, rep, pos) == False{}: Bool} -> {
+  Place.has(Place{rep, pos, b}, k) == False{}: Bool
+}:
+  h =>
+    %Equal.sym(Bool, Key.agree(k, rep, pos), False{}, h): {
+      List.all.if(u => Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Key.side(k, pos), Some{b}), _) == False{}: Bool
+    }
+    {==}
+
+# the key that a read of a well formed fork reaches agrees with its rep
+# before its bit
+def Crit.near_agree(
+  ~V: Data,
+  +rep: List<&2, U32>,
+  +pos: Nat,
+  +e: Maybe<&2, V>,
+  +z: Crit<V>,
+  +o: Crit<V>,
+  +lo: Nat,
+  +at: Nat,
+  +c: Cur,
+  +n: List<&2, U32>
+) -> {Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool} -> {
+  Crit.near(V, Crit.Fork{rep, pos, e, z, o}, at, c) == Some{n}: Maybe<&2, List<&2, U32>>
+} -> {Key.agree(n, rep, pos) == True{}: Bool}:
+  +h => Shared.Bool.when_cases(
+    Maybe<&2, List<&2, U32>>,
+    t => {t == Some{n}: Maybe<&2, List<&2, U32>>} -> {Key.agree(n, rep, pos) == True{}: Bool},
+    Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+    u => Some{rep},
+    u => Shared.Bool.when(
+      Maybe<&2, List<&2, U32>>,
+      Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+      u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+      u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep})
+    ),
+    t1 => s =>
+      %Shared.Maybe.some_inj(List<&2, U32>, rep, n, s): {Key.agree(_, rep, pos) == True{}: Bool}
+      Key.agree_self(rep, pos),
+    t1 => Shared.Bool.when_cases(
+      Maybe<&2, List<&2, U32>>,
+      t => {t == Some{n}: Maybe<&2, List<&2, U32>>} -> {Key.agree(n, rep, pos) == True{}: Bool},
+      Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+      u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+      u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+      t2 => Crit.or_pick(List<&2, U32>, {Key.agree(n, rep, pos) == True{}: Bool}, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), rep, n)(
+        s2 => Place.has_agree(rep, pos, True{}, n)(
+          Crit.near_pass(~V, ~Place, ~Place.has, o, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), Place{rep, pos, True{}}, n)(
+            Crit.wf.wf_o(~V, rep, pos, e, z, o, lo)(h)
+          )(Crit.wf.all_o(~V, rep, pos, e, z, o, lo)(h))(s2)
+        )
+      )(
+        eq => (
+          %eq: {Key.agree(_, rep, pos) == True{}: Bool}
+          Key.agree_self(rep, pos)
+        )
+      ),
+      t2 => Crit.or_pick(List<&2, U32>, {Key.agree(n, rep, pos) == True{}: Bool}, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), rep, n)(
+        s2 => Place.has_agree(rep, pos, False{}, n)(
+          Crit.near_pass(~V, ~Place, ~Place.has, z, 1n+pos, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), Place{rep, pos, False{}}, n)(
+            Crit.wf.wf_z(~V, rep, pos, e, z, o, lo)(h)
+          )(Crit.wf.all_z(~V, rep, pos, e, z, o, lo)(h))(s2)
+        )
+      )(
+        eq => (
+          %eq: {Key.agree(_, rep, pos) == True{}: Bool}
+          Key.agree_self(rep, pos)
+        )
+      )
+    )
+  )
+
+# two keys agree on n bits exactly when their bits do
+def Key.agree_bits(+a: List<&2, U32>, +b: List<&2, U32>, +n: Nat) -> {Key.agree(a, b, n) == Bits.agree_n(n, Key.bits(a), Key.bits(b)): Bool}:
+  Equal.trans(
+    Bool,
+    Key.agree(a, b, n),
+    Bits.agree(Bits.diff(Key.bits(a), Key.bits(b)), n),
+    Bits.agree_n(n, Key.bits(a), Key.bits(b)),
+    Equal.cong(Maybe<&2, Nat>, Bool, t => Bits.agree(t, n), Key.diff(a, b), Bits.diff(Key.bits(a), Key.bits(b)), Key.diff_bits(a, b)),
+    Bits.agree_diff(Key.bits(a), Key.bits(b), n)
+  )
+
+# two keys that agree with a third on n bits agree with each other
+def Key.agree_join(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>, +n: Nat) -> {Key.agree(a, c, n) == True{}: Bool} -> {
+  Key.agree(b, c, n) == True{}: Bool
+} -> {Key.agree(a, b, n) == True{}: Bool}:
+  h1 => h2 => Equal.trans(
+    Bool,
+    Key.agree(a, b, n),
+    Bits.agree_n(n, Key.bits(a), Key.bits(b)),
+    True{},
+    Key.agree_bits(a, b, n),
+    Bits.agree_n_trans(Key.bits(a), Key.bits(c), Key.bits(b), n)(
+      Equal.trans(Bool, Bits.agree_n(n, Key.bits(a), Key.bits(c)), Key.agree(a, c, n), True{}, Equal.sym(Bool, Key.agree(a, c, n), Bits.agree_n(n, Key.bits(a), Key.bits(c)), Key.agree_bits(a, c, n)), h1)
+    )(
+      Equal.trans(
+        Bool,
+        Bits.agree_n(n, Key.bits(c), Key.bits(b)),
+        Bits.agree_n(n, Key.bits(b), Key.bits(c)),
+        True{},
+        Bits.agree_n_sym(Key.bits(c), Key.bits(b), n),
+        Equal.trans(Bool, Bits.agree_n(n, Key.bits(b), Key.bits(c)), Key.agree(b, c, n), True{}, Equal.sym(Bool, Key.agree(b, c, n), Bits.agree_n(n, Key.bits(b), Key.bits(c)), Key.agree_bits(b, c, n)), h2)
+      )
+    )
+  )
+
+# a first difference before pos does not agree on pos bits
+def Crit.above_agree(d: Maybe<&2, Nat>, +pos: Nat) -> {Crit.above(d, pos) == True{}: Bool} -> {Bits.agree(d, pos) == False{}: Bool}:
+  match d:
+    case None{}:
+      h => Empty.absurd({True{} == False{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Some{+x}:
+      h => Crit.false_of(Nat.is_le(pos, x))(t => Crit.clash(Nat.is_lt(x, pos), True{}, False{}, h, Shared.Nat.le_nlt(pos, x)(t), Shared.Bool.true_ne_false))
+
+# a well formed fork holds no key that does not agree with its rep before its
+# bit
+def Crit.not_in_fork(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat, +k: List<&2, U32>) -> {
+  Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool
+} -> {Key.agree(k, rep, pos) == False{}: Bool} -> {Crit.lookup(V, Crit.Fork{rep, pos, e, z, o}, k) == None{}: Maybe<&2, V>}:
+  +h => +n => Crit.or3_none(V, Crit.ended(V, rep, e, k), Crit.lookup(V, z, k), Crit.lookup(V, o, k))(
+    Crit.ended_ne(V, rep, e, k)(
+      Crit.false_of(Key.is_eq(rep, k))(
+        t => Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Key.agree(k, rep, pos),
+            True{},
+            Equal.sym(Bool, Key.agree(k, rep, pos), False{}, n),
+            (
+              %Equal.sym(List<&2, U32>, rep, k, Key.is_eq_sound(rep, k)(t)): {Key.agree(k, _, pos) == True{}: Bool}
+              Key.agree_self(k, pos)
+            )
+          )
+        )
+      )
+    )
+  )(
+    Crit.lookup_all(~V, ~Place, ~Place.has, z, Place{rep, pos, False{}}, k)(Crit.wf.all_z(~V, rep, pos, e, z, o, lo)(h))(
+      Place.has_not_agree(rep, pos, False{}, k)(n)
+    )
+  )(
+    Crit.lookup_all(~V, ~Place, ~Place.has, o, Place{rep, pos, True{}}, k)(Crit.wf.all_o(~V, rep, pos, e, z, o, lo)(h))(
+      Place.has_not_agree(rep, pos, True{}, k)(n)
+    )
+  )
+
 # a map with no entry is well formed
 law Crit.new_wf:
   for ~V: Data
@@ -2714,34 +3285,6 @@ def Crit.drop_go_other(-V: Data, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32
         Crit.drop_go_other(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, q)(h)
       )
 
-# a cursor whose bits are d is done exactly when d is empty
-def Crit.done_of(+c: Cur, +d: List<&2, Bool>) -> {Cur.bits(c) == d: List<&2, Bool>} -> {Cur.done(c) == List.is_empty(&2, Bool, d): Bool}:
-  h => Equal.trans(
-    Bool,
-    Cur.done(c),
-    List.is_empty(&2, Bool, Cur.bits(c)),
-    List.is_empty(&2, Bool, d),
-    Cur.done_bits(c),
-    Equal.cong(List<&2, Bool>, Bool, l => List.is_empty(&2, Bool, l), Cur.bits(c), d, h)
-  )
-
-# the bit of a cursor whose bits are d is the head of d
-def Crit.bit_of(+c: Cur, +d: List<&2, Bool>) -> {Cur.bits(c) == d: List<&2, Bool>} -> {
-  Cur.bit(c) == Shared.List.head_or(Bool, d, False{}): Bool
-}:
-  h => Equal.trans(
-    Bool,
-    Cur.bit(c),
-    Shared.List.head_or(Bool, Cur.bits(c), False{}),
-    Shared.List.head_or(Bool, d, False{}),
-    Cur.bit_bits(c),
-    Equal.cong(List<&2, Bool>, Bool, l => Shared.List.head_or(Bool, l, False{}), Cur.bits(c), d, h)
-  )
-
-# two answers of one test that differ: no such test
-def Crit.clash(+b: Bool, +x: Bool, +y: Bool, hx: {b == x: Bool}, hy: {b == y: Bool}, n: {x == y: Bool} -> Empty) -> Empty:
-  n(Equal.trans(Bool, x, b, y, Equal.sym(Bool, b, x, hx), hy))
-
 # Crit.drop_go_none at a fork, from the cursor c2 at its bit, where k's bits
 # from the bit are d: the drops dz and dn of its sides hold no k
 def Crit.drop_fork_none(
@@ -2885,48 +3428,6 @@ def Crit.drop_fork_none(
             )
           )
         )
-
-# the bits of a cursor at the bit pos, read from a cursor at the bit at of k,
-# are k's bits from pos
-def Crit.skip_at(+k: List<&2, U32>, +at: Nat, +pos: Nat, +c: Cur) -> {Nat.is_le(at, pos) == True{}: Bool} -> {
-  Cur.bits(c) == List.drop(&2, Bool, Key.bits(k), at): List<&2, Bool>
-} -> {Cur.bits(Cur.skip(Nat.sub(pos, at), c)) == List.drop(&2, Bool, Key.bits(k), pos): List<&2, Bool>}:
-  l => hc => Equal.trans(
-    List<&2, Bool>,
-    Cur.bits(Cur.skip(Nat.sub(pos, at), c)),
-    List.drop(&2, Bool, Cur.bits(c), Nat.sub(pos, at)),
-    List.drop(&2, Bool, Key.bits(k), pos),
-    Cur.skip_bits(Nat.sub(pos, at), c),
-    Equal.trans(
-      List<&2, Bool>,
-      List.drop(&2, Bool, Cur.bits(c), Nat.sub(pos, at)),
-      List.drop(&2, Bool, List.drop(&2, Bool, Key.bits(k), at), Nat.sub(pos, at)),
-      List.drop(&2, Bool, Key.bits(k), pos),
-      Equal.cong(List<&2, Bool>, List<&2, Bool>, l2 => List.drop(&2, Bool, l2, Nat.sub(pos, at)), Cur.bits(c), List.drop(&2, Bool, Key.bits(k), at), hc),
-      Crit.drop_drop(Key.bits(k), at, pos)(l)
-    )
-  )
-
-# the bits of a cursor one on from one at the bit pos of k are k's bits from
-# the bit after
-def Crit.next_at(+k: List<&2, U32>, +pos: Nat, +c2: Cur) -> {Cur.bits(c2) == List.drop(&2, Bool, Key.bits(k), pos): List<&2, Bool>} -> {
-  Cur.bits(Cur.next(c2)) == List.drop(&2, Bool, Key.bits(k), 1n+pos): List<&2, Bool>
-}:
-  hc => Equal.trans(
-    List<&2, Bool>,
-    Cur.bits(Cur.next(c2)),
-    List.drop(&2, Bool, Cur.bits(c2), 1n),
-    List.drop(&2, Bool, Key.bits(k), 1n+pos),
-    Cur.next_bits(c2),
-    Equal.trans(
-      List<&2, Bool>,
-      List.drop(&2, Bool, Cur.bits(c2), 1n),
-      List.drop(&2, Bool, List.drop(&2, Bool, Key.bits(k), pos), 1n),
-      List.drop(&2, Bool, Key.bits(k), 1n+pos),
-      Equal.cong(List<&2, Bool>, List<&2, Bool>, l2 => List.drop(&2, Bool, l2, 1n), Cur.bits(c2), List.drop(&2, Bool, Key.bits(k), pos), hc),
-      Crit.drop_drop_one(Key.bits(k), pos)
-    )
-  )
 
 # a drop of k, read from k's cursor, from a well formed map, holds no k
 def Crit.drop_go_none(~V: Data, m: Crit<V>, +lo: Nat, +at: Nat, +c: Cur, +k: List<&2, U32>) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {
