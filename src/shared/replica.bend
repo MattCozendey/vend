@@ -5538,6 +5538,729 @@ def Keep.bind(
     case Some{+r1}:
       hg(r1)(Ext.based(~mach, ~d, l, r, r1, bd, gm))(hm)
 
+# taking a request keeps each key
+def Keep.taken.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +n: U32,
+  +vs: Maybe<&2, List<&2, String>>,
+  +bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Step.taken.at(~mach, ~d, r, i, a, n, vs)):
+  Keep.bind(
+    ~mach,
+    ~d,
+    l,
+    key,
+    val,
+    r,
+    Run.add(~mach, ~d, r, Log.out(i), Out.code(Out.Taken{a, n}, [])),
+    +r1 => Maybe.bind(
+      &2,
+      Run<Led.L(mach, d)>,
+      Run<Led.L(mach, d)>,
+      Run.add(
+        ~mach,
+        ~d,
+        r1,
+        Log.taken(n),
+        Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+      ),
+      r2 => Some{Run.next(Led.L(mach, d), r2, vs)}
+    ),
+    Keep.add(~mach, ~d, l, key, val, r, Log.out(i), Out.code(Out.Taken{a, n}, []), bd, kh),
+    Ext.add(~mach, ~d, l, r, Log.out(i), Out.code(Out.Taken{a, n}, [])),
+    bd,
+    +r1 => +bd1 => kh1 => Keep.bind(
+      ~mach,
+      ~d,
+      l,
+      key,
+      val,
+      r1,
+      Run.add(
+        ~mach,
+        ~d,
+        r1,
+        Log.taken(n),
+        Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+      ),
+      r2 => Some{Run.next(Led.L(mach, d), r2, vs)},
+      Keep.add(
+        ~mach,
+        ~d,
+        l,
+        key,
+        val,
+        r1,
+        Log.taken(n),
+        Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, []),
+        bd1,
+        kh1
+      ),
+      Ext.add(
+        ~mach,
+        ~d,
+        l,
+        r1,
+        Log.taken(n),
+        Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
+      ),
+      bd1,
+      r2 => bd2 => kh2 => Keep.step_next(~mach, ~d, l, key, val, r2, vs, kh2)
+    )
+  )
+
+# taking a request as the next number keeps each key
+def Keep.taken(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +vs: Maybe<&2, List<&2, String>>,
+  bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Step.taken(~mach, ~d, r, i, a, vs)):
+  Keep.taken.at(~mach, ~d, l, key, val, r, i, a, Tip.count(Run.tip(Led.L(mach, d), r)), vs, bd, kh)
+
+# a label keeps each key
+def Keep.labelled(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  v: Maybe<&2, Taken>,
+  +bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Step.labelled(~mach, ~d, r, i, a, m, v)):
+  match v:
+    case None{}:
+      Unit{}
+    case Some{+x}:
+      Keep.bind(
+        ~mach,
+        ~d,
+        l,
+        key,
+        val,
+        r,
+        Run.add(~mach, ~d, r, Log.label(m), Ledgers.Id.code(Taken.id(x), [])),
+        r2 => Step.taken(~mach, ~d, r2, i, a, None{}),
+        Keep.add(~mach, ~d, l, key, val, r, Log.label(m), Ledgers.Id.code(Taken.id(x), []), bd, kh),
+        Ext.add(~mach, ~d, l, r, Log.label(m), Ledgers.Id.code(Taken.id(x), [])),
+        bd,
+        r2 => bd2 => kh2 => Keep.taken(~mach, ~d, l, key, val, r2, i, a, None{}, bd2, kh2)
+      )
+
+# Step.label.at keeps each key
+def Keep.label.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  k: Maybe<&2, Maybe<&2, Ledgers.Id>>,
+  +bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Step.label.at(~mach, ~d, r, i, a, m, k)):
+  match k:
+    case None{}:
+      Unit{}
+    case Some{Some{x}}:
+      Keep.stale(~mach, ~d, l, key, val, r, i, a, bd, kh)
+    case Some{None{}}:
+      Shared.Bool.when_cases(
+        Maybe<&2, Run<Led.L(mach, d)>>,
+        z => Keep.Has(mach, d, l, key, val, r) -> Keep.Out(mach, d, l, key, val, z),
+        U32.is_eq(Tip.count(Run.tip(Led.L(mach, d), r)), 0),
+        u => Step.stale(~mach, ~d, r, i, a),
+        u => Step.labelled(
+          ~mach,
+          ~d,
+          r,
+          i,
+          a,
+          m,
+          Tip.taken(
+            ~mach,
+            ~d,
+            Run.ledger(Led.L(mach, d), r),
+            Run.tip(Led.L(mach, d), r),
+            U32.sub(Tip.count(Run.tip(Led.L(mach, d), r)), 1)
+          )
+        ),
+        e => kh1 => Keep.stale(~mach, ~d, l, key, val, r, i, a, bd, kh1),
+        e => kh1 => Keep.labelled(
+          ~mach,
+          ~d,
+          l,
+          key,
+          val,
+          r,
+          i,
+          a,
+          m,
+          Tip.taken(
+            ~mach,
+            ~d,
+            Run.ledger(Led.L(mach, d), r),
+            Run.tip(Led.L(mach, d), r),
+            U32.sub(Tip.count(Run.tip(Led.L(mach, d), r)), 1)
+          ),
+          bd,
+          kh1
+        )
+      )(kh)
+
+# a request for a label keeps each key
+def Keep.label(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +m: String,
+  bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Step.label(~mach, ~d, r, i, a, m)):
+  Keep.label.at(
+    ~mach,
+    ~d,
+    l,
+    key,
+    val,
+    r,
+    i,
+    a,
+    m,
+    Tip.known(
+      ~Ledgers.Id,
+      ~Ledgers.Id.code,
+      ~Ledgers.Id.code.read,
+      Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.label(m))
+    ),
+    bd,
+    kh
+  )
+
+# opening a sub line keeps each key
+def Keep.opens(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +b: String,
+  +t: Tip,
+  +ns: List<&2, List<&2, U32>>,
+  +bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Step.opens(~mach, ~d, r, i, a, b, t, ns)):
+  +r0 = Run.over(~mach, ~d, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r)))
+  Keep.bind(
+    ~mach,
+    ~d,
+    l,
+    key,
+    val,
+    r,
+    Run.add(~mach, ~d, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), [])),
+    r2 => Step.taken(~mach, ~d, r2, i, a, None{}),
+    Keep.add(
+      ~mach,
+      ~d,
+      l,
+      key,
+      val,
+      r0,
+      Log.start(b),
+      Hashes.Hash.code(Tip.hash(t), []),
+      Ext.based(
+        ~mach,
+        ~d,
+        l,
+        r,
+        r0,
+        bd,
+        Ext.over(~mach, ~d, l, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r)))
+      ),
+      Keep.over(~mach, ~d, l, key, val, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r)), kh)
+    ),
+    Ext.transM(
+      ~mach,
+      ~d,
+      l,
+      r,
+      r0,
+      Run.add(~mach, ~d, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), [])),
+      Ext.over(~mach, ~d, l, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r))),
+      Ext.add(~mach, ~d, l, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t), []))
+    ),
+    bd,
+    r2 => bd2 => kh2 => Keep.taken(~mach, ~d, l, key, val, r2, i, a, None{}, bd2, kh2)
+  )
+
+# an act of a kernel keeps each key
+def Keep.act(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  m: Maybe<&2, Act>,
+  +bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Act.run(~mach, ~d, r, i, a, m)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Act.Stale{}}:
+      Keep.stale(~mach, ~d, l, key, val, r, i, a, bd, kh)
+    case Some{Act.Label{x}}:
+      Keep.label(~mach, ~d, l, key, val, r, i, a, x, bd, kh)
+    case Some{Act.Taken{+vs, +h, +ns}}:
+      Keep.taken(
+        ~mach,
+        ~d,
+        l,
+        key,
+        val,
+        Run.over(~mach, ~d, r, ns, h),
+        i,
+        a,
+        vs,
+        Ext.based(~mach, ~d, l, r, Run.over(~mach, ~d, r, ns, h), bd, Ext.over(~mach, ~d, l, r, ns, h)),
+        Keep.over(~mach, ~d, l, key, val, r, ns, h, kh)
+      )
+    case Some{Act.Opens{b, t, ns}}:
+      Keep.opens(~mach, ~d, l, key, val, r, i, a, b, t, ns, bd, kh)
+
+# a request with the outcome o keeps each key
+def Keep.fresh(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +q: Machine.Q(mach),
+  o: Maybe<&2, Maybe<&2, Out>>,
+  bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Step.fresh(~mach, ~d, ~kern, r, c, i, a, q, o)):
+  match o:
+    case None{}:
+      Unit{}
+    case Some{Some{x}}:
+      kh
+    case Some{None{}}:
+      Keep.act(
+        ~mach,
+        ~d,
+        l,
+        key,
+        val,
+        r,
+        i,
+        a,
+        Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), r))(Run.tip(Led.L(mach, d), r))(c)(i)(q),
+        bd,
+        kh
+      )
+
+# the entry m keeps each key
+def Keep.asked(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +a: Hashes.Hash,
+  m: Maybe<&2, Entry(mach)>,
+  bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Step.asked(~mach, ~d, ~kern, r, c, a, m)):
+  match m:
+    case Some{Ledgers.Entry.Ask{+i, t, q}}:
+      Keep.fresh(
+        ~mach,
+        ~d,
+        ~kern,
+        l,
+        key,
+        val,
+        r,
+        c,
+        i,
+        a,
+        q,
+        Tip.known(
+          ~Out,
+          ~Out.code,
+          ~Out.code.read,
+          Tip.find(~mach, ~d, Run.ledger(Led.L(mach, d), r), Run.tip(Led.L(mach, d), r), Log.out(i))
+        ),
+        bd,
+        kh
+      )
+    case None{}:
+      Unit{}
+    case Some{Ledgers.Entry.Ballot{x}}:
+      Unit{}
+    case Some{Ledgers.Entry.Data{x}}:
+      Unit{}
+    case Some{Ledgers.Entry.Lie{x}}:
+      Unit{}
+
+# one request keeps each key
+def Keep.one(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +r: Run<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +a: Hashes.Hash,
+  bd: Ext.Based(mach, d, l, r),
+  kh: Keep.Has(mach, d, l, key, val, r)
+) -> Keep.Out(mach, d, l, key, val, Step.one(~mach, ~d, ~kern, r, c, a)):
+  Keep.asked(
+    ~mach,
+    ~d,
+    ~kern,
+    l,
+    key,
+    val,
+    r,
+    c,
+    a,
+    Led.get(~mach, ~d, Run.ledger(Led.L(mach, d), r), Ledgers.Name.Ask{a}),
+    bd,
+    kh
+  )
+
+# that the run m, when there is one, is based on l and keeps the key
+def Keep.All(
+  -mach: Machine(),
+  -d: Led(mach),
+  -l: Led.L(mach, d),
+  -key: List<&2, U32>,
+  -val: List<&2, U32>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>
+) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{r}:
+      Ext.Based(mach, d, l, r) & Keep.Has(mach, d, l, key, val, r)
+
+# Keep.All of a run m2 that follows r1
+def Keep.all_pair(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  -key: List<&2, U32>,
+  -val: List<&2, U32>,
+  +r1: Run<Led.L(mach, d)>,
+  m2: Maybe<&2, Run<Led.L(mach, d)>>,
+  ko: Keep.Out(mach, d, l, key, val, m2),
+  gm: Ext.GainM(mach, d, l, r1, m2),
+  bd: Ext.Based(mach, d, l, r1)
+) -> Keep.All(mach, d, l, key, val, m2):
+  match m2:
+    case None{}:
+      Unit{}
+    case Some{+r2}:
+      Tuple{Ext.based(~mach, ~d, l, r1, r2, bd, gm), ko}
+
+# Keep.All after one more request
+def Keep.all_step(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +c: Ledgers.Line,
+  +q: Hashes.Hash,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  hm: Keep.All(mach, d, l, key, val, m)
+) -> Keep.All(
+  mach,
+  d,
+  l,
+  key,
+  val,
+  Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, x => Step.one(~mach, ~d, ~kern, x, c, q))
+):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+r1}:
+      match hm:
+        case Tuple{+bd, kh}:
+          Keep.all_pair(
+            ~mach,
+            ~d,
+            l,
+            key,
+            val,
+            r1,
+            Step.one(~mach, ~d, ~kern, r1, c, q),
+            Keep.one(~mach, ~d, ~kern, l, key, val, r1, c, q, bd, kh),
+            Ext.one(~mach, ~d, ~kern, l, r1, c, q),
+            bd
+          )
+
+# Keep.All gives Keep.Out
+def Keep.all_out(
+  -mach: Machine(),
+  -d: Led(mach),
+  -l: Led.L(mach, d),
+  -key: List<&2, U32>,
+  -val: List<&2, U32>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  hm: Keep.All(mach, d, l, key, val, m)
+) -> Keep.Out(mach, d, l, key, val, m):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{r}:
+      match hm:
+        case Tuple{bd, kh}:
+          kh
+
+# the requests qs keep each key
+def Keep.all(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  +c: Ledgers.Line,
+  qs: List<&2, Hashes.Hash>,
+  +m: Maybe<&2, Run<Led.L(mach, d)>>,
+  hm: Keep.All(mach, d, l, key, val, m)
+) -> Keep.Out(mach, d, l, key, val, Step.all(~mach, ~d, ~kern, c, qs, m)):
+  match qs:
+    case Nil{}:
+      Keep.all_out(mach, d, l, key, val, m, hm)
+    case Con{+q, rest}:
+      Keep.all(
+        ~mach,
+        ~d,
+        ~kern,
+        l,
+        key,
+        val,
+        c,
+        rest,
+        Maybe.bind(&2, Run<Led.L(mach, d)>, Run<Led.L(mach, d)>, m, x => Step.one(~mach, ~d, ~kern, x, c, q)),
+        Keep.all_step(~mach, ~d, ~kern, l, key, val, c, q, m, hm)
+      )
+
+# Line.landed once the check of its run is known (b)
+def Keep.landed.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +tr: Tip,
+  +a: List<&2, List<&2, U32>>,
+  after: Maybe<&2, Hashes.Hash>,
+  -x: Tip,
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  b: Bool,
+  eb: {
+    Bool.and(Tips.same(Some{Tip.hash(tr)}, after), Ext.holds(~mach, ~d, l, a)) == b: Bool
+  },
+  ko: {Ext.holds(~mach, ~d, l, a) == True{}: Bool}
+    -> {Tip.get(~mach, ~d, l, tr, key) == Some{val}: Maybe<&2, List<&2, U32>>},
+  e: {Shared.Maybe.when(Tip, b, u => Some{tr}) == Some{x}: Maybe<&2, Tip>}
+) -> {Tip.get(~mach, ~d, l, x, key) == Some{val}: Maybe<&2, List<&2, U32>>}:
+  match b:
+    case True{}:
+      %Shared.Maybe.some_inj(Tip, tr, x, e): {Tip.get(~mach, ~d, l, _, key) == Some{val}: Maybe<&2, List<&2, U32>>}
+      ko(
+        Shared.Bool.and_true_right(
+          Tips.same(Some{Tip.hash(tr)}, after),
+          Ext.holds(~mach, ~d, l, a)
+        )(eb)
+      )
+    case False{}:
+      Empty.absurd(
+        {Tip.get(~mach, ~d, l, x, key) == Some{val}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(Tip, x, e)
+      )
+
+# a run that lands keeps each key
+def Keep.landed(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  ma: Maybe<&2, Run<Led.L(mach, d)>>,
+  +after: Maybe<&2, Hashes.Hash>,
+  +x: Tip,
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  ko: Keep.Out(mach, d, l, key, val, ma),
+  e: {Line.landed(~mach, ~d, l, ma, after) == Some{x}: Maybe<&2, Tip>}
+) -> {Tip.get(~mach, ~d, l, x, key) == Some{val}: Maybe<&2, List<&2, U32>>}:
+  match ma:
+    case None{}:
+      Empty.absurd(
+        {Tip.get(~mach, ~d, l, x, key) == Some{val}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(Tip, x, e)
+      )
+    case Some{Run{lr, +tr, +a}}:
+      Keep.landed.at(
+        ~mach,
+        ~d,
+        l,
+        tr,
+        a,
+        after,
+        x,
+        key,
+        val,
+        Bool.and(Tips.same(Some{Tip.hash(tr)}, after), Ext.holds(~mach, ~d, l, a)),
+        {==},
+        ko,
+        e
+      )
+
+# Line.moved once whether the step names the tip is known (b)
+def Keep.moved.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +t: Tip,
+  +qs: List<&2, Hashes.Hash>,
+  +after: Maybe<&2, Hashes.Hash>,
+  +x: Tip,
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  b: Bool,
+  e: {
+    Shared.Maybe.when(
+      Tip,
+      b,
+      u => Line.landed(~mach, ~d, l, Step.run(~mach, ~d, ~kern, l, c, t, qs), after)
+    )
+      == Some{x}: Maybe<&2, Tip>
+  },
+  hg: {Tip.get(~mach, ~d, l, t, key) == Some{val}: Maybe<&2, List<&2, U32>>}
+) -> {Tip.get(~mach, ~d, l, x, key) == Some{val}: Maybe<&2, List<&2, U32>>}:
+  match b:
+    case True{}:
+      Keep.landed(
+        ~mach,
+        ~d,
+        l,
+        Step.run(~mach, ~d, ~kern, l, c, t, qs),
+        after,
+        x,
+        key,
+        val,
+        Keep.all(
+          ~mach,
+          ~d,
+          ~kern,
+          l,
+          key,
+          val,
+          c,
+          qs,
+          Some{Run{l, t, []}},
+          Tuple{Tuple{[], Tuple{{==}, {==}}}, u => hg}
+        ),
+        e
+      )
+    case False{}:
+      Empty.absurd(
+        {Tip.get(~mach, ~d, l, x, key) == Some{val}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(Tip, x, e)
+      )
+
+# a step that moves a line keeps each key of its log
+def Keep.moved(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +t: Tip,
+  m: Maybe<&2, Ledgers.Step>,
+  +x: Tip,
+  +key: List<&2, U32>,
+  +val: List<&2, U32>,
+  e: {Line.moved(~mach, ~d, ~kern, l, c, t, m) == Some{x}: Maybe<&2, Tip>},
+  hg: {Tip.get(~mach, ~d, l, t, key) == Some{val}: Maybe<&2, List<&2, U32>>}
+) -> {Tip.get(~mach, ~d, l, x, key) == Some{val}: Maybe<&2, List<&2, U32>>}:
+  match m:
+    case None{}:
+      Empty.absurd(
+        {Tip.get(~mach, ~d, l, x, key) == Some{val}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(Tip, x, e)
+      )
+    case Some{Ledgers.Step{before, qs, after}}:
+      Keep.moved.at(
+        ~mach,
+        ~d,
+        ~kern,
+        l,
+        c,
+        t,
+        qs,
+        after,
+        x,
+        key,
+        val,
+        Tips.same(before, Some{Tip.hash(t)}),
+        e,
+        hg
+      )
+
 # a step lands on the same tip in a later ledger
 def Sim.moved(
   ~mach: Machine(),
@@ -5576,7 +6299,28 @@ def Keep.next(
 ) -> {Line.next(~mach, ~d, ~kern, l, c, h, t) == Some{x}: Maybe<&2, Tip>}
   -> {Tip.get(~mach, ~d, l, t, key) == Some{v}: Maybe<&2, List<&2, U32>>}
   -> {Tip.get(~mach, ~d, l, x, key) == Some{v}: Maybe<&2, List<&2, U32>>}:
-  ?TODO
+  e => hg => Keep.moved(
+    ~mach,
+    ~d,
+    ~kern,
+    l,
+    c,
+    t,
+    Height.decide(
+      ~mach,
+      ~d,
+      l,
+      c,
+      h,
+      Tip.voters(t),
+      Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(l)(c)(h)
+    ),
+    x,
+    key,
+    v,
+    e,
+    hg
+  )
 
 # Histories that stay
 # -------------------
