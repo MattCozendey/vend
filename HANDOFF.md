@@ -10,6 +10,7 @@ last rounds: the work was to state laws and to construct types.
 
 | File | Result |
 | --- | --- |
+| `src/shared/shared/shared/shared/side.bend` | 2 open laws |
 | `src/shared/shared/shared/pack.bend` | 2 open laws |
 | `src/shared/shared/rope.bend` | 1 open law |
 | `src/shared/shared/formats.bend` | 1 open law |
@@ -19,14 +20,16 @@ last rounds: the work was to state laws and to construct types.
 | `src/node/transport/spec.bend` | 33 IO declarations, no implementation |
 | `src/glob/impl.bend` | ALL PROOFS CHECK |
 
-There is no implementation of a ledger, of a replica or of Vend's kernel. They are stated as records
-(below).
+There is no implementation of a ledger, of a tree, of a replica or of Vend's kernel. They are stated
+as records (below).
 
 ## How correctness is built in
 
 1. **An interface is a record that holds its own laws.** A value of the record type is a proof. The
    repo already did this for `Codec`. It now does it for:
    - `Ledgers.Ledger(Q, c)`: `Ledger.Kind` (the operations) and `Ledger.Laws`.
+   - `Trees.Tree(S, fetch, grows)`: `Tree.Ops` and `Tree.Laws`. A replica's ledger carries one
+     (`Replicas.Led`): every tree of every line is kept in the ledger's data.
    - `Replicas.Kernel(mach, d)`: what a request does, and `Kernel.Stable`.
    - `Replicas.Replica(mach, d, kern)`: `Replica.Kind` (the operations) and `Replica.Laws`.
    - `Core.Kernel(d)`: a kernel of Vend, and `Kernel.Rules`.
@@ -62,7 +65,13 @@ There is no implementation of a ledger, of a replica or of Vend's kernel. They a
     the whole target and all that it brings) and how its target is found (`Find`). A language
     can make imports with no line (`Format.Code.implicit`). `Resources.Name.candidates` turns a
     target into names, in the order that the language looks.
-13. **A key signs one ballot.** `Replicas.Key.secret` is a hash of the seed of a replica, the root
+13. **One concept for "what a node knows stays".** `Shared.Read.Forward` (a read moves forward as
+    the state grows) and `Shared.Read.Stable` (it stays). Tree finality, kernel stability, one
+    history, final logs and answers that move forward are each one instance.
+14. **One concept for a three-way choice.** `Sides.Side.of` takes theirs, ours or both;
+    `Side.keeps_changes` and `Side.both_changed` say that it loses no change that only one side
+    made. A merge of a resource is `Side.of`, and only both changes need a format.
+15. **A key signs one ballot.** `Replicas.Key.secret` is a hash of the seed of a replica, the root
     and the number of the ballot. A replica keeps only its seed.
 
 ## What must be built
@@ -86,6 +95,20 @@ A ledger is what `Kind.get` gives. The laws state each other operation by it.
 | `Laws.LiarsSound`, `Laws.LiarsComplete` | A voter is a liar exactly when the ledger holds a proof against it. |
 
 Cost, stated on each operation: a read costs one name, a sync costs what differs.
+
+### A tree: `Trees.Tree(S, fetch, grows)`
+
+| Law | It says |
+| --- | --- |
+| `Laws.Final` | What a read could tell, it tells in any depot that grows. |
+| `Laws.Write` | A write (or a delete) changes its key and no other. |
+| `Laws.Canon` | The root is a function of the bindings, whatever the order of the writes. |
+| `Laws.Range` | A listing under a prefix is in key order and holds exactly the bindings under it. |
+| `Laws.Diff` | A difference lists exactly the keys that two trees read differently. |
+| `Laws.Whole` | A tree that the depot holds whole always answers. |
+
+The best known structure: a tree sorted by key and cut by content (a prolly tree). It is a rope
+of sorted bindings, so it unifies with `Ropes`.
 
 ### A replica: `Replicas.Replica(mach, d, kern)`
 
@@ -135,6 +158,8 @@ each change to its rule, on the line where it belongs, and refuses any other.
 
 | Law | It says |
 | --- | --- |
+| `Sides.Side.keeps_changes` | A three-way choice keeps each change that only one side made. |
+| `Sides.Side.both_changed` | It leaves both only when both changed, and differently. |
 | `Packs.Pack.read_pieces` | Packed pieces read back as their bytes. |
 | `Packs.Pack.words_unpack` | Words as bytes pack back to the words. |
 | `Ropes.Rope.cut_with_flat` | The pieces of a cut by content, one after the other, are what was cut. |
@@ -226,14 +251,15 @@ Defs that state a meaning, and are slow by design. A cache or a faster structure
 | --- | --- | --- |
 | `Replicas.Line.head` | It runs a history from its start. | The head of each line, kept by a replica. |
 | `Core.Tree.kept` | It walks a tree and reads each resource. | To know which trees a ledger holds whole. |
-| `Core.Group.nodes`, `Tree.resources`, `Node.branches`, `Import.under` | Each lists a tree. | A tree for each kind of key (limit 6). |
+| `Core.Import.under` | It lists the resources of a tree. | A listing by path order under a place. |
 | `Core.Node.affects` | The history of each other branch. | A mark of how far a reader is. |
 
-Two concepts that have two representations, to unify when their proofs are open again:
+Concepts that have two representations, to unify when their proofs are open again:
 
 1. `Ropes.Rope.cut` is `Ropes.Rope.cut.with` with no state.
-2. `Core.Pick.merge` and `Formats.Merge.decide` are the same three-way rule (theirs, ours, both),
-   on resources and on bytes.
+2. `Formats.Merge.decide` is `Sides.Side.of` on bytes, with one more choice (pieces).
+3. `Quorums.Quorum.major_kept` is a `Shared.Read.Stable` read: a majority stays as ballots are
+   kept.
 
 ## Limits
 
@@ -256,11 +282,9 @@ now stated for it.
 5. **The ledger's map is free** (`Ledger.Kind`). It must not be the proven `Trie`, which keeps a
    key as a list of bits. The best known one: a map that splits the 256-bit name by words, with
    a hash in each node, so a sync compares hashes and costs what differs (`Laws.Missing`).
-6. **The content tree has no range and no delete.** Not done. The best known structure is a
-   tree sorted by key and cut by content (a prolly tree): one root for one content in any order
-   of writes, shared nodes, ranges, delete and fast diff. It is a rope of sorted bindings, so it
-   unifies with `Ropes`. The replica uses `Trees.Tree` directly: the next step is a record for
-   the tree, as for the ledger, and a prolly tree that fills it.
+6. **The content tree is a record.** Stated: `Trees.Tree`, with range, delete and an exact
+   difference; the replica and the core read through it. A resource that goes is a key that
+   goes, and one kind of key is read by its prefix. A prolly tree fills it best.
 7. **Conditions are read through a view.** Stated: `Formats.Cond.holds`, `Formats.Import.holds`;
    `Core.Topic.Affects` carries the view of a subscription. A test that the view does not name
    holds, so no use is missed. Conditions are matched as written: no expression is evaluated.

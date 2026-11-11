@@ -48,6 +48,14 @@ def Read.then(
     case Some{Read{a, r}}:
       k(a)(r)
 
+# the value of a read that is the whole of some words: nothing follows it
+def Read.whole(-A: Data, m: Maybe<&2, Read<A>>) -> Maybe<&2, A>:
+  match m:
+    case Some{Read{x, Nil{}}}:
+      Some{x}
+    case _:
+      None{}
+
 # how a value written by enc is read, and that it reads back
 def Codec.Read(-A: Data, enc: A -> List<&2, U32> -> List<&2, U32>) -> Type:
   Sigma<&1, &1, List<&2, U32> -> Maybe<&2, Read<A>>, dec => Code.Laws(A, enc, dec)>

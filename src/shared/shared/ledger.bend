@@ -1416,10 +1416,10 @@ def Entry.words(-Q: Data, m: Maybe<&2, Entry<Q>>) -> Maybe<&2, List<&2, U32>>:
     case _:
       None{}
 
-# the data of l whose hash is h. It hashes nothing: a ledger holds data under
-# its hash only (Laws.GetNamed)
-def Kind.fetch(~Q: Data, ~k: Ledger.Kind(Q), l: Kind.L(Q, k), h: Hashes.Hash) -> Maybe<&2, List<&2, U32>>:
-  Entry.words(Q, Kind.get(Q, k)(l)(Name.Data{h}))
+# the data of a ledger of the kind k whose hash is h. It hashes nothing: a
+# ledger holds data under its hash only (Laws.GetNamed)
+def Kind.data(-Q: Data, k: Ledger.Kind(Q)) -> Kind.L(Q, k) -> Hashes.Hash -> Maybe<&2, List<&2, U32>>:
+  l => h => Entry.words(Q, Kind.get(Q, k)(l)(Name.Data{h}))
 
 # the step that the voter cast at the place w, in the ledger l: one step, or
 # many when it cast two

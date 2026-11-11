@@ -1914,22 +1914,6 @@ def Nat.nle_trans(
 } -> {Nat.is_le(b, c) == True{}: Bool} -> {Nat.is_le(a, b) == False{}: Bool}:
   h => k => Nat.nle_trans.at(a, b, c, Nat.is_le(a, b))({==})(h)(k)
 
-# a number is zero
-def Nat.IsZero(n: Nat) -> Type:
-  match n:
-    case 0n:
-      Unit
-    case 1n+p:
-      Empty
-
-# the number before n, 0 before 0
-def Nat.before(n: Nat) -> Nat:
-  match n:
-    case 0n:
-      0n
-    case 1n+p:
-      p
-
 # p holds of g and each element of xs
 def List.holds(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -> Bool:
   match xs:
@@ -2754,3 +2738,25 @@ def List.within(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>, +ks: List<&2, 
 # and repeats
 def List.same_set(~A: Data, ~same: A -> A -> Bool, +as: List<&2, A>, +bs: List<&2, A>) -> Bool:
   List.all.if(u => List.within(~A, ~same, bs, as), List.within(~A, ~same, as, bs))
+
+# Reads that move forward
+# -----------------------
+# A read of a state that grows moves forward: what it gives at a state, it
+# gives no less at a state that grows from it. A read that answers on what it
+# holds, and waits (none) for what it lacks, is such a read. Each law of the
+# kind "what a node knows stays" is one.
+
+# that the read f moves forward as the state grows (grows): what f gives at a
+# state, f gives after it (after) at each state that grows from it
+def Read.Forward(
+  -S: Data,
+  -grows: S -> S -> Type,
+  -A: Data,
+  -after: A -> Maybe<&2, A> -> Type,
+  -f: S -> Maybe<&2, A>
+) -> Type:
+  @a: S -> @b: S -> @x: A -> grows(a)(b) -> {f(a) == Some{x}: Maybe<&2, A>} -> after(x)(f(b))
+
+# that the read f stays as the state grows: what it gives, it gives for good
+def Read.Stable(-S: Data, -grows: S -> S -> Type, -A: Data, -f: S -> Maybe<&2, A>) -> Type:
+  Read.Forward(S, grows, A, x => m => {m == Some{x}: Maybe<&2, A>}, f)

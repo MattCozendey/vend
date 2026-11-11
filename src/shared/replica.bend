@@ -1,5 +1,6 @@
 import Base
 import ./shared/ledger.bend as Ledgers
+import ./shared/shared/depot.bend as Depots
 import ./shared/shared/shared/code.bend as Codes
 import ./shared/shared/shared/hash.bend as Hashes
 import ./shared/shared/shared/seal.bend as Seals
@@ -123,17 +124,45 @@ def Machine.seal(m: Machine()) -> String -> List<&2, U32>:
 # The ledger of a machine
 # -----------------------
 
-# a ledger for the requests of the machine mach
+# a ledger for the requests of the machine mach, and a tree whose nodes it
+# keeps as data: the trees of every line are kept in the ledger itself
 def Led(-mach: Machine()) -> Type:
-  Ledgers.Ledger(Machine.Q(mach), Machine.code(mach))
+  &x: Ledgers.Ledger(Machine.Q(mach), Machine.code(mach)) -> Trees.Tree(
+    Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+    Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+    a => b => Ledgers.Kind.Grows(
+      Machine.Q(mach),
+      Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+      a,
+      b
+    )
+  )
 
 # the kind of the ledger d
 def Led.kind(-mach: Machine(), d: Led(mach)) -> Ledgers.Ledger.Kind(Machine.Q(mach)):
-  Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), d)
+  match d:
+    case Tuple{x, t}:
+      Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)
 
 # what the ledger d is kept as
 def Led.L(-mach: Machine(), d: Led(mach)) -> Data:
   Ledgers.Kind.L(Machine.Q(mach), Led.kind(mach, d))
+
+# the operations of the tree of the ledger d
+def Led.tree(-mach: Machine(), d: Led(mach)) -> Trees.Tree.Ops(Led.L(mach, d)):
+  match d:
+    case Tuple{x, t}:
+      Trees.Tree.ops(
+        Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+        Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+        a => b => Ledgers.Kind.Grows(
+          Machine.Q(mach),
+          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+          a,
+          b
+        ),
+        t
+      )
 
 # an entry of the machine mach
 def Entry(-mach: Machine()) -> Data:
@@ -167,27 +196,7 @@ def Led.fetch(
   l: Led.L(mach, d),
   h: Hashes.Hash
 ) -> Maybe<&2, List<&2, U32>>:
-  Ledgers.Kind.fetch(~Machine.Q(mach), ~Led.kind(mach, d), l, h)
-
-# the value of a read that is the whole of some words
-def Read.whole(-A: Data, m: Maybe<&2, Codes.Read<A>>) -> Maybe<&2, A>:
-  match m:
-    case Some{Codes.Read{x, Nil{}}}:
-      Some{x}
-    case _:
-      None{}
-
-# the value of A whose code the ledger l holds as data under the hash h (none:
-# l lacks it, or it is not one whole code)
-def Led.load(
-  ~mach: Machine(),
-  ~d: Led(mach),
-  ~A: Data,
-  ~dec: List<&2, U32> -> Maybe<&2, Codes.Read<A>>,
-  l: Led.L(mach, d),
-  h: Hashes.Hash
-) -> Maybe<&2, A>:
-  Maybe.bind(&2, List<&2, U32>, A, Led.fetch(~mach, ~d, l, h), ws => Read.whole(A, dec(ws)))
+  Ledgers.Kind.data(Machine.Q(mach), Led.kind(mach, d))(l)(h)
 
 # l with each of the words ns as data
 def Led.puts(
@@ -247,6 +256,16 @@ def Led.tally(
 # Trees in a ledger
 # -----------------
 
+# what a read of the key k finds in the tree whose root is h, in l
+def Tree.look(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  l: Led.L(mach, d),
+  h: Maybe<&2, Hashes.Hash>,
+  k: List<&2, U32>
+) -> Trees.Look:
+  Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(h)(k)
+
 # what the tree whose root is h holds under the key k, in the data of l
 def Tree.get(
   ~mach: Machine(),
@@ -255,17 +274,7 @@ def Tree.get(
   h: Maybe<&2, Hashes.Hash>,
   k: List<&2, U32>
 ) -> Maybe<&2, List<&2, U32>>:
-  Trees.Tree.get(~Led.L(mach, d), ~Led.fetch(~mach, ~d), l, h, k)
-
-# what a read found, when it could tell: a value, or that there is none
-def Look.known(x: Trees.Look) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  match x:
-    case Trees.Look.Found{v}:
-      Some{Some{v}}
-    case Trees.Look.Absent{}:
-      Some{None{}}
-    case Trees.Look.Missing{h}:
-      None{}
+  Trees.Look.value(Tree.look(~mach, ~d, l, h, k))
 
 # what the tree whose root is h holds under the key k, or that it holds
 # nothing there (none: l lacks a node of the tree). A kernel reads with this:
@@ -277,19 +286,41 @@ def Tree.find(
   h: Maybe<&2, Hashes.Hash>,
   k: List<&2, U32>
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  Look.known(Trees.Tree.look(~Led.L(mach, d), ~Led.fetch(~mach, ~d), l, h, k))
+  Trees.Look.known(Tree.look(~mach, ~d, l, h, k))
 
-# the tree whose root is h with the key k set to x: its new root, and the
-# nodes that it adds (none: l lacks a node of the tree)
-def Tree.set(
+# the tree whose root is h with the key k set to the value m (none: deleted):
+# its new root, and the nodes that it adds (none: l lacks a node of the tree)
+def Tree.put(
   ~mach: Machine(),
   ~d: Led(mach),
   l: Led.L(mach, d),
   h: Maybe<&2, Hashes.Hash>,
   k: List<&2, U32>,
-  x: List<&2, U32>
-) -> Maybe<&2, Trees.Put>:
-  Trees.Tree.set(~Led.L(mach, d), ~Led.fetch(~mach, ~d), l, h, k, x)
+  m: Maybe<&2, List<&2, U32>>
+) -> Maybe<&2, Trees.Edit>:
+  Trees.Ops.put(Led.L(mach, d), Led.tree(mach, d))(l)(h)(k)(m)
+
+# the bindings of the tree whose root is h whose keys start with p, in the
+# order of their keys (none: l lacks a node of the tree)
+def Tree.range(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  l: Led.L(mach, d),
+  h: Maybe<&2, Hashes.Hash>,
+  p: List<&2, U32>
+) -> Maybe<&2, List<&2, Trees.Binding>>:
+  Trees.Ops.range(Led.L(mach, d), Led.tree(mach, d))(l)(h)(p)
+
+# the keys that the trees whose roots are a and b read differently (none: l
+# lacks a node)
+def Tree.diff(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  l: Led.L(mach, d),
+  a: Maybe<&2, Hashes.Hash>,
+  b: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, List<&2, List<&2, U32>>>:
+  Trees.Ops.diff(Led.L(mach, d), Led.tree(mach, d))(l)(a)(b)
 
 # Tips
 # ----
@@ -345,11 +376,9 @@ def Tip.words(t: Tip) -> List<&2, U32>:
         )
       )
 
-# the tip that some words are, when they are one
-def Tip.read(ws: List<&2, U32>) -> Maybe<&2, Tip>:
-  Read.whole(
-    Tip,
-    Codes.Code.four.read(
+# a tip
+def Tip.code.read(ws: List<&2, U32>) -> Maybe<&2, Codes.Read<Tip>>:
+  Codes.Code.four.read(
       ~Maybe<&2, Hashes.Hash>,
       ~Maybe<&2, Hashes.Hash>,
       ~U32,
@@ -361,7 +390,6 @@ def Tip.read(ws: List<&2, U32>) -> Maybe<&2, Tip>:
       ~Ledgers.Voters.code.read,
       c => l => n => vs => Tip{c, l, n, vs},
       ws
-    )
   )
 
 # the hash of the tip t: what a step names
@@ -370,7 +398,7 @@ def Tip.hash(t: Tip) -> Hashes.Hash:
 
 # the tip that l holds under the hash h
 def Tip.at(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), h: Hashes.Hash) -> Maybe<&2, Tip>:
-  Maybe.bind(&2, List<&2, U32>, Tip, Led.fetch(~mach, ~d, l, h), ws => Tip.read(ws))
+  Depots.Depot.load(~Led.L(mach, d), ~Led.fetch(~mach, ~d), ~Tip, ~Tip.code.read, l, h)
 
 # the tip that a step names, in l (none: the step names none, or l lacks it)
 def Tip.of(
@@ -424,9 +452,9 @@ def Out.words(o: Out) -> List<&2, U32>:
 def Out.read(ws: List<&2, U32>) -> Maybe<&2, Out>:
   match ws:
     case Con{0, r}:
-      Read.whole(Out, Codes.Code.one.read(~Hashes.Hash, ~Out, ~Hashes.Hash.code.read, a => Out.Stale{a}, r))
+      Codes.Read.whole(Out, Codes.Code.one.read(~Hashes.Hash, ~Out, ~Hashes.Hash.code.read, a => Out.Stale{a}, r))
     case Con{1, Con{n, r}}:
-      Read.whole(
+      Codes.Read.whole(
         Out,
         Codes.Code.one.read(~Hashes.Hash, ~Out, ~Hashes.Hash.code.read, a => Out.Taken{a, n}, r)
       )
@@ -445,7 +473,7 @@ def Taken.words(x: Taken) -> List<&2, U32>:
 
 # the taken request that some words are
 def Taken.read(ws: List<&2, U32>) -> Maybe<&2, Taken>:
-  Read.whole(
+  Codes.Read.whole(
     Taken,
     Codes.Code.two.read(
       ~Ledgers.Id,
@@ -495,7 +523,7 @@ def Tip.label(
     List<&2, U32>,
     Ledgers.Id,
     Tip.get(~mach, ~d, l, t, Log.label(m)),
-    ws => Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws))
+    ws => Codes.Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws))
   )
 
 # Rounds
@@ -1087,11 +1115,12 @@ def Kernel.Change(-mach: Machine(), -d: Led(mach)) -> Type:
 # tip that it is given, waits for what it lacks, and does not answer on what
 # it cannot read. So every replica that runs a request gets the same act
 def Kernel.Stable(-mach: Machine(), -d: Led(mach), -f: Kernel.Change(mach, d)) -> Type:
-  @a: Led.L(mach, d) -> @b: Led.L(mach, d) -> @t: Tip -> @c: Ledgers.Line -> @i: Ledgers.Id -> @q: Machine.Q(
-    mach
-  ) -> @x: Act -> Led.Grows(mach, d, a, b) -> {
-    f(a)(t)(c)(i)(q) == Some{x}: Maybe<&2, Act>
-  } -> {f(b)(t)(c)(i)(q) == Some{x}: Maybe<&2, Act>}
+  @t: Tip -> @c: Ledgers.Line -> @i: Ledgers.Id -> @q: Machine.Q(mach) -> Shared.Read.Stable(
+    Led.L(mach, d),
+    a => b => Led.Grows(mach, d, a, b),
+    Act,
+    l => f(l)(t)(c)(i)(q)
+  )
 
 # a request, with its ID and its time
 type Request<-Q: Data> is Data:
@@ -1140,11 +1169,11 @@ def Run.tip(-L: Data, r: Run<L>) -> Tip:
     case Run{l, t}:
       t
 
-# the tip t with the log h
-def Tip.logged(t: Tip, h: Hashes.Hash) -> Tip:
+# the tip t with the log h (none: the empty log)
+def Tip.logged(t: Tip, h: Maybe<&2, Hashes.Hash>) -> Tip:
   match t:
     case Tip{c, old, n, vs}:
-      Tip{c, Some{h}, n, vs}
+      Tip{c, h, n, vs}
 
 # the run on l at the tip t, with the new log p
 def Run.logged(
@@ -1152,13 +1181,13 @@ def Run.logged(
   ~d: Led(mach),
   l: Led.L(mach, d),
   t: Tip,
-  p: Maybe<&2, Trees.Put>
+  p: Maybe<&2, Trees.Edit>
 ) -> Maybe<&2, Run<Led.L(mach, d)>>:
   match p:
     case None{}:
       None{}
     case Some{+x}:
-      Some{Run{Led.puts(~mach, ~d, Trees.Put.nodes(x), l), Tip.logged(t, Trees.Put.root(x))}}
+      Some{Run{Led.puts(~mach, ~d, Trees.Edit.nodes(x), l), Tip.logged(t, Trees.Edit.root(x))}}
 
 # Run.add once the value m of the key in the log is known
 def Run.add.at(
@@ -1171,7 +1200,7 @@ def Run.add.at(
 ) -> Maybe<&2, Run<Led.L(mach, d)>>:
   match r m:
     case Run{+l, +t} None{}:
-      Run.logged(~mach, ~d, l, t, Tree.set(~mach, ~d, l, Tip.log(t), k, x))
+      Run.logged(~mach, ~d, l, t, Tree.put(~mach, ~d, l, Tip.log(t), k, Some{x}))
     case y Some{old}:
       None{}
 
@@ -1483,6 +1512,11 @@ def Step.run(
 ) -> Maybe<&2, Run<Led.L(mach, d)>>:
   Step.all(~mach, ~d, ~kern, c, qs, Some{Run{l, t}})
 
+# that b grows from a, and its ballots are honest: a later state of a ledger,
+# as the laws of a history read it
+def Led.Later(-mach: Machine(), -d: Led(mach), -a: Led.L(mach, d), -b: Led.L(mach, d)) -> Type:
+  Led.Grows(mach, d, a, b) & Led.Honest(mach, d, b)
+
 # Histories
 # ---------
 # The history of a line is a function of a ledger: its start, then each step
@@ -1664,7 +1698,7 @@ def Tip.named(
   l: Led.L(mach, d),
   ws: List<&2, U32>
 ) -> Maybe<&2, Tip>:
-  Tip.of(~mach, ~d, l, Read.whole(Hashes.Hash, Hashes.Hash.code.read(ws)))
+  Tip.of(~mach, ~d, l, Codes.Read.whole(Hashes.Hash, Hashes.Hash.code.read(ws)))
 
 # the first tip of the sub line b, which the log of its root line holds at
 # the tip m
@@ -1803,7 +1837,7 @@ def Tip.key(
       List<&2, U32>,
       Hashes.Hash,
       Tree.get(~mach, ~d, l, Tip.content(t), Machine.seal(mach)(voter)),
-      ws => Read.whole(Hashes.Hash, Hashes.Hash.code.read(ws))
+      ws => Codes.Read.whole(Hashes.Hash, Hashes.Hash.code.read(ws))
     )
   )
 
@@ -2938,14 +2972,13 @@ law Line.at_grows:
   for ~d: Led(mach)
   for ~kern: Kernel(mach, d)
   for k: Nat
-  for a: Led.L(mach, d)
-  for b: Led.L(mach, d)
   for c: Ledgers.Line
-  for t: Tip
-  for g: Led.Grows(mach, d, a, b)
-  for honest: Led.Honest(mach, d, b)
-  {Line.at(~mach, ~d, ~kern, k, a, c) == Some{t}: Maybe<&2, Tip>}
-    -> {Line.at(~mach, ~d, ~kern, k, b, c) == Some{t}: Maybe<&2, Tip>}
+  Shared.Read.Stable(
+    Led.L(mach, d),
+    a => b => Led.Later(mach, d, a, b),
+    Tip,
+    l => Line.at(~mach, ~d, ~kern, k, l, c)
+  )
 
 # what a line knows is final: what the log of a line holds under a key, it
 # holds for good, as the ledger grows and while its ballots are honest. An
@@ -2955,15 +2988,14 @@ law Line.get_grows:
   for ~mach: Machine()
   for ~d: Led(mach)
   for ~kern: Kernel(mach, d)
-  for a: Led.L(mach, d)
-  for b: Led.L(mach, d)
   for c: Ledgers.Line
   for key: List<&2, U32>
-  for v: List<&2, U32>
-  for g: Led.Grows(mach, d, a, b)
-  for honest: Led.Honest(mach, d, b)
-  {Line.get(~mach, ~d, ~kern, a, c, key) == Some{v}: Maybe<&2, List<&2, U32>>}
-    -> {Line.get(~mach, ~d, ~kern, b, c, key) == Some{v}: Maybe<&2, List<&2, U32>>}
+  Shared.Read.Stable(
+    Led.L(mach, d),
+    a => b => Led.Later(mach, d, a, b),
+    List<&2, U32>,
+    l => Line.get(~mach, ~d, ~kern, l, c, key)
+  )
 
 # a step gives each of its requests an outcome: after a run, the log holds an
 # outcome of the ID of each request of the step

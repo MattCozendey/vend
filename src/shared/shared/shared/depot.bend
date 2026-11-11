@@ -1,4 +1,5 @@
 import Base
+import ./shared/code.bend as Codes
 import ./shared/hash.bend as Hashes
 import ./shared/shared.bend as Shared
 
@@ -49,3 +50,15 @@ def Depot.Keeps(
   } -> {
     fetch(a)(h) == Some{w}: Maybe<&2, List<&2, U32>>
   } -> {fetch(b)(h) == Some{w}: Maybe<&2, List<&2, U32>>}
+
+# the value of A whose code the depot s holds under the hash h (none: s lacks
+# it, or it is not one whole code)
+def Depot.load(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~A: Data,
+  ~dec: List<&2, U32> -> Maybe<&2, Codes.Read<A>>,
+  s: S,
+  h: Hashes.Hash
+) -> Maybe<&2, A>:
+  Maybe.bind(&2, List<&2, U32>, A, fetch(s)(h), ws => Codes.Read.whole(A, dec(ws)))

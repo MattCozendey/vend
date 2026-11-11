@@ -323,10 +323,6 @@ def Trie.text(t: String) -> List<&2, Bool>:
 # after zero. A descent finds the highest key whose entries a test accepts,
 # in the width's number of steps when the test accepts at the top.
 
-# the n bits of x, highest first
-def Trie.word(n: Nat, x: U32) -> List<&2, Bool>:
-  List.reverse(&2, Bool, Trie.bits(n, x))
-
 # Laws of highest keys
 # --------------------
 
@@ -7077,17 +7073,6 @@ def Trie.take_keeps_right(
         Trie.take_keeps_right(~V, ~q, ~lq, ~r, ~lr, ~step, ~rrefl, o1, o2)
       )
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
-
-# what a takes of what it lacks of b is what it takes of b: the entries that a
-# sync sends are enough
-def Trie.take_minus(
-  ~V: Data,
-  ~same: V -> V -> Bool,
-  a: Trie<V>,
-  b: Trie<V>
-) -> {Trie.take(~V, a, Trie.minus(~V, ~same, b, a)) == Trie.take(~V, a, b): Trie<V>}:
-  Trie.union_lacks(~V, ~(x => y => x), ~same, ~(w => v => e => {==}), b, a)
-# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Orders
 # ------
