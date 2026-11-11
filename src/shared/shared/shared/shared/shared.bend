@@ -1794,6 +1794,14 @@ def Nat.le_nlt(
       h => Nat.le_nlt(p, q)(h)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# a sum is at least its first term
+def Nat.le_add_first(a: Nat, b: Nat) -> {Nat.is_le(a, Nat.add(a, b)) == True{}: Bool}:
+  match a:
+    case 0n:
+      Nat.le_zero(b)
+    case 1n+p:
+      Nat.le_add_first(p, b)
+
 # a number is at most its sum with another
 def Nat.le_add(y: Nat, +m: Nat) -> {Nat.is_le(m, Nat.add(y, m)) == True{}: Bool}:
   match y:
@@ -1970,6 +1978,35 @@ def List.append_assoc(
         zs
       ): {x <> List.append(&2, A, List.append(&2, A, r, ys), zs) == x <> _: List<&2, A>}
       {==}
+
+# the lists of two lists of lists, one after the other, are the lists of each
+def List.concat_append(
+  -A: Data,
+  xss: List<&2, List<&2, A>>,
+  +yss: List<&2, List<&2, A>>
+) -> {
+  List.concat(&2, A, List.append(&2, List<&2, A>, xss, yss))
+    == List.append(&2, A, List.concat(&2, A, xss), List.concat(&2, A, yss)): List<&2, A>
+}:
+  match xss:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      %Equal.sym(
+        List<&2, A>,
+        List.concat(&2, A, List.append(&2, List<&2, A>, r, yss)),
+        List.append(&2, A, List.concat(&2, A, r), List.concat(&2, A, yss)),
+        List.concat_append(A, r, yss)
+      ): {
+        List.append(&2, A, x, _)
+          == List.append(&2, A, List.append(&2, A, x, List.concat(&2, A, r)), List.concat(&2, A, yss)): List<&2, A>
+      }
+      Equal.sym(
+        List<&2, A>,
+        List.append(&2, A, List.append(&2, A, x, List.concat(&2, A, r)), List.concat(&2, A, yss)),
+        List.append(&2, A, x, List.append(&2, A, List.concat(&2, A, r), List.concat(&2, A, yss))),
+        List.append_assoc(A, x, List.concat(&2, A, r), List.concat(&2, A, yss))
+      )
 
 # Bool algebra
 # ------------
@@ -2732,3 +2769,90 @@ def Read.Forward(
 # that the read f stays as the state grows: what it gives, it gives for good
 def Read.Stable(-S: Data, -grows: S -> S -> Type, -A: Data, -f: S -> Maybe<&2, A>) -> Type:
   Read.Forward(S, grows, A, x => m => {m == Some{x}: Maybe<&2, A>}, f)
+
+# Bytes
+# -----
+# A byte is a U32 with no bit above the eighth set.
+
+# no bit of w is set
+def Word.is_zero(n: Nat, w: Word(n)) -> Bool:
+  match n:
+    case 0n:
+      True{}
+    case 1n+p:
+      match w:
+        case WCon{b, t}:
+          List.all.if(u => Word.is_zero(p, t), Bool.not(b))
+
+# every code of b is a byte: no bit above the eighth is set
+def Bytes.is_bytes(b: List<&2, U32>) -> Bool:
+  match b:
+    case Nil{}:
+      True{}
+    case Con{U32{WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, h}}}}}}}}}, r}:
+      List.all.if(u => Bytes.is_bytes(r), Word.is_zero(24n, h))
+
+# the byte of the bits b0 (the lowest) to b7
+def Byte.of(b0: Bool, b1: Bool, b2: Bool, b3: Bool, b4: Bool, b5: Bool, b6: Bool, b7: Bool) -> U32:
+  U32{
+    WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, Word.zero(24n)}}}}}}}}
+  }
+
+# the byte of the low eight bits of x
+def Byte.low(x: U32) -> U32:
+  match x:
+    case U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, h}}}}}}}}}:
+      Byte.of(b0, b1, b2, b3, b4, b5, b6, b7)
+
+# a word with no bit set is the zero word
+def Word.is_zero_eq(n: Nat, w: Word(n)) -> {Word.is_zero(n, w) == True{}: Bool} -> {w == Word.zero(n): Word(n)}:
+  match n:
+    case 0n:
+      match w:
+        case WNil{}:
+          h => {==}
+    case 1n+p:
+      match w:
+        case WCon{False{}, t}:
+          h =>
+            %Equal.sym(Word(p), t, Word.zero(p), Word.is_zero_eq(p, t)(h)): {
+              WCon{False{}, _} == WCon{False{}, Word.zero(p)}: Word(1n+p)
+            }
+            {==}
+        case WCon{True{}, t}:
+          h => Empty.absurd({WCon{True{}, t} == Word.zero(1n+p): Word(1n+p)}, Bool.false_ne_true(h))
+
+# a byte keeps its low eight bits
+def Byte.low_eq(x: U32) -> {Bytes.is_bytes([x]) == True{}: Bool} -> {Byte.low(x) == x: U32}:
+  match x:
+    case U32{WCon{+b0, WCon{+b1, WCon{+b2, WCon{+b3, WCon{+b4, WCon{+b5, WCon{+b6, WCon{+b7, +h}}}}}}}}}:
+      e =>
+        %Equal.sym(
+          Word(24n),
+          h,
+          Word.zero(24n),
+          Word.is_zero_eq(24n, h)(List.all.if_hit(Word.is_zero(24n, h), u => True{})(e))
+        ): {
+          Byte.of(b0, b1, b2, b3, b4, b5, b6, b7)
+            == U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, _}}}}}}}}}: U32
+        }
+        {==}
+
+# a sum of three is the same either way it is grouped
+def Nat.add_assoc(a: Nat, b: Nat, c: Nat) -> {Nat.add(Nat.add(a, b), c) == Nat.add(a, Nat.add(b, c)): Nat}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      %Equal.sym(Nat, Nat.add(Nat.add(p, b), c), Nat.add(p, Nat.add(b, c)), Nat.add_assoc(p, b, c)): {
+        1n+_ == 1n+Nat.add(p, Nat.add(b, c)): Nat
+      }
+      {==}
+
+# taking nothing away leaves a number as it is
+def Nat.sub_zero(a: Nat) -> {Nat.sub(a, 0n) == a: Nat}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
