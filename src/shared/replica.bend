@@ -10199,11 +10199,14 @@ def Keep.fin.of(
       == Trees.Look.of(Some{x}): Trees.Look
   }
     & (
-      @k2: List<&2, U32> -> {
+      @k2: List<&2, U32> -> @y: Maybe<&2, List<&2, U32>> -> {
         Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool
       } -> {
-        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Trees.Edit.root(e))(k2)
-          == Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(k2): Trees.Look
+        Trees.Look.known(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(k2))
+          == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      } -> {
+        Trees.Look.known(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Trees.Edit.root(e))(k2))
+          == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
       }
     )
 ) -> {Tip.get(~mach, ~d, l, Tip.logged(t, Trees.Edit.root(e)), key) == Some{val}: Maybe<&2, List<&2, U32>>}:
@@ -10215,13 +10218,11 @@ def Keep.fin.of(
         Trees.Edit.root(e),
         Keep.log_logged(t, Trees.Edit.root(e))
       ): {Tree.get(~mach, ~d, l, _, key) == Some{val}: Maybe<&2, List<&2, U32>>}
-      %Equal.sym(
-        Trees.Look,
+      Keep.found_back(
         Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Trees.Edit.root(e))(key),
-        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(key),
-        w2(key)(ne)
-      ): {Trees.Look.value(_) == Some{val}: Maybe<&2, List<&2, U32>>}
-      hg
+        val,
+        w2(key)(Some{val})(ne)(Keep.found(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(l)(Tip.log(t))(key), val, hg))
+      )
 
 # after a write of an absent key, whose nodes l holds, the log reads key as before
 def Keep.fin(
@@ -14595,11 +14596,14 @@ def Outs.fin.of(
       == Trees.Look.of(Some{x}): Trees.Look
   }
     & (
-      @k2: List<&2, U32> -> {
+      @k2: List<&2, U32> -> @y: Maybe<&2, List<&2, U32>> -> {
         Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool
       } -> {
-        Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Trees.Edit.root(e))(k2)
-          == Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Tip.log(t))(k2): Trees.Look
+        Trees.Look.known(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Tip.log(t))(k2))
+          == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      } -> {
+        Trees.Look.known(Trees.Ops.look(Led.L(mach, d), Led.tree(mach, d))(s)(Trees.Edit.root(e))(k2))
+          == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>
       }
     )
 ) -> {Tip.get(~mach, ~d, s, Tip.logged(t, Trees.Edit.root(e)), k) == Some{x}: Maybe<&2, List<&2, U32>>}:
