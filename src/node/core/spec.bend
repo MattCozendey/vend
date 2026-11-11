@@ -4034,6 +4034,150 @@ def Merge.grows_of(
   )
   Merge.puts_grows(~d, ex, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l))
 
+# what a write of the key kw to the value m, to the tree hc, gives in the ledger
+# lf: the new tree h1 reads the key as written, and each other key as hc did
+def Merge.Writes(
+  ~d: Led(),
+  lf: L(d),
+  h1: Maybe<&2, Hashes.Hash>,
+  hc: Maybe<&2, Hashes.Hash>,
+  kw: List<&2, U32>,
+  m: Maybe<&2, List<&2, U32>>
+) -> Type:
+  {Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, kw) == Trees.Look.of(m): Trees.Look}
+    & (
+      @k2: List<&2, U32> -> {Shared.List.is_eq(~U32, ~U32.is_eq, kw, k2) == False{}: Bool} -> {
+        Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, k2)
+          == Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc, k2): Trees.Look
+      }
+    )
+
+# the data of the ledger lf that holds the nodes N are the nodes N
+def Merge.Held(~d: Led(), lf: L(d), N: List<&2, List<&2, U32>>) -> Data:
+  {
+    Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), lf, N) == True{}: Bool
+  }
+
+# the ledger lc is the ledger l with the nodes ps
+def Merge.Puts(~d: Led(), l: L(d), lc: L(d), ps: List<&2, List<&2, U32>>) -> Data:
+  {lc == Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l): L(d)}
+
+# the work after a write of the edit e is the work of its ledger, tree and nodes
+def Merge.put_work(
+  ~d: Led(),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +e: Trees.Edit,
+  +W1: Work<L(d)>,
+  e1: {Work.put(~d, lc, P, Some{e}) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> {
+  Work{
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), lc),
+    Trees.Edit.root(e),
+    List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e))
+  }
+    == W1: Work<L(d)>
+}:
+  Shared.Maybe.some_inj(
+    Work<L(d)>,
+    Work{
+      Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), lc),
+      Trees.Edit.root(e),
+      List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e))
+    },
+    W1,
+    e1
+  )
+
+# the tree of the work after a write of the edit e is the tree of e
+def Merge.put_root(
+  ~d: Led(),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +e: Trees.Edit,
+  +W1: Work<L(d)>,
+  e1: {Work.put(~d, lc, P, Some{e}) == Some{W1}: Maybe<&2, Work<L(d)>>}
+) -> {Trees.Edit.root(e) == Merge.root(~d, W1): Maybe<&2, Hashes.Hash>}:
+  Equal.cong(
+    Work<L(d)>,
+    Maybe<&2, Hashes.Hash>,
+    w => Merge.root(~d, w),
+    Work{
+      Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), lc),
+      Trees.Edit.root(e),
+      List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e))
+    },
+    W1,
+    Merge.put_work(~d, lc, P, e, W1, e1)
+  )
+
+# the nodes of the work after a write of the edit e are those before it, and
+# the nodes of e
+def Merge.put_nodes(
+  ~d: Led(),
+  +lc: L(d),
+  +P: List<&2, List<&2, U32>>,
+  +e: Trees.Edit,
+  +W1: Work<L(d)>,
+  e1: {Work.put(~d, lc, P, Some{e}) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +N: List<&2, List<&2, U32>>,
+  nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+) -> Merge.Nodes(List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e)), N):
+  Merge.nodes_cast(
+    Merge.nodes(~d, W1),
+    List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e)),
+    N,
+    Equal.sym(
+      List<&2, List<&2, U32>>,
+      List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e)),
+      Merge.nodes(~d, W1),
+      Equal.cong(
+        Work<L(d)>,
+        List<&2, List<&2, U32>>,
+        w => Merge.nodes(~d, w),
+        Work{
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e), lc),
+          Trees.Edit.root(e),
+          List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(e))
+        },
+        W1,
+        Merge.put_work(~d, lc, P, e, W1, e1)
+      )
+    ),
+    nd
+  )
+
+# the work W1 is the work after a write of the key kw to the value m, to the
+# tree hc of the work with the ledger lc and the nodes P, when the ledger lf
+# holds the nodes N that come after those of W1
+def Merge.set_core(
+  ~d: Led(),
+  +l: L(d),
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +kw: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +lf: L(d),
+  +N: List<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  p: Maybe<&2, Trees.Edit>,
+  +ep: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, lc, hc, kw, m) == p: Maybe<&2, Trees.Edit>},
+  +e1: {Work.put(~d, lc, P, p) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +nd: Merge.Nodes(Merge.nodes(~d, W1), N)
+) -> Merge.Writes(~d, lf, Merge.root(~d, W1), hc, kw, m):
+  match p:
+    case None{}:
+      Empty.absurd(Merge.Writes(~d, lf, Merge.root(~d, W1), hc, kw, m), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e1))
+    case Some{+e}:
+      %Merge.put_root(~d, lc, P, e, W1, e1): Merge.Writes(~d, lf, _, hc, kw, m)
+      Merge.write(d)(lc)(lf)(hc)(kw)(m)(e)(ep)(
+        Merge.grows_of(~d, l, lc, lf, P, N, wc, wf, Merge.nodes_drop(P, Trees.Edit.nodes(e), N, Merge.put_nodes(~d, lc, P, e, W1, e1, N, nd)))
+      )(+w => c => Merge.holds_fetch(~d, lf, N, w)(held)(Merge.nodes_contains(P, Trees.Edit.nodes(e), N, Merge.put_nodes(~d, lc, P, e, W1, e1, N, nd), w, c)))
+
 # MERGE-HELPERS-END
 
 # a merge never loses a change that only one side made: when the merge of a
