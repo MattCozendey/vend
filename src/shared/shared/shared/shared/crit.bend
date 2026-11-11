@@ -351,6 +351,34 @@ def Crit.merge(~V: Data, ~f: V -> V -> V, e: Maybe<&2, V>, v: V) -> V:
     case Some{w}:
       f(w, v)
 
+# Crit.put at a fork at the bit pos that holds k's place, once the cursor c2
+# is at pos: put z and put o put k into each side, from the cursor after pos
+def Crit.put.fork(
+  ~V: Data,
+  ~f: V -> V -> V,
+  +k: List<&2, U32>,
+  +v: V,
+  +rep: List<&2, U32>,
+  +pos: Nat,
+  +e: Maybe<&2, V>,
+  +z: Crit<V>,
+  +o: Crit<V>,
+  +c2: Cur,
+  pz: Cur -> Crit<V>,
+  po: Cur -> Crit<V>
+) -> Crit<V>:
+  Shared.Bool.when(
+    Crit<V>,
+    Cur.done(c2),
+    u => Crit.mk(V, k, pos, Some{Crit.merge(~V, ~f, e, v)}, z, o),
+    u => Shared.Bool.when(
+      Crit<V>,
+      Cur.bit(c2),
+      w => Crit.mk(V, rep, pos, e, z, po(Cur.next(c2))),
+      w => Crit.mk(V, rep, pos, e, pz(Cur.next(c2)), o)
+    )
+  )
+
 # m, read from the cursor c at the bit at, with the key k bound to v (to f
 # of the old value and v, when m binds k), where d is the first bit where k
 # differs from the key that the read reaches (none: k is that key)
@@ -379,6 +407,293 @@ def Crit.put(
         Crit<V>,
         Crit.above(d, pos),
         u => Crit.join(V, Crit.Leaf{k, v}, Crit.Fork{rep, pos, e, z, o}, Maybe.default(&2, Nat, d, 0n)),
-        u => Crit.put.at(~V, ~f, k, v, rep, pos, e, z, o, Cur.skip(Nat.sub(pos, at), c))
+        u => Crit.put.fork(
+          ~V,
+          ~f,
+          k,
+          v,
+          rep,
+          pos,
+          e,
+          z,
+          o,
+          Cur.skip(Nat.sub(pos, at), c),
+          z2 => Crit.put(~V, ~f, z, 1n+pos, z2, k, v, d),
+          o2 => Crit.put(~V, ~f, o, 1n+pos, o2, k, v, d)
+        )
       )
 
+# the first bit where k differs from the key n that a read reaches (none: k
+# is n, or m is empty)
+def Crit.diff(k: List<&2, U32>, n: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Nat>:
+  match n:
+    case None{}:
+      None{}
+    case Some{x}:
+      Key.diff(k, x)
+
+# m with the key k bound to v, or to f of the old value and v
+def Crit.upsert(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U32>, v: V) -> Crit<V>:
+  Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, m, 0n, Cur.of(k))))
+
+# m with the key k bound to v
+def Crit.set(~V: Data, +m: Crit<V>, +k: List<&2, U32>, v: V) -> Crit<V>:
+  Crit.upsert(~V, ~(w => x => x), m, k, v)
+
+# a map with no entry
+def Crit.new(-V: Data) -> Crit<V>:
+  Crit.Tip{}
+
+# Crit.drop at a fork at the bit pos, once the cursor c2 is at pos: dz and do
+# drop k from each side, from the cursor after pos
+def Crit.drop.fork(
+  -V: Data,
+  +k: List<&2, U32>,
+  +rep: List<&2, U32>,
+  +pos: Nat,
+  +e: Maybe<&2, V>,
+  +z: Crit<V>,
+  +o: Crit<V>,
+  +c2: Cur,
+  dz: Cur -> Crit<V>,
+  dn: Cur -> Crit<V>
+) -> Crit<V>:
+  Shared.Bool.when(
+    Crit<V>,
+    Cur.done(c2),
+    u => Shared.Bool.when(
+      Crit<V>,
+      Key.is_eq(rep, k),
+      w => Crit.mk(V, rep, pos, None{}, z, o),
+      w => Crit.Fork{rep, pos, e, z, o}
+    ),
+    u => Shared.Bool.when(
+      Crit<V>,
+      Cur.bit(c2),
+      w => Crit.mk(V, rep, pos, e, z, dn(Cur.next(c2))),
+      w => Crit.mk(V, rep, pos, e, dz(Cur.next(c2)), o)
+    )
+  )
+
+# m, read from the cursor c at the bit at, without the key k
+def Crit.drop.go(-V: Data, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32>) -> Crit<V>:
+  match m:
+    case Crit.Tip{}:
+      Crit.Tip{}
+    case Crit.Leaf{+k2, +w}:
+      Shared.Bool.when(Crit<V>, Key.is_eq(k2, k), u => Crit.Tip{}, u => Crit.Leaf{k2, w})
+    case Crit.Fork{+rep, +pos, +e, +z, +o}:
+      Crit.drop.fork(
+        V,
+        k,
+        rep,
+        pos,
+        e,
+        z,
+        o,
+        Cur.skip(Nat.sub(pos, at), c),
+        z2 => Crit.drop.go(V, z, 1n+pos, z2, k),
+        o2 => Crit.drop.go(V, o, 1n+pos, o2, k)
+      )
+
+# m without the key k
+def Crit.drop(-V: Data, m: Crit<V>, +k: List<&2, U32>) -> Crit<V>:
+  Crit.drop.go(V, m, 0n, Cur.of(k), k)
+
+# the bit of the key k at pos (False: k ends before it)
+def Key.bit(k: List<&2, U32>, pos: Nat) -> Bool:
+  Cur.bit(Key.at(k, pos))
+
+# Crit.union of two forks whose keys agree before both bits, by how the bit
+# pa of a compares to the bit pb of b (c): at one bit, the sides join two by
+# two (in parallel); else the deeper fork goes to its side of the other
+def Crit.union.at(
+  ~V: Data,
+  ~j: V -> V -> V,
+  c: Cmp,
+  +ra: List<&2, U32>,
+  +pa: Nat,
+  +ea: Maybe<&2, V>,
+  +rb: List<&2, U32>,
+  +pb: Nat,
+  +eb: Maybe<&2, V>,
+  both: Crit<V> -> Crit<V> -> Crit<V>,
+  zz: Unit -> Crit<V>,
+  oo: Unit -> Crit<V>,
+  zb: Unit -> Crit<V>,
+  ob: Unit -> Crit<V>,
+  az: Unit -> Crit<V>,
+  ao: Unit -> Crit<V>,
+  +za: Crit<V>,
+  +oa: Crit<V>,
+  +zb2: Crit<V>,
+  +ob2: Crit<V>
+) -> Crit<V>:
+  match c:
+    case EQ{}:
+      zs os = zz(Unit{}) oo(Unit{})
+      both(zs, os)
+    case LT{}:
+      Shared.Bool.when(
+        Crit<V>,
+        Key.bit(rb, pa),
+        u => Crit.mk(V, ra, pa, ea, za, ob(Unit{})),
+        u => Crit.mk(V, ra, pa, ea, zb(Unit{}), oa)
+      )
+    case GT{}:
+      Shared.Bool.when(
+        Crit<V>,
+        Key.bit(ra, pb),
+        u => Crit.mk(V, rb, pb, eb, zb2, ao(Unit{})),
+        u => Crit.mk(V, rb, pb, eb, az(Unit{}), ob2)
+      )
+
+# the entries of a and b: where both hold a key, j of their values
+def Crit.union(~V: Data, ~j: V -> V -> V, +a: Crit<V>, +b: Crit<V>) -> Crit<V>:
+  match a b:
+    case Crit.Tip{} y:
+      y
+    case x Crit.Tip{}:
+      x
+    case Crit.Leaf{+k, +v} y:
+      Crit.upsert(~V, ~(w => x => j(x, w)), b, k, v)
+    case x Crit.Leaf{+k, +w}:
+      Crit.upsert(~V, ~j, a, k, w)
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      +d = Key.diff(ra, rb)
+      Shared.Bool.when(
+        Crit<V>,
+        Bool.and(Crit.above(d, pa), Crit.above(d, pb)),
+        u => Crit.join(V, a, b, Maybe.default(&2, Nat, d, 0n)),
+        u => Crit.union.at(
+          ~V,
+          ~j,
+          Nat.cmp(pa, pb),
+          ra,
+          pa,
+          ea,
+          rb,
+          pb,
+          eb,
+          zs => os => Crit.mk(
+            V,
+            Bool.pick(List<&2, U32>, Maybe.is_some(&2, V, ea), ra, rb),
+            pa,
+            Shared.Maybe.join(~V, ~j, ea, eb),
+            zs,
+            os
+          ),
+          u2 => Crit.union(~V, ~j, za, zb),
+          u2 => Crit.union(~V, ~j, oa, ob),
+          u2 => Crit.union(~V, ~j, za, b),
+          u2 => Crit.union(~V, ~j, oa, b),
+          u2 => Crit.union(~V, ~j, a, zb),
+          u2 => Crit.union(~V, ~j, a, ob),
+          za,
+          oa,
+          zb,
+          ob
+        )
+      )
+
+# Crit.minus of two forks whose keys agree before both bits, by how the bit
+# pa of a compares to the bit pb of b (c)
+def Crit.minus.at(
+  -V: Data,
+  c: Cmp,
+  +ra: List<&2, U32>,
+  +pa: Nat,
+  +ea: Maybe<&2, V>,
+  +rb: List<&2, U32>,
+  +pb: Nat,
+  +eb: Maybe<&2, V>,
+  zz: Unit -> Crit<V>,
+  oo: Unit -> Crit<V>,
+  zb: Unit -> Crit<V>,
+  ob: Unit -> Crit<V>,
+  az: Unit -> Crit<V>,
+  ao: Unit -> Crit<V>,
+  +za: Crit<V>,
+  +oa: Crit<V>
+) -> Crit<V>:
+  match c:
+    case EQ{}:
+      zs os = zz(Unit{}) oo(Unit{})
+      Crit.mk(V, ra, pa, Bool.pick(Maybe<&2, V>, Maybe.is_some(&2, V, eb), None{}, ea), zs, os)
+    case LT{}:
+      Shared.Bool.when(
+        Crit<V>,
+        Key.bit(rb, pa),
+        u => Crit.mk(V, ra, pa, ea, za, ob(Unit{})),
+        u => Crit.mk(V, ra, pa, ea, zb(Unit{}), oa)
+      )
+    case GT{}:
+      Shared.Bool.when(Crit<V>, Key.bit(ra, pb), u => ao(Unit{}), u => az(Unit{}))
+
+# the entries of a whose keys b lacks
+def Crit.minus(-V: Data, +a: Crit<V>, +b: Crit<V>) -> Crit<V>:
+  match a b:
+    case Crit.Tip{} y:
+      Crit.Tip{}
+    case x Crit.Tip{}:
+      x
+    case Crit.Leaf{+k, +v} y:
+      Shared.Bool.when(Crit<V>, Crit.has(V, b, k), u => Crit.Tip{}, u => Crit.Leaf{k, v})
+    case x Crit.Leaf{+k, w}:
+      Crit.drop(V, a, k)
+    case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
+      +d = Key.diff(ra, rb)
+      Shared.Bool.when(
+        Crit<V>,
+        Bool.and(Crit.above(d, pa), Crit.above(d, pb)),
+        u => a,
+        u => Crit.minus.at(
+          V,
+          Nat.cmp(pa, pb),
+          ra,
+          pa,
+          ea,
+          rb,
+          pb,
+          eb,
+          u2 => Crit.minus(V, za, zb),
+          u2 => Crit.minus(V, oa, ob),
+          u2 => Crit.minus(V, za, b),
+          u2 => Crit.minus(V, oa, b),
+          u2 => Crit.minus(V, a, zb),
+          u2 => Crit.minus(V, a, ob),
+          za,
+          oa
+        )
+      )
+
+# the number of entries of m
+def Crit.size(-V: Data, m: Crit<V>) -> Nat:
+  match m:
+    case Crit.Tip{}:
+      0n
+    case Crit.Leaf{k, v}:
+      1n
+    case Crit.Fork{r, p, e, z, o}:
+      zs os = Crit.size(V, z) Crit.size(V, o)
+      Shared.Nat.add_if(Maybe.is_some(&2, V, e), Nat.add(zs, os))
+
+# an entry of a map: a key and its value
+type Bind<-V: Data> is Data:
+  Bind{key: List<&2, U32>, value: V}
+
+# the entries of m, in the order of their keys, then rest
+def Crit.entries.go(-V: Data, m: Crit<V>, rest: List<&2, Bind<V>>) -> List<&2, Bind<V>>:
+  match m:
+    case Crit.Tip{}:
+      rest
+    case Crit.Leaf{k, v}:
+      Bind{k, v} <> rest
+    case Crit.Fork{r, p, None{}, z, o}:
+      Crit.entries.go(V, z, Crit.entries.go(V, o, rest))
+    case Crit.Fork{r, p, Some{v}, z, o}:
+      Bind{r, v} <> Crit.entries.go(V, z, Crit.entries.go(V, o, rest))
+
+# the entries of m, in the order of their keys
+def Crit.entries(-V: Data, m: Crit<V>) -> List<&2, Bind<V>>:
+  Crit.entries.go(V, m, [])
