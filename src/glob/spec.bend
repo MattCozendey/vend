@@ -1,4 +1,6 @@
 import Base
+import ../shared/shared/regex.bend as Regex
+import ../shared/shared/shared/spans.bend as Spans
 
 # A path is a String: segments joined by '/'. It has no leading or trailing
 # '/', and no empty, "." or ".." segment. A segment has no NUL and no '\'.
@@ -21,102 +23,81 @@ def is_segment(s: String) -> Bool:
 def is_path(s: String) -> Bool:
   List.all(~&2, ~String, ~is_segment, String.split(s, '/'))
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
-# A glob, as a tree. A parser turns glob text into one; Void and Eps let
-# matching state what is left of a glob after some characters.
+# A glob, as a tree. A parser turns glob text into one.
 type Glob is Data:
   Void{}
   Eps{}
   Lit{c: Char}
   Any{}
   Star{}
-  Class{neg: Bool, cs: List<&2, Char>}
+  Class{neg: Bool, ss: List<&2, Spans.Span>}
   Deep{}
   Cat{a: Glob, b: Glob}
   Alt{a: Glob, b: Glob}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # Void: no text. Eps: only "". Lit: c. Any (`?`): one character.
 # Star (`*`): any text. Class (`[...]`, `[!...]` when neg): one character
-# in cs, or not in cs. None of these five matches '/'. Deep (`**`): any
+# in a span of ss, or in none. None of these five matches '/'. Deep (`**`): any
 # text, '/' included. Cat: a, then b. Alt (`{a,b}`): a or b.
-
-# Eps for True, Void for False
-def Glob.of_bool(b: Bool) -> Glob:
-  match b:
-    case False{}:
-      Void{}
-    case True{}:
-      Eps{}
-
-# g matches ""
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a glob tree is a few nodes, and a short-circuit match would need mutual recursion, which Bend refuses
-def Glob.is_nullable(g: Glob) -> Bool:
-  match g:
-    case Void{}:
-      False{}
-    case Eps{}:
-      True{}
-    case Lit{c}:
-      False{}
-    case Any{}:
-      False{}
-    case Star{}:
-      True{}
-    case Class{neg, cs}:
-      False{}
-    case Deep{}:
-      True{}
-    case Cat{a, b}:
-      Bool.and(Glob.is_nullable(a), Glob.is_nullable(b))
-    case Alt{a, b}:
-      Bool.or(Glob.is_nullable(a), Glob.is_nullable(b))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # c is not '/'
 def is_inner(c: Char) -> Bool:
   Bool.not(Char.is_eq(c, '/'))
 
-# what g must still match after it reads c
-def Glob.step(g: Glob, +c: Char) -> Glob:
+# Matching is that of regular expressions (regex.bend): a glob is an
+# expression over characters, whose atoms are the three forms that read one
+# character.
+
+# What reads one character: the character c, any character but '/', or a
+# class (a character in a span of ss, or in none when neg; never '/').
+type Atom is Data:
+  ALit{c: Char}
+  AAny{}
+  AClass{neg: Bool, ss: List<&2, Spans.Span>}
+
+# t accepts c
+def Atom.hit(t: Atom, c: Char) -> Bool:
+  match t:
+    case ALit{x}:
+      Char.is_eq(x, c)
+    case AAny{}:
+      is_inner(c)
+    case AClass{neg, ss}:
+      +c = c
+      List.all.if(u => Bool.xor(neg, Spans.Spans.has(ss, c)), is_inner(c))
+
+# the regular expression of g
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
+def Glob.re(g: Glob) -> Regex.Re<Atom>:
   match g:
     case Void{}:
-      Void{}
+      Regex.Void{}
     case Eps{}:
-      Void{}
-    case Lit{x}:
-      Glob.of_bool(Char.is_eq(x, c))
+      Regex.Eps{}
+    case Lit{c}:
+      Regex.One{ALit{c}}
     case Any{}:
-      Glob.of_bool(is_inner(c))
+      Regex.One{AAny{}}
     case Star{}:
-      Cat{Glob.of_bool(is_inner(c)), Star{}}
-    case Class{neg, cs}:
-      hit = Bool.xor(neg, List.contains(~Char, ~Char.is_eq, cs, c))
-      Glob.of_bool(Bool.and(is_inner(c), hit))
+      Regex.Star{Regex.One{AAny{}}}
+    case Class{neg, ss}:
+      Regex.One{AClass{neg, ss}}
     case Deep{}:
-      Deep{}
-    # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a glob tree is a few nodes, where a fork costs more than it saves
-    case Cat{+a, +b}:
-      n = Glob.is_nullable(a)
-      Alt{Cat{Glob.step(a, c), b}, Cat{Glob.of_bool(n), Glob.step(b, c)}}
+      Regex.All{}
+    case Cat{a, b}:
+      Regex.Cat{Glob.re(a), Glob.re(b)}
     case Alt{a, b}:
-      Alt{Glob.step(a, c), Glob.step(b, c)}
-    # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+      Regex.Alt{Glob.re(a), Glob.re(b)}
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # g matches all of s
 def Glob.matches(s: String, g: Glob) -> Bool:
-  match s:
-    case SNil{}:
-      Glob.is_nullable(g)
-    case SCon{c, t}:
-      Glob.matches(t, Glob.step(g, c))
+  Regex.Re.matches(~Char, ~Atom, ~Atom.hit, String.to_list(s), Glob.re(g))
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # One line of a selector: `g` includes, `!g` excludes.
 type Rule is Data:
   Include{g: Glob}
   Exclude{g: Glob}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the answer for p after rules, given the answer acc before them
 def Rule.selects.go(rules: List<&2, Rule>, +p: String, acc: Bool) -> Bool:
@@ -136,14 +117,12 @@ def Rule.selects.go(rules: List<&2, Rule>, +p: String, acc: Bool) -> Bool:
 def Rule.selects(rules: List<&2, Rule>, p: String) -> Bool:
   Rule.selects.go(rules, p, False{})
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # A question about two rule lists: is there a valid path that
 # Both: a and b select? Only: a selects and b does not?
 # "No path for Only{a, b}" means: b covers a.
 type Query is Data:
   Both{a: List<&2, Rule>, b: List<&2, Rule>}
   Only{a: List<&2, Rule>, b: List<&2, Rule>}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # p is a valid path that answers q
 def Query.holds(q: Query, +p: String) -> Bool:
@@ -156,14 +135,12 @@ def Query.holds(q: Query, +p: String) -> Bool:
       Bool.and(is_path(p), Bool.and(in_a, Bool.not(Rule.selects(b, p))))
   # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # The answer of a search. Found: a path that answers the query. Absent: no
 # path answers it. Unknown: the search ran out of steps; it claims nothing.
 type Search is Data:
   Found{path: String}
   Absent{}
   Unknown{}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the answer to q
 law Query.search:
@@ -190,7 +167,6 @@ law search_absent:
 # also matches "". A ',' outside braces is itself. Text that starts with '/'
 # is an error. A rule line that starts with `!` is an Exclude.
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # the role of a character in glob text
 type Sym is Data:
   SEsc{}
@@ -205,7 +181,6 @@ type Sym is Data:
   SBang{}
   SDash{}
   SChar{c: Char}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
 
 # the character of s
 def Sym.char(s: Sym) -> Char:
@@ -271,42 +246,18 @@ def Sym.of.go(specials: List<&2, Sym>, +c: Char) -> Sym:
 def Sym.of(c: Char) -> Sym:
   Sym.of.go(Sym.specials(), c)
 
-# lo, then the next n characters
-def Char.range.go(n: Nat, +lo: U32) -> List<&2, Char>:
-  match n:
-    case 0n:
-      [Chr{lo}]
-    case 1n+p:
-      Chr{lo} <> Char.range.go(p, (lo + 1: U32))
-
-# lo and the n characters after it, or None when ok is False
-def Char.range.if(lo: U32, n: Nat, ok: Bool) -> Maybe<&2, List<&2, Char>>:
-  match ok:
-    case False{}:
-      None{}
-    case True{}:
-      Some{Char.range.go(n, lo)}
-
-# every character from lo to hi, or None when hi comes before lo
-def Char.range(lo: Char, hi: Char) -> Maybe<&2, List<&2, Char>>:
-  match lo hi:
-    case Chr{+a} Chr{+b}:
-      Char.range.if(a, U32.to_nat((b - a: U32)), U32.is_le(a, b))
-
 # Inside a `{`: the alternatives so far and the atoms of the current one,
 # both last first, and whether the `{` opened at the start of a segment.
 # The bottom frame is the whole text.
 type Frame is Data:
   Frame{alts: List<&2, Glob>, seq: List<&2, Glob>, start: Bool}
 
-# bend-lint: expect-begin bend-lint-rules/layout/case@warning -- a constructor is PascalCase, as in Base (Some, Con): the rule reads a constructor as a law
 # Out: between atoms. After: just after a `**`, where the segment must end.
-# In: inside a class, with its characters so far.
+# In: inside a class, with its spans so far.
 type Mode is Data:
   Out{}
   After{}
-  In{neg: Bool, cs: List<&2, Char>}
-# bend-lint: expect-end bend-lint-rules/layout/case@warning
+  In{neg: Bool, ss: List<&2, Spans.Span>}
 
 # the atoms, last first, before acc
 def Glob.of_seq(atoms: List<&2, Glob>, acc: Glob) -> Glob:
@@ -340,16 +291,13 @@ def Glob.read.end(stack: List<&2, Frame>) -> Maybe<&2, Glob>:
     case _:
       None{}
 
-# k of the range r, or None when r is None
-def Glob.read.range(
-  r: Maybe<&2, List<&2, Char>>,
-  k: List<&2, Char> -> Maybe<&2, Glob>
-) -> Maybe<&2, Glob>:
+# k of the span r, or None when r is None
+def Glob.read.range(r: Maybe<&2, Spans.Span>, k: Spans.Span -> Maybe<&2, Glob>) -> Maybe<&2, Glob>:
   match r:
     case None{}:
       None{}
-    case Some{cs}:
-      k(cs)
+    case Some{s}:
+      k(s)
 
 # `**/`: "", or any text that ends with '/'
 def Glob.dirs() -> Glob:
@@ -382,27 +330,29 @@ def Glob.read.go(
   match syms mode:
     case Nil{} Out{}:
       Glob.read.end(stack)
-    case Nil{} In{neg, cs}:
+    case Nil{} In{neg, ss}:
       None{}
     case Con{SEsc{}, Nil{}} _:
       None{}
     case Con{SEsc{}, Con{x, t}} Out{}:
       Glob.read.go(t, Out{}, Frame.add(stack, Lit{Sym.char(x)}), False{})
-    case Con{SEsc{}, Con{x, t}} In{neg, cs}:
-      Glob.read.go(t, In{neg, Con{Sym.char(x), cs}}, stack, seg)
+    case Con{SEsc{}, Con{x, t}} In{neg, ss}:
+      +c = Sym.char(x)
+      Glob.read.go(t, In{neg, Con{Spans.Span{c, c}, ss}}, stack, seg)
     case Con{SRight{}, t} Out{}:
       None{}
-    case Con{SRight{}, t} In{neg, cs}:
-      Glob.read.go(t, Out{}, Frame.add(stack, Class{neg, cs}), False{})
-    case Con{x, Con{SDash{}, Con{SRight{}, t}}} In{neg, cs}:
+    case Con{SRight{}, t} In{neg, ss}:
+      Glob.read.go(t, Out{}, Frame.add(stack, Class{neg, ss}), False{})
+    case Con{x, Con{SDash{}, Con{SRight{}, t}}} In{neg, ss}:
       None{}
-    case Con{x, Con{SDash{}, Con{SEsc{}, t}}} In{neg, cs}:
+    case Con{x, Con{SDash{}, Con{SEsc{}, t}}} In{neg, ss}:
       None{}
-    case Con{x, Con{SDash{}, Con{y, t}}} In{neg, cs}:
-      r = Char.range(Sym.char(x), Sym.char(y))
-      Glob.read.range(r, rs => Glob.read.go(t, In{neg, List.append(&2, Char, rs, cs)}, stack, seg))
-    case Con{x, t} In{neg, cs}:
-      Glob.read.go(t, In{neg, Con{Sym.char(x), cs}}, stack, seg)
+    case Con{x, Con{SDash{}, Con{y, t}}} In{neg, ss}:
+      r = Spans.Span.of(Sym.char(x), Sym.char(y))
+      Glob.read.range(r, s => Glob.read.go(t, In{neg, Con{s, ss}}, stack, seg))
+    case Con{x, t} In{neg, ss}:
+      +c = Sym.char(x)
+      Glob.read.go(t, In{neg, Con{Spans.Span{c, c}, ss}}, stack, seg)
     case Con{SAny{}, t} _:
       Glob.read.go(t, Out{}, Frame.add(stack, Any{}), False{})
     case Nil{} After{}:
@@ -462,18 +412,6 @@ def Sym.list(s: String) -> List<&2, Sym>:
 # the glob that text s spells, or None for bad text
 def Glob.read(s: String) -> Maybe<&2, Glob>:
   Glob.read.syms(Sym.list(s))
-
-# the rule that syms spell: a leading `!` excludes
-def Rule.read.syms(+syms: List<&2, Sym>) -> Maybe<&2, Rule>:
-  match syms:
-    case Con{SBang{}, t}:
-      Maybe.map(&2, Glob, Rule, g => Exclude{g}, Glob.read.syms(t))
-    case _:
-      Maybe.map(&2, Glob, Rule, g => Include{g}, Glob.read.syms(syms))
-
-# the rule that line s spells, or None for bad text
-def Rule.read(s: String) -> Maybe<&2, Rule>:
-  Rule.read.syms(Sym.list(s))
 
 # text that spells g
 law Glob.show:
