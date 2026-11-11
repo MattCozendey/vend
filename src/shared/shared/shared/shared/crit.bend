@@ -1452,6 +1452,59 @@ def Bits.head(bs: List<&2, Bool>) -> Maybe<&2, Bool>:
 def Bits.at(bs: List<&2, Bool>, n: Nat) -> Maybe<&2, Bool>:
   Bits.head(List.drop(&2, Bool, bs, n))
 
+# a difference agrees on 0 bits
+def Bits.agree.zero(d: Maybe<&2, Nat>) -> {Bits.agree(d, 0n) == True{}: Bool}:
+  match d:
+    case None{}:
+      {==}
+    case Some{x}:
+      Shared.Nat.le_zero(x)
+
+# a difference one bit on is one more, and agreement moves with it
+def Bits.agree.shift(d: Maybe<&2, Nat>, p: Nat) -> {
+  Bits.agree(Maybe.map(&2, Nat, Nat, m => 1n+m, d), 1n+p) == Bits.agree(d, p): Bool
+}:
+  match d:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# at 0 bits, the bits of a and b agree whichever way they differ
+def Bits.agree_diff.zero_step(x: Bool, y: Bool, d: Maybe<&2, Nat>) -> {
+  Bits.agree(Shared.Bool.when(Maybe<&2, Nat>, Shared.Bool.is_eq(x, y), u => Maybe.map(&2, Nat, Nat, m => 1n+m, d), u => Some{0n}), 0n) == True{}: Bool
+}:
+  match x y:
+    case True{} True{}:
+      Bits.agree.zero(Maybe.map(&2, Nat, Nat, m => 1n+m, d))
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      Bits.agree.zero(Maybe.map(&2, Nat, Nat, m => 1n+m, d))
+
+# one bit on: the first bits decide, and the rest agrees with r
+def Bits.agree_diff.step(
+  x: Bool,
+  y: Bool,
+  +d: Maybe<&2, Nat>,
+  p: Nat,
+  r: Bool,
+  ih: {Bits.agree(d, p) == r: Bool}
+) -> {
+  Bits.agree(Shared.Bool.when(Maybe<&2, Nat>, Shared.Bool.is_eq(x, y), u => Maybe.map(&2, Nat, Nat, m => 1n+m, d), u => Some{0n}), 1n+p) == Bool.and(Shared.Bool.is_eq(x, y), r): Bool
+}:
+  match x y:
+    case True{} True{}:
+      Equal.trans(Bool, Bits.agree(Maybe.map(&2, Nat, Nat, m => 1n+m, d), 1n+p), Bits.agree(d, p), r, Bits.agree.shift(d, p), ih)
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      Equal.trans(Bool, Bits.agree(Maybe.map(&2, Nat, Nat, m => 1n+m, d), 1n+p), Bits.agree(d, p), r, Bits.agree.shift(d, p), ih)
+
 # a first difference is at n or after exactly when the bits agree on their
 # first n
 law Bits.agree_diff:
@@ -1461,7 +1514,31 @@ law Bits.agree_diff:
   {Bits.agree(Bits.diff(a, b), n) == Bits.agree_n(n, a, b): Bool}
 
 def Bits.agree_diff(a, b, n):
-  ?TODO
+  match a b:
+    case Nil{} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      match n:
+        case 0n:
+          Bits.agree_diff.zero_step(x, y, Bits.diff(ra, rb))
+        case 1n+(+p):
+          Bits.agree_diff.step(x, y, Bits.diff(ra, rb), p, Bits.agree_n(p, ra, rb), Bits.agree_diff(ra, rb, p))
+    case Nil{} Con{y, rb}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
+    case Con{x, ra} Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+p:
+          {==}
 
 # Bool.is_eq does not depend on the order of its arguments
 def Bits.is_eq_comm(a: Bool, b: Bool) -> {Shared.Bool.is_eq(a, b) == Shared.Bool.is_eq(b, a): Bool}:
