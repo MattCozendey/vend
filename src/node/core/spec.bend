@@ -6991,6 +6991,143 @@ def Merge.work_act(
           e
         )
       )
+# that the three trees of a merge are whole
+def Merge.ok(
+  ~d: Led(),
+  +l: L(d),
+  hb: Maybe<&2, Hashes.Hash>,
+  ho: Maybe<&2, Hashes.Hash>,
+  ht: Maybe<&2, Hashes.Hash>
+) -> Bool:
+  List.all.if(u => List.all.if(u2 => Tree.kept(~d, l, ho), Tree.kept(~d, l, hb)), Tree.kept(~d, l, ht))
+
+# the act of a merge once the trees are checked (ok) and the keys to merge are
+# read (md)
+def Merge.act.go(
+  ~d: Led(),
+  +l: L(d),
+  +k: Ledgers.Id,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  ok: Bool,
+  md: Maybe<&2, List<&2, List<&2, U32>>>
+) -> Maybe<&2, Replicas.Act>:
+  Shared.Bool.when(
+    Maybe<&2, Replicas.Act>,
+    ok,
+    u => Work.act(
+      ~d,
+      None{},
+      Merge.all(
+        ~d,
+        l,
+        hb,
+        ho,
+        ht,
+        k,
+        Maybe.default(&2, List<&2, List<&2, U32>>, md, []),
+        Some{Work{l, ho, []}}
+      )
+    ),
+    u => None{}
+  )
+
+# the act of a merge is the act once its trees are checked
+def Merge.act_eq(
+  ~d: Led(),
+  +l: L(d),
+  t: Replicas.Tip,
+  +k: Ledgers.Id,
+  from: Requests.Source,
+  base: Maybe<&2, Requests.Source>
+) -> {
+  Merge.act(~d, l, t, k, from, base)
+    == Merge.act.go(
+      ~d,
+      l,
+      k,
+      Base.tree(base),
+      Replicas.Tip.content(t),
+      Source.root(from),
+      Merge.ok(~d, l, Base.tree(base), Replicas.Tip.content(t), Source.root(from)),
+      Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, Replicas.Tip.content(t), Source.root(from))
+    ): Maybe<&2, Replicas.Act>
+}:
+  {==}
+
+# a merge that gives an act has its trees checked
+def Merge.act_ok(
+  ~d: Led(),
+  +l: L(d),
+  +k: Ledgers.Id,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  ok: Bool,
+  md: Maybe<&2, List<&2, List<&2, U32>>>,
+  ac: Replicas.Act,
+  e: {Merge.act.go(~d, l, k, hb, ho, ht, ok, md) == Some{ac}: Maybe<&2, Replicas.Act>}
+) -> {ok == True{}: Bool}:
+  match ok:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd({False{} == True{}: Bool}, Shared.Maybe.none_ne_some(Replicas.Act, ac, e))
+
+# the three trees that a check holds of are each kept
+def Merge.guard3(
+  a: Bool,
+  b: Bool,
+  c: Bool,
+  h: {List.all.if(u => List.all.if(u2 => c, b), a) == True{}: Bool}
+) -> Merge.And({a == True{}: Bool}, Merge.And({b == True{}: Bool}, {c == True{}: Bool})):
+  match a b c:
+    case True{} True{} True{}:
+      ({==}, ({==}, {==}))
+    case True{} True{} False{}:
+      Empty.absurd(
+        Merge.And({True{} == True{}: Bool}, Merge.And({True{} == True{}: Bool}, {False{} == True{}: Bool})),
+        Shared.Bool.false_ne_true(h)
+      )
+    case True{} False{} z:
+      Empty.absurd(
+        Merge.And({True{} == True{}: Bool}, Merge.And({False{} == True{}: Bool}, {z == True{}: Bool})),
+        Shared.Bool.false_ne_true(h)
+      )
+    case False{} y z:
+      Empty.absurd(
+        Merge.And({False{} == True{}: Bool}, Merge.And({y == True{}: Bool}, {z == True{}: Bool})),
+        Shared.Bool.false_ne_true(h)
+      )
+
+# the work that a merge that gives an act is of
+def Merge.act_acted(
+  ~d: Led(),
+  +l: L(d),
+  +k: Ledgers.Id,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  md: Maybe<&2, List<&2, List<&2, U32>>>,
+  +vs: Maybe<&2, List<&2, String>>,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  e: {Merge.act.go(~d, l, k, hb, ho, ht, True{}, md) == Some{Replicas.Act.Taken{vs, h2, ns}}: Maybe<&2, Replicas.Act>}
+) -> Merge.Acted(
+  ~d,
+  Merge.all(~d, l, hb, ho, ht, k, Maybe.default(&2, List<&2, List<&2, U32>>, md, []), Some{Work{l, ho, []}}),
+  h2,
+  ns
+):
+  Merge.work_act(
+    ~d,
+    Merge.all(~d, l, hb, ho, ht, k, Maybe.default(&2, List<&2, List<&2, U32>>, md, []), Some{Work{l, ho, []}}),
+    vs,
+    h2,
+    ns,
+    e
+  )
 # TMP-END
 
 # a merge never loses a change that only one side made: when the merge of a
