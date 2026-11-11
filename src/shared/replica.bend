@@ -133,9 +133,10 @@ def Led(-mach: Machine()) -> Type:
   &x: Ledgers.Ledger(Machine.Q(mach), Machine.code(mach)) -> Trees.Tree(
     Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
     Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
-    a => b => Ledgers.Kind.Grows(
-      Machine.Q(mach),
-      Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+    a => b => Ledgers.Kind.grows(
+      ~Machine.Q(mach),
+      ~Machine.code(mach),
+      ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
       a,
       b
     )
@@ -158,9 +159,10 @@ def Led.tree(-mach: Machine(), d: Led(mach)) -> Trees.Tree.Ops(Led.L(mach, d)):
       Trees.Tree.ops(
         Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
         Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
-        a => b => Ledgers.Kind.Grows(
-          Machine.Q(mach),
-          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+        a => b => Ledgers.Kind.grows(
+          ~Machine.Q(mach),
+          ~Machine.code(mach),
+          ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
           a,
           b
         ),
@@ -189,8 +191,8 @@ def Led.has(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), e: Entry(mach)) 
   Ledgers.Kind.has(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), l, e)
 
 # that the ledger b holds each entry that a holds
-def Led.Grows(-mach: Machine(), -d: Led(mach), -a: Led.L(mach, d), -b: Led.L(mach, d)) -> Type:
-  Ledgers.Kind.Grows(Machine.Q(mach), Led.kind(mach, d), a, b)
+def Led.Grows(-mach: Machine(), -d: Led(mach), -a: Led.L(mach, d), -b: Led.L(mach, d)) -> Data:
+  {Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b) == True{}: Bool}
 
 # the data of l whose hash is h
 def Led.fetch(
@@ -4233,9 +4235,10 @@ def Hist.final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Final(
       Hist.final.of(
         Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
         Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
-        a => b => Ledgers.Kind.Grows(
-          Machine.Q(mach),
-          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+        a => b => Ledgers.Kind.grows(
+          ~Machine.Q(mach),
+          ~Machine.code(mach),
+          ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
           a,
           b
         ),
@@ -4253,9 +4256,10 @@ def Hist.put_final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.PutFinal(
       Hist.put_final.of(
         Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
         Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
-        a => b => Ledgers.Kind.Grows(
-          Machine.Q(mach),
-          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+        a => b => Ledgers.Kind.grows(
+          ~Machine.Q(mach),
+          ~Machine.code(mach),
+          ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
           a,
           b
         ),
@@ -4274,9 +4278,10 @@ def Hist.write(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Write(
       Hist.write.of(
         Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
         Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
-        a => b => Ledgers.Kind.Grows(
-          Machine.Q(mach),
-          Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+        a => b => Ledgers.Kind.grows(
+          ~Machine.Q(mach),
+          ~Machine.code(mach),
+          ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
           a,
           b
         ),

@@ -182,7 +182,7 @@ def Ops.diff(
 # ------------------
 # Each is a proposition about the operations o in a depot kept as S, whose
 # data is fetch, and where grows says that a depot keeps all that another
-# holds.
+# holds (a test, so that a proof may use it many times).
 
 # the depot s holds each node of the edit e, under its hash
 def Edit.Held(-S: Data, -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, -s: S, -e: Edit) -> Type:
@@ -192,22 +192,22 @@ def Edit.Held(-S: Data, -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, -s
 
 # what a read could tell, it tells in any depot that grows: only Missing
 # changes
-def Laws.Final(-S: Data, -grows: S -> S -> Type, -o: Tree.Ops(S)) -> Type:
+def Laws.Final(-S: Data, -grows: S -> S -> Bool, -o: Tree.Ops(S)) -> Type:
   @h: Maybe<&2, Hashes.Hash> -> @k: List<&2, U32> -> Shared.Read.Stable(
     S,
-    grows,
+    a => b => {grows(a, b) == True{}: Bool},
     Maybe<&2, List<&2, U32>>,
     s => Look.known(Ops.look(S, o)(s)(h)(k))
   )
 
 # a write stays as the depot grows: it reads only nodes on its key's path,
 # and what a read could tell stays
-def Laws.PutFinal(-S: Data, -grows: S -> S -> Type, -o: Tree.Ops(S)) -> Type:
+def Laws.PutFinal(-S: Data, -grows: S -> S -> Bool, -o: Tree.Ops(S)) -> Type:
   @s: S -> @s2: S -> @h: Maybe<&2, Hashes.Hash> -> @k: List<&2, U32> -> @m: Maybe<
     &2,
     List<&2, U32>> -> @e: Edit -> {
     Ops.put(S, o)(s)(h)(k)(m) == Some{e}: Maybe<&2, Edit>
-  } -> grows(s)(s2) -> {Ops.put(S, o)(s2)(h)(k)(m) == Some{e}: Maybe<&2, Edit>}
+  } -> {grows(s, s2) == True{}: Bool} -> {Ops.put(S, o)(s2)(h)(k)(m) == Some{e}: Maybe<&2, Edit>}
 
 # a write changes its key and no other: in a depot that grows and holds the
 # new nodes, the new root reads the key as written, and every other key as
@@ -215,14 +215,14 @@ def Laws.PutFinal(-S: Data, -grows: S -> S -> Type, -o: Tree.Ops(S)) -> Type:
 def Laws.Write(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   -o: Tree.Ops(S)
 ) -> Type:
   @s: S -> @s2: S -> @h: Maybe<&2, Hashes.Hash> -> @k: List<&2, U32> -> @m: Maybe<
     &2,
     List<&2, U32>> -> @e: Edit -> {
     Ops.put(S, o)(s)(h)(k)(m) == Some{e}: Maybe<&2, Edit>
-  } -> grows(s)(s2) -> Edit.Held(S, fetch, s2, e) -> {
+  } -> {grows(s, s2) == True{}: Bool} -> Edit.Held(S, fetch, s2, e) -> {
     Ops.look(S, o)(s2)(Edit.root(e))(k) == Look.of(m): Look
   }
     & (
@@ -317,7 +317,7 @@ def Laws.Whole(-S: Data, -o: Tree.Ops(S)) -> Type:
 def Tree.Laws(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   -o: Tree.Ops(S)
 ) -> Type:
   Laws.Final(S, grows, o)
@@ -334,7 +334,7 @@ def Tree.Laws(
 def Tree(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type
+  -grows: S -> S -> Bool
 ) -> Type:
   &o: Tree.Ops(S) -> Tree.Laws(S, fetch, grows, o)
 
@@ -342,7 +342,7 @@ def Tree(
 def Tree.ops(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  -grows: S -> S -> Type,
+  -grows: S -> S -> Bool,
   t: Tree(S, fetch, grows)
 ) -> Tree.Ops(S):
   match t:
