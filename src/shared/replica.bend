@@ -4592,6 +4592,573 @@ def Ext.all(
         )
       )
 
+# that the ledger of the run r is base with some data put, which base holds
+# when it holds what r added
+def Ext.Based(-mach: Machine(), -d: Led(mach), -base: Led.L(mach, d), -r: Run<Led.L(mach, d)>) -> Data:
+  +Sigma<List<&2, List<&2, U32>>, xs => +Sigma<
+    {Run.ledger(Led.L(mach, d), r) == Led.puts(~mach, ~d, xs, base): Led.L(mach, d)},
+    e => {Ext.holds(~mach, ~d, base, xs) == Ext.holds(~mach, ~d, base, Run.added(Led.L(mach, d), r)): Bool}>>
+
+# the check of Ext.based: base holds the puts when it holds the added nodes
+def Ext.based.holds(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +base: Led.L(mach, d),
+  +xs: List<&2, List<&2, U32>>,
+  +ys: List<&2, List<&2, U32>>,
+  +zs: List<&2, List<&2, U32>>,
+  +a: List<&2, List<&2, U32>>,
+  +a2: List<&2, List<&2, U32>>,
+  e2: {Ext.holds(~mach, ~d, base, xs) == Ext.holds(~mach, ~d, base, a): Bool},
+  h1: {Ext.holds(~mach, ~d, base, zs) == Ext.holds(~mach, ~d, base, ys): Bool},
+  a1: {a2 == List.append(&2, List<&2, U32>, ys, a): List<&2, List<&2, U32>>}
+) -> {
+  Ext.holds(~mach, ~d, base, List.append(&2, List<&2, U32>, xs, zs)) == Ext.holds(~mach, ~d, base, a2): Bool
+}:
+  %Equal.sym(List<&2, List<&2, U32>>, a2, List.append(&2, List<&2, U32>, ys, a), a1): {
+    Ext.holds(~mach, ~d, base, List.append(&2, List<&2, U32>, xs, zs)) == Ext.holds(~mach, ~d, base, _): Bool
+  }
+  %Equal.sym(
+    Bool,
+    Ext.holds(~mach, ~d, base, List.append(&2, List<&2, U32>, xs, zs)),
+    Bool.and(Ext.holds(~mach, ~d, base, xs), Ext.holds(~mach, ~d, base, zs)),
+    Ext.holds_append(~mach, ~d, base, xs, zs)
+  ): {_ == Ext.holds(~mach, ~d, base, List.append(&2, List<&2, U32>, ys, a)): Bool}
+  %Equal.sym(
+    Bool,
+    Ext.holds(~mach, ~d, base, List.append(&2, List<&2, U32>, ys, a)),
+    Bool.and(Ext.holds(~mach, ~d, base, ys), Ext.holds(~mach, ~d, base, a)),
+    Ext.holds_append(~mach, ~d, base, ys, a)
+  ): {Bool.and(Ext.holds(~mach, ~d, base, xs), Ext.holds(~mach, ~d, base, zs)) == _: Bool}
+  %Equal.sym(Bool, Ext.holds(~mach, ~d, base, xs), Ext.holds(~mach, ~d, base, a), e2): {
+    Bool.and(_, Ext.holds(~mach, ~d, base, zs))
+      == Bool.and(Ext.holds(~mach, ~d, base, ys), Ext.holds(~mach, ~d, base, a)): Bool
+  }
+  %Equal.sym(Bool, Ext.holds(~mach, ~d, base, zs), Ext.holds(~mach, ~d, base, ys), h1): {
+    Bool.and(Ext.holds(~mach, ~d, base, a), _)
+      == Bool.and(Ext.holds(~mach, ~d, base, ys), Ext.holds(~mach, ~d, base, a)): Bool
+  }
+  Ext.and_comm(Ext.holds(~mach, ~d, base, a), Ext.holds(~mach, ~d, base, ys))
+
+# a run that follows a run based on base is based on base
+def Ext.based(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +base: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  +r2: Run<Led.L(mach, d)>,
+  bd: Ext.Based(mach, d, base, r),
+  g: Ext.Gain(mach, d, base, r, r2)
+) -> Ext.Based(mach, d, base, r2):
+  match bd:
+    case Tuple{+xs, Tuple{e1, e2}}:
+      match g:
+        case Tuple{+ys, Tuple{+zs, Tuple{a1, Tuple{l1, h1}}}}:
+          Tuple{
+            List.append(&2, List<&2, U32>, xs, zs),
+            Tuple{
+              Equal.trans(
+                Led.L(mach, d),
+                Run.ledger(Led.L(mach, d), r2),
+                Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
+                Led.puts(~mach, ~d, List.append(&2, List<&2, U32>, xs, zs), base),
+                l1,
+                Equal.trans(
+                  Led.L(mach, d),
+                  Led.puts(~mach, ~d, zs, Run.ledger(Led.L(mach, d), r)),
+                  Led.puts(~mach, ~d, zs, Led.puts(~mach, ~d, xs, base)),
+                  Led.puts(~mach, ~d, List.append(&2, List<&2, U32>, xs, zs), base),
+                  Equal.cong(
+                    Led.L(mach, d),
+                    Led.L(mach, d),
+                    z => Led.puts(~mach, ~d, zs, z),
+                    Run.ledger(Led.L(mach, d), r),
+                    Led.puts(~mach, ~d, xs, base),
+                    e1
+                  ),
+                  Ext.puts_append(~mach, ~d, xs, zs, base)
+                )
+              ),
+              Ext.based.holds(
+                ~mach,
+                ~d,
+                base,
+                xs,
+                ys,
+                zs,
+                Run.added(Led.L(mach, d), r),
+                Run.added(Led.L(mach, d), r2),
+                e2,
+                h1,
+                a1
+              )
+            }
+          }
+
+# a run whose added nodes s holds: s holds what the run before it added
+def Ext.gain_holds(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +s: Led.L(mach, d),
+  +r: Run<Led.L(mach, d)>,
+  r2: Run<Led.L(mach, d)>,
+  g: Ext.Gain(mach, d, s, r, r2),
+  h: {Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r2)) == True{}: Bool}
+) -> {Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r)) == True{}: Bool}:
+  match g:
+    case Tuple{+ys, Tuple{zs, Tuple{a1, Tuple{l1, h1}}}}:
+      Ext.holds_right(
+        ~mach,
+        ~d,
+        s,
+        ys,
+        Run.added(Led.L(mach, d), r)
+      )(
+        Equal.trans(
+          Bool,
+          Ext.holds(~mach, ~d, s, List.append(&2, List<&2, U32>, ys, Run.added(Led.L(mach, d), r))),
+          Ext.holds(~mach, ~d, s, Run.added(Led.L(mach, d), r2)),
+          True{},
+          Equal.cong(
+            List<&2, List<&2, U32>>,
+            Bool,
+            z => Ext.holds(~mach, ~d, s, z),
+            List.append(&2, List<&2, U32>, ys, Run.added(Led.L(mach, d), r)),
+            Run.added(Led.L(mach, d), r2),
+            Equal.sym(
+              List<&2, List<&2, U32>>,
+              Run.added(Led.L(mach, d), r2),
+              List.append(&2, List<&2, U32>, ys, Run.added(Led.L(mach, d), r)),
+              a1
+            )
+          ),
+          h
+        )
+      )
+
+# the entry m whose words are w is the data w
+def Ext.words_data(
+  -mach: Machine(),
+  m: Maybe<&2, Entry(mach)>,
+  -w: List<&2, U32>,
+  h: {Ledgers.Entry.words(Machine.Q(mach), m) == Some{w}: Maybe<&2, List<&2, U32>>}
+) -> {m == Some{Ledgers.Entry.Data{w}}: Maybe<&2, Entry(mach)>}:
+  match m:
+    case None{}:
+      Empty.absurd(
+        {None{} == Some{Ledgers.Entry.Data{w}}: Maybe<&2, Entry(mach)>},
+        Shared.Maybe.none_ne_some(List<&2, U32>, w, h)
+      )
+    case Some{Ledgers.Entry.Data{ws}}:
+      Equal.cong(
+        List<&2, U32>,
+        Maybe<&2, Entry(mach)>,
+        z => Some{Ledgers.Entry.Data{z}},
+        ws,
+        w,
+        Shared.Maybe.some_inj(List<&2, U32>, ws, w, h)
+      )
+    case Some{Ledgers.Entry.Ask{i, t, q}}:
+      Empty.absurd(
+        {Some{Ledgers.Entry.Ask{i, t, q}} == Some{Ledgers.Entry.Data{w}}: Maybe<&2, Entry(mach)>},
+        Shared.Maybe.none_ne_some(List<&2, U32>, w, h)
+      )
+    case Some{Ledgers.Entry.Ballot{b}}:
+      Empty.absurd(
+        {Some{Ledgers.Entry.Ballot{b}} == Some{Ledgers.Entry.Data{w}}: Maybe<&2, Entry(mach)>},
+        Shared.Maybe.none_ne_some(List<&2, U32>, w, h)
+      )
+    case Some{Ledgers.Entry.Lie{x}}:
+      Empty.absurd(
+        {Some{Ledgers.Entry.Lie{x}} == Some{Ledgers.Entry.Data{w}}: Maybe<&2, Entry(mach)>},
+        Shared.Maybe.none_ne_some(List<&2, U32>, w, h)
+      )
+
+# Ext.add_into at a data name, once whether its hash is that of w is known (b)
+def Ext.add_into.data(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +lb: Led.L(mach, d),
+  +w: List<&2, U32>,
+  +y: Hashes.Hash,
+  -e: Entry(mach),
+  b: Bool,
+  eb: {Hashes.Hash.is_eq(Hashes.Sha.hash(w), y) == b: Bool},
+  hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool},
+  h: {Shared.Maybe.when(Entry(mach), b, u => Some{Ledgers.Entry.Data{w}}) == Some{e}: Maybe<&2, Entry(mach)>}
+) -> {Led.get(~mach, ~d, lb, Ledgers.Name.Data{y}) == Some{e}: Maybe<&2, Entry(mach)>}:
+  match b:
+    case True{}:
+      %Hashes.Hash.is_eq_sound(Hashes.Sha.hash(w), y)(eb): {
+        Led.get(~mach, ~d, lb, Ledgers.Name.Data{_}) == Some{e}: Maybe<&2, Entry(mach)>
+      }
+      %Shared.Maybe.some_inj(Entry(mach), Ledgers.Entry.Data{w}, e, h): {
+        Led.get(~mach, ~d, lb, Ledgers.Name.Data{Hashes.Sha.hash(w)}) == Some{_}: Maybe<&2, Entry(mach)>
+      }
+      Ext.words_data(
+        mach,
+        Led.get(~mach, ~d, lb, Ledgers.Name.Data{Hashes.Sha.hash(w)}),
+        w,
+        Hist.has(~mach, ~d, lb, w)(hw)
+      )
+    case False{}:
+      Empty.absurd(
+        {Led.get(~mach, ~d, lb, Ledgers.Name.Data{y}) == Some{e}: Maybe<&2, Entry(mach)>},
+        Shared.Maybe.none_ne_some(Entry(mach), e, h)
+      )
+
+# Ext.add_into at a name that the ledger before lacked
+def Ext.add_into.none(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +lb: Led.L(mach, d),
+  +w: List<&2, U32>,
+  n: Ledgers.Name,
+  -e: Entry(mach),
+  hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool},
+  h: {
+    Shared.Maybe.when(
+      Entry(mach),
+      Ledgers.Name.is_eq(Ledgers.Name.Data{Hashes.Sha.hash(w)}, n),
+      u => Some{Ledgers.Entry.Data{w}}
+    )
+      == Some{e}: Maybe<&2, Entry(mach)>
+  }
+) -> {Led.get(~mach, ~d, lb, n) == Some{e}: Maybe<&2, Entry(mach)>}:
+  match n:
+    case Ledgers.Name.Data{+y}:
+      Ext.add_into.data(~mach, ~d, lb, w, y, e, Hashes.Hash.is_eq(Hashes.Sha.hash(w), y), {==}, hw, h)
+    case Ledgers.Name.Ask{y}:
+      Empty.absurd(
+        {Led.get(~mach, ~d, lb, Ledgers.Name.Ask{y}) == Some{e}: Maybe<&2, Entry(mach)>},
+        Shared.Maybe.none_ne_some(Entry(mach), e, h)
+      )
+    case Ledgers.Name.Ballot{y}:
+      Empty.absurd(
+        {Led.get(~mach, ~d, lb, Ledgers.Name.Ballot{y}) == Some{e}: Maybe<&2, Entry(mach)>},
+        Shared.Maybe.none_ne_some(Entry(mach), e, h)
+      )
+    case Ledgers.Name.Lie{y}:
+      Empty.absurd(
+        {Led.get(~mach, ~d, lb, Ledgers.Name.Lie{y}) == Some{e}: Maybe<&2, Entry(mach)>},
+        Shared.Maybe.none_ne_some(Entry(mach), e, h)
+      )
+
+# Ext.add_into once what the ledger before held under the name is known (m)
+def Ext.add_into.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  -la: Led.L(mach, d),
+  +lb: Led.L(mach, d),
+  +w: List<&2, U32>,
+  +n: Ledgers.Name,
+  +e: Entry(mach),
+  m: Maybe<&2, Entry(mach)>,
+  em: {Led.get(~mach, ~d, la, n) == m: Maybe<&2, Entry(mach)>},
+  g: Led.Grows(mach, d, la, lb),
+  hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool},
+  h: {
+    Maybe.or(
+      &2,
+      Entry(mach),
+      m,
+      Shared.Maybe.when(
+        Entry(mach),
+        Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Data{w}), n),
+        u => Some{Ledgers.Entry.Data{w}}
+      )
+    )
+      == Some{e}: Maybe<&2, Entry(mach)>
+  }
+) -> {Led.get(~mach, ~d, lb, n) == Some{e}: Maybe<&2, Entry(mach)>}:
+  match m:
+    case Some{x}:
+      g(n)(e)(Equal.trans(Maybe<&2, Entry(mach)>, Led.get(~mach, ~d, la, n), Some{x}, Some{e}, em, h))
+    case None{}:
+      Ext.add_into.none(~mach, ~d, lb, w, n, e, hw, h)
+
+# a ledger with data that lb holds still grows into lb
+def Ext.add_into(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +la: Led.L(mach, d),
+  +lb: Led.L(mach, d),
+  +w: List<&2, U32>,
+  g: Led.Grows(mach, d, la, lb),
+  hw: {Ext.has(~mach, ~d, lb, w) == True{}: Bool}
+) -> Led.Grows(mach, d, Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}), lb):
+  +n => +e => h => Ext.add_into.at(
+    ~mach,
+    ~d,
+    la,
+    lb,
+    w,
+    n,
+    e,
+    Led.get(~mach, ~d, la, n),
+    {==},
+    g,
+    hw,
+    Equal.trans(
+      Maybe<&2, Entry(mach)>,
+      Maybe.or(
+        &2,
+        Entry(mach),
+        Led.get(~mach, ~d, la, n),
+        Shared.Maybe.when(
+          Entry(mach),
+          Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Data{w}), n),
+          u => Some{Ledgers.Entry.Data{w}}
+        )
+      ),
+      Led.get(~mach, ~d, Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}), n),
+      Some{e},
+      Equal.sym(
+        Maybe<&2, Entry(mach)>,
+        Led.get(~mach, ~d, Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}), n),
+        Maybe.or(
+          &2,
+          Entry(mach),
+          Led.get(~mach, ~d, la, n),
+          Shared.Maybe.when(
+            Entry(mach),
+            Ledgers.Name.is_eq(Entry.name(~mach, Ledgers.Entry.Data{w}), n),
+            u => Some{Ledgers.Entry.Data{w}}
+          )
+        ),
+        Hist.get_add(mach, d)(la)(Ledgers.Entry.Data{w})(n)
+      ),
+      h
+    )
+  )
+
+# a ledger with data ns that lb holds still grows into lb
+def Ext.puts_into(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ns: List<&2, List<&2, U32>>,
+  +la: Led.L(mach, d),
+  +lb: Led.L(mach, d),
+  g: Led.Grows(mach, d, la, lb),
+  +h: {Ext.holds(~mach, ~d, lb, ns) == True{}: Bool}
+) -> Led.Grows(mach, d, Led.puts(~mach, ~d, ns, la), lb):
+  match ns:
+    case Nil{}:
+      g
+    case Con{+w, +r}:
+      Ext.puts_into(
+        ~mach,
+        ~d,
+        r,
+        Led.add(~mach, ~d, la, Ledgers.Entry.Data{w}),
+        lb,
+        Ext.add_into(
+          ~mach,
+          ~d,
+          la,
+          lb,
+          w,
+          g,
+          Shared.List.all.if_hit(Ext.has(~mach, ~d, lb, w), u => Ext.holds(~mach, ~d, lb, r))(h)
+        ),
+        Shared.List.all.if_rest(Ext.has(~mach, ~d, lb, w), u => Ext.holds(~mach, ~d, lb, r))(h)
+      )
+
+# a run based on base, whose added nodes base holds: its ledger grows into base
+def Ext.based_grows(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +base: Led.L(mach, d),
+  r: Run<Led.L(mach, d)>,
+  bd: Ext.Based(mach, d, base, r),
+  h: {Ext.holds(~mach, ~d, base, Run.added(Led.L(mach, d), r)) == True{}: Bool}
+) -> Led.Grows(mach, d, Run.ledger(Led.L(mach, d), r), base):
+  match bd:
+    case Tuple{+xs, Tuple{e1, e2}}:
+      %Equal.sym(Led.L(mach, d), Run.ledger(Led.L(mach, d), r), Led.puts(~mach, ~d, xs, base), e1): Led.Grows(
+        mach,
+        d,
+        _,
+        base
+      )
+      Ext.puts_into(
+        ~mach,
+        ~d,
+        xs,
+        base,
+        base,
+        Hist.refl(mach, d, base),
+        Equal.trans(
+          Bool,
+          Ext.holds(~mach, ~d, base, xs),
+          Ext.holds(~mach, ~d, base, Run.added(Led.L(mach, d), r)),
+          True{},
+          e2,
+          h
+        )
+      )
+
+# the ledger of a run based on base grows from base
+def Ext.based_from(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +base: Led.L(mach, d),
+  r: Run<Led.L(mach, d)>,
+  bd: Ext.Based(mach, d, base, r)
+) -> Led.Grows(mach, d, base, Run.ledger(Led.L(mach, d), r)):
+  match bd:
+    case Tuple{+xs, Tuple{e1, e2}}:
+      %Equal.sym(Led.L(mach, d), Run.ledger(Led.L(mach, d), r), Led.puts(~mach, ~d, xs, base), e1): Led.Grows(
+        mach,
+        d,
+        base,
+        _
+      )
+      Hist.puts(~mach, ~d, xs, base)
+
+# a case of an "or": the hit, or the rest
+def Ext.any_cases(
+  hit: Bool,
+  -rest: Unit -> Bool,
+  -P: Type,
+  ph: {hit == True{}: Bool} -> P,
+  pr: {rest(Unit{}) == True{}: Bool} -> P,
+  h: {List.any.if(rest, hit) == True{}: Bool}
+) -> P:
+  match hit:
+    case True{}:
+      ph({==})
+    case False{}:
+      pr(h)
+
+# a ledger gives each of the words that it holds, under their hash
+def Ext.held.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  ns: List<&2, List<&2, U32>>,
+  +w: List<&2, U32>,
+  +h: {Ext.holds(~mach, ~d, l, ns) == True{}: Bool},
+  hc: {
+    List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ns, w) == True{}: Bool
+  }
+) -> {Led.fetch(~mach, ~d, l, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>}:
+  match ns:
+    case Nil{}:
+      Empty.absurd(
+        {Led.fetch(~mach, ~d, l, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>},
+        Shared.Bool.false_ne_true(hc)
+      )
+    case Con{+ws, +r}:
+      Ext.any_cases(
+        Shared.List.is_eq(~U32, ~U32.is_eq, ws, w),
+        u => List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), r, w),
+        {Led.fetch(~mach, ~d, l, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>},
+        he =>
+          %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), ws, w)(he): {
+            Led.fetch(~mach, ~d, l, Hashes.Sha.hash(_)) == Some{_}: Maybe<&2, List<&2, U32>>
+          }
+          Hist.has(
+            ~mach,
+            ~d,
+            l,
+            ws
+          )(Shared.List.all.if_hit(Ext.has(~mach, ~d, l, ws), u => Ext.holds(~mach, ~d, l, r))(h)),
+        hr => Ext.held.of(
+          ~mach,
+          ~d,
+          l,
+          r,
+          w,
+          Shared.List.all.if_rest(Ext.has(~mach, ~d, l, ws), u => Ext.holds(~mach, ~d, l, r))(h),
+          hr
+        ),
+        hc
+      )
+
+# a ledger that holds the nodes of an edit holds the edit
+def Ext.held(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  +e: Trees.Edit,
+  h: {Ext.holds(~mach, ~d, l, Trees.Edit.nodes(e)) == True{}: Bool}
+) -> Trees.Edit.Held(Led.L(mach, d), x => y => Led.fetch(~mach, ~d, x, y), l, e):
+  +w => hc => Ext.held.of(~mach, ~d, l, Trees.Edit.nodes(e), w, h, hc)
+
+# the log of a tip with a new log
+def Keep.log_logged(t: Tip, -h: Maybe<&2, Hashes.Hash>) -> {Tip.log(Tip.logged(t, h)) == h: Maybe<&2, Hashes.Hash>}:
+  match t:
+    case Tip{c, o, n, vs}:
+      {==}
+
+# the log of a tip with new content
+def Keep.log_over(t: Tip, -h: Maybe<&2, Hashes.Hash>) -> {
+  Tip.log(Tip.over(t, h)) == Tip.log(t): Maybe<&2, Hashes.Hash>
+}:
+  match t:
+    case Tip{c, o, n, vs}:
+      {==}
+
+# the log of a tip one request on
+def Keep.log_next(t: Tip, -vs: Maybe<&2, List<&2, String>>) -> {
+  Tip.log(Tip.next(t, vs)) == Tip.log(t): Maybe<&2, Hashes.Hash>
+}:
+  match t:
+    case Tip{c, o, n, x}:
+      {==}
+
+# a read that found a value knows it
+def Keep.found(
+  m: Trees.Look,
+  -v: List<&2, U32>,
+  h: {Trees.Look.value(m) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> {Trees.Look.known(m) == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match m:
+    case Trees.Look.Found{x}:
+      Equal.cong(
+        List<&2, U32>,
+        Maybe<&2, Maybe<&2, List<&2, U32>>>,
+        z => Some{Some{z}},
+        x,
+        v,
+        Shared.Maybe.some_inj(List<&2, U32>, x, v, h)
+      )
+    case Trees.Look.Absent{}:
+      Empty.absurd(
+        {Some{None{}} == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Shared.Maybe.none_ne_some(List<&2, U32>, v, h)
+      )
+    case Trees.Look.Missing{x}:
+      Empty.absurd(
+        {None{} == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Shared.Maybe.none_ne_some(List<&2, U32>, v, h)
+      )
+
+# a read that knows a value found it
+def Keep.found_back(
+  m: Trees.Look,
+  -v: List<&2, U32>,
+  h: {Trees.Look.known(m) == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> {Trees.Look.value(m) == Some{v}: Maybe<&2, List<&2, U32>>}:
+  match m:
+    case Trees.Look.Found{x}:
+      Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, Some{x}, Some{v}, h)
+    case Trees.Look.Absent{}:
+      Empty.absurd(
+        {None{} == Some{v}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(
+          List<&2, U32>,
+          v,
+          Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, None{}, Some{v}, h)
+        )
+      )
+    case Trees.Look.Missing{x}:
+      Empty.absurd(
+        {None{} == Some{v}: Maybe<&2, List<&2, U32>>},
+        Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, Some{v}, h)
+      )
+
 # a step lands on the same tip in a later ledger
 def Sim.moved(
   ~mach: Machine(),
