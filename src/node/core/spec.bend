@@ -6079,6 +6079,282 @@ def Merge.all_frame(
         lc1 => hc1 => P1 => e1 => wc1 => hx1 => kn1 => Merge.all_frame(~d, l, hb, ho, ht, k, n0, v, rest, lc1, hc1, P1, lf, hf, N, e1, wc1, wf, held, hx1, kn1)
       )
 
+# TMP-BEGIN
+# a read that finds a value is known, once the value is the written one
+def Merge.known_look(
+  m: Maybe<&2, List<&2, U32>>
+) -> {Trees.Look.known(Trees.Look.of(m)) == Some{m}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{w}:
+      {==}
+
+# a read that is the read of a written value is known as that value
+def Merge.known_of(
+  l: Trees.Look,
+  m: Maybe<&2, List<&2, U32>>,
+  e: {l == Trees.Look.of(m): Trees.Look}
+) -> {Trees.Look.known(l) == Some{m}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  %Equal.sym(Trees.Look, l, Trees.Look.of(m), e): {Trees.Look.known(_) == Some{m}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+  Merge.known_look(m)
+
+# the key y is the key of the resource n, once it is known that it is the key
+def Merge.name_of_key(
+  +y: List<&2, U32>,
+  +n: Resources.Name,
+  e: {Shared.List.is_eq(~U32, ~U32.is_eq, y, Key.res(n)) == True{}: Bool}
+) -> {Res.name(y) == Some{n}: Maybe<&2, Resources.Name>}:
+  %Equal.sym(
+    List<&2, U32>,
+    y,
+    Key.res(n),
+    Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), y, Key.res(n))(e)
+  ): {Res.name(_) == Some{n}: Maybe<&2, Resources.Name>}
+  Merge.key_name(n)
+
+# the induction hypothesis of Merge.all_take for the keys rest
+def Merge.TakeIH(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +x: Maybe<&2, Requests.Res>,
+  rest: List<&2, List<&2, U32>>,
+  lf: L(d),
+  hf: Maybe<&2, Hashes.Hash>,
+  N: List<&2, List<&2, U32>>
+) -> Type:
+  @lc1: L(d) -> @hc1: Maybe<&2, Hashes.Hash> -> @P1: List<&2, List<&2, U32>> -> {
+    Merge.all(~d, l, hb, ho, ht, k, rest, Some{Work{lc1, hc1, P1}}) == Some{Work{lf, hf, N}}: Maybe<&2, Work<L(d)>>
+  } -> Merge.Puts(~d, l, lc1, P1) -> {
+    List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n)) == True{}: Bool
+  } -> {
+    Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n)) == Some{Res.value(x)}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  }
+
+# Merge.all_take once the key y is the key of the resource n, and no key after
+# it is
+def Merge.all_take.hit(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b0: Maybe<&2, Requests.Res>,
+  +o0: Maybe<&2, Requests.Res>,
+  +t0: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  +y: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +lf: L(d),
+  +hf: Maybe<&2, Hashes.Hash>,
+  +N: List<&2, List<&2, U32>>,
+  +lc1: L(d),
+  +hc1: Maybe<&2, Hashes.Hash>,
+  +P1: List<&2, List<&2, U32>>,
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wc1: Merge.Puts(~d, l, lc1, P1),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +hb0: {Res.find(~d, l, hb, n) == Some{b0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, ho, n) == Some{o0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, ht, n) == Some{t0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hp: {Pick.merge(~d, l, b0, o0, t0) == Some{Pick.Take{x}}: Maybe<&2, Pick>},
+  +ey: {Shared.List.is_eq(~U32, ~U32.is_eq, y, Key.res(n)) == True{}: Bool},
+  +erest: {
+    Merge.all(~d, l, hb, ho, ht, k, rest, Some{Work{lc1, hc1, P1}}) == Some{Work{lf, hf, N}}: Maybe<&2, Work<L(d)>>
+  },
+  +enext: {
+    Merge.next(~d, l, hb, ho, ht, k, Work{lc, hc, P}, Res.name(y)) == Some{Work{lc1, hc1, P1}}: Maybe<&2, Work<L(d)>>
+  },
+  +ec: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n)) == False{}: Bool}
+) -> {
+  Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n)) == Some{Res.value(x)}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  Merge.all_frame(
+    ~d,
+    l,
+    hb,
+    ho,
+    ht,
+    k,
+    n,
+    Res.value(x),
+    rest,
+    lc1,
+    hc1,
+    P1,
+    lf,
+    hf,
+    N,
+    erest,
+    wc1,
+    wf,
+    held,
+    ec,
+    Merge.known_of(
+      Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, hc1, Key.res(n)),
+      Res.value(x),
+      Merge.next_hit(
+        ~d,
+        l,
+        lc,
+        hb,
+        ho,
+        ht,
+        hc,
+        P,
+        k,
+        n,
+        b0,
+        o0,
+        t0,
+        x,
+        Work{lc1, hc1, P1},
+        lf,
+        N,
+        %Merge.name_of_key(y, n, ey): {
+          Merge.next(~d, l, hb, ho, ht, k, Work{lc, hc, P}, _) == Some{Work{lc1, hc1, P1}}: Maybe<&2, Work<L(d)>>
+        }
+        enext,
+        hb0,
+        ho0,
+        ht0,
+        hp,
+        wc,
+        wf,
+        held,
+        Merge.And.right(
+          Merge.Puts(~d, l, lf, N),
+          Merge.Nodes(P1, N),
+          Merge.all_puts(~d, l, hb, ho, ht, k, rest, lc1, hc1, P1, lf, hf, N, erest, wc1)
+        )
+      )
+    )
+  )
+
+# Merge.all_take once it is known whether the key y is the key of the resource
+# n (p), and whether the keys after it hold it (c)
+def Merge.all_take.cc(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +b0: Maybe<&2, Requests.Res>,
+  +o0: Maybe<&2, Requests.Res>,
+  +t0: Maybe<&2, Requests.Res>,
+  +x: Maybe<&2, Requests.Res>,
+  +y: List<&2, U32>,
+  +rest: List<&2, List<&2, U32>>,
+  +lc: L(d),
+  +hc: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +lf: L(d),
+  +hf: Maybe<&2, Hashes.Hash>,
+  +N: List<&2, List<&2, U32>>,
+  +lc1: L(d),
+  +hc1: Maybe<&2, Hashes.Hash>,
+  +P1: List<&2, List<&2, U32>>,
+  +wc: Merge.Puts(~d, l, lc, P),
+  +wc1: Merge.Puts(~d, l, lc1, P1),
+  +wf: Merge.Puts(~d, l, lf, N),
+  +held: Merge.Held(~d, lf, N),
+  +hb0: {Res.find(~d, l, hb, n) == Some{b0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ho0: {Res.find(~d, l, ho, n) == Some{o0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +ht0: {Res.find(~d, l, ht, n) == Some{t0}: Maybe<&2, Maybe<&2, Requests.Res>>},
+  +hp: {Pick.merge(~d, l, b0, o0, t0) == Some{Pick.Take{x}}: Maybe<&2, Pick>},
+  +erest: {
+    Merge.all(~d, l, hb, ho, ht, k, rest, Some{Work{lc1, hc1, P1}}) == Some{Work{lf, hf, N}}: Maybe<&2, Work<L(d)>>
+  },
+  +enext: {
+    Merge.next(~d, l, hb, ho, ht, k, Work{lc, hc, P}, Res.name(y)) == Some{Work{lc1, hc1, P1}}: Maybe<&2, Work<L(d)>>
+  },
+  +p: Bool,
+  +ep: {Shared.List.is_eq(~U32, ~U32.is_eq, y, Key.res(n)) == p: Bool},
+  +c: Bool,
+  +ec: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n)) == c: Bool},
+  +hx: {
+    List.any.if(u => List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n)), p) == True{}: Bool
+  },
+  ih: Merge.TakeIH(~d, l, hb, ho, ht, k, n, x, rest, lf, hf, N)
+) -> {
+  Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n)) == Some{Res.value(x)}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  match p c:
+    case q True{}:
+      ih(lc1)(hc1)(P1)(erest)(wc1)(ec)
+    case True{} False{}:
+      Merge.all_take.hit(
+        ~d,
+        l,
+        hb,
+        ho,
+        ht,
+        k,
+        n,
+        b0,
+        o0,
+        t0,
+        x,
+        y,
+        rest,
+        lc,
+        hc,
+        P,
+        lf,
+        hf,
+        N,
+        lc1,
+        hc1,
+        P1,
+        wc,
+        wc1,
+        wf,
+        held,
+        hb0,
+        ho0,
+        ht0,
+        hp,
+        ep,
+        erest,
+        enext,
+        ec
+      )
+    case False{} False{}:
+      Empty.absurd(
+        {
+          Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, hf, Key.res(n)) == Some{Res.value(x)}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+        },
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n)),
+            True{},
+            Equal.sym(
+              Bool,
+              List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), rest, Key.res(n)),
+              False{},
+              ec
+            ),
+            hx
+          )
+        )
+      )
+# TMP-END
+
 # a merge never loses a change that only one side made: when the merge of a
 # resource takes the content of one side (Pick.merge: theirs when ours is the
 # base, ours when theirs is the base or both agree), the tree that a taken
