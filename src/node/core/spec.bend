@@ -3633,6 +3633,19 @@ def Node.answer_follows.go(
     e
   )
 
+# the owners of a line keep each part of what they decide: the ledger holds
+# the whole of the content of the newest tip of each line, its nodes and the
+# format and the bytes of each of its resources
+law Node.head_kept:
+  for ~d: Led()
+  for ~kern: Kern(d)
+  for ~rules: Kernel.Rules(d, kern)
+  for l: L(d)
+  for c: Ledgers.Line
+  for t: Replicas.Tip
+  {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c) == Some{t}: Maybe<&2, Replicas.Tip>}
+    -> {Tree.kept(~d, l, Replicas.Tip.content(t)) == True{}: Bool}
+
 # answers only move forward: as the ledger grows, and while its ballots are
 # honest, a request that a node answers stays answered; Stale and Refused are
 # final; a taken change stays taken (Answer.follows)

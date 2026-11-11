@@ -313,6 +313,24 @@ def Laws.Whole(-S: Data, -o: Tree.Ops(S)) -> Type:
         )
     )
 
+# a write keeps a tree whole: in a depot that grows and holds the new nodes,
+# a write to a tree that lists whole gives a tree that lists whole
+def Laws.Kept(
+  -S: Data,
+  -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -grows: S -> S -> Bool,
+  -o: Tree.Ops(S)
+) -> Type:
+  @s: S -> @s2: S -> @h: Maybe<&2, Hashes.Hash> -> @bs: List<&2, Binding> -> @k: List<&2, U32> -> @m: Maybe<
+    &2,
+    List<&2, U32>> -> @e: Edit -> {
+    Ops.range(S, o)(s)(h)([]) == Some{bs}: Maybe<&2, List<&2, Binding>>
+  } -> {
+    Ops.put(S, o)(s)(h)(k)(m) == Some{e}: Maybe<&2, Edit>
+  } -> {grows(s, s2) == True{}: Bool} -> Edit.Held(S, fetch, s2, e) -> {
+    Maybe.is_some(&2, List<&2, Binding>, Ops.range(S, o)(s2)(Edit.root(e))([])) == True{}: Bool
+  }
+
 # the laws of a tree with the operations o
 def Tree.Laws(
   -S: Data,
@@ -326,7 +344,7 @@ def Tree.Laws(
     )
     & (
       Laws.Write(S, fetch, grows, o)
-        & (Laws.Canon(S, o) & (Laws.Range(S, o) & (Laws.Diff(S, o) & Laws.Whole(S, o))))
+        & (Laws.Canon(S, o) & (Laws.Range(S, o) & (Laws.Diff(S, o) & (Laws.Whole(S, o) & Laws.Kept(S, fetch, grows, o)))))
     )
 
 # a tree in a depot kept as S, whose data is fetch and which grows as grows
