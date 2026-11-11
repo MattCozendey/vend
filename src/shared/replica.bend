@@ -3757,6 +3757,381 @@ def Hist.LaterLast(-mach: Machine(), -d: Led(mach)) -> Type:
 # Safety of rounds: the decision of a height
 # -------------------------------------------
 
+# the value m, if any, is x, as same says
+def Safe.of_is(~B: Data, ~same: B -> B -> Bool, m: Maybe<&2, B>, +x: B) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{y}:
+      same(y, x)
+
+# each ballot of bs that holds a value, as of reads it, holds x
+def Safe.all_of(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  bs: List<&2, Ledgers.Ballot>,
+  +x: B
+) -> Bool:
+  match bs:
+    case Nil{}:
+      True{}
+    case Con{e, r}:
+      List.all.if(u => Safe.all_of(~B, ~same, ~of, r, x), Safe.of_is(~B, ~same, of(e), x))
+
+# the cell m holds nothing, or only x
+def Safe.most(~B: Data, ~same: B -> B -> Bool, m: Maybe<&2, Cells.Cell<B>>, +x: B) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Cells.One{y}}:
+      same(y, x)
+    case Some{Cells.Many{}}:
+      False{}
+
+# the cell of one value holds only x when the value is x
+def Safe.most_one(~B: Data, ~same: B -> B -> Bool, m: Maybe<&2, B>, +x: B) -> {
+  Safe.most(~B, ~same, Maybe.bind(&2, B, Cells.Cell<B>, m, y => Some{Cells.One{y}}), x)
+    == Safe.of_is(~B, ~same, m, x): Bool
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{y}:
+      {==}
+
+# two cells that hold only x join to a cell that holds only x
+def Safe.most_join(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~sl: Shared.Eq.Laws(B, same),
+  p: Maybe<&2, Cells.Cell<B>>,
+  q: Maybe<&2, Cells.Cell<B>>,
+  +x: B
+) -> {Safe.most(~B, ~same, p, x) == True{}: Bool}
+  -> {Safe.most(~B, ~same, q, x) == True{}: Bool}
+  -> {
+    Safe.most(~B, ~same, Shared.Maybe.join(~Cells.Cell<B>, ~Cells.Cell.join(~B, ~same), p, q), x) == True{}: Bool
+  }:
+  match p q:
+    case None{} y:
+      hp => hq => hq
+    case Some{c} None{}:
+      hp => hq => hp
+    case Some{Cells.One{+y1}} Some{Cells.One{+y2}}:
+      +hp => hq =>
+        %Equal.trans(
+          B,
+          y1,
+          x,
+          y2,
+          Shared.Eq.sound(~B, ~same, sl, y1, x)(hp),
+          Equal.sym(B, y2, x, Shared.Eq.sound(~B, ~same, sl, y2, x)(hq))
+        ): {
+          Safe.most(~B, ~same, Some{Bool.pick(Cells.Cell<B>, same(y1, _), Cells.One{y1}, Cells.Many{})}, x) == True{}: Bool
+        }
+        %Equal.sym(Bool, same(y1, y1), True{}, Shared.Eq.refl(~B, ~same, sl, y1)): {
+          Safe.most(~B, ~same, Some{Bool.pick(Cells.Cell<B>, _, Cells.One{y1}, Cells.Many{})}, x) == True{}: Bool
+        }
+        hp
+    case Some{Cells.One{y1}} Some{Cells.Many{}}:
+      hp => hq => Empty.absurd(
+        {
+          Safe.most(
+            ~B,
+            ~same,
+            Shared.Maybe.join(~Cells.Cell<B>, ~Cells.Cell.join(~B, ~same), Some{Cells.One{y1}}, Some{Cells.Many{}}),
+            x
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(hq)
+      )
+    case Some{Cells.Many{}} Some{c}:
+      hp => hq => Empty.absurd(
+        {
+          Safe.most(
+            ~B,
+            ~same,
+            Shared.Maybe.join(~Cells.Cell<B>, ~Cells.Cell.join(~B, ~same), Some{Cells.Many{}}, Some{c}),
+            x
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(hp)
+      )
+
+# ballots that each hold only x make a cell that holds only x
+def Safe.cell_most(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~sl: Shared.Eq.Laws(B, same),
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  bs: List<&2, Ledgers.Ballot>,
+  +x: B
+) -> {Safe.all_of(~B, ~same, ~of, bs, x) == True{}: Bool}
+  -> {Safe.most(~B, ~same, Ledgers.Ballots.cell(~B, ~same, ~of, bs), x) == True{}: Bool}:
+  match bs:
+    case Nil{}:
+      h => {==}
+    case Con{+e, +r}:
+      +h => Safe.most_join(
+        ~B,
+        ~same,
+        ~sl,
+        Maybe.bind(&2, B, Cells.Cell<B>, of(e), y => Some{Cells.One{y}}),
+        Ledgers.Ballots.cell(~B, ~same, ~of, r),
+        x
+      )(
+        Equal.trans(
+          Bool,
+          Safe.most(~B, ~same, Maybe.bind(&2, B, Cells.Cell<B>, of(e), y => Some{Cells.One{y}}), x),
+          Safe.of_is(~B, ~same, of(e), x),
+          True{},
+          Safe.most_one(~B, ~same, of(e), x),
+          Shared.List.all.if_hit(Safe.of_is(~B, ~same, of(e), x), u => Safe.all_of(~B, ~same, ~of, r, x))(h)
+        )
+      )(
+        Safe.cell_most(
+          ~B,
+          ~same,
+          ~sl,
+          ~of,
+          r,
+          x
+        )(Shared.List.all.if_rest(Safe.of_is(~B, ~same, of(e), x), u => Safe.all_of(~B, ~same, ~of, r, x))(h))
+      )
+
+# a join with a cell on the left holds a cell
+def Safe.join_some_left(~B: Data, ~same: B -> B -> Bool, p: Cells.Cell<B>, q: Maybe<&2, Cells.Cell<B>>) -> {
+  Maybe.is_some(
+    &2,
+    Cells.Cell<B>,
+    Shared.Maybe.join(~Cells.Cell<B>, ~Cells.Cell.join(~B, ~same), Some{p}, q)
+  )
+    == True{}: Bool
+}:
+  match q:
+    case None{}:
+      {==}
+    case Some{y}:
+      {==}
+
+# a join with a cell on the right holds a cell
+def Safe.join_some_right(~B: Data, ~same: B -> B -> Bool, p: Maybe<&2, Cells.Cell<B>>, q: Maybe<&2, Cells.Cell<B>>) -> {
+  Maybe.is_some(&2, Cells.Cell<B>, q) == True{}: Bool
+} -> {
+  Maybe.is_some(&2, Cells.Cell<B>, Shared.Maybe.join(~Cells.Cell<B>, ~Cells.Cell.join(~B, ~same), p, q))
+    == True{}: Bool
+}:
+  match p q:
+    case None{} y:
+      h => h
+    case Some{x} None{}:
+      h => {==}
+    case Some{x} Some{y}:
+      h => {==}
+
+# Safe.cell_some once it is known whether the first ballot is e0 (hb)
+def Safe.cell_some.at(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  +h: Ledgers.Ballot,
+  +t: List<&2, Ledgers.Ballot>,
+  +e0: Ledgers.Ballot,
+  +x: B,
+  +hb: Bool,
+  eb: {Ledgers.Ballot.is_eq(h, e0) == hb: Bool},
+  ih: {List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, t, e0) == True{}: Bool}
+    -> {Maybe.is_some(&2, Cells.Cell<B>, Ledgers.Ballots.cell(~B, ~same, ~of, t)) == True{}: Bool}
+) -> {List.any.if(u => List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, t, e0), hb) == True{}: Bool}
+  -> {of(e0) == Some{x}: Maybe<&2, B>}
+  -> {
+    Maybe.is_some(
+      &2,
+      Cells.Cell<B>,
+      Shared.Maybe.join(
+        ~Cells.Cell<B>,
+        ~Cells.Cell.join(~B, ~same),
+        Maybe.bind(&2, B, Cells.Cell<B>, of(h), y => Some{Cells.One{y}}),
+        Ledgers.Ballots.cell(~B, ~same, ~of, t)
+      )
+    )
+      == True{}: Bool
+  }:
+  match hb:
+    case True{}:
+      hc => hx =>
+        %Equal.sym(Ledgers.Ballot, h, e0, Ledgers.Ballot.is_eq_sound(h, e0)(eb)): {
+          Maybe.is_some(
+            &2,
+            Cells.Cell<B>,
+            Shared.Maybe.join(
+              ~Cells.Cell<B>,
+              ~Cells.Cell.join(~B, ~same),
+              Maybe.bind(&2, B, Cells.Cell<B>, of(_), y => Some{Cells.One{y}}),
+              Ledgers.Ballots.cell(~B, ~same, ~of, t)
+            )
+          )
+            == True{}: Bool
+        }
+        %Equal.sym(Maybe<&2, B>, of(e0), Some{x}, hx): {
+          Maybe.is_some(
+            &2,
+            Cells.Cell<B>,
+            Shared.Maybe.join(
+              ~Cells.Cell<B>,
+              ~Cells.Cell.join(~B, ~same),
+              Maybe.bind(&2, B, Cells.Cell<B>, _, y => Some{Cells.One{y}}),
+              Ledgers.Ballots.cell(~B, ~same, ~of, t)
+            )
+          )
+            == True{}: Bool
+        }
+        Safe.join_some_left(~B, ~same, Cells.One{x}, Ledgers.Ballots.cell(~B, ~same, ~of, t))
+    case False{}:
+      hc => hx => Safe.join_some_right(
+        ~B,
+        ~same,
+        Maybe.bind(&2, B, Cells.Cell<B>, of(h), y => Some{Cells.One{y}}),
+        Ledgers.Ballots.cell(~B, ~same, ~of, t)
+      )(ih(hc))
+
+# ballots of which one holds a value make a cell
+def Safe.cell_some(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  bs: List<&2, Ledgers.Ballot>,
+  +e0: Ledgers.Ballot,
+  +x: B
+) -> {List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, bs, e0) == True{}: Bool}
+  -> {of(e0) == Some{x}: Maybe<&2, B>}
+  -> {Maybe.is_some(&2, Cells.Cell<B>, Ledgers.Ballots.cell(~B, ~same, ~of, bs)) == True{}: Bool}:
+  match bs:
+    case Nil{}:
+      hc => hx => Empty.absurd(
+        {Maybe.is_some(&2, Cells.Cell<B>, Ledgers.Ballots.cell(~B, ~same, ~of, [])) == True{}: Bool},
+        Shared.Bool.false_ne_true(hc)
+      )
+    case Con{+h, +t}:
+      hc => +hx => Safe.cell_some.at(
+        ~B,
+        ~same,
+        ~of,
+        h,
+        t,
+        e0,
+        x,
+        Ledgers.Ballot.is_eq(h, e0),
+        {==},
+        c => Safe.cell_some(~B, ~same, ~of, t, e0, x)(c)(hx)
+      )(hc)(hx)
+
+# a cell that holds only x, and holds a cell, holds x
+def Safe.most_some(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~sl: Shared.Eq.Laws(B, same),
+  m: Maybe<&2, Cells.Cell<B>>,
+  +x: B
+) -> {Safe.most(~B, ~same, m, x) == True{}: Bool}
+  -> {Maybe.is_some(&2, Cells.Cell<B>, m) == True{}: Bool}
+  -> {m == Some{Cells.One{x}}: Maybe<&2, Cells.Cell<B>>}:
+  match m:
+    case None{}:
+      h1 => h2 => Empty.absurd(
+        {None{} == Some{Cells.One{x}}: Maybe<&2, Cells.Cell<B>>},
+        Shared.Bool.false_ne_true(h2)
+      )
+    case Some{Cells.One{+y}}:
+      h1 => h2 =>
+        %Shared.Eq.sound(~B, ~same, sl, y, x)(h1): {Some{Cells.One{y}} == Some{Cells.One{_}}: Maybe<&2, Cells.Cell<B>>}
+        {==}
+    case Some{Cells.Many{}}:
+      h1 => h2 => Empty.absurd(
+        {Some{Cells.Many{}} == Some{Cells.One{x}}: Maybe<&2, Cells.Cell<B>>},
+        Shared.Bool.false_ne_true(h1)
+      )
+
+# a ballot heads a list that it starts
+def Safe.contains_head(+h: Ledgers.Ballot, t: List<&2, Ledgers.Ballot>) -> {
+  List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, h <> t, h) == True{}: Bool
+}:
+  %Equal.sym(Bool, Ledgers.Ballot.is_eq(h, h), True{}, Ledgers.Ballot.is_eq_refl(h)): {
+    List.any.if(u => List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, t, h), _) == True{}: Bool
+  }
+  {==}
+
+# a ballot of a list that holds a value, as of reads it
+def Safe.Wit(~B: Data, ~of: Ledgers.Ballot -> Maybe<&2, B>, bs: List<&2, Ledgers.Ballot>) -> Type:
+  Exists(
+    Ledgers.Ballot,
+    e => {List.contains(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, bs, e) == True{}: Bool}
+      & Exists(B, y => {of(e) == Some{y}: Maybe<&2, B>})
+  )
+
+# a ballot of the tail is a ballot of the list
+def Safe.wit_cons(~B: Data, ~of: Ledgers.Ballot -> Maybe<&2, B>, h: Ledgers.Ballot, t: List<&2, Ledgers.Ballot>, w: Safe.Wit(~B, ~of, t)) -> Safe.Wit(
+  ~B,
+  ~of,
+  h <> t
+):
+  match w:
+    case Tuple{+e, Tuple{c, r}}:
+      Tuple{e, Tuple{Shared.List.contains_cons(~Ledgers.Ballot, ~Ledgers.Ballot.is_eq, h, t, e)(c), r}}
+
+# Safe.witness once the value m of the first ballot is known
+def Safe.witness.at(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  +h: Ledgers.Ballot,
+  t: List<&2, Ledgers.Ballot>,
+  -c: Cells.Cell<B>,
+  m: Maybe<&2, B>,
+  em: {of(h) == m: Maybe<&2, B>},
+  ih: {Ledgers.Ballots.cell(~B, ~same, ~of, t) == Some{c}: Maybe<&2, Cells.Cell<B>>} -> Safe.Wit(~B, ~of, t)
+) -> {
+  Shared.Maybe.join(
+    ~Cells.Cell<B>,
+    ~Cells.Cell.join(~B, ~same),
+    Maybe.bind(&2, B, Cells.Cell<B>, m, y => Some{Cells.One{y}}),
+    Ledgers.Ballots.cell(~B, ~same, ~of, t)
+  )
+    == Some{c}: Maybe<&2, Cells.Cell<B>>
+} -> Safe.Wit(~B, ~of, h <> t):
+  match m:
+    case Some{y}:
+      e => Tuple{h, Tuple{Safe.contains_head(h, t), Tuple{y, em}}}
+    case None{}:
+      e => Safe.wit_cons(~B, ~of, h, t, ih(e))
+
+# a cell that holds something has a ballot that holds a value
+def Safe.witness(
+  ~B: Data,
+  ~same: B -> B -> Bool,
+  ~of: Ledgers.Ballot -> Maybe<&2, B>,
+  bs: List<&2, Ledgers.Ballot>,
+  -c: Cells.Cell<B>
+) -> {Ledgers.Ballots.cell(~B, ~same, ~of, bs) == Some{c}: Maybe<&2, Cells.Cell<B>>} -> Safe.Wit(~B, ~of, bs):
+  match bs:
+    case Nil{}:
+      e => Empty.absurd(Safe.Wit(~B, ~of, []), Shared.Maybe.none_ne_some(Cells.Cell<B>, c, e))
+    case Con{+h, +t}:
+      Safe.witness.at(
+        ~B,
+        ~same,
+        ~of,
+        h,
+        t,
+        c,
+        of(h),
+        {==},
+        Safe.witness(~B, ~same, ~of, t, c)
+      )
+
 # a height decides the same step in a later ledger
 def Safe.decide(
   ~mach: Machine(),
