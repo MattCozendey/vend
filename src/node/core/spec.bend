@@ -4398,6 +4398,511 @@ def Affects.side_live(
 }:
   Affects.has_live(Affects.side(~d, l, view, h, ns, b), Affects.side_has(~d, l, view, h, ns, b), p, q)
 
+# Affects.rev_path once the rest of the path is reversed (w)
+def Affects.rev_path.cons(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  +b: Bool,
+  +p: List<&2, Bool>,
+  +x: List<&2, Bool>,
+  +m: List<&2, Bool>,
+  he: Affects.Edge(Affects.side(~d, l, view, h, ns, b), x, p),
+  w: &qs: List<&2, List<&2, Bool>> -> {
+    Reaches.Reach.path(
+      ~List<&2, Bool>,
+      ~Reaches.Graph,
+      ~Tries.Trie.same_key,
+      ~Reaches.Graph.succ,
+      qs,
+      Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
+      Affects.side(~d, l, view, h, ns, Bool.not(b)),
+      p
+    )
+      == True{}: Bool
+  }
+) -> &qs: List<&2, List<&2, Bool>> -> {
+  Reaches.Reach.path(
+    ~List<&2, Bool>,
+    ~Reaches.Graph,
+    ~Tries.Trie.same_key,
+    ~Reaches.Graph.succ,
+    qs,
+    Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
+    Affects.side(~d, l, view, h, ns, Bool.not(b)),
+    x
+  )
+    == True{}: Bool
+}:
+  match w:
+    case (+qs, hq):
+      (
+        List.append(&2, List<&2, Bool>, qs, [p]),
+        Reaches.Reach.path_append(
+          ~List<&2, Bool>,
+          ~Reaches.Graph,
+          ~Tries.Trie.same_key,
+          ~Reaches.Graph.succ,
+          qs,
+          Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
+          p,
+          [],
+          Affects.side(~d, l, view, h, ns, Bool.not(b)),
+          x
+        )(hq)(Affects.side_edge(~d, l, view, h, ns, b, x, p)(he))
+      )
+
+# a path from x to m in a side, reversed, is a path from m to x in the other
+def Affects.rev_path(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  +b: Bool,
+  ps: List<&2, List<&2, Bool>>,
+  +x: List<&2, Bool>,
+  +m: List<&2, Bool>
+) -> {
+  Reaches.Reach.path(
+    ~List<&2, Bool>,
+    ~Reaches.Graph,
+    ~Tries.Trie.same_key,
+    ~Reaches.Graph.succ,
+    ps,
+    Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
+    Affects.side(~d, l, view, h, ns, b),
+    m
+  )
+    == True{}: Bool
+} -> &qs: List<&2, List<&2, Bool>> -> {
+  Reaches.Reach.path(
+    ~List<&2, Bool>,
+    ~Reaches.Graph,
+    ~Tries.Trie.same_key,
+    ~Reaches.Graph.succ,
+    qs,
+    Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
+    Affects.side(~d, l, view, h, ns, Bool.not(b)),
+    x
+  )
+    == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      hp => ([], Affects.side_edge(~d, l, view, h, ns, b, x, m)(hp))
+    case Con{+p, +r}:
+      +hp =>
+        +contains1 = List.contains(
+          ~List<&2, Bool>,
+          ~Tries.Trie.same_key,
+          Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
+          p
+        )
+        +path1 = Reaches.Reach.path(
+          ~List<&2, Bool>,
+          ~Reaches.Graph,
+          ~Tries.Trie.same_key,
+          ~Reaches.Graph.succ,
+          r,
+          Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), p),
+          Affects.side(~d, l, view, h, ns, b),
+          m
+        )
+        Affects.rev_path.cons(
+          ~d,
+          l,
+          view,
+          h,
+          ns,
+          b,
+          p,
+          x,
+          m,
+          Shared.Bool.and_true_left(contains1, path1)(hp),
+          Affects.rev_path(~d, l, view, h, ns, b, r, p, m)(Shared.Bool.and_true_right(contains1, path1)(hp))
+        )
+
+# the nodes of a path in a side are nodes of it
+def Affects.within(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  +b: Bool,
+  +ps: List<&2, List<&2, Bool>>,
+  ys: List<&2, List<&2, Bool>>,
+  +m: List<&2, Bool>
+) -> {
+  Reaches.Reach.path(
+    ~List<&2, Bool>,
+    ~Reaches.Graph,
+    ~Tries.Trie.same_key,
+    ~Reaches.Graph.succ,
+    ps,
+    ys,
+    Affects.side(~d, l, view, h, ns, b),
+    m
+  )
+    == True{}: Bool
+} -> {
+  Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, ps, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)))
+    == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      +hp => {==}
+    case Con{+p, +r}:
+      +hp =>
+        +path1 = Reaches.Reach.path(
+          ~List<&2, Bool>,
+          ~Reaches.Graph,
+          ~Tries.Trie.same_key,
+          ~Reaches.Graph.succ,
+          r,
+          Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), p),
+          Affects.side(~d, l, view, h, ns, b),
+          m
+        )
+        +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ys, p)
+        hf = Reaches.Reach.path_first(
+          ~List<&2, Bool>,
+          ~Reaches.Graph,
+          ~Tries.Trie.same_key,
+          ~Reaches.Graph.succ,
+          r,
+          Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), p),
+          Affects.side(~d, l, view, h, ns, b),
+          m
+        )(Shared.Bool.and_true_right(contains1, path1)(hp))
+        %Equal.sym(
+          Bool,
+          List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)), p),
+          True{},
+          Affects.side_live(~d, l, view, h, ns, b, p, Reaches.Reach.first(List<&2, Bool>, r, m))(hf)
+        ): {
+          Bool.and(
+            _,
+            Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, r, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)))
+          )
+            == True{}: Bool
+        }
+        Affects.within(
+          ~d,
+          l,
+          view,
+          h,
+          ns,
+          b,
+          r,
+          Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), p),
+          m
+        )(Shared.Bool.and_true_right(contains1, path1)(hp))
+
+# a path from x to m in a side that visits each node once makes its search
+# find m
+def Affects.fin(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  +b: Bool,
+  +x: List<&2, Bool>,
+  +m: List<&2, Bool>,
+  w: &qs: List<&2, List<&2, Bool>> -> {
+    Reaches.Reach.path(
+      ~List<&2, Bool>,
+      ~Reaches.Graph,
+      ~Tries.Trie.same_key,
+      ~Reaches.Graph.succ,
+      qs,
+      Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
+      Affects.side(~d, l, view, h, ns, b),
+      m
+    )
+      == True{}: Bool
+  }
+    & {Reaches.Reach.distinct(~List<&2, Bool>, ~Tries.Trie.same_key, qs) == True{}: Bool}
+) -> {
+  Reaches.Reach.in(
+    ~List<&2, Bool>,
+    ~Reaches.Graph,
+    ~Tries.Trie.same_key,
+    ~Reaches.Graph.succ,
+    ~Reaches.Graph.nodes,
+    Affects.side(~d, l, view, h, ns, b),
+    x,
+    m
+  )
+    == True{}: Bool
+}:
+  match w:
+    case (+qs, (+hq, hd)):
+      Reaches.Reach.path_go(
+        ~List<&2, Bool>,
+        ~Reaches.Graph,
+        ~Tries.Trie.same_key,
+        ~Reaches.Graph.succ,
+        ~Affects.key_laws(),
+        qs,
+        List.length(&2, List<&2, Bool>, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b))),
+        Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
+        Affects.side(~d, l, view, h, ns, b),
+        m
+      )(hq)(
+        Reaches.Reach.fits_nodes(
+          ~List<&2, Bool>,
+          ~Tries.Trie.same_key,
+          ~Affects.key_laws(),
+          qs,
+          Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b))
+        )(hd)(Affects.within(~d, l, view, h, ns, b, qs, Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x), m)(hq))
+      )
+
+# Affects.rev_in once a path of the search is found (w)
+def Affects.rev_in.one(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  +b: Bool,
+  +x: List<&2, Bool>,
+  +m: List<&2, Bool>,
+  w: &ps: List<&2, List<&2, Bool>> -> {
+    Reaches.Reach.path(
+      ~List<&2, Bool>,
+      ~Reaches.Graph,
+      ~Tries.Trie.same_key,
+      ~Reaches.Graph.succ,
+      ps,
+      Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
+      Affects.side(~d, l, view, h, ns, b),
+      m
+    )
+      == True{}: Bool
+  }
+    & {
+      Reaches.Reach.fits(
+        List<&2, Bool>,
+        ps,
+        List.length(&2, List<&2, Bool>, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b)))
+      )
+        == True{}: Bool
+    }
+) -> &qs: List<&2, List<&2, Bool>> -> {
+  Reaches.Reach.path(
+    ~List<&2, Bool>,
+    ~Reaches.Graph,
+    ~Tries.Trie.same_key,
+    ~Reaches.Graph.succ,
+    qs,
+    Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
+    Affects.side(~d, l, view, h, ns, Bool.not(b)),
+    x
+  )
+    == True{}: Bool
+}:
+  match w:
+    case (+ps, (+hp, hf)):
+      Affects.rev_path(~d, l, view, h, ns, b, ps, x, m)(hp)
+
+# Affects.rev_in once the path is reversed (w)
+def Affects.rev_in.two(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  +b: Bool,
+  +x: List<&2, Bool>,
+  +m: List<&2, Bool>,
+  w: &qs: List<&2, List<&2, Bool>> -> {
+    Reaches.Reach.path(
+      ~List<&2, Bool>,
+      ~Reaches.Graph,
+      ~Tries.Trie.same_key,
+      ~Reaches.Graph.succ,
+      qs,
+      Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
+      Affects.side(~d, l, view, h, ns, Bool.not(b)),
+      x
+    )
+      == True{}: Bool
+  }
+) -> {
+  Reaches.Reach.in(
+    ~List<&2, Bool>,
+    ~Reaches.Graph,
+    ~Tries.Trie.same_key,
+    ~Reaches.Graph.succ,
+    ~Reaches.Graph.nodes,
+    Affects.side(~d, l, view, h, ns, Bool.not(b)),
+    m,
+    x
+  )
+    == True{}: Bool
+}:
+  match w:
+    case (+qs, hq):
+      Affects.fin(
+        ~d,
+        l,
+        view,
+        h,
+        ns,
+        Bool.not(b),
+        m,
+        x,
+        Reaches.Reach.shorten(
+          ~List<&2, Bool>,
+          ~Reaches.Graph,
+          ~Tries.Trie.same_key,
+          ~Reaches.Graph.succ,
+          ~Affects.key_laws(),
+          qs,
+          Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, Bool.not(b)), m),
+          Affects.side(~d, l, view, h, ns, Bool.not(b)),
+          x
+        )(hq)
+      )
+
+# what a search of a side finds from x, a search of the other side finds x
+# from
+def Affects.rev_in(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  +b: Bool,
+  +x: List<&2, Bool>,
+  +m: List<&2, Bool>
+) -> {
+  Reaches.Reach.in(
+    ~List<&2, Bool>,
+    ~Reaches.Graph,
+    ~Tries.Trie.same_key,
+    ~Reaches.Graph.succ,
+    ~Reaches.Graph.nodes,
+    Affects.side(~d, l, view, h, ns, b),
+    x,
+    m
+  )
+    == True{}: Bool
+} -> {
+  Reaches.Reach.in(
+    ~List<&2, Bool>,
+    ~Reaches.Graph,
+    ~Tries.Trie.same_key,
+    ~Reaches.Graph.succ,
+    ~Reaches.Graph.nodes,
+    Affects.side(~d, l, view, h, ns, Bool.not(b)),
+    m,
+    x
+  )
+    == True{}: Bool
+}:
+  hp => Affects.rev_in.two(
+    ~d,
+    l,
+    view,
+    h,
+    ns,
+    b,
+    x,
+    m,
+    Affects.rev_in.one(
+      ~d,
+      l,
+      view,
+      h,
+      ns,
+      b,
+      x,
+      m,
+      Reaches.Reach.go_path(
+        ~List<&2, Bool>,
+        ~Reaches.Graph,
+        ~Tries.Trie.same_key,
+        ~Reaches.Graph.succ,
+        ~Affects.key_laws(),
+        List.length(&2, List<&2, Bool>, Reaches.Graph.nodes(Affects.side(~d, l, view, h, ns, b))),
+        Reaches.Graph.succ(Affects.side(~d, l, view, h, ns, b), x),
+        Affects.side(~d, l, view, h, ns, b),
+        m
+      )(hp)
+    )
+  )
+
+# what Graph.reach of a side finds from x, Graph.reach of the other side finds
+# x from
+def Affects.reach_rev(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, Resources.Name>,
+  +b: Bool,
+  +x: List<&2, Bool>,
+  +m: List<&2, Bool>
+) -> {
+  Tries.Trie.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, b), x), m) == True{}: Bool
+} -> {Tries.Trie.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, Bool.not(b)), m), x) == True{}: Bool}:
+  hp =>
+    %Equal.sym(
+      Bool,
+      Tries.Trie.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, Bool.not(b)), m), x),
+      Reaches.Reach.in(
+        ~List<&2, Bool>,
+        ~Reaches.Graph,
+        ~Tries.Trie.same_key,
+        ~Reaches.Graph.succ,
+        ~Reaches.Graph.nodes,
+        Affects.side(~d, l, view, h, ns, Bool.not(b)),
+        m,
+        x
+      ),
+      Reaches.Reach.all_in(~Reaches.Graph, ~Reaches.Graph.succ, ~Reaches.Graph.nodes, Affects.side(~d, l, view, h, ns, Bool.not(b)), m, x)
+    ): {_ == True{}: Bool}
+    Affects.rev_in(~d, l, view, h, ns, b, x, m)(
+      Equal.trans(
+        Bool,
+        Reaches.Reach.in(
+          ~List<&2, Bool>,
+          ~Reaches.Graph,
+          ~Tries.Trie.same_key,
+          ~Reaches.Graph.succ,
+          ~Reaches.Graph.nodes,
+          Affects.side(~d, l, view, h, ns, b),
+          x,
+          m
+        ),
+        Tries.Trie.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, b), x), m),
+        True{},
+        Equal.sym(
+          Bool,
+          Tries.Trie.has(Unit, Reaches.Graph.reach(Affects.side(~d, l, view, h, ns, b), x), m),
+          Reaches.Reach.in(
+            ~List<&2, Bool>,
+            ~Reaches.Graph,
+            ~Tries.Trie.same_key,
+            ~Reaches.Graph.succ,
+            ~Reaches.Graph.nodes,
+            Affects.side(~d, l, view, h, ns, b),
+            x,
+            m
+          ),
+          Reaches.Reach.all_in(~Reaches.Graph, ~Reaches.Graph.succ, ~Reaches.Graph.nodes, Affects.side(~d, l, view, h, ns, b), x, m)
+        ),
+        hp
+      )
+    )
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
