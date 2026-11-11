@@ -16026,6 +16026,214 @@ def Entry.checks(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Le
     case Ledgers.Entry.Lie{x}:
       Lie.proves(x)
 
+# Proofs of checks
+# ----------------
+
+# two ballots that Ballot.is_eq calls different are different
+def Chk.ne(+a: Ledgers.Ballot, -b: Ledgers.Ballot, hf: {Ledgers.Ballot.is_eq(a, b) == False{}: Bool}) -> {a != b: Ledgers.Ballot}:
+  e => Shared.Bool.true_ne_false(
+    Equal.trans(
+      Bool,
+      True{},
+      Ledgers.Ballot.is_eq(a, a),
+      False{},
+      Equal.sym(Bool, Ledgers.Ballot.is_eq(a, a), True{}, Ledgers.Ballot.is_eq_refl(a)),
+      Equal.trans(
+        Bool,
+        Ledgers.Ballot.is_eq(a, a),
+        Ledgers.Ballot.is_eq(a, b),
+        False{},
+        Equal.cong(Ledgers.Ballot, Bool, z => Ledgers.Ballot.is_eq(a, z), a, b, e),
+        hf
+      )
+    )
+  )
+
+# Lie.proves_sound, by the parts of the lie
+def Chk.lie(x: Ledgers.Lie) -> {Lie.proves(x) == True{}: Bool} -> Lie.Proves(x):
+  match x:
+    case Ledgers.Lie{+k, +a, +b}:
+      +h =>
+        +s = Shared.Bool.and_true_left(
+          Bool.and(Ledgers.Ballot.sealed(k, a), Ledgers.Ballot.sealed(k, b)),
+          Bool.not(Ledgers.Ballot.is_eq(a, b))
+        )(h)
+        Tuple{
+          Shared.Bool.and_true_left(Ledgers.Ballot.sealed(k, a), Ledgers.Ballot.sealed(k, b))(s),
+          Tuple{
+            Shared.Bool.and_true_right(Ledgers.Ballot.sealed(k, a), Ledgers.Ballot.sealed(k, b))(s),
+            Chk.ne(
+              a,
+              b,
+              Shared.Bool.not_true(
+                Ledgers.Ballot.is_eq(a, b)
+              )(
+                Shared.Bool.and_true_right(
+                  Bool.and(Ledgers.Ballot.sealed(k, a), Ledgers.Ballot.sealed(k, b)),
+                  Bool.not(Ledgers.Ballot.is_eq(a, b))
+                )(h)
+              )
+            )
+          }
+        }
+
+# the key of a request, once the entry is known (m): it stays as the ledger grows
+def Chk.key_at(
+  ~mach: Machine(),
+  m: Maybe<&2, Entry(mach)>,
+  -m2: Maybe<&2, Entry(mach)>,
+  hm: @e: Entry(mach) -> {m == Some{e}: Maybe<&2, Entry(mach)>} -> {m2 == Some{e}: Maybe<&2, Entry(mach)>},
+  voter: String,
+  -k: Hashes.Hash
+) -> {Root.key.at(~mach, m, voter) == Some{k}: Maybe<&2, Hashes.Hash>}
+  -> {Root.key.at(~mach, m2, voter) == Some{k}: Maybe<&2, Hashes.Hash>}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Root.key.at(~mach, m2, voter) == Some{k}: Maybe<&2, Hashes.Hash>},
+        Shared.Maybe.none_ne_some(Hashes.Hash, k, e)
+      )
+    case Some{y}:
+      e =>
+        %Equal.sym(Maybe<&2, Entry(mach)>, m2, Some{y}, hm(y)({==})): {
+          Root.key.at(~mach, _, voter) == Some{k}: Maybe<&2, Hashes.Hash>
+        }
+        e
+
+# a key that some data is stays, once the data is known (m)
+def Chk.whole(
+  m: Maybe<&2, List<&2, U32>>,
+  -m2: Maybe<&2, List<&2, U32>>,
+  hm: @w: List<&2, U32> -> {m == Some{w}: Maybe<&2, List<&2, U32>>} -> {m2 == Some{w}: Maybe<&2, List<&2, U32>>},
+  -k: Hashes.Hash
+) -> {Codes.Code.whole.of(~Hashes.Hash, ~Hashes.Hash.code, ~Hashes.Hash.code.read, m) == Some{k}: Maybe<&2, Hashes.Hash>}
+  -> {Codes.Code.whole.of(~Hashes.Hash, ~Hashes.Hash.code, ~Hashes.Hash.code.read, m2) == Some{k}: Maybe<&2, Hashes.Hash>}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Codes.Code.whole.of(~Hashes.Hash, ~Hashes.Hash.code, ~Hashes.Hash.code.read, m2) == Some{k}: Maybe<&2, Hashes.Hash>},
+        Shared.Maybe.none_ne_some(Hashes.Hash, k, e)
+      )
+    case Some{y}:
+      e =>
+        %Equal.sym(Maybe<&2, List<&2, U32>>, m2, Some{y}, hm(y)({==})): {
+          Codes.Code.whole.of(~Hashes.Hash, ~Hashes.Hash.code, ~Hashes.Hash.code.read, _) == Some{k}: Maybe<&2, Hashes.Hash>
+        }
+        e
+
+# the key that a tip gives a voter stays as the ledger grows, once the tip is
+# known (m)
+def Chk.tip_key(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +g: Led.Grows(mach, d, a, b),
+  m: Maybe<&2, Tip>,
+  -m2: Maybe<&2, Tip>,
+  hm: @t: Tip -> {m == Some{t}: Maybe<&2, Tip>} -> {m2 == Some{t}: Maybe<&2, Tip>},
+  +voter: String,
+  -k: Hashes.Hash
+) -> {Tip.key(~mach, ~d, a, m, voter) == Some{k}: Maybe<&2, Hashes.Hash>}
+  -> {Tip.key(~mach, ~d, b, m2, voter) == Some{k}: Maybe<&2, Hashes.Hash>}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Tip.key(~mach, ~d, b, m2, voter) == Some{k}: Maybe<&2, Hashes.Hash>},
+        Shared.Maybe.none_ne_some(Hashes.Hash, k, e)
+      )
+    case Some{+t}:
+      e =>
+        %Equal.sym(Maybe<&2, Tip>, m2, Some{t}, hm(t)({==})): {
+          Tip.key(~mach, ~d, b, _, voter) == Some{k}: Maybe<&2, Hashes.Hash>
+        }
+        Chk.whole(
+          Tree.get(~mach, ~d, a, Tip.content(t), Machine.seal(mach)(voter)),
+          Tree.get(~mach, ~d, b, Tip.content(t), Machine.seal(mach)(voter)),
+          +w => ew => Hist.value(
+            Tree.look(~mach, ~d, a, Tip.content(t), Machine.seal(mach)(voter)),
+            Tree.look(~mach, ~d, b, Tip.content(t), Machine.seal(mach)(voter)),
+            w,
+            Hist.find(~mach, ~d, a, b, Tip.content(t), Machine.seal(mach)(voter), Some{w}, g)
+          )(ew),
+          k
+        )(e)
+
+# a first key that a root line gives stays in a later ledger
+def Chk.gives(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: Led.Later(~mach, ~d, a, b),
+  +r: Hashes.Hash,
+  +voter: String,
+  -k: Hashes.Hash,
+  gv: Root.Gives(mach, d, kern, a, r, voter, k)
+) -> Root.Gives(mach, d, kern, b, r, voter, k):
+  match gv:
+    case Inl{e}:
+      Inl{
+        Chk.key_at(
+          ~mach,
+          Led.get(~mach, ~d, a, Ledgers.Name.Ask{r}),
+          Led.get(~mach, ~d, b, Ledgers.Name.Ask{r}),
+          y => Hist.gets(~mach, ~d, a, b, Led.later_grows(~mach, ~d, a, b)(later))(Ledgers.Name.Ask{r})(y),
+          voter,
+          k
+        )(e)
+      }
+    case Inr{Tuple{+n, e}}:
+      Inr{
+        Tuple{
+          n,
+          Chk.tip_key(
+            ~mach,
+            ~d,
+            a,
+            b,
+            Led.later_grows(~mach, ~d, a, b)(later),
+            Line.at(~mach, ~d, ~kern, n, a, Ledgers.Line{r, None{}}),
+            Line.at(~mach, ~d, ~kern, n, b, Ledgers.Line{r, None{}}),
+            t => et => Line.at_grows(~mach, ~d, ~kern, n, Ledgers.Line{r, None{}})(a)(b)(t)(later)(et),
+            voter,
+            k
+          )(e)
+        }
+      }
+
+# a link of a ballot stays in a later ledger
+def Chk.link_grows(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: Led.Later(~mach, ~d, a, b),
+  +x: Ledgers.Ballot,
+  p: Maybe<&2, Ledgers.Place>,
+  lk: Ballot.Linked(mach, d, kern, a, x, p)
+) -> Ballot.Linked(mach, d, kern, b, x, p):
+  match p:
+    case None{}:
+      match lk:
+        case Tuple{+k, Tuple{sk, gv}}:
+          Tuple{
+            k,
+            Tuple{sk, Chk.gives(~mach, ~d, ~kern, a, b, later, Ledgers.Ballot.root(x), Ledgers.Ballot.voter(x), k, gv)}
+          }
+    case Some{w}:
+      match lk:
+        case Tuple{+b0, Tuple{hb, rest}}:
+          Tuple{
+            b0,
+            Tuple{
+              Hist.has_grows(~mach, ~d, a, b, Ledgers.Entry.Ballot{b0}, Led.later_grows(~mach, ~d, a, b)(later))(hb),
+              rest
+            }
+          }
+
 # Laws of checks
 
 # a lie that the test passes proves
