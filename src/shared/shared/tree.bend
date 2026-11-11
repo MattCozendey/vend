@@ -1922,6 +1922,942 @@ def Mst.look.go_kept(
         m2 => r2 => Mst.look.go_kept(~S, ~fetch, ~grows, ~kept, p, m2, a, b, r2, k, x, gr)
       )
 
+# a read ma that gives a value, mb gives too
+def Mst.Kept(-A: Data, -ma: Maybe<&2, A>, -mb: Maybe<&2, A>) -> Type:
+  @x: A -> {ma == Some{x}: Maybe<&2, A>} -> {mb == Some{x}: Maybe<&2, A>}
+
+# a step F that gives nothing of nothing keeps what it reads kept
+def Mst.kept.app(
+  -A: Data,
+  -B: Data,
+  -F: Maybe<&2, A> -> Maybe<&2, B>,
+  ma: Maybe<&2, A>,
+  -mb: Maybe<&2, A>,
+  hn: {F(None{}) == None{}: Maybe<&2, B>},
+  hm: Mst.Kept(A, ma, mb)
+) -> Mst.Kept(B, F(ma), F(mb)):
+  match ma:
+    case None{}:
+      x => e => Empty.absurd(
+        {F(mb) == Some{x}: Maybe<&2, B>},
+        Shared.Maybe.none_ne_some(
+          B,
+          x,
+          Equal.trans(Maybe<&2, B>, None{}, F(None{}), Some{x}, Equal.sym(Maybe<&2, B>, F(None{}), None{}, hn), e)
+        )
+      )
+    case Some{+y}:
+      %Equal.sym(Maybe<&2, A>, mb, Some{y}, hm(y)({==})): Mst.Kept(B, F(Some{y}), F(_))
+      x => e => e
+
+# a choice keeps what each of its branches keeps
+def Mst.kept.when(
+  -A: Data,
+  b: Bool,
+  -ka: Unit -> Maybe<&2, A>,
+  -kb: Unit -> Maybe<&2, A>,
+  -ea: Unit -> Maybe<&2, A>,
+  -eb: Unit -> Maybe<&2, A>,
+  hk: Mst.Kept(A, ka(Unit{}), kb(Unit{})),
+  he: Mst.Kept(A, ea(Unit{}), eb(Unit{}))
+) -> Mst.Kept(A, Shared.Bool.when(Maybe<&2, A>, b, ka, ea), Shared.Bool.when(Maybe<&2, A>, b, kb, eb)):
+  match b:
+    case True{}:
+      hk
+    case False{}:
+      he
+
+# a test that stays true keeps what its branch keeps
+def Mst.kept.mwhen(
+  -A: Data,
+  ba: Bool,
+  -bb: Bool,
+  -ka: Unit -> Maybe<&2, A>,
+  -kb: Unit -> Maybe<&2, A>,
+  hb: {ba == True{}: Bool} -> {bb == True{}: Bool},
+  hk: Mst.Kept(A, ka(Unit{}), kb(Unit{}))
+) -> Mst.Kept(A, Shared.Maybe.when(A, ba, ka), Shared.Maybe.when(A, bb, kb)):
+  match ba:
+    case True{}:
+      %Equal.sym(Bool, bb, True{}, hb({==})): Mst.Kept(A, ka(Unit{}), Shared.Maybe.when(A, _, kb))
+      hk
+    case False{}:
+      x => e => Empty.absurd(
+        {Shared.Maybe.when(A, bb, kb) == Some{x}: Maybe<&2, A>},
+        Shared.Maybe.none_ne_some(A, x, e)
+      )
+
+# a read that finds a key absent tells that it is absent
+def Look.absent_known(l: Look) -> {Look.is_absent(l) == True{}: Bool} -> {
+  Look.known(l) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  match l:
+    case Look.Found{v}:
+      e => Empty.absurd(
+        {Look.known(Look.Found{v}) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Shared.Bool.false_ne_true(e)
+      )
+    case Look.Absent{}:
+      e => {==}
+    case Look.Missing{h}:
+      e => Empty.absurd(
+        {Look.known(Look.Missing{h}) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Shared.Bool.false_ne_true(e)
+      )
+
+# a read that tells that a key is absent finds it absent
+def Look.known_absent(l: Look) -> {
+  Look.known(l) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {Look.is_absent(l) == True{}: Bool}:
+  match l:
+    case Look.Found{v}:
+      e => Empty.absurd(
+        {Look.is_absent(Look.Found{v}) == True{}: Bool},
+        Shared.Maybe.none_ne_some(
+          List<&2, U32>,
+          v,
+          Equal.sym(
+            Maybe<&2, List<&2, U32>>,
+            Some{v},
+            None{},
+            Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, Some{v}, None{}, e)
+          )
+        )
+      )
+    case Look.Absent{}:
+      e => {==}
+    case Look.Missing{h}:
+      e => Empty.absurd(
+        {Look.is_absent(Look.Missing{h}) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, None{}, e)
+      )
+
+# a read that finds a key absent, a depot that grows from it finds so too
+def Mst.look.absent_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  +f: Nat,
+  +m: Maybe<&2, Hashes.Hash>,
+  +a: S,
+  +b: S,
+  +r: Room,
+  +k: List<&2, U32>,
+  +gr: {grows(a, b) == True{}: Bool}
+) -> {
+  Look.is_absent(Mst.look.go(~S, ~fetch, f, a, r, m, k)) == True{}: Bool
+} -> {Look.is_absent(Mst.look.go(~S, ~fetch, f, b, r, m, k)) == True{}: Bool}:
+  e => Look.known_absent(Mst.look.go(~S, ~fetch, f, b, r, m, k))(
+    Mst.look.go_kept(~S, ~fetch, ~grows, ~kept, f, m, a, b, r, k, None{}, gr)(
+      Look.absent_known(Mst.look.go(~S, ~fetch, f, a, r, m, k))(e)
+    )
+  )
+
+# Mst.split.done keeps what the split of its gap keeps
+def Mst.split.done_kept(
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  p: Part,
+  ma: Maybe<&2, Halves>,
+  -mb: Maybe<&2, Halves>,
+  hm: Mst.Kept(Halves, ma, mb)
+) -> Mst.Kept(Halves, Mst.split.done(l, left, p, ma), Mst.split.done(l, left, p, mb)):
+  match p:
+    case Part{+b, +g, +a}:
+      Mst.kept.app(Halves, Halves, m => Mst.split.done(l, left, Part{b, g, a}, m), ma, mb, {==}, hm)
+
+# Mst.split.at keeps what its node and the splits below it keep
+def Mst.split.at_kept(
+  na: Maybe<&2, Node>,
+  r: Room,
+  -nb: Maybe<&2, Node>,
+  +k: List<&2, U32>,
+  goa: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  -gob: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  hn: @n: Node -> {na == Some{n}: Maybe<&2, Node>} -> {nb == Some{n}: Maybe<&2, Node>},
+  hg: @r2: Room -> @c: Maybe<&2, Hashes.Hash> -> Mst.Kept(Halves, goa(r2)(c), gob(r2)(c))
+) -> Mst.Kept(Halves, Mst.split.at(na, r, k, goa), Mst.split.at(nb, r, k, gob)):
+  match na r:
+    case None{} r0:
+      x => e => Empty.absurd(
+        {Mst.split.at(nb, r0, k, gob) == Some{x}: Maybe<&2, Halves>},
+        Shared.Maybe.none_ne_some(Halves, x, e)
+      )
+    case Some{Node{+l, +left, +xs}} Room{+up, +lo, +hi}:
+      %Equal.sym(Maybe<&2, Node>, nb, Some{Node{l, left, xs}}, hn(Node{l, left, xs})({==})): Mst.Kept(
+        Halves,
+        Mst.split.at(Some{Node{l, left, xs}}, Room{up, lo, hi}, k, goa),
+        Mst.split.at(_, Room{up, lo, hi}, k, gob)
+      )
+      Mst.kept.when(
+        Halves,
+        Part.hits(Mst.part(xs, left, k, []), k),
+        u => None{},
+        u => None{},
+        u => Mst.split.done(
+          l,
+          left,
+          Mst.part(xs, left, k, []),
+          goa(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, [])))
+        ),
+        u => Mst.split.done(
+          l,
+          left,
+          Mst.part(xs, left, k, []),
+          gob(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, [])))
+        ),
+        x => e => e,
+        Mst.split.done_kept(
+          l,
+          left,
+          Mst.part(xs, left, k, []),
+          goa(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, []))),
+          gob(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, []))),
+          hg(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, [])))
+        )
+      )
+
+# a split that a depot gives, a depot that grows from it gives too
+def Mst.split_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  f: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  +a: S,
+  +b: S,
+  +r: Room,
+  +k: List<&2, U32>,
+  +gr: {grows(a, b) == True{}: Bool}
+) -> Mst.Kept(Halves, Mst.split(~S, ~fetch, f, a, r, m, k), Mst.split(~S, ~fetch, f, b, r, m, k)):
+  match f m:
+    case f0 None{}:
+      x => e => e
+    case 0n Some{h}:
+      x => e => e
+    case 1n+(+p) Some{+h}:
+      Mst.split.at_kept(
+        Mst.node.in(~S, ~fetch, a, h, r),
+        r,
+        Mst.node.in(~S, ~fetch, b, h, r),
+        k,
+        r2 => c => Mst.split(~S, ~fetch, p, a, r2, c, k),
+        r2 => c => Mst.split(~S, ~fetch, p, b, r2, c, k),
+        n => Mst.node_in_kept(~S, ~fetch, ~grows, ~kept, a, b, h, r, n, gr),
+        r2 => c => Mst.split_kept(~S, ~fetch, ~grows, ~kept, p, c, a, b, r2, k, gr)
+      )
+
+# an edge walk of a node that a depot gives keeps what the walk below keeps
+def Mst.edge.left.at_kept(
+  na: Maybe<&2, Node>,
+  r: Room,
+  -nb: Maybe<&2, Node>,
+  -goa: Room -> Maybe<&2, Hashes.Hash> -> Bool,
+  -gob: Room -> Maybe<&2, Hashes.Hash> -> Bool,
+  hn: @n: Node -> {na == Some{n}: Maybe<&2, Node>} -> {nb == Some{n}: Maybe<&2, Node>},
+  hg: @r2: Room -> @c: Maybe<&2, Hashes.Hash> -> {goa(r2)(c) == True{}: Bool} -> {gob(r2)(c) == True{}: Bool}
+) -> {Mst.edge.left.at(na, r, goa) == True{}: Bool} -> {Mst.edge.left.at(nb, r, gob) == True{}: Bool}:
+  match na r:
+    case None{} r0:
+      e => Empty.absurd({Mst.edge.left.at(nb, r0, gob) == True{}: Bool}, Shared.Bool.false_ne_true(e))
+    case Some{Node{+l, +left, +xs}} Room{+up, +lo, +hi}:
+      %Equal.sym(Maybe<&2, Node>, nb, Some{Node{l, left, xs}}, hn(Node{l, left, xs})({==})): (
+        {Mst.edge.left.at(Some{Node{l, left, xs}}, Room{up, lo, hi}, goa) == True{}: Bool}
+          -> {Mst.edge.left.at(_, Room{up, lo, hi}, gob) == True{}: Bool}
+      )
+      hg(Room.of(l, lo, Items.head_key(xs, hi)))(left)
+
+# Mst.edge.left.at_kept, on the right edge
+def Mst.edge.right.at_kept(
+  na: Maybe<&2, Node>,
+  r: Room,
+  -nb: Maybe<&2, Node>,
+  -goa: Room -> Maybe<&2, Hashes.Hash> -> Bool,
+  -gob: Room -> Maybe<&2, Hashes.Hash> -> Bool,
+  hn: @n: Node -> {na == Some{n}: Maybe<&2, Node>} -> {nb == Some{n}: Maybe<&2, Node>},
+  hg: @r2: Room -> @c: Maybe<&2, Hashes.Hash> -> {goa(r2)(c) == True{}: Bool} -> {gob(r2)(c) == True{}: Bool}
+) -> {Mst.edge.right.at(na, r, goa) == True{}: Bool} -> {Mst.edge.right.at(nb, r, gob) == True{}: Bool}:
+  match na r:
+    case None{} r0:
+      e => Empty.absurd({Mst.edge.right.at(nb, r0, gob) == True{}: Bool}, Shared.Bool.false_ne_true(e))
+    case Some{Node{+l, +left, +xs}} Room{+up, +lo, +hi}:
+      %Equal.sym(Maybe<&2, Node>, nb, Some{Node{l, left, xs}}, hn(Node{l, left, xs})({==})): (
+        {Mst.edge.right.at(Some{Node{l, left, xs}}, Room{up, lo, hi}, goa) == True{}: Bool}
+          -> {Mst.edge.right.at(_, Room{up, lo, hi}, gob) == True{}: Bool}
+      )
+      hg(Room.of(l, Items.last_key(xs, lo), hi))(Mst.last(xs, left))
+
+# an edge that a depot gives in its rooms, a depot that grows from it gives too
+def Mst.edge_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  f: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  left: Bool,
+  +a: S,
+  +b: S,
+  +r: Room,
+  +gr: {grows(a, b) == True{}: Bool}
+) -> {Mst.edge(~S, ~fetch, f, a, left, r, m) == True{}: Bool} -> {Mst.edge(~S, ~fetch, f, b, left, r, m) == True{}: Bool}:
+  match f m left:
+    case f0 None{} l0:
+      e => e
+    case 0n Some{h} l0:
+      e => e
+    case 1n+(+p) Some{+h} True{}:
+      Mst.edge.left.at_kept(
+        Mst.node.in(~S, ~fetch, a, h, r),
+        r,
+        Mst.node.in(~S, ~fetch, b, h, r),
+        r2 => c => Mst.edge(~S, ~fetch, p, a, True{}, r2, c),
+        r2 => c => Mst.edge(~S, ~fetch, p, b, True{}, r2, c),
+        n => Mst.node_in_kept(~S, ~fetch, ~grows, ~kept, a, b, h, r, n, gr),
+        r2 => c => Mst.edge_kept(~S, ~fetch, ~grows, ~kept, p, c, True{}, a, b, r2, gr)
+      )
+    case 1n+(+p) Some{+h} False{}:
+      Mst.edge.right.at_kept(
+        Mst.node.in(~S, ~fetch, a, h, r),
+        r,
+        Mst.node.in(~S, ~fetch, b, h, r),
+        r2 => c => Mst.edge(~S, ~fetch, p, a, False{}, r2, c),
+        r2 => c => Mst.edge(~S, ~fetch, p, b, False{}, r2, c),
+        n => Mst.node_in_kept(~S, ~fetch, ~grows, ~kept, a, b, h, r, n, gr),
+        r2 => c => Mst.edge_kept(~S, ~fetch, ~grows, ~kept, p, c, False{}, a, b, r2, gr)
+      )
+
+# Mst.merge.nodes keeps what the merge below it keeps
+def Mst.merge.nodes_kept(
+  c: Cmp,
+  +ha: Hashes.Hash,
+  ra: Room,
+  +la: Nat,
+  +lefta: Maybe<&2, Hashes.Hash>,
+  +xa: List<&2, Item>,
+  +hb: Hashes.Hash,
+  rb: Room,
+  +lb: Nat,
+  +leftb: Maybe<&2, Hashes.Hash>,
+  +xb: List<&2, Item>,
+  goa: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  -gob: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  hg: @r1: Room -> @r2: Room -> @x: Maybe<&2, Hashes.Hash> -> @y: Maybe<&2, Hashes.Hash> -> Mst.Kept(
+    Edit,
+    goa(r1)(r2)(x)(y),
+    gob(r1)(r2)(x)(y)
+  )
+) -> Mst.Kept(
+  Edit,
+  Mst.merge.nodes(c, ha, ra, la, lefta, xa, hb, rb, lb, leftb, xb, goa),
+  Mst.merge.nodes(c, ha, ra, la, lefta, xa, hb, rb, lb, leftb, xb, gob)
+):
+  match c ra rb:
+    case GT{} Room{+ua, +loa, +hia} Room{+ub, +lob, +hib}:
+      Mst.kept.app(
+        Edit,
+        Edit,
+        e => Mst.with_last(la, lefta, xa, e),
+        goa(Room.of(la, Items.last_key(xa, loa), hia))(Room{ub, lob, hib})(Mst.last(xa, lefta))(Some{hb}),
+        gob(Room.of(la, Items.last_key(xa, loa), hia))(Room{ub, lob, hib})(Mst.last(xa, lefta))(Some{hb}),
+        {==},
+        hg(Room.of(la, Items.last_key(xa, loa), hia))(Room{ub, lob, hib})(Mst.last(xa, lefta))(Some{hb})
+      )
+    case LT{} Room{+ua, +loa, +hia} Room{+ub, +lob, +hib}:
+      Mst.kept.app(
+        Edit,
+        Edit,
+        e => Mst.with_first(lb, xb, e),
+        goa(Room{ua, loa, hia})(Room.of(lb, lob, Items.head_key(xb, hib)))(Some{ha})(leftb),
+        gob(Room{ua, loa, hia})(Room.of(lb, lob, Items.head_key(xb, hib)))(Some{ha})(leftb),
+        {==},
+        hg(Room{ua, loa, hia})(Room.of(lb, lob, Items.head_key(xb, hib)))(Some{ha})(leftb)
+      )
+    case EQ{} Room{+ua, +loa, +hia} Room{+ub, +lob, +hib}:
+      Mst.kept.app(
+        Edit,
+        Edit,
+        e => Mst.with_both(la, lefta, xa, xb, e),
+        goa(Room.of(la, Items.last_key(xa, loa), hia))(Room.of(lb, lob, Items.head_key(xb, hib)))(Mst.last(xa, lefta))(leftb),
+        gob(Room.of(la, Items.last_key(xa, loa), hia))(Room.of(lb, lob, Items.head_key(xb, hib)))(Mst.last(xa, lefta))(leftb),
+        {==},
+        hg(Room.of(la, Items.last_key(xa, loa), hia))(Room.of(lb, lob, Items.head_key(xb, hib)))(Mst.last(xa, lefta))(leftb)
+      )
+
+# Mst.merge.at keeps what its nodes and the merge below them keep
+def Mst.merge.at_kept(
+  na: Maybe<&2, Node>,
+  nb: Maybe<&2, Node>,
+  -na2: Maybe<&2, Node>,
+  -nb2: Maybe<&2, Node>,
+  +ha: Hashes.Hash,
+  +ra: Room,
+  +hb: Hashes.Hash,
+  +rb: Room,
+  goa: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  -gob: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  hna: @n: Node -> {na == Some{n}: Maybe<&2, Node>} -> {na2 == Some{n}: Maybe<&2, Node>},
+  hnb: @n: Node -> {nb == Some{n}: Maybe<&2, Node>} -> {nb2 == Some{n}: Maybe<&2, Node>},
+  hg: @r1: Room -> @r2: Room -> @x: Maybe<&2, Hashes.Hash> -> @y: Maybe<&2, Hashes.Hash> -> Mst.Kept(
+    Edit,
+    goa(r1)(r2)(x)(y),
+    gob(r1)(r2)(x)(y)
+  )
+) -> Mst.Kept(Edit, Mst.merge.at(na, nb, ha, ra, hb, rb, goa), Mst.merge.at(na2, nb2, ha, ra, hb, rb, gob)):
+  match na nb:
+    case Some{Node{+la, +lefta, +xa}} Some{Node{+lb, +leftb, +xb}}:
+      %Equal.sym(Maybe<&2, Node>, na2, Some{Node{la, lefta, xa}}, hna(Node{la, lefta, xa})({==})): Mst.Kept(
+        Edit,
+        Mst.merge.at(Some{Node{la, lefta, xa}}, Some{Node{lb, leftb, xb}}, ha, ra, hb, rb, goa),
+        Mst.merge.at(_, nb2, ha, ra, hb, rb, gob)
+      )
+      %Equal.sym(Maybe<&2, Node>, nb2, Some{Node{lb, leftb, xb}}, hnb(Node{lb, leftb, xb})({==})): Mst.Kept(
+        Edit,
+        Mst.merge.at(Some{Node{la, lefta, xa}}, Some{Node{lb, leftb, xb}}, ha, ra, hb, rb, goa),
+        Mst.merge.at(Some{Node{la, lefta, xa}}, _, ha, ra, hb, rb, gob)
+      )
+      Mst.merge.nodes_kept(Nat.cmp(la, lb), ha, ra, la, lefta, xa, hb, rb, lb, leftb, xb, goa, gob, hg)
+    case Some{Node{la, lefta, xa}} None{}:
+      x => e => Empty.absurd(
+        {Mst.merge.at(na2, nb2, ha, ra, hb, rb, gob) == Some{x}: Maybe<&2, Edit>},
+        Shared.Maybe.none_ne_some(Edit, x, e)
+      )
+    case None{} y0:
+      x => e => Empty.absurd(
+        {Mst.merge.at(na2, nb2, ha, ra, hb, rb, gob) == Some{x}: Maybe<&2, Edit>},
+        Shared.Maybe.none_ne_some(Edit, x, e)
+      )
+
+# a merge that a depot gives, a depot that grows from it gives too
+def Mst.merge_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  f: Nat,
+  ma: Maybe<&2, Hashes.Hash>,
+  mb: Maybe<&2, Hashes.Hash>,
+  +a: S,
+  +b: S,
+  +ra: Room,
+  +rb: Room,
+  +gr: {grows(a, b) == True{}: Bool}
+) -> Mst.Kept(Edit, Mst.merge(~S, ~fetch, f, a, ra, rb, ma, mb), Mst.merge(~S, ~fetch, f, b, ra, rb, ma, mb)):
+  match f ma mb:
+    case f0 None{} None{}:
+      x => e => e
+    case f0 None{} Some{+hb}:
+      Mst.kept.mwhen(
+        Edit,
+        Mst.edge(~S, ~fetch, Mst.depth(), a, True{}, rb, Some{hb}),
+        Mst.edge(~S, ~fetch, Mst.depth(), b, True{}, rb, Some{hb}),
+        u => Some{Edit{Some{hb}, []}},
+        u => Some{Edit{Some{hb}, []}},
+        Mst.edge_kept(~S, ~fetch, ~grows, ~kept, Mst.depth(), Some{hb}, True{}, a, b, rb, gr),
+        x => e => e
+      )
+    case f0 Some{+ha} None{}:
+      Mst.kept.mwhen(
+        Edit,
+        Mst.edge(~S, ~fetch, Mst.depth(), a, False{}, ra, Some{ha}),
+        Mst.edge(~S, ~fetch, Mst.depth(), b, False{}, ra, Some{ha}),
+        u => Some{Edit{Some{ha}, []}},
+        u => Some{Edit{Some{ha}, []}},
+        Mst.edge_kept(~S, ~fetch, ~grows, ~kept, Mst.depth(), Some{ha}, False{}, a, b, ra, gr),
+        x => e => e
+      )
+    case 0n Some{ha} Some{hb}:
+      x => e => e
+    case 1n+(+p) Some{+ha} Some{+hb}:
+      Mst.merge.at_kept(
+        Mst.node.in(~S, ~fetch, a, ha, ra),
+        Mst.node.in(~S, ~fetch, a, hb, rb),
+        Mst.node.in(~S, ~fetch, b, ha, ra),
+        Mst.node.in(~S, ~fetch, b, hb, rb),
+        ha,
+        ra,
+        hb,
+        rb,
+        r1 => r2 => x => y => Mst.merge(~S, ~fetch, p, a, r1, r2, x, y),
+        r1 => r2 => x => y => Mst.merge(~S, ~fetch, p, b, r1, r2, x, y),
+        n => Mst.node_in_kept(~S, ~fetch, ~grows, ~kept, a, b, ha, ra, n, gr),
+        n => Mst.node_in_kept(~S, ~fetch, ~grows, ~kept, a, b, hb, rb, n, gr),
+        r1 => r2 => x => y => Mst.merge_kept(~S, ~fetch, ~grows, ~kept, p, x, y, a, b, r1, r2, gr)
+      )
+
+# Mst.with_gap keeps what the edit of its gap keeps
+def Mst.with_gap_kept(
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  p: Part,
+  ea: Maybe<&2, Edit>,
+  -eb: Maybe<&2, Edit>,
+  he: Mst.Kept(Edit, ea, eb)
+) -> Mst.Kept(Edit, Mst.with_gap(l, left, p, ea), Mst.with_gap(l, left, p, eb)):
+  match p:
+    case Part{+b, +g, +a}:
+      Mst.kept.app(Edit, Edit, e => Mst.with_gap(l, left, Part{b, g, a}, e), ea, eb, {==}, he)
+
+# Mst.insert.gap keeps what the split of its gap keeps
+def Mst.insert.gap_kept(
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  p: Part,
+  ma: Maybe<&2, Halves>,
+  -mb: Maybe<&2, Halves>,
+  hm: Mst.Kept(Halves, ma, mb)
+) -> Mst.Kept(Edit, Mst.insert.gap(l, left, k, v, p, ma), Mst.insert.gap(l, left, k, v, p, mb)):
+  match p:
+    case Part{+b, +g, +a}:
+      Mst.kept.app(Halves, Edit, m => Mst.insert.gap(l, left, k, v, Part{b, g, a}, m), ma, mb, {==}, hm)
+
+# Mst.insert.here keeps what the split of its gap keeps
+def Mst.insert.here_kept(
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  p: Part,
+  spa: Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  -spb: Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  hs: @c: Maybe<&2, Hashes.Hash> -> Mst.Kept(Halves, spa(c), spb(c))
+) -> Mst.Kept(Edit, Mst.insert.here(l, left, k, v, p, spa), Mst.insert.here(l, left, k, v, p, spb)):
+  match p:
+    case Part{+b, +g, Con{Item{+ik, +iv, +r}, +rest}}:
+      Mst.kept.when(
+        Edit,
+        Cmp.is_eq(Key.cmp(ik, k)),
+        u => Some{Mst.store(Node{l, left, Mst.rejoin(b, g, Item{k, v, r} <> rest)}, [])},
+        u => Some{Mst.store(Node{l, left, Mst.rejoin(b, g, Item{k, v, r} <> rest)}, [])},
+        u => Mst.insert.gap(l, left, k, v, Part{b, g, Item{ik, iv, r} <> rest}, spa(g)),
+        u => Mst.insert.gap(l, left, k, v, Part{b, g, Item{ik, iv, r} <> rest}, spb(g)),
+        x => e => e,
+        Mst.insert.gap_kept(l, left, k, v, Part{b, g, Item{ik, iv, r} <> rest}, spa(g), spb(g), hs(g))
+      )
+    case Part{+b, +g, Nil{}}:
+      Mst.insert.gap_kept(l, left, k, v, Part{b, g, []}, spa(g), spb(g), hs(g))
+
+# Mst.insert.node keeps what the splits and inserts below it keep
+def Mst.insert.node_kept(
+  c: Cmp,
+  +h: Hashes.Hash,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +L: Nat,
+  spa: Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  -spb: Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  spga: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  -spgb: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  insa: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  -insb: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  hs: @c: Maybe<&2, Hashes.Hash> -> Mst.Kept(Halves, spa(c), spb(c)),
+  hsg: @r: Room -> @c: Maybe<&2, Hashes.Hash> -> Mst.Kept(Halves, spga(r)(c), spgb(r)(c)),
+  hins: @r: Room -> @c: Maybe<&2, Hashes.Hash> -> Mst.Kept(Edit, insa(r)(c), insb(r)(c))
+) -> Mst.Kept(
+  Edit,
+  Mst.insert.node(c, h, l, left, xs, lo, hi, k, v, L, spa, spga, insa),
+  Mst.insert.node(c, h, l, left, xs, lo, hi, k, v, L, spb, spgb, insb)
+):
+  match c:
+    case LT{}:
+      Mst.kept.app(Halves, Edit, m => Mst.insert.top(L, k, v, m), spa(Some{h}), spb(Some{h}), {==}, hs(Some{h}))
+    case EQ{}:
+      Mst.insert.here_kept(
+        l,
+        left,
+        k,
+        v,
+        Mst.part(xs, left, k, []),
+        spga(Part.room(Mst.part(xs, left, k, []), l, lo, hi)),
+        spgb(Part.room(Mst.part(xs, left, k, []), l, lo, hi)),
+        hsg(Part.room(Mst.part(xs, left, k, []), l, lo, hi))
+      )
+    case GT{}:
+      Mst.kept.when(
+        Edit,
+        Part.hits(Mst.part(xs, left, k, []), k),
+        u => None{},
+        u => None{},
+        u => Mst.with_gap(
+          l,
+          left,
+          Mst.part(xs, left, k, []),
+          insa(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, [])))
+        ),
+        u => Mst.with_gap(
+          l,
+          left,
+          Mst.part(xs, left, k, []),
+          insb(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, [])))
+        ),
+        x => e => e,
+        Mst.with_gap_kept(
+          l,
+          left,
+          Mst.part(xs, left, k, []),
+          insa(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, []))),
+          insb(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, []))),
+          hins(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, [])))
+        )
+      )
+
+# Mst.insert.at keeps what its node and the writes below it keep
+def Mst.insert.at_kept(
+  na: Maybe<&2, Node>,
+  r: Room,
+  -nb: Maybe<&2, Node>,
+  +h: Hashes.Hash,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +L: Nat,
+  spa: Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  -spb: Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  spga: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  -spgb: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  insa: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  -insb: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  hn: @n: Node -> {na == Some{n}: Maybe<&2, Node>} -> {nb == Some{n}: Maybe<&2, Node>},
+  hs: @c: Maybe<&2, Hashes.Hash> -> Mst.Kept(Halves, spa(c), spb(c)),
+  hsg: @r2: Room -> @c: Maybe<&2, Hashes.Hash> -> Mst.Kept(Halves, spga(r2)(c), spgb(r2)(c)),
+  hins: @r2: Room -> @c: Maybe<&2, Hashes.Hash> -> Mst.Kept(Edit, insa(r2)(c), insb(r2)(c))
+) -> Mst.Kept(
+  Edit,
+  Mst.insert.at(na, h, r, k, v, L, spa, spga, insa),
+  Mst.insert.at(nb, h, r, k, v, L, spb, spgb, insb)
+):
+  match na r:
+    case None{} r0:
+      x => e => Empty.absurd(
+        {Mst.insert.at(nb, h, r0, k, v, L, spb, spgb, insb) == Some{x}: Maybe<&2, Edit>},
+        Shared.Maybe.none_ne_some(Edit, x, e)
+      )
+    case Some{Node{+l, +left, +xs}} Room{+up, +lo, +hi}:
+      %Equal.sym(Maybe<&2, Node>, nb, Some{Node{l, left, xs}}, hn(Node{l, left, xs})({==})): Mst.Kept(
+        Edit,
+        Mst.insert.at(Some{Node{l, left, xs}}, h, Room{up, lo, hi}, k, v, L, spa, spga, insa),
+        Mst.insert.at(_, h, Room{up, lo, hi}, k, v, L, spb, spgb, insb)
+      )
+      Mst.insert.node_kept(Nat.cmp(l, L), h, l, left, xs, lo, hi, k, v, L, spa, spb, spga, spgb, insa, insb, hs, hsg, hins)
+
+# an insert that a depot gives, a depot that grows from it gives too
+def Mst.insert_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  f: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  +a: S,
+  +b: S,
+  +r: Room,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +L: Nat,
+  +gr: {grows(a, b) == True{}: Bool}
+) -> Mst.Kept(Edit, Mst.insert(~S, ~fetch, f, a, r, m, k, v, L), Mst.insert(~S, ~fetch, f, b, r, m, k, v, L)):
+  match f m:
+    case f0 None{}:
+      x => e => e
+    case 0n Some{h}:
+      x => e => e
+    case 1n+(+p) Some{+h}:
+      Mst.insert.at_kept(
+        Mst.node.in(~S, ~fetch, a, h, r),
+        r,
+        Mst.node.in(~S, ~fetch, b, h, r),
+        h,
+        k,
+        v,
+        L,
+        c => Mst.split(~S, ~fetch, p, a, r, c, k),
+        c => Mst.split(~S, ~fetch, p, b, r, c, k),
+        r2 => c => Mst.split(~S, ~fetch, p, a, r2, c, k),
+        r2 => c => Mst.split(~S, ~fetch, p, b, r2, c, k),
+        r2 => c => Mst.insert(~S, ~fetch, p, a, r2, c, k, v, L),
+        r2 => c => Mst.insert(~S, ~fetch, p, b, r2, c, k, v, L),
+        n => Mst.node_in_kept(~S, ~fetch, ~grows, ~kept, a, b, h, r, n, gr),
+        c => Mst.split_kept(~S, ~fetch, ~grows, ~kept, p, c, a, b, r, k, gr),
+        r2 => c => Mst.split_kept(~S, ~fetch, ~grows, ~kept, p, c, a, b, r2, k, gr),
+        r2 => c => Mst.insert_kept(~S, ~fetch, ~grows, ~kept, p, c, a, b, r2, k, v, L, gr)
+      )
+
+# Mst.delete.none keeps what the read of its subtree keeps
+def Mst.delete.none_kept(
+  +h: Hashes.Hash,
+  +r: Room,
+  +m: Maybe<&2, Hashes.Hash>,
+  lka: Room -> Maybe<&2, Hashes.Hash> -> Look,
+  -lkb: Room -> Maybe<&2, Hashes.Hash> -> Look,
+  hl: @r2: Room -> @c: Maybe<&2, Hashes.Hash> -> {Look.is_absent(lka(r2)(c)) == True{}: Bool} -> {
+    Look.is_absent(lkb(r2)(c)) == True{}: Bool
+  }
+) -> Mst.Kept(Edit, Mst.delete.none(h, r, m, lka), Mst.delete.none(h, r, m, lkb)):
+  Mst.kept.mwhen(
+    Edit,
+    Look.is_absent(lka(r)(m)),
+    Look.is_absent(lkb(r)(m)),
+    u => Some{Edit{Some{h}, []}},
+    u => Some{Edit{Some{h}, []}},
+    hl(r)(m),
+    x => e => e
+  )
+
+# Mst.delete.lacks stays true with a read that keeps what it finds absent
+def Mst.delete.lacks_kept(
+  p: Pick,
+  -lka: Room -> Maybe<&2, Hashes.Hash> -> Look,
+  -lkb: Room -> Maybe<&2, Hashes.Hash> -> Look,
+  hl: @r2: Room -> @c: Maybe<&2, Hashes.Hash> -> {Look.is_absent(lka(r2)(c)) == True{}: Bool} -> {
+    Look.is_absent(lkb(r2)(c)) == True{}: Bool
+  }
+) -> {Mst.delete.lacks(p, lka) == True{}: Bool} -> {Mst.delete.lacks(p, lkb) == True{}: Bool}:
+  match p:
+    case Pick.Hit{v}:
+      e => e
+    case Pick.Down{m, r}:
+      hl(r)(m)
+
+# Mst.delete.here keeps what the merge and the read below it keep
+def Mst.delete.here_kept(
+  +h: Hashes.Hash,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  p: Part,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  mga: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  -mgb: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  lka: Room -> Maybe<&2, Hashes.Hash> -> Look,
+  -lkb: Room -> Maybe<&2, Hashes.Hash> -> Look,
+  hm: @r1: Room -> @r2: Room -> @x: Maybe<&2, Hashes.Hash> -> @y: Maybe<&2, Hashes.Hash> -> Mst.Kept(
+    Edit,
+    mga(r1)(r2)(x)(y),
+    mgb(r1)(r2)(x)(y)
+  ),
+  hl: @r2: Room -> @c: Maybe<&2, Hashes.Hash> -> {Look.is_absent(lka(r2)(c)) == True{}: Bool} -> {
+    Look.is_absent(lkb(r2)(c)) == True{}: Bool
+  }
+) -> Mst.Kept(
+  Edit,
+  Mst.delete.here(h, l, left, k, p, lo, hi, mga, lka),
+  Mst.delete.here(h, l, left, k, p, lo, hi, mgb, lkb)
+):
+  match p:
+    case Part{+b, +g, Con{Item{+ik, +iv, +r}, +rest}}:
+      Mst.kept.when(
+        Edit,
+        Cmp.is_eq(Key.cmp(ik, k)),
+        u => Mst.with_gap(
+          l,
+          left,
+          Part{b, g, rest},
+          mga(Room.of(l, Items.head_key(b, lo), Some{ik}))(Room.of(l, Some{ik}, Items.head_key(rest, hi)))(g)(r)
+        ),
+        u => Mst.with_gap(
+          l,
+          left,
+          Part{b, g, rest},
+          mgb(Room.of(l, Items.head_key(b, lo), Some{ik}))(Room.of(l, Some{ik}, Items.head_key(rest, hi)))(g)(r)
+        ),
+        u => Mst.delete.none(h, Room.of(l, Items.head_key(b, lo), Some{ik}), g, lka),
+        u => Mst.delete.none(h, Room.of(l, Items.head_key(b, lo), Some{ik}), g, lkb),
+        Mst.with_gap_kept(
+          l,
+          left,
+          Part{b, g, rest},
+          mga(Room.of(l, Items.head_key(b, lo), Some{ik}))(Room.of(l, Some{ik}, Items.head_key(rest, hi)))(g)(r),
+          mgb(Room.of(l, Items.head_key(b, lo), Some{ik}))(Room.of(l, Some{ik}, Items.head_key(rest, hi)))(g)(r),
+          hm(Room.of(l, Items.head_key(b, lo), Some{ik}))(Room.of(l, Some{ik}, Items.head_key(rest, hi)))(g)(r)
+        ),
+        Mst.delete.none_kept(h, Room.of(l, Items.head_key(b, lo), Some{ik}), g, lka, lkb, hl)
+      )
+    case Part{+b, +g, Nil{}}:
+      Mst.delete.none_kept(h, Room.of(l, Items.head_key(b, lo), hi), g, lka, lkb, hl)
+
+# Mst.delete.node keeps what the merges, deletes and reads below it keep
+def Mst.delete.node_kept(
+  c: Cmp,
+  +h: Hashes.Hash,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  mga: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  -mgb: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  dela: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  -delb: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  lka: Room -> Maybe<&2, Hashes.Hash> -> Look,
+  -lkb: Room -> Maybe<&2, Hashes.Hash> -> Look,
+  hm: @r1: Room -> @r2: Room -> @x: Maybe<&2, Hashes.Hash> -> @y: Maybe<&2, Hashes.Hash> -> Mst.Kept(
+    Edit,
+    mga(r1)(r2)(x)(y),
+    mgb(r1)(r2)(x)(y)
+  ),
+  hd: @r2: Room -> @c2: Maybe<&2, Hashes.Hash> -> Mst.Kept(Edit, dela(r2)(c2), delb(r2)(c2)),
+  hl: @r2: Room -> @c2: Maybe<&2, Hashes.Hash> -> {Look.is_absent(lka(r2)(c2)) == True{}: Bool} -> {
+    Look.is_absent(lkb(r2)(c2)) == True{}: Bool
+  }
+) -> Mst.Kept(
+  Edit,
+  Mst.delete.node(c, h, l, left, xs, lo, hi, k, mga, dela, lka),
+  Mst.delete.node(c, h, l, left, xs, lo, hi, k, mgb, delb, lkb)
+):
+  match c:
+    case LT{}:
+      Mst.kept.mwhen(
+        Edit,
+        Mst.delete.lacks(Mst.pick(xs, left, l, lo, hi, k), lka),
+        Mst.delete.lacks(Mst.pick(xs, left, l, lo, hi, k), lkb),
+        u => Some{Edit{Some{h}, []}},
+        u => Some{Edit{Some{h}, []}},
+        Mst.delete.lacks_kept(Mst.pick(xs, left, l, lo, hi, k), lka, lkb, hl),
+        x => e => e
+      )
+    case EQ{}:
+      Mst.delete.here_kept(h, l, left, k, Mst.part(xs, left, k, []), lo, hi, mga, mgb, lka, lkb, hm, hl)
+    case GT{}:
+      Mst.kept.when(
+        Edit,
+        Part.hits(Mst.part(xs, left, k, []), k),
+        u => None{},
+        u => None{},
+        u => Mst.with_gap(
+          l,
+          left,
+          Mst.part(xs, left, k, []),
+          dela(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, [])))
+        ),
+        u => Mst.with_gap(
+          l,
+          left,
+          Mst.part(xs, left, k, []),
+          delb(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, [])))
+        ),
+        x => e => e,
+        Mst.with_gap_kept(
+          l,
+          left,
+          Mst.part(xs, left, k, []),
+          dela(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, []))),
+          delb(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, []))),
+          hd(Part.room(Mst.part(xs, left, k, []), l, lo, hi))(Part.gap(Mst.part(xs, left, k, [])))
+        )
+      )
+
+# Mst.delete.at keeps what its node and the steps below it keep
+def Mst.delete.at_kept(
+  na: Maybe<&2, Node>,
+  r: Room,
+  -nb: Maybe<&2, Node>,
+  +h: Hashes.Hash,
+  +k: List<&2, U32>,
+  +L: Nat,
+  mga: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  -mgb: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  dela: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  -delb: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  lka: Room -> Maybe<&2, Hashes.Hash> -> Look,
+  -lkb: Room -> Maybe<&2, Hashes.Hash> -> Look,
+  hn: @n: Node -> {na == Some{n}: Maybe<&2, Node>} -> {nb == Some{n}: Maybe<&2, Node>},
+  hm: @r1: Room -> @r2: Room -> @x: Maybe<&2, Hashes.Hash> -> @y: Maybe<&2, Hashes.Hash> -> Mst.Kept(
+    Edit,
+    mga(r1)(r2)(x)(y),
+    mgb(r1)(r2)(x)(y)
+  ),
+  hd: @r2: Room -> @c2: Maybe<&2, Hashes.Hash> -> Mst.Kept(Edit, dela(r2)(c2), delb(r2)(c2)),
+  hl: @r2: Room -> @c2: Maybe<&2, Hashes.Hash> -> {Look.is_absent(lka(r2)(c2)) == True{}: Bool} -> {
+    Look.is_absent(lkb(r2)(c2)) == True{}: Bool
+  }
+) -> Mst.Kept(
+  Edit,
+  Mst.delete.at(na, h, r, k, L, mga, dela, lka),
+  Mst.delete.at(nb, h, r, k, L, mgb, delb, lkb)
+):
+  match na r:
+    case None{} r0:
+      x => e => Empty.absurd(
+        {Mst.delete.at(nb, h, r0, k, L, mgb, delb, lkb) == Some{x}: Maybe<&2, Edit>},
+        Shared.Maybe.none_ne_some(Edit, x, e)
+      )
+    case Some{Node{+l, +left, +xs}} Room{+up, +lo, +hi}:
+      %Equal.sym(Maybe<&2, Node>, nb, Some{Node{l, left, xs}}, hn(Node{l, left, xs})({==})): Mst.Kept(
+        Edit,
+        Mst.delete.at(Some{Node{l, left, xs}}, h, Room{up, lo, hi}, k, L, mga, dela, lka),
+        Mst.delete.at(_, h, Room{up, lo, hi}, k, L, mgb, delb, lkb)
+      )
+      Mst.delete.node_kept(Nat.cmp(l, L), h, l, left, xs, lo, hi, k, mga, mgb, dela, delb, lka, lkb, hm, hd, hl)
+
+# a delete that a depot gives, a depot that grows from it gives too
+def Mst.delete_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  f: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  +a: S,
+  +b: S,
+  +r: Room,
+  +k: List<&2, U32>,
+  +L: Nat,
+  +gr: {grows(a, b) == True{}: Bool}
+) -> Mst.Kept(Edit, Mst.delete(~S, ~fetch, f, a, r, m, k, L), Mst.delete(~S, ~fetch, f, b, r, m, k, L)):
+  match f m:
+    case f0 None{}:
+      x => e => e
+    case 0n Some{h}:
+      x => e => e
+    case 1n+(+p) Some{+h}:
+      Mst.delete.at_kept(
+        Mst.node.in(~S, ~fetch, a, h, r),
+        r,
+        Mst.node.in(~S, ~fetch, b, h, r),
+        h,
+        k,
+        L,
+        r1 => r2 => x => y => Mst.merge(~S, ~fetch, p, a, r1, r2, x, y),
+        r1 => r2 => x => y => Mst.merge(~S, ~fetch, p, b, r1, r2, x, y),
+        r2 => c => Mst.delete(~S, ~fetch, p, a, r2, c, k, L),
+        r2 => c => Mst.delete(~S, ~fetch, p, b, r2, c, k, L),
+        r2 => c => Mst.look.go(~S, ~fetch, p, a, r2, c, k),
+        r2 => c => Mst.look.go(~S, ~fetch, p, b, r2, c, k),
+        n => Mst.node_in_kept(~S, ~fetch, ~grows, ~kept, a, b, h, r, n, gr),
+        r1 => r2 => x => y => Mst.merge_kept(~S, ~fetch, ~grows, ~kept, p, x, y, a, b, r1, r2, gr),
+        r2 => c => Mst.delete_kept(~S, ~fetch, ~grows, ~kept, p, c, a, b, r2, k, L, gr),
+        r2 => c => Mst.look.absent_kept(~S, ~fetch, ~grows, ~kept, p, c, a, b, r2, k, gr)
+      )
+
+# a write that a depot gives, a depot that grows from it gives too
+def Mst.put_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  m2: Maybe<&2, List<&2, U32>>,
+  +a: S,
+  +b: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +gr: {grows(a, b) == True{}: Bool}
+) -> Mst.Kept(Edit, Mst.put(~S, ~fetch, a, h, k, m2), Mst.put(~S, ~fetch, b, h, k, m2)):
+  match m2:
+    case Some{v}:
+      Mst.insert_kept(~S, ~fetch, ~grows, ~kept, Mst.depth(), h, a, b, Room.top(), k, v, Key.level(k), gr)
+    case None{}:
+      Mst.delete_kept(~S, ~fetch, ~grows, ~kept, Mst.depth(), h, a, b, Room.top(), k, Key.level(k), gr)
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
@@ -1940,6 +2876,9 @@ law Mst.puts_final:
   for ~grows: S -> S -> Bool
   for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   Laws.PutFinal(S, grows, Mst.ops(~S, ~fetch))
+
+def Mst.puts_final(S, fetch, grows, kept):
+  s => s2 => h => k => m => e => he => gr => Mst.put_kept(~S, ~fetch, ~grows, ~kept, m, s, s2, h, k, gr)(e)(he)
 
 # a write changes its key and no other
 law Mst.writes:
