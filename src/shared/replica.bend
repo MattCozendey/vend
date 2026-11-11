@@ -11276,19 +11276,13 @@ def Sim.grows(
     Hist.trans(~mach, ~d, a, b, lb, Led.later_grows(~mach, ~d, a, b)(later), Ext.based_from(~mach, ~d, b, Run{lb, ta, aa}, bdb))
   )
 
-# b holds what a holds
-def Sim.holds_b(
+# what a ledger holds, a ledger that grows from it holds
+def Hist.holds_grows(
   ~mach: Machine(),
   ~d: Led(mach),
   +a: Led.L(mach, d),
   +b: Led.L(mach, d),
-  +later: {
-    Bool.and(
-      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
-      Led.honest(~mach, ~d, b)
-    )
-      == True{}: Bool
-  },
+  +g: Led.Grows(mach, d, a, b),
   ns: List<&2, List<&2, U32>>,
   +h: {Ext.holds(~mach, ~d, a, ns) == True{}: Bool}
 ) -> {Ext.holds(~mach, ~d, b, ns) == True{}: Bool}:
@@ -11313,20 +11307,57 @@ def Sim.holds_b(
             b,
             Hashes.Sha.hash(w),
             w,
-            Led.later_grows(~mach, ~d, a, b)(later)
+            g
           )(Hist.has(~mach, ~d, a, w)(Shared.List.all.if_hit(Ext.has(~mach, ~d, a, w), u => Ext.holds(~mach, ~d, a, r))(h)))
         )
       )(
-        Sim.holds_b(
+        Hist.holds_grows(
           ~mach,
           ~d,
           a,
           b,
-          later,
+          g,
           r,
           Shared.List.all.if_rest(Ext.has(~mach, ~d, a, w), u => Ext.holds(~mach, ~d, a, r))(h)
         )
       )
+
+# what an act adds, a ledger that grows holds
+def Hist.held_grows(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +g: Led.Grows(mach, d, a, b),
+  act: Act
+) -> {Act.held(~mach, ~d, a, act) == True{}: Bool} -> {Act.held(~mach, ~d, b, act) == True{}: Bool}:
+  match act:
+    case Act.Taken{vs, h, ns}:
+      e => Hist.holds_grows(~mach, ~d, a, b, g, ns, e)
+    case Act.Opens{x, t, ns}:
+      e => Hist.holds_grows(~mach, ~d, a, b, g, ns, e)
+    case Act.Stale{}:
+      e => e
+    case Act.Label{x}:
+      e => e
+
+# b holds what a holds
+def Sim.holds_b(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +later: {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  },
+  +ns: List<&2, List<&2, U32>>,
+  +h: {Ext.holds(~mach, ~d, a, ns) == True{}: Bool}
+) -> {Ext.holds(~mach, ~d, b, ns) == True{}: Bool}:
+  Hist.holds_grows(~mach, ~d, a, b, Led.later_grows(~mach, ~d, a, b)(later), ns, h)
 
 # the ledgers of two related runs grow, once a holds what the run in a added
 def Sim.grow_of(
@@ -11403,6 +11434,35 @@ def Sim.cond(
         +hr = Ext.gain_holds(~mach, ~d, a, ra, ra2, gm, hh)
         +rel = sh(hr)
         %heq(rel)(hr): Sim.R2(mach, d, a, b, ra2, _)
+        inner(u => rel)(hh)
+
+# Sim.cond, when the results in b are equal once a holds what the run in a
+# added (heq)
+def Sim.cond.held(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  +ra: Run<Led.L(mach, d)>,
+  -rb: Run<Led.L(mach, d)>,
+  ma: Maybe<&2, Run<Led.L(mach, d)>>,
+  -mb: Maybe<&2, Run<Led.L(mach, d)>>,
+  -mb2: Maybe<&2, Run<Led.L(mach, d)>>,
+  gm: Ext.GainM(mach, d, a, ra, ma),
+  sh: Sim.Has(mach, d, a, b, ra, rb),
+  heq: Sim.Rel(mach, d, a, b, ra, rb) -> {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool}
+    -> @r2: Run<Led.L(mach, d)> -> {ma == Some{r2}: Maybe<&2, Run<Led.L(mach, d)>>}
+    -> {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), r2)) == True{}: Bool} -> {mb2 == mb: Maybe<&2, Run<Led.L(mach, d)>>},
+  inner: Sim.Has(mach, d, a, b, ra, rb) -> Sim.Out(mach, d, a, b, ma, mb2)
+) -> Sim.Out(mach, d, a, b, ma, mb):
+  match ma:
+    case None{}:
+      Unit{}
+    case Some{+ra2}:
+      +hh =>
+        +hr = Ext.gain_holds(~mach, ~d, a, ra, ra2, gm, hh)
+        +rel = sh(hr)
+        %heq(rel)(hr)(ra2)({==})(hh): Sim.R2(mach, d, a, b, ra2, _)
         inner(u => rel)(hh)
 
 # Sim.bind once the step in a is known (m2)
@@ -11927,6 +11987,112 @@ def Sim.get_eq(
     Sim.grow_of(~mach, ~d, a, b, later, ra, rb, rel, ha)
   )(n)(e)(h)
 
+# a gain of the run r0, once the result of the run after it is known (m)
+def Ext.gain_of(
+  -mach: Machine(),
+  -d: Led(mach),
+  -s: Led.L(mach, d),
+  -r0: Run<Led.L(mach, d)>,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  -r2: Run<Led.L(mach, d)>,
+  gm: Ext.GainM(mach, d, s, r0, m)
+) -> {m == Some{r2}: Maybe<&2, Run<Led.L(mach, d)>>} -> Ext.Gain(mach, d, s, r0, r2):
+  match m:
+    case None{}:
+      e => Empty.absurd(Ext.Gain(mach, d, s, r0, r2), Shared.Maybe.none_ne_some(Run<Led.L(mach, d)>, r2, e))
+    case Some{r1}:
+      e =>
+        %Shared.Maybe.some_inj(Run<Led.L(mach, d)>, r1, r2, e): Ext.Gain(mach, d, s, r0, _)
+        gm
+
+# a ledger that holds what a run of the act x added holds what x adds
+def Ext.act_held(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  r: Run<Led.L(mach, d)>,
+  +i: Ledgers.Id,
+  +ah: Hashes.Hash,
+  x: Act,
+  +r2: Run<Led.L(mach, d)>
+) -> {Act.run(~mach, ~d, r, i, ah, Some{x}) == Some{r2}: Maybe<&2, Run<Led.L(mach, d)>>}
+  -> {Ext.holds(~mach, ~d, l, Run.added(Led.L(mach, d), r2)) == True{}: Bool}
+  -> {Act.held(~mach, ~d, l, x) == True{}: Bool}:
+  match r:
+    case Run{+lr, +t, +aa}:
+      match x:
+        case Act.Stale{}:
+          e => hh => {==}
+        case Act.Label{m}:
+          e => hh => {==}
+        case Act.Taken{+vs, +h, +ns}:
+          e => hh => Ext.holds_left(
+            ~mach,
+            ~d,
+            l,
+            ns,
+            aa
+          )(
+            Ext.gain_holds(
+              ~mach,
+              ~d,
+              l,
+              Run.over(~mach, ~d, Run{lr, t, aa}, ns, h),
+              r2,
+              Ext.gain_of(
+                mach,
+                d,
+                l,
+                Run.over(~mach, ~d, Run{lr, t, aa}, ns, h),
+                Step.taken(~mach, ~d, Run.over(~mach, ~d, Run{lr, t, aa}, ns, h), i, ah, vs),
+                r2,
+                Ext.taken(~mach, ~d, l, Run.over(~mach, ~d, Run{lr, t, aa}, ns, h), i, ah, vs)
+              )(e),
+              hh
+            )
+          )
+        case Act.Opens{+b, +t2, +ns}:
+          +r0 = Run.over(~mach, ~d, Run{lr, t, aa}, Tip.code(t2, []) <> ns, Tip.content(t))
+          e => hh => Shared.List.all.if_rest(
+            Ext.has(~mach, ~d, l, Tip.code(t2, [])),
+            u => Ext.holds(~mach, ~d, l, ns)
+          )(
+            Ext.holds_left(
+              ~mach,
+              ~d,
+              l,
+              Tip.code(t2, []) <> ns,
+              aa
+            )(
+              Ext.gain_holds(
+                ~mach,
+                ~d,
+                l,
+                r0,
+                r2,
+                Ext.gain_of(
+                  mach,
+                  d,
+                  l,
+                  r0,
+                  Step.opens(~mach, ~d, Run{lr, t, aa}, i, ah, b, t2, ns),
+                  r2,
+                  Ext.bind(
+                    ~mach,
+                    ~d,
+                    l,
+                    r0,
+                    Run.add(~mach, ~d, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t2), [])),
+                    r3 => Step.taken(~mach, ~d, r3, i, ah, None{}),
+                    Ext.add(~mach, ~d, l, r0, Log.start(b), Hashes.Hash.code(Tip.hash(t2), [])),
+                    r3 => Ext.taken(~mach, ~d, l, r3, i, ah, None{})
+                  )
+                )(e),
+                hh
+              )
+            )
+          )
+
 # an act of the kernel in the run in a is its act in the run in b
 def Sim.kern_eq(
   ~mach: Machine(),
@@ -11951,18 +12117,36 @@ def Sim.kern_eq(
   ha: {Ext.holds(~mach, ~d, a, Run.added(Led.L(mach, d), ra)) == True{}: Bool},
   h: {
     Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), ra))(Run.tip(Led.L(mach, d), ra))(c)(i)(q) == Some{act}: Maybe<&2, Act>
-  }
+  },
+  hd: {Act.held(~mach, ~d, a, act) == True{}: Bool}
 ) -> {
   Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), rb))(Run.tip(Led.L(mach, d), rb))(c)(i)(q) == Some{act}: Maybe<&2, Act>
 }:
   match ra:
     case Run{+la, +ta, +aa}:
       match rel:
-        case Tuple{+lb, Tuple{erb, Tuple{bda, bdb}}}:
+        case Tuple{+lb, Tuple{erb, Tuple{+bda, +bdb}}}:
           %Equal.sym(Run<Led.L(mach, d)>, rb, Run{lb, ta, aa}, erb): {
             Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), _))(Run.tip(Led.L(mach, d), _))(c)(i)(q) == Some{act}: Maybe<&2, Act>
           }
-          Hist.kern(mach, d, kern)(ta)(c)(i)(q)(la)(lb)(act)(Sim.grows(~mach, ~d, a, b, later, la, ta, aa, lb, bda, bdb, ha))(h)
+          Hist.kern(mach, d, kern)(ta)(c)(i)(q)(la)(lb)(act)(Sim.grows(~mach, ~d, a, b, later, la, ta, aa, lb, bda, bdb, ha))(h)(
+            Hist.held_grows(
+              ~mach,
+              ~d,
+              a,
+              lb,
+              Hist.trans(
+                ~mach,
+                ~d,
+                a,
+                b,
+                lb,
+                Led.later_grows(~mach, ~d, a, b)(later),
+                Ext.based_from(~mach, ~d, b, Run{lb, ta, aa}, bdb)
+              ),
+              act
+            )(hd)
+          )
 
 # Sim.taken_eq once the read of the log in a is known (m)
 def Sim.taken_eq.at(
@@ -12856,7 +13040,7 @@ def Sim.fresh.act(
     case None{}:
       Unit{}
     case Some{+act}:
-      Sim.cond(
+      Sim.cond.held(
         ~mach,
         ~d,
         a,
@@ -12875,7 +13059,7 @@ def Sim.fresh.act(
         Act.run(~mach, ~d, rb, i, ah, Some{act}),
         Ext.act(~mach, ~d, a, ra, i, ah, Some{act}),
         sh,
-        +rel => +hr => Equal.cong(
+        +rel => +hr => +r2 => e2 => hh2 => Equal.cong(
           Maybe<&2, Act>,
           Maybe<&2, Run<Led.L(mach, d)>>,
           z => Act.run(~mach, ~d, rb, i, ah, z),
@@ -12885,7 +13069,7 @@ def Sim.fresh.act(
             Maybe<&2, Act>,
             Kernel.change(mach, d, kern)(Run.ledger(Led.L(mach, d), rb))(Run.tip(Led.L(mach, d), rb))(c)(i)(q),
             Some{act},
-            Sim.kern_eq(~mach, ~d, ~kern, a, b, later, ra, rb, c, i, q, act, rel, hr, em)
+            Sim.kern_eq(~mach, ~d, ~kern, a, b, later, ra, rb, c, i, q, act, rel, hr, em, Ext.act_held(~mach, ~d, a, ra, i, ah, act, r2)(e2)(hh2))
           )
         ),
         sh2 => Sim.act(~mach, ~d, a, b, later, ra, rb, i, ah, Some{act}, sh2)
