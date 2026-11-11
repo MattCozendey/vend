@@ -8404,6 +8404,181 @@ def Affects.versions_cons(
     )
   )(e)
 
+# Touches.of, each touch: by the head u of used, once it is known whether the
+# touch of u is x (q)
+def Affects.of_in.hit(
+  +from: Branch,
+  +v: Ledgers.Id,
+  +c: Resources.Name,
+  +b: Branch,
+  +u: Resources.Name,
+  +rest: List<&2, Resources.Name>,
+  +reach: Crits.Dict(Unit),
+  -P: Touch -> Type,
+  +x: Touch,
+  q: Bool,
+  eq: {Touch.is_eq(Touch{from, v, c, b, u}, x) == q: Bool},
+  +econd: {List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u)), Resources.Name.is_eq(u, c)) == True{}: Bool},
+  hp: @u2: Resources.Name -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, u <> rest, u2) == True{}: Bool}
+    -> {List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u2)), Resources.Name.is_eq(u2, c)) == True{}: Bool}
+    -> P(Touch{from, v, c, b, u2}),
+  ih: (
+    @u2: Resources.Name -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, u2) == True{}: Bool}
+      -> {List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u2)), Resources.Name.is_eq(u2, c)) == True{}: Bool}
+      -> P(Touch{from, v, c, b, u2})
+  ) -> {List.contains(~Touch, ~Touch.is_eq, Touches.of(from, v, c, b, rest, reach), x) == True{}: Bool} -> P(x)
+) -> {
+  List.any.if(w => List.contains(~Touch, ~Touch.is_eq, Touches.of(from, v, c, b, rest, reach), x), q) == True{}: Bool
+} -> P(x):
+  match q:
+    case True{}:
+      h => Affects.cast(
+        Touch,
+        P,
+        Touch{from, v, c, b, u},
+        x,
+        Affects.touch_sound(Touch{from, v, c, b, u}, x)(eq),
+        hp(u)(Affects.contains_head(~Resources.Name, ~Resources.Name.is_eq, ~Affects.name_laws(), u, rest))(econd)
+      )
+    case False{}:
+      h => ih(+u2 => a => e => hp(u2)(Shared.List.contains_cons(~Resources.Name, ~Resources.Name.is_eq, u, rest, u2)(a))(e))(h)
+
+# Touches.of, each touch: by the head u of used, once it is known whether u
+# is kept (cnd)
+def Affects.of_in.at(
+  +from: Branch,
+  +v: Ledgers.Id,
+  +c: Resources.Name,
+  +b: Branch,
+  +u: Resources.Name,
+  +rest: List<&2, Resources.Name>,
+  +reach: Crits.Dict(Unit),
+  -P: Touch -> Type,
+  +x: Touch,
+  cnd: Bool,
+  +ecnd: {List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u)), Resources.Name.is_eq(u, c)) == cnd: Bool},
+  hp: @u2: Resources.Name -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, u <> rest, u2) == True{}: Bool}
+    -> {List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u2)), Resources.Name.is_eq(u2, c)) == True{}: Bool}
+    -> P(Touch{from, v, c, b, u2}),
+  ih: (
+    @u2: Resources.Name -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, rest, u2) == True{}: Bool}
+      -> {List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u2)), Resources.Name.is_eq(u2, c)) == True{}: Bool}
+      -> P(Touch{from, v, c, b, u2})
+  ) -> {List.contains(~Touch, ~Touch.is_eq, Touches.of(from, v, c, b, rest, reach), x) == True{}: Bool} -> P(x)
+) -> {
+  List.contains(
+    ~Touch,
+    ~Touch.is_eq,
+    List.filter.put(Touch, Touch{from, v, c, b, u}, Touches.of(from, v, c, b, rest, reach), cnd),
+    x
+  )
+    == True{}: Bool
+} -> P(x):
+  match cnd:
+    case True{}:
+      h => Affects.of_in.hit(from, v, c, b, u, rest, reach, P, x, Touch.is_eq(Touch{from, v, c, b, u}, x), {==}, ecnd, hp, ih)(h)
+    case False{}:
+      h => ih(+u2 => a => e => hp(u2)(Shared.List.contains_cons(~Resources.Name, ~Resources.Name.is_eq, u, rest, u2)(a))(e))(h)
+
+# each touch that Touches.of gives is of a resource of used that is c or that
+# the set reach holds
+def Affects.of_in(
+  +from: Branch,
+  +v: Ledgers.Id,
+  +c: Resources.Name,
+  +b: Branch,
+  used: List<&2, Resources.Name>,
+  +reach: Crits.Dict(Unit),
+  -P: Touch -> Type,
+  hp: @u2: Resources.Name -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, used, u2) == True{}: Bool}
+    -> {List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u2)), Resources.Name.is_eq(u2, c)) == True{}: Bool}
+    -> P(Touch{from, v, c, b, u2}),
+  +x: Touch
+) -> {List.contains(~Touch, ~Touch.is_eq, Touches.of(from, v, c, b, used, reach), x) == True{}: Bool} -> P(x):
+  match used:
+    case Nil{}:
+      h => Empty.absurd(P(x), Shared.Bool.false_ne_true(h))
+    case Con{+u, +rest}:
+      h => Affects.of_in.at(
+        from,
+        v,
+        c,
+        b,
+        u,
+        rest,
+        reach,
+        P,
+        x,
+        List.any.if(w => Crits.Dict.has(Unit, reach, Name.key(u)), Resources.Name.is_eq(u, c)),
+        {==},
+        hp,
+        hp2 => h2 => Affects.of_in(from, v, c, b, rest, reach, P, hp2, x)(h2)
+      )(h)
+
+# Affects.app_in once it is known whether a holds x (q)
+def Affects.app_in.at(
+  -H: Type,
+  -P: Touch -> Type,
+  +a: List<&2, Touch>,
+  +r: List<&2, Touch>,
+  +x: Touch,
+  q: Bool,
+  eq: {List.contains(~Touch, ~Touch.is_eq, a, x) == q: Bool},
+  hp: H,
+  ka: H -> {List.contains(~Touch, ~Touch.is_eq, a, x) == True{}: Bool} -> P(x),
+  kr: H -> {List.contains(~Touch, ~Touch.is_eq, r, x) == True{}: Bool} -> P(x)
+) -> {Bool.or(q, List.contains(~Touch, ~Touch.is_eq, r, x)) == True{}: Bool} -> P(x):
+  match q:
+    case True{}:
+      h => ka(hp)(eq)
+    case False{}:
+      h => kr(hp)(h)
+
+# a touch of a ++ r is a touch of a or of r
+def Affects.app_in(
+  -H: Type,
+  -P: Touch -> Type,
+  +a: List<&2, Touch>,
+  +r: List<&2, Touch>,
+  +x: Touch,
+  hp: H,
+  ka: H -> {List.contains(~Touch, ~Touch.is_eq, a, x) == True{}: Bool} -> P(x),
+  kr: H -> {List.contains(~Touch, ~Touch.is_eq, r, x) == True{}: Bool} -> P(x)
+) -> {List.contains(~Touch, ~Touch.is_eq, List.append(&2, Touch, a, r), x) == True{}: Bool} -> P(x):
+  h => Affects.app_in.at(H, P, a, r, x, List.contains(~Touch, ~Touch.is_eq, a, x), {==}, hp, ka, kr)(
+    Equal.trans(
+      Bool,
+      Bool.or(List.contains(~Touch, ~Touch.is_eq, a, x), List.contains(~Touch, ~Touch.is_eq, r, x)),
+      List.contains(~Touch, ~Touch.is_eq, List.append(&2, Touch, a, r), x),
+      True{},
+      Equal.sym(
+        Bool,
+        List.contains(~Touch, ~Touch.is_eq, List.append(&2, Touch, a, r), x),
+        Bool.or(List.contains(~Touch, ~Touch.is_eq, a, x), List.contains(~Touch, ~Touch.is_eq, r, x)),
+        Shared.List.contains_append(~Touch, ~Touch.is_eq, a, r, x)
+      ),
+      h
+    )
+  )
+
+# no touch is in a list that a read gave as empty
+def Affects.none_in(-P: Touch -> Type, +ts: List<&2, Touch>, +x: Touch, e: {Some{[]} == Some{ts}: Maybe<&2, List<&2, Touch>>}) -> {
+  List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool
+} -> P(x):
+  h => Empty.absurd(
+    P(x),
+    Shared.Bool.false_ne_true(
+      Affects.cast(
+        List<&2, Touch>,
+        z => {List.contains(~Touch, ~Touch.is_eq, z, x) == True{}: Bool},
+        ts,
+        [],
+        Equal.sym(List<&2, Touch>, [], ts, Shared.Maybe.some_inj(List<&2, Touch>, [], ts, e)),
+        h
+      )
+    )
+  )
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
