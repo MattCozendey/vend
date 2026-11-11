@@ -2316,6 +2316,215 @@ def Crit.side_drop(+k: List<&2, U32>, +pos: Nat, +d: List<&2, Bool>) -> {List.dr
     Equal.cong(List<&2, Bool>, Maybe<&2, Bool>, l => Bits.head(l), List.drop(&2, Bool, Key.bits(k), pos), d, hd)
   )
 
+# no Some is None
+def Crit.some_ne_none(-A: Data, -x: A, e: {Some{x} == None{}: Maybe<&2, A>}) -> Empty:
+  Shared.Maybe.none_ne_some(A, x, Equal.sym(Maybe<&2, A>, Some{x}, None{}, e))
+
+# bits differ from themselves nowhere
+def Bits.diff_self(bs: List<&2, Bool>) -> {Bits.diff(bs, bs) == None{}: Maybe<&2, Nat>}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{True{}, +r}:
+      %Equal.sym(Maybe<&2, Nat>, Bits.diff(r, r), None{}, Bits.diff_self(r)): {Maybe.map(&2, Nat, Nat, n => 1n+n, _) == None{}: Maybe<&2, Nat>}
+      {==}
+    case Con{False{}, +r}:
+      %Equal.sym(Maybe<&2, Nat>, Bits.diff(r, r), None{}, Bits.diff_self(r)): {Maybe.map(&2, Nat, Nat, n => 1n+n, _) == None{}: Maybe<&2, Nat>}
+      {==}
+
+# a key differs from itself nowhere
+def Key.diff_self(+k: List<&2, U32>) -> {Key.diff(k, k) == None{}: Maybe<&2, Nat>}:
+  %Equal.sym(Maybe<&2, Nat>, Key.diff(k, k), Bits.diff(Key.bits(k), Key.bits(k)), Key.diff_bits(k, k)): {_ == None{}: Maybe<&2, Nat>}
+  Bits.diff_self(Key.bits(k))
+
+# a key agrees with itself on any number of bits
+def Key.agree_self(+k: List<&2, U32>, +n: Nat) -> {Key.agree(k, k, n) == True{}: Bool}:
+  %Equal.sym(Maybe<&2, Nat>, Key.diff(k, k), None{}, Key.diff_self(k)): {Bits.agree(_, n) == True{}: Bool}
+  {==}
+
+# a difference one on that is none was none
+def Crit.map_succ_none(d: Maybe<&2, Nat>) -> {Maybe.map(&2, Nat, Nat, m => 1n+m, d) == None{}: Maybe<&2, Nat>} -> {d == None{}: Maybe<&2, Nat>}:
+  match d:
+    case None{}:
+      h => {==}
+    case Some{x}:
+      h => Empty.absurd({Some{x} == None{}: Maybe<&2, Nat>}, Crit.some_ne_none(Nat, 1n+x, h))
+
+# words that differ nowhere are equal
+def Word.diff_none(n: Nat, w: Word(n), v: Word(n)) -> {Word.diff(n, w, v) == None{}: Maybe<&2, Nat>} -> {w == v: Word(n)}:
+  match n:
+    case 0n:
+      match w v:
+        case WNil{} WNil{}:
+          h => {==}
+    case 1n+(+p):
+      match w v:
+        case WCon{True{}, +rw} WCon{True{}, +rv}:
+          h =>
+            %Word.diff_none(p, rw, rv)(Crit.map_succ_none(Word.diff(p, rw, rv))(h)): {WCon{True{}, rw} == WCon{True{}, _}: Word(1n+p)}
+            {==}
+        case WCon{False{}, +rw} WCon{False{}, +rv}:
+          h =>
+            %Word.diff_none(p, rw, rv)(Crit.map_succ_none(Word.diff(p, rw, rv))(h)): {WCon{False{}, rw} == WCon{False{}, _}: Word(1n+p)}
+            {==}
+        case WCon{True{}, rw} WCon{False{}, rv}:
+          h => Empty.absurd({WCon{True{}, rw} == WCon{False{}, rv}: Word(1n+p)}, Crit.some_ne_none(Nat, 0n, h))
+        case WCon{False{}, rw} WCon{True{}, rv}:
+          h => Empty.absurd({WCon{False{}, rw} == WCon{True{}, rv}: Word(1n+p)}, Crit.some_ne_none(Nat, 0n, h))
+
+# Key.diff_go_none at two first words, once their difference dd is known
+def Key.diff_go_none.at(
+  +w: Word(32n),
+  +v: Word(32n),
+  +ra: List<&2, U32>,
+  +rb: List<&2, U32>,
+  +at: Nat,
+  dd: Maybe<&2, Nat>,
+  ih: {Key.diff.go(ra, rb, Nat.add(at, 32n)) == None{}: Maybe<&2, Nat>} -> {ra == rb: List<&2, U32>}
+) -> {Word.diff(32n, w, v) == dd: Maybe<&2, Nat>} -> {
+  Shared.Bool.when(
+    Maybe<&2, Nat>,
+    Maybe.is_none(&2, Nat, dd),
+    u => Key.diff.go(ra, rb, Nat.add(at, 32n)),
+    u => Maybe.map(&2, Nat, Nat, n => Nat.add(at, n), dd)
+  )
+    == None{}: Maybe<&2, Nat>
+} -> {U32{w} <> ra == U32{v} <> rb: List<&2, U32>}:
+  match dd:
+    case None{}:
+      hw => h =>
+        %Word.diff_none(32n, w, v)(hw): {U32{w} <> ra == U32{_} <> rb: List<&2, U32>}
+        %ih(h): {U32{w} <> ra == U32{w} <> _: List<&2, U32>}
+        {==}
+    case Some{y}:
+      hw => h => Empty.absurd({U32{w} <> ra == U32{v} <> rb: List<&2, U32>}, Crit.some_ne_none(Nat, Nat.add(at, y), h))
+
+# keys that differ nowhere, after at bits, are equal
+def Key.diff_go_none(+a: List<&2, U32>, +b: List<&2, U32>, +at: Nat) -> {Key.diff.go(a, b, at) == None{}: Maybe<&2, Nat>} -> {
+  a == b: List<&2, U32>
+}:
+  match a b:
+    case Nil{} Nil{}:
+      h => {==}
+    case Con{U32{+w}, +ra} Con{U32{+v}, +rb}:
+      h => Key.diff_go_none.at(w, v, ra, rb, at, Word.diff(32n, w, v), Key.diff_go_none(ra, rb, Nat.add(at, 32n)))({==})(h)
+    case Nil{} Con{U32{w}, rb}:
+      h => Empty.absurd({[] == U32{w} <> rb: List<&2, U32>}, Crit.some_ne_none(Nat, at, h))
+    case Con{U32{w}, ra} Nil{}:
+      h => Empty.absurd({U32{w} <> ra == []: List<&2, U32>}, Crit.some_ne_none(Nat, at, h))
+
+# keys that differ nowhere are equal
+def Key.diff_none(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.diff(a, b) == None{}: Maybe<&2, Nat>} -> {a == b: List<&2, U32>}:
+  Key.diff_go_none(a, b, 0n)
+
+# a difference that is none is None
+def Crit.none_of(d: Maybe<&2, Nat>) -> {Maybe.is_none(&2, Nat, d) == True{}: Bool} -> {d == None{}: Maybe<&2, Nat>}:
+  match d:
+    case None{}:
+      h => {==}
+    case Some{x}:
+      h => Empty.absurd({Some{x} == None{}: Maybe<&2, Nat>}, Shared.Bool.false_ne_true(h))
+
+# bits that differ first at x have different bits at x
+def Bits.diff_at(+a: List<&2, Bool>, +b: List<&2, Bool>, +x: Nat) -> {Bits.diff(a, b) == Some{x}: Maybe<&2, Nat>} -> {
+  Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(a, x), Bits.at(b, x)) == False{}: Bool
+}:
+  +h =>
+    +ex = Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(a, x), Bits.at(b, x))
+    Equal.trans(
+      Bool,
+      ex,
+      Bool.and(Bits.agree_n(x, a, b), ex),
+      False{},
+      Equal.cong(Bool, Bool, t => Bool.and(t, ex), True{}, Bits.agree_n(x, a, b), Equal.sym(Bool, Bits.agree_n(x, a, b), True{}, (
+          %Bits.agree_diff(a, b, x): {_ == True{}: Bool}
+          %Equal.sym(Maybe<&2, Nat>, Bits.diff(a, b), Some{x}, h): {Bits.agree(_, x) == True{}: Bool}
+          Shared.Nat.le_refl(x)
+        ))),
+      Equal.trans(
+        Bool,
+        Bool.and(Bits.agree_n(x, a, b), ex),
+        Bits.agree_n(1n+x, a, b),
+        False{},
+        Equal.sym(Bool, Bits.agree_n(1n+x, a, b), Bool.and(Bits.agree_n(x, a, b), ex), Bits.agree_n_succ(a, b, x)),
+        (
+          %Bits.agree_diff(a, b, 1n+x): {_ == False{}: Bool}
+          %Equal.sym(Maybe<&2, Nat>, Bits.diff(a, b), Some{x}, h): {Bits.agree(_, 1n+x) == False{}: Bool}
+          Shared.Nat.succ_nle(x)
+        )
+      )
+    )
+
+# a list that is gone after a is gone after any b at least a
+def Crit.drop_nil_le(+xs: List<&2, Bool>, +a: Nat, +b: Nat) -> {List.drop(&2, Bool, xs, a) == []: List<&2, Bool>} -> {
+  Nat.is_le(a, b) == True{}: Bool
+} -> {List.drop(&2, Bool, xs, b) == []: List<&2, Bool>}:
+  h => l => Equal.trans(
+    List<&2, Bool>,
+    List.drop(&2, Bool, xs, b),
+    List.drop(&2, Bool, List.drop(&2, Bool, xs, a), Nat.sub(b, a)),
+    [],
+    Equal.sym(List<&2, Bool>, List.drop(&2, Bool, List.drop(&2, Bool, xs, a), Nat.sub(b, a)), List.drop(&2, Bool, xs, b), Crit.drop_drop(xs, a, b)(l)),
+    Equal.cong(List<&2, Bool>, List<&2, Bool>, t => List.drop(&2, Bool, t, Nat.sub(b, a)), List.drop(&2, Bool, xs, a), [], h)
+  )
+
+# Crit.end_is, once the difference dd of k and rep is known
+def Crit.end_is.at(+rep: List<&2, U32>, +pos: Nat, +k: List<&2, U32>, dd: Maybe<&2, Nat>) -> {Key.diff(k, rep) == dd: Maybe<&2, Nat>} -> {
+  Nat.is_eq(List.length(&2, Bool, Key.bits(rep)), pos) == True{}: Bool
+} -> {List.drop(&2, Bool, Key.bits(k), pos) == []: List<&2, Bool>} -> {Crit.above(dd, pos) == False{}: Bool} -> {
+  Key.is_eq(rep, k) == True{}: Bool
+}:
+  match dd:
+    case None{}:
+      he => hl => hd => ha =>
+        %Key.diff_none(k, rep)(he): {Key.is_eq(_, k) == True{}: Bool}
+        Key.is_eq_refl(k)
+    case Some{+x}:
+      +he => +hl => +hd => +ha =>
+        +le = Shared.Nat.nlt_le(x, pos)(ha)
+        +nk = Crit.drop_nil_le(Key.bits(k), pos, x)(hd)(le)
+        +nr = Crit.drop_nil_le(Key.bits(rep), pos, x)((
+          %Shared.Nat.is_eq_sound(List.length(&2, Bool, Key.bits(rep)), pos)(hl): {List.drop(&2, Bool, Key.bits(rep), _) == []: List<&2, Bool>}
+          Crit.drop_length(Key.bits(rep))
+        ))(le)
+        Empty.absurd(
+          {Key.is_eq(rep, k) == True{}: Bool},
+          Shared.Bool.false_ne_true(
+            Equal.trans(
+              Bool,
+              False{},
+              Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(Key.bits(k), x), Bits.at(Key.bits(rep), x)),
+              True{},
+              Equal.sym(
+                Bool,
+                Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.at(Key.bits(k), x), Bits.at(Key.bits(rep), x)),
+                False{},
+                Bits.diff_at(Key.bits(k), Key.bits(rep), x)(
+                  Equal.trans(Maybe<&2, Nat>, Bits.diff(Key.bits(k), Key.bits(rep)), Key.diff(k, rep), Some{x}, Equal.sym(Maybe<&2, Nat>, Key.diff(k, rep), Bits.diff(Key.bits(k), Key.bits(rep)), Key.diff_bits(k, rep)), he)
+                )
+              ),
+              (
+                %Equal.sym(List<&2, Bool>, List.drop(&2, Bool, Key.bits(k), x), [], nk): {
+                  Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.head(_), Bits.head(List.drop(&2, Bool, Key.bits(rep), x))) == True{}: Bool
+                }
+                %Equal.sym(List<&2, Bool>, List.drop(&2, Bool, Key.bits(rep), x), [], nr): {
+                  Shared.Maybe.is_eq(~Bool, ~Shared.Bool.is_eq, Bits.head([]), Bits.head(_)) == True{}: Bool
+                }
+                {==}
+              )
+            )
+          )
+        )
+
+# a fork's end key of pos bits is a key k that ends by pos and differs from
+# it nowhere before pos
+def Crit.end_is(+rep: List<&2, U32>, +pos: Nat, +k: List<&2, U32>) -> {
+  Nat.is_eq(List.length(&2, Bool, Key.bits(rep)), pos) == True{}: Bool
+} -> {List.drop(&2, Bool, Key.bits(k), pos) == []: List<&2, Bool>} -> {Crit.above(Key.diff(k, rep), pos) == False{}: Bool} -> {
+  Key.is_eq(rep, k) == True{}: Bool
+}:
+  Crit.end_is.at(rep, pos, k, Key.diff(k, rep))({==})
+
 # a map with no entry is well formed
 law Crit.new_wf:
   for ~V: Data
