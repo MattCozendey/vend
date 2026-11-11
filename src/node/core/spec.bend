@@ -2859,7 +2859,7 @@ law Node.answer_follows:
   for q: Requests.Ask
   Shared.Read.Forward(
     L(d),
-    a => b => Replicas.Led.Later(Requests.Ask.machine(), d, a, b),
+    a => b => Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
     Answer,
     x => m => {Answer.follows(x, m) == True{}: Bool},
     l => Node.answer(~d, ~kern, l, i, time, q)

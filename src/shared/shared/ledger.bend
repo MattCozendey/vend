@@ -1162,6 +1162,21 @@ def Kind.Grows(-Q: Data, -k: Ledger.Kind(Q), -a: Kind.L(Q, k), -b: Kind.L(Q, k))
     Kind.get(Q, k)(a)(n) == Some{e}: Maybe<&2, Entry<Q>>
   } -> {Kind.get(Q, k)(b)(n) == Some{e}: Maybe<&2, Entry<Q>>}
 
+# the entries of the ledger a: those that a ledger that holds nothing lacks
+def Kind.entries(~Q: Data, ~k: Ledger.Kind(Q), a: Kind.L(Q, k)) -> List<&2, Entry<Q>>:
+  Kind.missing(Q, k)(a)(Kind.empty(Q, k))
+
+# the ledger b holds each entry that a holds: a check, so a law can use it as
+# often as it needs
+def Kind.grows(~Q: Data, ~c: Codes.Codec(Q), ~k: Ledger.Kind(Q), a: Kind.L(Q, k), +b: Kind.L(Q, k)) -> Bool:
+  Shared.List.holds(
+    ~Entry<Q>,
+    ~Kind.L(Q, k),
+    ~(l => e => Kind.has(~Q, ~c, ~k, l, e)),
+    Kind.entries(~Q, ~k, a),
+    b
+  )
+
 # The laws of a ledger
 # --------------------
 # Each is a proposition about a kind k, when c is the code of changes.
@@ -1481,3 +1496,16 @@ def Kind.tally(
   voters: List<&2, String>
 ) -> Maybe<&2, Step>:
   Quorums.Quorum.major(~Step, ~Step.is_eq, Kind.cells(~Q, ~k, l, w, voters))
+
+# a ledger that the check says grows from a holds each entry that a holds
+law Kind.grows_get:
+  for ~Q: Data
+  for ~c: Codes.Codec(Q)
+  for ~k: Ledger.Kind(Q)
+  for ~laws: Ledger.Laws(Q, c, k)
+  for a: Kind.L(Q, k)
+  for b: Kind.L(Q, k)
+  {Kind.grows(~Q, ~c, ~k, a, b) == True{}: Bool} -> Kind.Grows(Q, k, a, b)
+
+def Kind.grows_get(q, c, k, laws, a, b):
+  ?TODO
