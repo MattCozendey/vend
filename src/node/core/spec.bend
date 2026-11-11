@@ -995,7 +995,7 @@ def Merge.act(
   +hb = Base.tree(base)
   Shared.Bool.when(
     Maybe<&2, Replicas.Act>,
-    List.all.if(u => Tree.kept(~d, l, hb), Tree.kept(~d, l, ht)),
+    List.all.if(u => List.all.if(u2 => Tree.kept(~d, l, ho), Tree.kept(~d, l, hb)), Tree.kept(~d, l, ht)),
     u => Work.act(
       ~d,
       None{},

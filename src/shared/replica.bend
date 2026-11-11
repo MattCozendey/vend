@@ -1725,7 +1725,7 @@ def Step.run(
 # that b grows from a, and its ballots are honest: a later state of a ledger,
 # as the laws of a history read it. An equation of checks, so a proof can use
 # it as often as it needs (Led.later_grows, Led.later_honest)
-def Led.Later(~mach: Machine(), ~d: Led(mach), a: Led.L(mach, d), +b: Led.L(mach, d)) -> Type:
+def Led.Later(~mach: Machine(), ~d: Led(mach), a: Led.L(mach, d), +b: Led.L(mach, d)) -> Data:
   {
     Bool.and(
       Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
