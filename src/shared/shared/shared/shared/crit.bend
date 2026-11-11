@@ -8055,6 +8055,47 @@ law Dict.get_new:
   for k: List<&2, U32>
   {Dict.get(V, Dict.new(~V), k) == None{}: Maybe<&2, V>}
 
+def Dict.get_new(V, k):
+  {==}
+
+# a write that keeps the new value merges to the new value, whatever was there
+def Dict.merge_new(~V: Data, e: Maybe<&2, V>, +v: V) -> {Crit.merge(~V, ~(w => x => x), e, v) == v: V}:
+  match e:
+    case None{}:
+      {==}
+    case Some{w}:
+      {==}
+
+# Dict.get_set on the map m of a dict, with its proof w
+def Dict.get_set.at(~V: Data, +m: Crit<V>, +k0: List<&2, U32>, +v: V, +k: List<&2, U32>) -> {
+  Crit.wf(~V, m, 0n) == True{}: Bool
+} -> {
+  Crit.get(V, Crit.set(~V, m, k0, v), k)
+    == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), Some{v}, Crit.get(V, m, k)): Maybe<&2, V>
+}:
+  +w =>
+    %Equal.sym(
+      Maybe<&2, V>,
+      Crit.get(V, Crit.set(~V, m, k0, v), k),
+      Crit.lookup(V, Crit.set(~V, m, k0, v), k),
+      Crit.get_lookup(~V, Crit.set(~V, m, k0, v), k)(Crit.upsert_wf(~V, ~(a => b => b), m, k0, v)(w))
+    ): {_ == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), Some{v}, Crit.get(V, m, k)): Maybe<&2, V>}
+    %Equal.sym(
+      Maybe<&2, V>,
+      Crit.lookup(V, Crit.set(~V, m, k0, v), k),
+      Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), Some{Crit.merge(~V, ~(a => b => b), Crit.lookup(V, m, k0), v)}, Crit.lookup(V, m, k)),
+      Crit.upsert_lookup(~V, ~(a => b => b), m, k0, v, k)(w)
+    ): {_ == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), Some{v}, Crit.get(V, m, k)): Maybe<&2, V>}
+    %Equal.sym(Maybe<&2, V>, Crit.get(V, m, k), Crit.lookup(V, m, k), Crit.get_lookup(~V, m, k)(w)): {
+      Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), Some{Crit.merge(~V, ~(a => b => b), Crit.lookup(V, m, k0), v)}, Crit.lookup(V, m, k))
+        == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), Some{v}, _): Maybe<&2, V>
+    }
+    %Equal.sym(V, Crit.merge(~V, ~(a => b => b), Crit.lookup(V, m, k0), v), v, Dict.merge_new(~V, Crit.lookup(V, m, k0), v)): {
+      Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), Some{_}, Crit.lookup(V, m, k))
+        == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), Some{v}, Crit.lookup(V, m, k)): Maybe<&2, V>
+    }
+    {==}
+
 # a write binds its key to its value, and no other key
 law Dict.get_set:
   for ~V: Data
@@ -8067,6 +8108,11 @@ law Dict.get_set:
       == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), Some{v}, Dict.get(V, d, k)): Maybe<&2, V>
   }
 
+def Dict.get_set(V, d, k0, v, k):
+  match d:
+    case Tuple{m, w}:
+      Dict.get_set.at(~V, m, k0, v, k)(w)
+
 # a drop unbinds its key, and no other key
 law Dict.get_drop:
   for ~V: Data
@@ -8077,6 +8123,9 @@ law Dict.get_drop:
     Dict.get(V, Dict.drop(~V, d, k0), k)
       == Bool.pick(Maybe<&2, V>, Key.is_eq(k, k0), None{}, Dict.get(V, d, k)): Maybe<&2, V>
   }
+
+def Dict.get_drop(V, d, k0, k):
+  ?TODO
 
 # a difference holds what a holds under each key that b lacks
 law Dict.get_minus:
@@ -8089,6 +8138,9 @@ law Dict.get_minus:
       == Bool.pick(Maybe<&2, V>, Dict.has(V, b, k), None{}, Dict.get(V, a, k)): Maybe<&2, V>
   }
 
+def Dict.get_minus(V, a, b, k):
+  ?TODO
+
 # a write adds one entry exactly when its key was not there
 law Dict.size_set:
   for ~V: Data
@@ -8100,9 +8152,15 @@ law Dict.size_set:
       == Shared.Nat.add_if(Bool.not(Dict.has(V, d, k)), Dict.size(V, d)): Nat
   }
 
+def Dict.size_set(V, d, k, v):
+  ?TODO
+
 # a dict is its entries: two dicts with the same entries are the same dict
 law Dict.ext:
   for ~V: Data
   for a: Dict(V)
   for b: Dict(V)
   {Dict.entries(V, a) == Dict.entries(V, b): List<&2, Bind<V>>} -> {a == b: Dict(V)}
+
+def Dict.ext(V, a, b):
+  ?TODO
