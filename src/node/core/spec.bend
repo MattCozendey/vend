@@ -2987,6 +2987,76 @@ def Answer.out_follows(
         Hashes.Hash.is_eq(x, a)
       )
 
+# Answer.at follows itself once the outcome is read from two words (g1 at the
+# first tip, g2 at the second) and g2 holds what g1 does
+def Answer.at_follows.words(
+  ~d: Led(),
+  l: L(d),
+  l2: L(d),
+  t: Replicas.Tip,
+  t2: Replicas.Tip,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +a: Hashes.Hash,
+  g1: Maybe<&2, List<&2, U32>>,
+  g2: Maybe<&2, List<&2, U32>>,
+  keep: @ws: List<&2, U32> -> {g1 == Some{ws}: Maybe<&2, List<&2, U32>>} -> {g2 == Some{ws}: Maybe<&2, List<&2, U32>>}
+) -> {
+  Answer.follows(
+    Answer.out(~d, l, t, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, g1)),
+    Some{
+      Answer.out(~d, l2, t2, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, g2))
+    }
+  )
+    == True{}: Bool
+}:
+  match g1:
+    case None{}:
+      {==}
+    case Some{+ws}:
+      %Equal.sym(Maybe<&2, List<&2, U32>>, g2, Some{ws}, keep(ws)({==})): {
+        Answer.follows(
+          Answer.out(~d, l, t, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, Some{ws})),
+          Some{
+            Answer.out(~d, l2, t2, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, _))
+          }
+        )
+          == True{}: Bool
+      }
+      Answer.out_follows(~d, l, l2, t, t2, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, Some{ws}))
+
+# Answer.at follows Pending: no outcome words are read at the first tip
+def Answer.at_follows.pending(
+  ~d: Led(),
+  l: L(d),
+  t: Replicas.Tip,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +a: Hashes.Hash,
+  g1: Maybe<&2, List<&2, U32>>,
+  none: @ws: List<&2, U32> -> {g1 == Some{ws}: Maybe<&2, List<&2, U32>>} -> Empty
+) -> {
+  Answer.follows(
+    Answer.out(~d, l, t, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, g1)),
+    Some{Answer.Pending{}}
+  )
+    == True{}: Bool
+}:
+  match g1:
+    case None{}:
+      {==}
+    case Some{ws}:
+      Empty.absurd(
+        {
+          Answer.follows(
+            Answer.out(~d, l, t, i, q, a, Codes.Code.whole.of(~Replicas.Out, ~Replicas.Out.code, ~Replicas.Out.code.read, Some{ws})),
+            Some{Answer.Pending{}}
+          )
+            == True{}: Bool
+        },
+        none(ws)({==})
+      )
+
 # answers only move forward: as the ledger grows, and while its ballots are
 # honest, a request that a node answers stays answered; Stale and Refused are
 # final; a taken change stays taken (Answer.follows)
