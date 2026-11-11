@@ -1033,6 +1033,83 @@ def Led.Single(-mach: Machine(), -d: Led(mach), -l: Led.L(mach, d)) -> Type:
     Cast.is_vote(Ledgers.Ballot.cast(a)) == Cast.is_vote(Ledgers.Ballot.cast(b)): Bool
   } -> {Ledgers.Ballot.cast(a) == Ledgers.Ballot.cast(b): Ledgers.Cast}
 
+# the ballots among the entries es
+def Led.ballots.of(-Q: Data, es: List<&2, Ledgers.Entry<Q>>) -> List<&2, Ledgers.Ballot>:
+  match es:
+    case Nil{}:
+      []
+    case Con{Ledgers.Entry.Ballot{b}, r}:
+      b <> Led.ballots.of(Q, r)
+    case Con{e, r}:
+      Led.ballots.of(Q, r)
+
+# the ballots of l
+def Led.ballots(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d)) -> List<&2, Ledgers.Ballot>:
+  Led.ballots.of(Machine.Q(mach), Ledgers.Kind.entries(~Machine.Q(mach), ~Led.kind(mach, d), l))
+
+# a and b do not break the promise of one vote and one pass: unless they are
+# of one voter, at one place, and of one kind, they cast the same
+def Ballots.agree(+a: Ledgers.Ballot, +b: Ledgers.Ballot) -> Bool:
+  Bool.or(
+    Bool.not(
+      Bool.and(
+        Ledgers.Ballot.is_at(b, Ledgers.Ballot.at(a), Ledgers.Ballot.voter(a)),
+        Shared.Bool.is_eq(Cast.is_vote(Ledgers.Ballot.cast(a)), Cast.is_vote(Ledgers.Ballot.cast(b)))
+      )
+    ),
+    Ledgers.Cast.is_eq(Ledgers.Ballot.cast(a), Ledgers.Ballot.cast(b))
+  )
+
+# the ballot a agrees with each of bs
+def Ballots.agree_all(bs: List<&2, Ledgers.Ballot>, +a: Ledgers.Ballot) -> Bool:
+  match bs:
+    case Nil{}:
+      True{}
+    case Con{b, r}:
+      List.all.if(u => Ballots.agree_all(r, a), Ballots.agree(a, b))
+
+# each ballot of as agrees with each of bs
+def Ballots.single(as: List<&2, Ledgers.Ballot>, +bs: List<&2, Ledgers.Ballot>) -> Bool:
+  match as:
+    case Nil{}:
+      True{}
+    case Con{a, r}:
+      List.all.if(u => Ballots.single(r, bs), Ballots.agree_all(bs, a))
+
+# the pass p of the voter q at the place w, if b is one, names the last vote
+# of q below its round
+def Ballot.last.at(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  +l: Led.L(mach, d),
+  q: String,
+  w: Ledgers.Place,
+  p: Maybe<&2, Maybe<&2, Ledgers.Last>>
+) -> Bool:
+  match w p:
+    case x None{}:
+      True{}
+    case Ledgers.Place{c, h, rd} Some{y}:
+      Ledgers.Last.is_eq(y, Last.below(~mach, ~d, q, l, c, h, rd))
+
+# the pass b, if it is one, names the last vote of its voter below its round
+def Ballot.last(~mach: Machine(), ~d: Led(mach), +l: Led.L(mach, d), +b: Ledgers.Ballot) -> Bool:
+  Ballot.last.at(~mach, ~d, l, Ledgers.Ballot.voter(b), Ledgers.Ballot.at(b), Ledgers.Ballot.pass(b))
+
+# the ballots bs of l: each pass names the last vote of its voter
+def Ballots.last(~mach: Machine(), ~d: Led(mach), bs: List<&2, Ledgers.Ballot>, +l: Led.L(mach, d)) -> Bool:
+  match bs:
+    case Nil{}:
+      True{}
+    case Con{b, r}:
+      List.all.if(u => Ballots.last(~mach, ~d, r, l), Ballot.last(~mach, ~d, l, b))
+
+# the ballots of l keep both promises: a check, so a law can use it as often
+# as it needs
+def Led.honest(~mach: Machine(), ~d: Led(mach), +l: Led.L(mach, d)) -> Bool:
+  +bs = Led.ballots(~mach, ~d, l)
+  List.all.if(u => Ballots.last(~mach, ~d, bs, l), Ballots.single(bs, bs))
+
 # that the ballots of l are those of voters that keep their two promises
 def Led.Honest(-mach: Machine(), -d: Led(mach), -l: Led.L(mach, d)) -> Type:
   Led.Single(mach, d, l) & (@c: Ledgers.Line -> @h: U32 -> Rounds.Last(mach, d, l, c, h))
@@ -1638,9 +1715,51 @@ def Step.run(
   Step.all(~mach, ~d, ~kern, c, qs, Some{Run{l, t, []}})
 
 # that b grows from a, and its ballots are honest: a later state of a ledger,
-# as the laws of a history read it
-def Led.Later(-mach: Machine(), -d: Led(mach), -a: Led.L(mach, d), -b: Led.L(mach, d)) -> Type:
-  Led.Grows(mach, d, a, b) & Led.Honest(mach, d, b)
+# as the laws of a history read it. An equation of checks, so a proof can use
+# it as often as it needs (Led.later_grows, Led.later_honest)
+def Led.Later(~mach: Machine(), ~d: Led(mach), a: Led.L(mach, d), +b: Led.L(mach, d)) -> Type:
+  {
+    Bool.and(
+      Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+      Led.honest(~mach, ~d, b)
+    )
+      == True{}: Bool
+  }
+
+# a later ledger holds each entry of the earlier one
+law Led.later_grows:
+  for ~mach: Machine()
+  for ~d: Led(mach)
+  for a: Led.L(mach, d)
+  for b: Led.L(mach, d)
+  Led.Later(~mach, ~d, a, b) -> Led.Grows(mach, d, a, b)
+
+def Led.later_grows(mach, d, a, b):
+  ?TODO
+
+# the ballots of a later ledger cast one vote at a place and one pass to it
+law Led.later_single:
+  for ~mach: Machine()
+  for ~d: Led(mach)
+  for a: Led.L(mach, d)
+  for b: Led.L(mach, d)
+  Led.Later(~mach, ~d, a, b) -> Led.Single(mach, d, b)
+
+def Led.later_single(mach, d, a, b):
+  ?TODO
+
+# the passes of a later ledger name the last vote of their voter
+law Led.later_last:
+  for ~mach: Machine()
+  for ~d: Led(mach)
+  for a: Led.L(mach, d)
+  for b: Led.L(mach, d)
+  for c: Ledgers.Line
+  for h: U32
+  Led.Later(~mach, ~d, a, b) -> Rounds.Last(mach, d, b, c, h)
+
+def Led.later_last(mach, d, a, b, c, h):
+  ?TODO
 
 # Histories
 # ---------
@@ -3633,7 +3752,7 @@ law Line.at_grows:
   for c: Ledgers.Line
   Shared.Read.Stable(
     Led.L(mach, d),
-    a => b => Led.Later(mach, d, a, b),
+    a => b => Led.Later(~mach, ~d, a, b),
     Tip,
     l => Line.at(~mach, ~d, ~kern, k, l, c)
   )
@@ -3650,7 +3769,7 @@ law Line.get_grows:
   for key: List<&2, U32>
   Shared.Read.Stable(
     Led.L(mach, d),
-    a => b => Led.Later(mach, d, a, b),
+    a => b => Led.Later(~mach, ~d, a, b),
     List<&2, U32>,
     l => Line.get(~mach, ~d, ~kern, l, c, key)
   )

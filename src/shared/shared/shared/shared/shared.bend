@@ -2942,3 +2942,93 @@ def Bool.or_comm(a: Bool, b: Bool) -> {Bool.or(a, b) == Bool.or(b, a): Bool}:
       {==}
     case True{} True{}:
       {==}
+
+# Cuts
+# ----
+
+# x in front of the pieces gs: a new piece if x ends one (e), else the head
+# of the first
+def List.cut.at(-A: Data, e: Bool, x: A, gs: List<&2, List<&2, A>>) -> List<&2, List<&2, A>>:
+  match e gs:
+    case True{} gs:
+      [x] <> gs
+    case False{} Nil{}:
+      [[x]]
+    case False{} Con{g, t}:
+      (x <> g) <> t
+
+# the pieces of x in front of gs, one after the other, are x in front of
+# those of gs
+def List.cut.at_flat(
+  -A: Data,
+  e: Bool,
+  x: A,
+  gs: List<&2, List<&2, A>>
+) -> {List.concat(&2, A, List.cut.at(A, e, x, gs)) == x <> List.concat(&2, A, gs): List<&2, A>}:
+  match e gs:
+    case True{} g:
+      {==}
+    case False{} Nil{}:
+      {==}
+    case False{} Con{g, t}:
+      {==}
+
+# xs cut after each element where edge holds of the state after it: the state
+# starts at s and each element moves it by step. A cut by content: where a
+# piece ends depends on the elements before the cut, not on where it sits, so
+# an edit moves only the cuts near it. A cut by elements alone has no state
+# (Unit)
+def List.cut.with(
+  ~A: Data,
+  ~S: Data,
+  ~step: S -> A -> S,
+  ~edge: S -> A -> Bool,
+  xs: List<&2, A>,
+  +s: S
+) -> List<&2, List<&2, A>>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{+x, rest}:
+      +s2 = step(s)(x)
+      List.cut.at(A, edge(s2)(x), x, List.cut.with(~A, ~S, ~step, ~edge, rest, s2))
+
+# the pieces of a cut by state, one after the other, are what was cut
+law List.cut_with_flat:
+  for ~A: Data
+  for ~S: Data
+  for ~step: S -> A -> S
+  for ~edge: S -> A -> Bool
+  for xs: List<&2, A>
+  for +s: S
+  {List.concat(&2, A, List.cut.with(~A, ~S, ~step, ~edge, xs, s)) == xs: List<&2, A>}
+
+def List.cut_with_flat(ty, sty, step, edge, xs, s):
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +rest}:
+      +s2 = step(s)(x)
+      %List.cut_with_flat(~ty, ~sty, ~step, ~edge, rest, s2): {
+        List.concat(&2, ty, List.cut.at(ty, edge(s2)(x), x, List.cut.with(~ty, ~sty, ~step, ~edge, rest, s2)))
+          == x <> _: List<&2, ty>
+      }
+      List.cut.at_flat(ty, edge(s2)(x), x, List.cut.with(~ty, ~sty, ~step, ~edge, rest, s2))
+
+# Edges by content
+# ----------------
+# A cut by content ends a piece after an element whose words say so. The
+# words mix into one, and about one element in 32 is an edge. A salt gives
+# each use its own edges: the levels of a tree cut apart.
+
+# the words ws, mixed into x
+def Words.mix(ws: List<&2, U32>, x: U32) -> U32:
+  match ws:
+    case Nil{}:
+      x
+    case Con{w, r}:
+      Words.mix(r, U32.mul(U32.xor(x, w), 2654435761))
+
+# the words ws end a piece, under the salt: the top 5 bits of their mix are 0
+def Words.edge(salt: U32, ws: List<&2, U32>) -> Bool:
+  U32.is_eq(U32.and(Words.mix(ws, salt), 4160749568), 0)
