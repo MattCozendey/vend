@@ -3,7 +3,6 @@ import ../../shared/replica.bend as Replicas
 import ../../shared/shared/formats.bend as Formats
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/rope.bend as Ropes
-import ../../shared/shared/shared/depot.bend as Depots
 import ../../shared/shared/shared/keyset.bend as KeySets
 import ../../shared/shared/shared/pack.bend as Packs
 import ../../shared/shared/shared/reach.bend as Reaches
@@ -82,13 +81,9 @@ def Key.res(n: Resources.Name) -> List<&2, U32>:
 def Res.value(m: Maybe<&2, Requests.Res>) -> Maybe<&2, List<&2, U32>>:
   Maybe.bind(&2, Requests.Res, List<&2, U32>, m, x => Some{Requests.Res.code(x, [])})
 
-# the resource in the value ws, when it is one
-def Res.read(ws: List<&2, U32>) -> Maybe<&2, Requests.Res>:
-  Codes.Read.whole(Requests.Res, Requests.Res.code.read(ws))
-
 # the resource in the value m, if any
 def Res.found(m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Requests.Res>:
-  Maybe.bind(&2, List<&2, U32>, Requests.Res, m, ws => Res.read(ws))
+  Codes.Code.whole.of(~Requests.Res, ~Requests.Res.code, ~Requests.Res.code.read, m)
 
 # the root of the content of the resource n in the tree whose root is h, or
 # that it is not there (none: l lacks a node of the tree)
@@ -129,13 +124,11 @@ def Res.bytes(~d: Led(), l: L(d), m: Maybe<&2, Requests.Res>) -> Maybe<&2, Texts
 # the format that the ledger holds under the hash h (none: l lacks it, or it
 # is not the code of a format)
 def Format.at(~d: Led(), l: L(d), h: Hashes.Hash) -> Maybe<&2, Formats.Format>:
-  Depots.Depot.load(
-    ~L(d),
-    ~Replicas.Led.fetch(~Requests.Ask.machine(), ~d),
+  Codes.Code.whole.of(
     ~Formats.Format,
+    ~Formats.Format.code,
     ~Formats.Format.code.read,
-    l,
-    h
+    Replicas.Led.fetch(~Requests.Ask.machine(), ~d)(l)(h)
   )
 
 # the format of the resource x
@@ -191,7 +184,7 @@ def Res.kept(~d: Led(), +l: L(d), m: Maybe<&2, Requests.Res>) -> Bool:
 def Res.held(~d: Led(), l: L(d), x: Trees.Binding) -> Bool:
   match x:
     case Trees.Binding{Con{0, r}, v}:
-      Res.kept(~d, l, Res.read(v))
+      Res.kept(~d, l, Codes.Code.whole.read(~Requests.Res, ~Requests.Res.code, ~Requests.Res.code.read, v))
     case _:
       True{}
 
@@ -440,15 +433,11 @@ def Clash.names(
   Maybe.default(
     &2,
     List<&2, Resources.Name>,
-    Maybe.bind(
-      &2,
-      List<&2, U32>,
-      List<&2, Resources.Name>,
-      Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, h, Key.clashes(k)),
-      ws => Codes.Read.whole(
-        List<&2, Resources.Name>,
-        Codes.Code.list.read(~Resources.Name, ~Resources.Name.code.read, ws)
-      )
+    Codes.Code.whole.of(
+      ~List<&2, Resources.Name>,
+      ~(ns => r => Codes.Code.list(~Resources.Name, ~Resources.Name.code, ns, r)),
+      ~(ws => Codes.Code.list.read(~Resources.Name, ~Resources.Name.code.read, ws)),
+      Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, h, Key.clashes(k))
     ),
     []
   )
@@ -656,6 +645,27 @@ law Pointer.code_read:
   for r: List<&2, U32>
   {Pointer.code.read(Pointer.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Pointer>>}
 
+def Pointer.code_read(x, r):
+  match x:
+    case Pointer{st, b, k, v}:
+      Codes.Code.four_read(
+        ~Hashes.Hash,
+        ~String,
+        ~U32,
+        ~Ledgers.Id,
+        ~Pointer,
+        ~Hashes.Hash.codec(),
+        ~Codes.Code.text.codec(),
+        ~Codes.Code.token.codec(),
+        ~Ledgers.Id.codec(),
+        w => y => z => q => Pointer{w, y, z, q},
+        st,
+        b,
+        k,
+        v,
+        r
+      )
+
 # the bytes of a submodule that holds the pointer x: its code, four bytes in a
 # word
 def Pointer.bytes(x: Pointer) -> Texts.Bytes():
@@ -663,7 +673,7 @@ def Pointer.bytes(x: Pointer) -> Texts.Bytes():
 
 # the pointer that the bytes b of a submodule hold
 def Pointer.read(b: Texts.Bytes()) -> Maybe<&2, Pointer>:
-  Codes.Read.whole(Pointer, Pointer.code.read(Packs.Pack.words(b)))
+  Codes.Code.whole.read(~Pointer, ~Pointer.code, ~Pointer.code.read, Packs.Pack.words(b))
 
 # the newer of the pointers x and y, when they point to one branch of one
 # store and their numbers differ, or they are the same
@@ -872,7 +882,7 @@ def Merge.pick(
 def Res.name(k: List<&2, U32>) -> Maybe<&2, Resources.Name>:
   match k:
     case Con{0, r}:
-      Codes.Read.whole(Resources.Name, Resources.Name.code.read(r))
+      Codes.Code.whole.read(~Resources.Name, ~Resources.Name.code, ~Resources.Name.code.read, r)
     case _:
       None{}
 
@@ -1027,12 +1037,12 @@ def Group.read(x: Trees.Binding) -> Maybe<&2, Group>:
         &2,
         String,
         Group,
-        Codes.Read.whole(String, Codes.Code.text.read(r)),
+        Codes.Code.whole.read(~String, ~Codes.Code.text, ~Codes.Code.text.read, r),
         n => Maybe.bind(
           &2,
           List<&2, Requests.Member>,
           Group,
-          Codes.Read.whole(List<&2, Requests.Member>, Requests.Members.code.read(v)),
+          Codes.Code.whole.read(~List<&2, Requests.Member>, ~Requests.Members.code, ~Requests.Members.code.read, v),
           ms => Some{Group{n, ms}}
         )
       )
@@ -1759,12 +1769,11 @@ def Node.members(
     Replicas.Tip,
     List<&2, Requests.Member>,
     Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st),
-    t => Maybe.bind(
-      &2,
-      List<&2, U32>,
-      List<&2, Requests.Member>,
-      Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, Replicas.Tip.content(t), Key.group(g)),
-      ws => Codes.Read.whole(List<&2, Requests.Member>, Requests.Members.code.read(ws))
+    t => Codes.Code.whole.of(
+      ~List<&2, Requests.Member>,
+      ~Requests.Members.code,
+      ~Requests.Members.code.read,
+      Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, Replicas.Tip.content(t), Key.group(g))
     )
   )
 
@@ -1831,7 +1840,7 @@ def BranchEntry.of(~d: Led(), l: L(d), b: Branch, m: Maybe<&2, Replicas.Tip>) ->
 def Branch.started(x: Trees.Binding) -> Maybe<&2, String>:
   match x:
     case Trees.Binding{Con{5, r}, v}:
-      Codes.Read.whole(String, Codes.Code.text.read(r))
+      Codes.Code.whole.read(~String, ~Codes.Code.text, ~Codes.Code.text.read, r)
     case _:
       None{}
 
@@ -2710,12 +2719,11 @@ def Mount.change(
 
 # the name of the owner group of the line whose tip is t, if it has one
 def Tip.group(~d: Led(), l: L(d), t: Replicas.Tip) -> Maybe<&2, String>:
-  Maybe.bind(
-    &2,
-    List<&2, U32>,
-    String,
-    Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, Replicas.Tip.content(t), Key.owner()),
-    ws => Codes.Read.whole(String, Codes.Code.text.read(ws))
+  Codes.Code.whole.of(
+    ~String,
+    ~Codes.Code.text,
+    ~Codes.Code.text.read,
+    Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, Replicas.Tip.content(t), Key.owner())
   )
 
 # the request that makes the nodes ns of the group g the owners of the line c,

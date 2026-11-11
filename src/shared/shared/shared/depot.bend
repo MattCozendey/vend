@@ -1,5 +1,4 @@
 import Base
-import ./shared/code.bend as Codes
 import ./shared/hash.bend as Hashes
 import ./shared/shared.bend as Shared
 
@@ -7,7 +6,8 @@ import ./shared/shared.bend as Shared
 # ------
 # A depot gives the words that it holds under a hash (fetch). A tree, a rope
 # and a ledger's data are kept in one: each of their nodes is words under
-# their hash. A depot only grows, so what it gives, it gives for good.
+# their hash. A depot only grows, so what it gives, it gives for good. A
+# value is read from the words under its hash with Code.whole.of.
 
 # the depot s holds the words ws, under their hash
 def Depot.has(
@@ -50,15 +50,3 @@ def Depot.Keeps(
   } -> {
     fetch(a)(h) == Some{w}: Maybe<&2, List<&2, U32>>
   } -> {fetch(b)(h) == Some{w}: Maybe<&2, List<&2, U32>>}
-
-# the value of A whose code the depot s holds under the hash h (none: s lacks
-# it, or it is not one whole code)
-def Depot.load(
-  ~S: Data,
-  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  ~A: Data,
-  ~dec: List<&2, U32> -> Maybe<&2, Codes.Read<A>>,
-  s: S,
-  h: Hashes.Hash
-) -> Maybe<&2, A>:
-  Maybe.bind(&2, List<&2, U32>, A, fetch(s)(h), ws => Codes.Read.whole(A, dec(ws)))

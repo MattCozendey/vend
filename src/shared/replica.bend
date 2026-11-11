@@ -1,6 +1,5 @@
 import Base
 import ./shared/ledger.bend as Ledgers
-import ./shared/shared/depot.bend as Depots
 import ./shared/shared/shared/code.bend as Codes
 import ./shared/shared/shared/hash.bend as Hashes
 import ./shared/shared/shared/seal.bend as Seals
@@ -360,8 +359,8 @@ def Tip.voters(t: Tip) -> List<&2, String>:
     case Tip{c, l, n, vs}:
       vs
 
-# the words of the tip t
-def Tip.words(t: Tip) -> List<&2, U32>:
+# the tip t, then r
+def Tip.code(t: Tip, r: List<&2, U32>) -> List<&2, U32>:
   match t:
     case Tip{c, l, n, vs}:
       Codes.Code.maybe(
@@ -372,33 +371,58 @@ def Tip.words(t: Tip) -> List<&2, U32>:
           ~Hashes.Hash,
           ~Hashes.Hash.code,
           l,
-          Codes.Code.token(n, Ledgers.Voters.code(vs, []))
+          Codes.Code.token(n, Ledgers.Voters.code(vs, r))
         )
       )
 
 # a tip
 def Tip.code.read(ws: List<&2, U32>) -> Maybe<&2, Codes.Read<Tip>>:
   Codes.Code.four.read(
-      ~Maybe<&2, Hashes.Hash>,
-      ~Maybe<&2, Hashes.Hash>,
-      ~U32,
-      ~List<&2, String>,
-      ~Tip,
-      ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
-      ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
-      ~Codes.Code.token.read,
-      ~Ledgers.Voters.code.read,
-      c => l => n => vs => Tip{c, l, n, vs},
-      ws
+    ~Maybe<&2, Hashes.Hash>,
+    ~Maybe<&2, Hashes.Hash>,
+    ~U32,
+    ~List<&2, String>,
+    ~Tip,
+    ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
+    ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
+    ~Codes.Code.token.read,
+    ~Ledgers.Voters.code.read,
+    c => l => n => vs => Tip{c, l, n, vs},
+    ws
   )
+
+# a tip reads back
+def Tip.code_read(
+  t: Tip,
+  r: List<&2, U32>
+) -> {Tip.code.read(Tip.code(t, r)) == Some{Codes.Read{t, r}}: Maybe<&2, Codes.Read<Tip>>}:
+  match t:
+    case Tip{c, l, n, vs}:
+      Codes.Code.four_read(
+        ~Maybe<&2, Hashes.Hash>,
+        ~Maybe<&2, Hashes.Hash>,
+        ~U32,
+        ~List<&2, String>,
+        ~Tip,
+        ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
+        ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
+        ~Codes.Code.token.codec(),
+        ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
+        w => x => y => z => Tip{w, x, y, z},
+        c,
+        l,
+        n,
+        vs,
+        r
+      )
 
 # the hash of the tip t: what a step names
 def Tip.hash(t: Tip) -> Hashes.Hash:
-  Hashes.Sha.hash(Tip.words(t))
+  Hashes.Sha.hash(Tip.code(t, []))
 
 # the tip that l holds under the hash h
 def Tip.at(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), h: Hashes.Hash) -> Maybe<&2, Tip>:
-  Depots.Depot.load(~Led.L(mach, d), ~Led.fetch(~mach, ~d), ~Tip, ~Tip.code.read, l, h)
+  Codes.Code.whole.of(~Tip, ~Tip.code, ~Tip.code.read, Led.fetch(~mach, ~d)(l)(h))
 
 # the tip that a step names, in l (none: the step names none, or l lacks it)
 def Tip.of(
@@ -440,51 +464,75 @@ type Out is Data:
   Out.Stale{ask: Hashes.Hash}
   Out.Taken{ask: Hashes.Hash, number: U32}
 
-# the words of the outcome o
-def Out.words(o: Out) -> List<&2, U32>:
+# the outcome o, then r
+def Out.code(o: Out, r: List<&2, U32>) -> List<&2, U32>:
   match o:
     case Out.Stale{a}:
-      0 <> Hashes.Hash.code(a, [])
+      0 <> Hashes.Hash.code(a, r)
     case Out.Taken{a, n}:
-      1 <> n <> Hashes.Hash.code(a, [])
+      1 <> n <> Hashes.Hash.code(a, r)
 
-# the outcome that some words are
-def Out.read(ws: List<&2, U32>) -> Maybe<&2, Out>:
-  match ws:
+# an outcome
+def Out.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Out>>:
+  match ts:
     case Con{0, r}:
-      Codes.Read.whole(Out, Codes.Code.one.read(~Hashes.Hash, ~Out, ~Hashes.Hash.code.read, a => Out.Stale{a}, r))
+      Codes.Code.one.read(~Hashes.Hash, ~Out, ~Hashes.Hash.code.read, a => Out.Stale{a}, r)
     case Con{1, Con{n, r}}:
-      Codes.Read.whole(
-        Out,
-        Codes.Code.one.read(~Hashes.Hash, ~Out, ~Hashes.Hash.code.read, a => Out.Taken{a, n}, r)
-      )
+      Codes.Code.one.read(~Hashes.Hash, ~Out, ~Hashes.Hash.code.read, a => Out.Taken{a, n}, r)
     case _:
       None{}
+
+# an outcome reads back
+def Out.code_read(
+  o: Out,
+  r: List<&2, U32>
+) -> {Out.code.read(Out.code(o, r)) == Some{Codes.Read{o, r}}: Maybe<&2, Codes.Read<Out>>}:
+  match o:
+    case Out.Stale{a}:
+      Codes.Code.one_read(~Hashes.Hash, ~Out, ~Hashes.Hash.codec(), x => Out.Stale{x}, a, r)
+    case Out.Taken{a, n}:
+      Codes.Code.one_read(~Hashes.Hash, ~Out, ~Hashes.Hash.codec(), x => Out.Taken{x, n}, a, r)
 
 # a taken request: its ID, and the root of the content after it
 type Taken is Data:
   Taken{id: Ledgers.Id, root: Maybe<&2, Hashes.Hash>}
 
-# the words of the taken request x
-def Taken.words(x: Taken) -> List<&2, U32>:
+# the taken request x, then r
+def Taken.code(x: Taken, r: List<&2, U32>) -> List<&2, U32>:
   match x:
-    case Taken{i, r}:
-      Ledgers.Id.code(i, Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, r, []))
+    case Taken{i, h}:
+      Ledgers.Id.code(i, Codes.Code.maybe(~Hashes.Hash, ~Hashes.Hash.code, h, r))
 
-# the taken request that some words are
-def Taken.read(ws: List<&2, U32>) -> Maybe<&2, Taken>:
-  Codes.Read.whole(
-    Taken,
-    Codes.Code.two.read(
-      ~Ledgers.Id,
-      ~Maybe<&2, Hashes.Hash>,
-      ~Taken,
-      ~Ledgers.Id.code.read,
-      ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
-      i => r => Taken{i, r},
-      ws
-    )
+# a taken request
+def Taken.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Taken>>:
+  Codes.Code.two.read(
+    ~Ledgers.Id,
+    ~Maybe<&2, Hashes.Hash>,
+    ~Taken,
+    ~Ledgers.Id.code.read,
+    ~(m => Codes.Code.maybe.read(~Hashes.Hash, ~Hashes.Hash.code.read, m)),
+    i => h => Taken{i, h},
+    ts
   )
+
+# a taken request reads back
+def Taken.code_read(
+  x: Taken,
+  r: List<&2, U32>
+) -> {Taken.code.read(Taken.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Taken>>}:
+  match x:
+    case Taken{i, h}:
+      Codes.Code.two_read(
+        ~Ledgers.Id,
+        ~Maybe<&2, Hashes.Hash>,
+        ~Taken,
+        ~Ledgers.Id.codec(),
+        ~Codes.Code.maybe.codec(~Hashes.Hash, ~Hashes.Hash.codec()),
+        a => b => Taken{a, b},
+        i,
+        h,
+        r
+      )
 
 # the ID of the taken request x
 def Taken.id(x: Taken) -> Ledgers.Id:
@@ -504,11 +552,11 @@ def Tip.get(
 
 # the outcome of the request ID i at the tip t
 def Tip.out(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), t: Tip, i: Ledgers.Id) -> Maybe<&2, Out>:
-  Maybe.bind(&2, List<&2, U32>, Out, Tip.get(~mach, ~d, l, t, Log.out(i)), ws => Out.read(ws))
+  Codes.Code.whole.of(~Out, ~Out.code, ~Out.code.read, Tip.get(~mach, ~d, l, t, Log.out(i)))
 
 # the request that the line took as the number n, at the tip t
 def Tip.taken(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), t: Tip, n: U32) -> Maybe<&2, Taken>:
-  Maybe.bind(&2, List<&2, U32>, Taken, Tip.get(~mach, ~d, l, t, Log.taken(n)), ws => Taken.read(ws))
+  Codes.Code.whole.of(~Taken, ~Taken.code, ~Taken.code.read, Tip.get(~mach, ~d, l, t, Log.taken(n)))
 
 # the request that the label m names, at the tip t
 def Tip.label(
@@ -518,13 +566,7 @@ def Tip.label(
   t: Tip,
   m: String
 ) -> Maybe<&2, Ledgers.Id>:
-  Maybe.bind(
-    &2,
-    List<&2, U32>,
-    Ledgers.Id,
-    Tip.get(~mach, ~d, l, t, Log.label(m)),
-    ws => Codes.Read.whole(Ledgers.Id, Ledgers.Id.code.read(ws))
-  )
+  Codes.Code.whole.of(~Ledgers.Id, ~Ledgers.Id.code, ~Ledgers.Id.code.read, Tip.get(~mach, ~d, l, t, Log.label(m)))
 
 # Rounds
 # ------
@@ -1230,7 +1272,7 @@ def Step.stale(
   i: Ledgers.Id,
   a: Hashes.Hash
 ) -> Maybe<&2, Run<Led.L(mach, d)>>:
-  Run.add(~mach, ~d, r, Log.out(i), Out.words(Out.Stale{a}))
+  Run.add(~mach, ~d, r, Log.out(i), Out.code(Out.Stale{a}, []))
 
 # the tip t one request on, with the voters that the request gives, if any
 def Tip.next(t: Tip, vs: Maybe<&2, List<&2, String>>) -> Tip:
@@ -1260,7 +1302,7 @@ def Step.taken.at(
     &2,
     Run<Led.L(mach, d)>,
     Run<Led.L(mach, d)>,
-    Run.add(~mach, ~d, r, Log.out(i), Out.words(Out.Taken{a, n})),
+    Run.add(~mach, ~d, r, Log.out(i), Out.code(Out.Taken{a, n}, [])),
     +r1 => Maybe.bind(
       &2,
       Run<Led.L(mach, d)>,
@@ -1270,7 +1312,7 @@ def Step.taken.at(
         ~d,
         r1,
         Log.taken(n),
-        Taken.words(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))})
+        Taken.code(Taken{i, Tip.content(Run.tip(Led.L(mach, d), r1))}, [])
       ),
       r2 => Some{Run.next(Led.L(mach, d), r2, vs)}
     )
@@ -1370,7 +1412,7 @@ def Step.opens(
     Run.add(
       ~mach,
       ~d,
-      Run.over(~mach, ~d, r, Tip.words(t) <> ns, Tip.content(Run.tip(Led.L(mach, d), r))),
+      Run.over(~mach, ~d, r, Tip.code(t, []) <> ns, Tip.content(Run.tip(Led.L(mach, d), r))),
       Log.start(b),
       Hashes.Hash.code(Tip.hash(t), [])
     ),
@@ -1698,7 +1740,7 @@ def Tip.named(
   l: Led.L(mach, d),
   ws: List<&2, U32>
 ) -> Maybe<&2, Tip>:
-  Tip.of(~mach, ~d, l, Codes.Read.whole(Hashes.Hash, Hashes.Hash.code.read(ws)))
+  Tip.of(~mach, ~d, l, Codes.Code.whole.read(~Hashes.Hash, ~Hashes.Hash.code, ~Hashes.Hash.code.read, ws))
 
 # the first tip of the sub line b, which the log of its root line holds at
 # the tip m
@@ -1832,12 +1874,11 @@ def Tip.key(
     Tip,
     Hashes.Hash,
     m,
-    t => Maybe.bind(
-      &2,
-      List<&2, U32>,
-      Hashes.Hash,
-      Tree.get(~mach, ~d, l, Tip.content(t), Machine.seal(mach)(voter)),
-      ws => Codes.Read.whole(Hashes.Hash, Hashes.Hash.code.read(ws))
+    t => Codes.Code.whole.of(
+      ~Hashes.Hash,
+      ~Hashes.Hash.code,
+      ~Hashes.Hash.code.read,
+      Tree.get(~mach, ~d, l, Tip.content(t), Machine.seal(mach)(voter))
     )
   )
 
