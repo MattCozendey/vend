@@ -937,3 +937,230 @@ def Crit.get_is_find(-V: Data, m: Crit<V>, +k: List<&2, U32>) -> {
   Crit.get(V, m, k) == Crit.find(V, m, 0n, Key.bits(k), k): Maybe<&2, V>
 }:
   Crit.get_find(V, m, 0n, Cur.of(k), k)
+
+# Laws of differences
+# -------------------
+
+# the first difference of a part that agrees is the first one after it, n on
+def Bits.then(d: Maybe<&2, Nat>, +n: Nat, rest: Maybe<&2, Nat>) -> Maybe<&2, Nat>:
+  match d:
+    case Some{x}:
+      Some{x}
+    case None{}:
+      Maybe.map(&2, Nat, Nat, m => Nat.add(n, m), rest)
+
+# a difference moved by no bits is the same
+def Bits.map_zero(d: Maybe<&2, Nat>) -> {Maybe.map(&2, Nat, Nat, m => Nat.add(0n, m), d) == d: Maybe<&2, Nat>}:
+  match d:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# the words w and v differ first where their bits do
+def Word.diff_bits(n: Nat, w: Word(n), v: Word(n)) -> {
+  Word.diff(n, w, v) == Bits.diff(Word.bits(n, w), Word.bits(n, v)): Maybe<&2, Nat>
+}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      match w v:
+        case WCon{+x, +rw} WCon{+y, +rv}:
+          %Equal.sym(
+            Maybe<&2, Nat>,
+            Word.diff(p, rw, rv),
+            Bits.diff(Word.bits(p, rw), Word.bits(p, rv)),
+            Word.diff_bits(p, rw, rv)
+          ): {
+            Shared.Bool.when(
+              Maybe<&2, Nat>,
+              Shared.Bool.is_eq(x, y),
+              u => Maybe.map(&2, Nat, Nat, m => 1n+m, _),
+              u => Some{0n}
+            )
+              == Shared.Bool.when(
+                Maybe<&2, Nat>,
+                Shared.Bool.is_eq(x, y),
+                u => Maybe.map(&2, Nat, Nat, m => 1n+m, Bits.diff(Word.bits(p, rw), Word.bits(p, rv))),
+                u => Some{0n}
+              ): Maybe<&2, Nat>
+          }
+          {==}
+
+# a difference one bit on, after a part of p bits, is after a part of p + 1
+def Bits.then_succ(d: Maybe<&2, Nat>, +p: Nat, e: Maybe<&2, Nat>) -> {
+  Maybe.map(&2, Nat, Nat, m => 1n+m, Bits.then(d, p, e))
+    == Bits.then(Maybe.map(&2, Nat, Nat, m => 1n+m, d), 1n+p, e): Maybe<&2, Nat>
+}:
+  match d e:
+    case Some{x} e1:
+      {==}
+    case None{} None{}:
+      {==}
+    case None{} Some{m}:
+      {==}
+
+# Bits.diff_append at a first bit, once it is known whether x and y are the
+# same (b)
+def Bits.diff_append.at(
+  +p: Nat,
+  +x: Bool,
+  +y: Bool,
+  +rw: Word(p),
+  +rv: Word(p),
+  +a: List<&2, Bool>,
+  +b2: List<&2, Bool>,
+  b: Bool,
+  ih: {
+    Bits.diff(List.append(&2, Bool, Word.bits(p, rw), a), List.append(&2, Bool, Word.bits(p, rv), b2))
+      == Bits.then(Word.diff(p, rw, rv), p, Bits.diff(a, b2)): Maybe<&2, Nat>
+  }
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, Nat>,
+    b,
+    u => Maybe.map(
+      &2,
+      Nat,
+      Nat,
+      n => 1n+n,
+      Bits.diff(List.append(&2, Bool, Word.bits(p, rw), a), List.append(&2, Bool, Word.bits(p, rv), b2))
+    ),
+    u => Some{0n}
+  )
+    == Bits.then(
+      Shared.Bool.when(
+        Maybe<&2, Nat>,
+        b,
+        u => Maybe.map(&2, Nat, Nat, m => 1n+m, Word.diff(p, rw, rv)),
+        u => Some{0n}
+      ),
+      1n+p,
+      Bits.diff(a, b2)
+    ): Maybe<&2, Nat>
+}:
+  match b:
+    case True{}:
+      %Equal.sym(
+        Maybe<&2, Nat>,
+        Bits.diff(List.append(&2, Bool, Word.bits(p, rw), a), List.append(&2, Bool, Word.bits(p, rv), b2)),
+        Bits.then(Word.diff(p, rw, rv), p, Bits.diff(a, b2)),
+        ih
+      ): {
+        Maybe.map(&2, Nat, Nat, n => 1n+n, _)
+          == Bits.then(Maybe.map(&2, Nat, Nat, m => 1n+m, Word.diff(p, rw, rv)), 1n+p, Bits.diff(a, b2)): Maybe<&2, Nat>
+      }
+      Bits.then_succ(Word.diff(p, rw, rv), p, Bits.diff(a, b2))
+    case False{}:
+      {==}
+
+# words of n bits, each with bits after it, differ first where the words do,
+# else where the bits after them do, n on
+def Bits.diff_append(n: Nat, w: Word(n), v: Word(n), +a: List<&2, Bool>, +b: List<&2, Bool>) -> {
+  Bits.diff(List.append(&2, Bool, Word.bits(n, w), a), List.append(&2, Bool, Word.bits(n, v), b))
+    == Bits.then(Word.diff(n, w, v), n, Bits.diff(a, b)): Maybe<&2, Nat>
+}:
+  match n:
+    case 0n:
+      Equal.sym(
+        Maybe<&2, Nat>,
+        Maybe.map(&2, Nat, Nat, m => Nat.add(0n, m), Bits.diff(a, b)),
+        Bits.diff(a, b),
+        Bits.map_zero(Bits.diff(a, b))
+      )
+    case 1n+(+p):
+      match w v:
+        case WCon{+x, +rw} WCon{+y, +rv}:
+          Bits.diff_append.at(p, x, y, rw, rv, a, b, Shared.Bool.is_eq(x, y), Bits.diff_append(p, rw, rv, a, b))
+
+# a difference moved by at + 32 bits is moved by 32, then by at
+def Bits.map_add(+at: Nat, +n: Nat, d: Maybe<&2, Nat>) -> {
+  Maybe.map(&2, Nat, Nat, m => Nat.add(Nat.add(at, n), m), d)
+    == Maybe.map(&2, Nat, Nat, m => Nat.add(at, m), Maybe.map(&2, Nat, Nat, m => Nat.add(n, m), d)): Maybe<&2, Nat>
+}:
+  match d:
+    case None{}:
+      {==}
+    case Some{x}:
+      %Shared.Nat.add_assoc(at, n, x): {Some{Nat.add(Nat.add(at, n), x)} == Some{_}: Maybe<&2, Nat>}
+      {==}
+
+# Key.diff.go at two first words, once their difference d is known
+def Key.diff.at(
+  +at: Nat,
+  d: Maybe<&2, Nat>,
+  ra: List<&2, U32>,
+  rb: List<&2, U32>,
+  ih: {
+    Key.diff.go(ra, rb, Nat.add(at, 32n))
+      == Maybe.map(&2, Nat, Nat, m => Nat.add(Nat.add(at, 32n), m), Bits.diff(Key.bits(ra), Key.bits(rb))): Maybe<&2, Nat>
+  }
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, Nat>,
+    Maybe.is_none(&2, Nat, d),
+    u => Key.diff.go(ra, rb, Nat.add(at, 32n)),
+    u => Maybe.map(&2, Nat, Nat, n => Nat.add(at, n), d)
+  )
+    == Maybe.map(&2, Nat, Nat, m => Nat.add(at, m), Bits.then(d, 32n, Bits.diff(Key.bits(ra), Key.bits(rb)))): Maybe<&2, Nat>
+}:
+  match d:
+    case None{}:
+      %Equal.sym(
+        Maybe<&2, Nat>,
+        Key.diff.go(ra, rb, Nat.add(at, 32n)),
+        Maybe.map(&2, Nat, Nat, m => Nat.add(Nat.add(at, 32n), m), Bits.diff(Key.bits(ra), Key.bits(rb))),
+        ih
+      ): {
+        _
+          == Maybe.map(
+            &2,
+            Nat,
+            Nat,
+            m => Nat.add(at, m),
+            Maybe.map(&2, Nat, Nat, m => Nat.add(32n, m), Bits.diff(Key.bits(ra), Key.bits(rb)))
+          ): Maybe<&2, Nat>
+      }
+      Bits.map_add(at, 32n, Bits.diff(Key.bits(ra), Key.bits(rb)))
+    case Some{x}:
+      {==}
+
+# the keys a and b differ first where their bits do, at bits on
+def Key.diff_go_bits(+a: List<&2, U32>, +b: List<&2, U32>, +at: Nat) -> {
+  Key.diff.go(a, b, at) == Maybe.map(&2, Nat, Nat, m => Nat.add(at, m), Bits.diff(Key.bits(a), Key.bits(b))): Maybe<&2, Nat>
+}:
+  match a b:
+    case Nil{} Nil{}:
+      {==}
+    case Con{U32{+w}, +ra} Con{U32{+v}, +rb}:
+      %Equal.sym(
+        Maybe<&2, Nat>,
+        Bits.diff(
+          List.append(&2, Bool, Word.bits(32n, w), Key.bits(ra)),
+          List.append(&2, Bool, Word.bits(32n, v), Key.bits(rb))
+        ),
+        Bits.then(Word.diff(32n, w, v), 32n, Bits.diff(Key.bits(ra), Key.bits(rb))),
+        Bits.diff_append(32n, w, v, Key.bits(ra), Key.bits(rb))
+      ): {
+        Key.diff.go(U32{w} <> ra, U32{v} <> rb, at) == Maybe.map(&2, Nat, Nat, m => Nat.add(at, m), _): Maybe<&2, Nat>
+      }
+      Key.diff.at(at, Word.diff(32n, w, v), ra, rb, Key.diff_go_bits(ra, rb, Nat.add(at, 32n)))
+    case Nil{} Con{U32{WCon{b0, t}}, r}:
+      %Equal.sym(Nat, Nat.add(at, 0n), at, Shared.Nat.add_zero(at)): {Some{at} == Some{_}: Maybe<&2, Nat>}
+      {==}
+    case Con{U32{WCon{b0, t}}, r} Nil{}:
+      %Equal.sym(Nat, Nat.add(at, 0n), at, Shared.Nat.add_zero(at)): {Some{at} == Some{_}: Maybe<&2, Nat>}
+      {==}
+
+# the keys a and b differ first where their bits do
+def Key.diff_bits(+a: List<&2, U32>, +b: List<&2, U32>) -> {
+  Key.diff(a, b) == Bits.diff(Key.bits(a), Key.bits(b)): Maybe<&2, Nat>
+}:
+  %Equal.sym(
+    Maybe<&2, Nat>,
+    Key.diff.go(a, b, 0n),
+    Maybe.map(&2, Nat, Nat, m => Nat.add(0n, m), Bits.diff(Key.bits(a), Key.bits(b))),
+    Key.diff_go_bits(a, b, 0n)
+  ): {_ == Bits.diff(Key.bits(a), Key.bits(b)): Maybe<&2, Nat>}
+  Bits.map_zero(Bits.diff(Key.bits(a), Key.bits(b)))
