@@ -5321,6 +5321,229 @@ def Affects.names_of(
     case Con{+x, +rest}:
       h => Affects.names_of.at(x, rest, b, u, Trees.Binding.is_eq(x, b), {==}, en, h2 => Affects.names_of(rest, b, u, en)(h2))(h)
 
+# a resource, or none, is the same as itself
+def Affects.same_refl(a: Maybe<&2, Requests.Res>) -> {Res.same(a, a) == True{}: Bool}:
+  match a:
+    case None{}:
+      {==}
+    case Some{x}:
+      Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), Requests.Res.code(x, []))
+
+# Affects.find_named once the binding is known to name u, and its value to be
+# the resource r1
+def Affects.find_named.of(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Trees.Binding>,
+  +er: {Tree.range(~d, l, hb, [0]) == Some{xs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +u: Resources.Name,
+  -P: Type,
+  k: @r0: Maybe<&2, Requests.Res> -> {Res.find(~d, l, hb, u) == Some{r0}: Maybe<&2, Maybe<&2, Requests.Res>>}
+    -> {Maybe.is_some(&2, Requests.Res, r0) == True{}: Bool} -> P,
+  +k0: List<&2, U32>,
+  +v0: List<&2, U32>,
+  +r1: Requests.Res,
+  +hc: {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{k0, v0}) == True{}: Bool},
+  +ef: {Res.found(Some{v0}) == Some{r1}: Maybe<&2, Requests.Res>},
+  +ek: {Key.res(u) == k0: List<&2, U32>}
+) -> P:
+  +look0 = Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, hb, k0)
+  +iseq = Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Trees.Look.value(look0), Some{v0})
+  +htrue = Equal.trans(
+    Bool,
+    Bool.and(Trees.Key.leads([0], k0), iseq),
+    List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{k0, v0}),
+    True{},
+    Equal.sym(
+      Bool,
+      List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{k0, v0}),
+      Bool.and(Trees.Key.leads([0], k0), iseq),
+      Affects.range_has(~d, l, hb, [0], xs, er, k0, v0)
+    ),
+    hc
+  )
+  +evalue = Shared.Maybe.is_eq_sound(
+    ~List<&2, U32>,
+    ~Shared.List.is_eq(~U32, ~U32.is_eq),
+    x => y => Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), x, y),
+    Trees.Look.value(look0),
+    Some{v0}
+  )(Shared.Bool.and_true_right(Trees.Key.leads([0], k0), iseq)(htrue))
+  +eknown = Affects.cast(
+    List<&2, U32>,
+    z => {
+      Trees.Look.known(Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, hb, z))
+        == Some{Some{v0}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+    },
+    k0,
+    Key.res(u),
+    Equal.sym(List<&2, U32>, Key.res(u), k0, ek),
+    Affects.value_known(look0, v0)(evalue)
+  )
+  k(Res.found(Some{v0}))(
+    Affects.cast(
+      Maybe<&2, Maybe<&2, List<&2, U32>>>,
+      z => {
+        Maybe.bind(&2, Maybe<&2, List<&2, U32>>, Maybe<&2, Requests.Res>, z, m => Some{Res.found(m)})
+          == Some{Res.found(Some{v0})}: Maybe<&2, Maybe<&2, Requests.Res>>
+      },
+      Some{Some{v0}},
+      Trees.Look.known(Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, hb, Key.res(u))),
+      Equal.sym(
+        Maybe<&2, Maybe<&2, List<&2, U32>>>,
+        Trees.Look.known(Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, hb, Key.res(u))),
+        Some{Some{v0}},
+        eknown
+      ),
+      {==}
+    )
+  )(
+    Affects.cast(
+      Maybe<&2, Requests.Res>,
+      z => {Maybe.is_some(&2, Requests.Res, z) == True{}: Bool},
+      Some{r1},
+      Res.found(Some{v0}),
+      Equal.sym(Maybe<&2, Requests.Res>, Res.found(Some{v0}), Some{r1}, ef),
+      {==}
+    )
+  )
+
+# Affects.find_named for a binding b of xs that names u
+def Affects.find_named.at(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Trees.Binding>,
+  +er: {Tree.range(~d, l, hb, [0]) == Some{xs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +u: Resources.Name,
+  -P: Type,
+  k: @r0: Maybe<&2, Requests.Res> -> {Res.find(~d, l, hb, u) == Some{r0}: Maybe<&2, Maybe<&2, Requests.Res>>}
+    -> {Maybe.is_some(&2, Requests.Res, r0) == True{}: Bool} -> P,
+  b: Trees.Binding,
+  +hc: {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, b) == True{}: Bool}
+) -> {Res.named(b) == Some{u}: Maybe<&2, Resources.Name>} -> P:
+  match b:
+    case Trees.Binding{+k0, +v0}:
+      hn => Affects.bind_some(
+        Requests.Res,
+        Resources.Name,
+        P,
+        Res.found(Some{v0}),
+        r => Res.name(k0),
+        u,
+        +r1 => ef => en => Affects.find_named.of(~d, l, hb, xs, er, u, P, k, k0, v0, r1, hc, ef, Affects.key_of_name(k0, u)(en))
+      )(hn)
+
+# a resource of a listing of a tree is there: Res.find gives some resource
+def Affects.find_named(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Trees.Binding>,
+  +er: {Tree.range(~d, l, hb, [0]) == Some{xs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +u: Resources.Name,
+  -P: Type,
+  k: @r0: Maybe<&2, Requests.Res> -> {Res.find(~d, l, hb, u) == Some{r0}: Maybe<&2, Maybe<&2, Requests.Res>>}
+    -> {Maybe.is_some(&2, Requests.Res, r0) == True{}: Bool} -> P
+) -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(xs), u) == True{}: Bool} -> P:
+  h => Affects.names_in(xs, u, P, +b => hc => hn => Affects.find_named.at(~d, l, hb, xs, er, u, P, k, b, hc)(hn))(h)
+
+# Affects.find_names once the read m0 of the key of u is known
+def Affects.find_names.at(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Trees.Binding>,
+  +er: {Tree.range(~d, l, hb, [0]) == Some{xs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +u: Resources.Name,
+  +r0: Requests.Res,
+  m0: Maybe<&2, List<&2, U32>>,
+  +em0: {
+    Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, hb, Key.res(u)) == Some{m0}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  },
+  +ef: {Res.found(m0) == Some{r0}: Maybe<&2, Requests.Res>}
+) -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(xs), u) == True{}: Bool}:
+  match m0:
+    case None{}:
+      Empty.absurd(
+        {List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(xs), u) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Requests.Res, r0, ef)
+      )
+    case Some{+v}:
+      +look0 = Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, hb, Key.res(u))
+      +evalue = Affects.known_value(look0, Some{v})(em0)
+      Affects.names_of(
+        xs,
+        Trees.Binding{Key.res(u), v},
+        u,
+        Affects.cast(
+          Maybe<&2, Requests.Res>,
+          z => {Maybe.bind(&2, Requests.Res, Resources.Name, z, r => Res.name(Key.res(u))) == Some{u}: Maybe<&2, Resources.Name>},
+          Some{r0},
+          Res.found(Some{v}),
+          Equal.sym(Maybe<&2, Requests.Res>, Res.found(Some{v}), Some{r0}, ef),
+          Affects.name_key(u)
+        )
+      )(
+        Equal.trans(
+          Bool,
+          List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{Key.res(u), v}),
+          Bool.and(
+            Trees.Key.leads([0], Key.res(u)),
+            Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Trees.Look.value(look0), Some{v})
+          ),
+          True{},
+          Affects.range_has(~d, l, hb, [0], xs, er, Key.res(u), v),
+          Affects.cast(
+            Maybe<&2, List<&2, U32>>,
+            z => {
+              Bool.and(
+                Trees.Key.leads([0], Key.res(u)),
+                Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), z, Some{v})
+              )
+                == True{}: Bool
+            },
+            Some{v},
+            Trees.Look.value(look0),
+            Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Look.value(look0), Some{v}, evalue),
+            Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), v)
+          )
+        )
+      )
+
+# a resource that Res.find finds in a tree is a resource of its listing
+def Affects.find_names(
+  ~d: Led(),
+  +l: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Trees.Binding>,
+  +er: {Tree.range(~d, l, hb, [0]) == Some{xs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +u: Resources.Name,
+  +r0: Requests.Res
+) -> {Res.find(~d, l, hb, u) == Some{Some{r0}}: Maybe<&2, Maybe<&2, Requests.Res>>}
+  -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(xs), u) == True{}: Bool}:
+  ef => Affects.bind_some(
+    Maybe<&2, List<&2, U32>>,
+    Maybe<&2, Requests.Res>,
+    {List.contains(~Resources.Name, ~Resources.Name.is_eq, Res.names(xs), u) == True{}: Bool},
+    Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, hb, Key.res(u)),
+    m => Some{Res.found(m)},
+    Some{r0},
+    +m0 => em0 => e2 => Affects.find_names.at(
+      ~d,
+      l,
+      hb,
+      xs,
+      er,
+      u,
+      r0,
+      m0,
+      em0,
+      Shared.Maybe.some_inj(Maybe<&2, Requests.Res>, Res.found(m0), Some{r0}, e2)
+    )
+  )(ef)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
