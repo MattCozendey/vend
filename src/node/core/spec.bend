@@ -11243,6 +11243,413 @@ def Affects.holds_facts(
     eof => e4 => Empty.absurd(R, Shared.Bool.false_ne_true(Shared.Maybe.some_inj(Bool, False{}, True{}, e4)))
   )(e)
 
+# the graph of imports of the resources of a listing is read when their users
+# graph is: it is a side
+def Affects.graph_some(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Trees.Binding>,
+  +users: Reaches.Graph,
+  +eu: {
+    Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()) == Some{users}: Maybe<&2, Reaches.Graph>
+  }
+) -> {
+  Uses.graph(~d, l, view, hb, Res.names(xs), Reaches.Graph.new())
+    == Some{Affects.side(~d, l, view, hb, Res.names(xs), True{})}: Maybe<&2, Reaches.Graph>
+}:
+  +gr = Uses.graph(~d, l, view, hb, Res.names(xs), Reaches.Graph.new())
+  +us = Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new())
+  Affects.some_is(gr)(
+    Equal.trans(
+      Bool,
+      Maybe.is_some(&2, Reaches.Graph, gr),
+      Maybe.is_some(&2, Reaches.Graph, us),
+      True{},
+      Equal.sym(
+        Bool,
+        Maybe.is_some(&2, Reaches.Graph, us),
+        Maybe.is_some(&2, Reaches.Graph, gr),
+        Affects.some_fold(~d, l, view, hb, Res.names(xs), Reaches.Graph.new(), Reaches.Graph.new())
+      ),
+      Affects.cast(
+        Maybe<&2, Reaches.Graph>,
+        z => {Maybe.is_some(&2, Reaches.Graph, z) == True{}: Bool},
+        Some{users},
+        us,
+        Equal.sym(Maybe<&2, Reaches.Graph>, us, Some{users}, eu),
+        {==}
+      )
+    )
+  )
+
+# the search of Uses.reaches, at a tree whose listing and users graph are
+# read, is the search of the graph of imports of the listing
+def Affects.rest_eq(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Trees.Binding>,
+  +er: {Tree.range(~d, l, hb, [0]) == Some{xs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +users: Reaches.Graph,
+  +eu: {
+    Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()) == Some{users}: Maybe<&2, Reaches.Graph>
+  },
+  +used: Resources.Name,
+  +changed: Resources.Name
+) -> {
+  Maybe.bind(
+    &2,
+    Reaches.Graph,
+    Bool,
+    Maybe.bind(
+      &2,
+      List<&2, Resources.Name>,
+      Reaches.Graph,
+      Tree.resources(~d, l, hb),
+      ns => Uses.graph(~d, l, view, hb, ns, Reaches.Graph.new())
+    ),
+    g => Some{Crits.Dict.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
+  )
+    == Some{
+      Crits.Dict.has(
+        Unit,
+        Reaches.Graph.reach(Affects.side(~d, l, view, hb, Res.names(xs), True{}), Name.key(used)),
+        Name.key(changed)
+      )
+    }: Maybe<&2, Bool>
+}:
+  +side1 = Affects.side(~d, l, view, hb, Res.names(xs), True{})
+  %Equal.sym(Maybe<&2, List<&2, Trees.Binding>>, Tree.range(~d, l, hb, [0]), Some{xs}, er): {
+    Maybe.bind(
+      &2,
+      Reaches.Graph,
+      Bool,
+      Maybe.bind(
+        &2,
+        List<&2, Resources.Name>,
+        Reaches.Graph,
+        Maybe.map(&2, List<&2, Trees.Binding>, List<&2, Resources.Name>, Res.names, _),
+        ns => Uses.graph(~d, l, view, hb, ns, Reaches.Graph.new())
+      ),
+      g => Some{Crits.Dict.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
+    )
+      == Some{Crits.Dict.has(Unit, Reaches.Graph.reach(side1, Name.key(used)), Name.key(changed))}: Maybe<&2, Bool>
+  }
+  %Equal.sym(
+    Maybe<&2, Reaches.Graph>,
+    Uses.graph(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()),
+    Some{side1},
+    Affects.graph_some(~d, l, view, hb, xs, users, eu)
+  ): {
+    Maybe.bind(
+      &2,
+      Reaches.Graph,
+      Bool,
+      _,
+      g => Some{Crits.Dict.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
+    )
+      == Some{Crits.Dict.has(Unit, Reaches.Graph.reach(side1, Name.key(used)), Name.key(changed))}: Maybe<&2, Bool>
+  }
+  {==}
+
+# Affects.reaches_back once it is known whether used is changed (q)
+def Affects.reaches_back.at(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Trees.Binding>,
+  +er: {Tree.range(~d, l, hb, [0]) == Some{xs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +users: Reaches.Graph,
+  +eu: {
+    Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()) == Some{users}: Maybe<&2, Reaches.Graph>
+  },
+  +used: Resources.Name,
+  +changed: Resources.Name,
+  q: Bool,
+  +ereach: {
+    Shared.Bool.when(
+      Maybe<&2, Bool>,
+      q,
+      u => Some{True{}},
+      u => Maybe.bind(
+        &2,
+        Reaches.Graph,
+        Bool,
+        Maybe.bind(
+          &2,
+          List<&2, Resources.Name>,
+          Reaches.Graph,
+          Tree.resources(~d, l, hb),
+          ns => Uses.graph(~d, l, view, hb, ns, Reaches.Graph.new())
+        ),
+        g => Some{Crits.Dict.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
+      )
+    )
+      == Some{True{}}: Maybe<&2, Bool>
+  }
+) -> {
+  List.any.if(w => Crits.Dict.has(Unit, Reaches.Graph.reach(users, Name.key(changed)), Name.key(used)), q) == True{}: Bool
+}:
+  match q:
+    case True{}:
+      {==}
+    case False{}:
+      +side1 = Affects.side(~d, l, view, hb, Res.names(xs), True{})
+      +has1 = Crits.Dict.has(Unit, Reaches.Graph.reach(side1, Name.key(used)), Name.key(changed))
+      Affects.cast(
+        Reaches.Graph,
+        z => {Crits.Dict.has(Unit, Reaches.Graph.reach(z, Name.key(changed)), Name.key(used)) == True{}: Bool},
+        Affects.side(~d, l, view, hb, Res.names(xs), False{}),
+        users,
+        Equal.cong(
+          Maybe<&2, Reaches.Graph>,
+          Reaches.Graph,
+          z => Maybe.default(&2, Reaches.Graph, z, Reaches.Graph.new()),
+          Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()),
+          Some{users},
+          eu
+        ),
+        Affects.reach_rev(~d, l, view, hb, Res.names(xs), True{}, Name.key(used), Name.key(changed))(
+          Shared.Maybe.some_inj(
+            Bool,
+            has1,
+            True{},
+            Equal.trans(
+              Maybe<&2, Bool>,
+              Some{has1},
+              Maybe.bind(
+                &2,
+                Reaches.Graph,
+                Bool,
+                Maybe.bind(
+                  &2,
+                  List<&2, Resources.Name>,
+                  Reaches.Graph,
+                  Tree.resources(~d, l, hb),
+                  ns => Uses.graph(~d, l, view, hb, ns, Reaches.Graph.new())
+                ),
+                g => Some{Crits.Dict.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
+              ),
+              Some{True{}},
+              Equal.sym(
+                Maybe<&2, Bool>,
+                Maybe.bind(
+                  &2,
+                  Reaches.Graph,
+                  Bool,
+                  Maybe.bind(
+                    &2,
+                    List<&2, Resources.Name>,
+                    Reaches.Graph,
+                    Tree.resources(~d, l, hb),
+                    ns => Uses.graph(~d, l, view, hb, ns, Reaches.Graph.new())
+                  ),
+                  g => Some{Crits.Dict.has(Unit, Reaches.Graph.reach(g, Name.key(used)), Name.key(changed))}
+                ),
+                Some{has1},
+                Affects.rest_eq(~d, l, view, hb, xs, er, users, eu, used, changed)
+              ),
+              ereach
+            )
+          )
+        )
+      )
+
+# a resource of a branch that uses a changed resource is c, or the users
+# graph of c finds it
+def Affects.reaches_back(
+  ~d: Led(),
+  +l: L(d),
+  +view: List<&2, Formats.Cond>,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Trees.Binding>,
+  +er: {Tree.range(~d, l, hb, [0]) == Some{xs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +users: Reaches.Graph,
+  +eu: {
+    Uses.users(~d, l, view, hb, Res.names(xs), Reaches.Graph.new()) == Some{users}: Maybe<&2, Reaches.Graph>
+  },
+  +used: Resources.Name,
+  +changed: Resources.Name,
+  +ereach: {Uses.reaches(~d, l, view, hb, used, changed) == Some{True{}}: Maybe<&2, Bool>}
+) -> {
+  List.any.if(
+    w => Crits.Dict.has(Unit, Reaches.Graph.reach(users, Name.key(changed)), Name.key(used)),
+    Resources.Name.is_eq(used, changed)
+  )
+    == True{}: Bool
+}:
+  Affects.reaches_back.at(~d, l, view, hb, xs, er, users, eu, used, changed, Resources.Name.is_eq(used, changed), ereach)
+
+# the first tip m of a line whose newest tip is known is some tip
+def Affects.head_of_some(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +c: Ledgers.Line,
+  m: Maybe<&2, Replicas.Tip>,
+  -t: Replicas.Tip,
+  -R: Type,
+  k: @t0: Replicas.Tip -> {m == Some{t0}: Maybe<&2, Replicas.Tip>} -> R
+) -> {Replicas.Line.head.of(~Requests.Ask.machine(), ~d, ~kern, l, c, m) == Some{t}: Maybe<&2, Replicas.Tip>} -> R:
+  match m:
+    case None{}:
+      e => Empty.absurd(R, Shared.Maybe.none_ne_some(Replicas.Tip, t, e))
+    case Some{+t0}:
+      e => k(t0)({==})
+
+# a branch whose newest tip is known has a first tip in the log of the
+# newest tip of its store
+def Affects.head_start(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +st: Hashes.Hash,
+  +nf: String,
+  +tf: Replicas.Tip,
+  -R: Type,
+  k: @rt: Replicas.Tip -> {Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st) == Some{rt}: Maybe<&2, Replicas.Tip>}
+    -> @ws: List<&2, U32> -> {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, rt, Replicas.Log.start(nf)) == Some{ws}: Maybe<&2, List<&2, U32>>}
+    -> R
+) -> {Branch.head(~d, ~kern, l, Branch{st, nf}) == Some{tf}: Maybe<&2, Replicas.Tip>} -> R:
+  e => Affects.head_of_some(
+    ~d,
+    ~kern,
+    l,
+    Ledgers.Line{st, Some{nf}},
+    Replicas.Line.start(~Requests.Ask.machine(), ~d, ~kern, l, Ledgers.Line{st, Some{nf}}),
+    tf,
+    R,
+    +t0 => es => Affects.bind_some(
+      Replicas.Tip,
+      Replicas.Tip,
+      R,
+      Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st),
+      t => Maybe.bind(
+        &2,
+        List<&2, U32>,
+        Replicas.Tip,
+        Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, t, Replicas.Log.start(nf)),
+        ws => Replicas.Tip.named(~Requests.Ask.machine(), ~d, l, ws)
+      ),
+      t0,
+      +rt => +ert => e2 => Affects.bind_some(
+        List<&2, U32>,
+        Replicas.Tip,
+        R,
+        Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, rt, Replicas.Log.start(nf)),
+        ws => Replicas.Tip.named(~Requests.Ask.machine(), ~d, l, ws),
+        t0,
+        +ws => +ews => e3 => k(rt)(ert)(ws)(ews)
+      )(e2)
+    )(es)
+  )(e)
+
+# a list of names that holds u holds it with one more name m before it, if any
+def Affects.cons_keep_s(m: Maybe<&2, String>, +r: List<&2, String>, +u: String) -> {
+  List.contains(~String, ~String.eq, r, u) == True{}: Bool
+} -> {List.contains(~String, ~String.eq, Shared.Maybe.cons(String, m, r), u) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => h
+    case Some{y}:
+      h => Shared.List.contains_cons(~String, ~String.eq, y, r, u)(h)
+
+# Affects.started_of once it is known whether x is bb (c)
+def Affects.started_of.at(
+  +x: Trees.Binding,
+  +rest: List<&2, Trees.Binding>,
+  +bb: Trees.Binding,
+  +nf: String,
+  c: Bool,
+  ec: {Trees.Binding.is_eq(x, bb) == c: Bool},
+  +en: {Branch.started(bb) == Some{nf}: Maybe<&2, String>},
+  ih: {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, rest, bb) == True{}: Bool}
+    -> {List.contains(~String, ~String.eq, Branches.names(rest), nf) == True{}: Bool}
+) -> {
+  List.any.if(w => List.contains(~Trees.Binding, ~Trees.Binding.is_eq, rest, bb), c) == True{}: Bool
+} -> {List.contains(~String, ~String.eq, Shared.Maybe.cons(String, Branch.started(x), Branches.names(rest)), nf) == True{}: Bool}:
+  match c:
+    case True{}:
+      h => Affects.cast(
+        Trees.Binding,
+        z => {List.contains(~String, ~String.eq, Shared.Maybe.cons(String, Branch.started(z), Branches.names(rest)), nf) == True{}: Bool},
+        bb,
+        x,
+        Equal.sym(Trees.Binding, x, bb, Affects.binding_sound(x, bb)(ec)),
+        Affects.cast(
+          Maybe<&2, String>,
+          z => {List.contains(~String, ~String.eq, Shared.Maybe.cons(String, z, Branches.names(rest)), nf) == True{}: Bool},
+          Some{nf},
+          Branch.started(bb),
+          Equal.sym(Maybe<&2, String>, Branch.started(bb), Some{nf}, en),
+          Affects.contains_head(~String, ~String.eq, ~Texts.String.laws(), nf, Branches.names(rest))
+        )
+      )
+    case False{}:
+      h => Affects.cons_keep_s(Branch.started(x), Branches.names(rest), nf)(ih(h))
+
+# the branch that a binding of xs starts is among the names of xs
+def Affects.started_of(
+  xs: List<&2, Trees.Binding>,
+  +bb: Trees.Binding,
+  +nf: String,
+  +en: {Branch.started(bb) == Some{nf}: Maybe<&2, String>}
+) -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, bb) == True{}: Bool}
+  -> {List.contains(~String, ~String.eq, Branches.names(xs), nf) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      h => Empty.absurd({List.contains(~String, ~String.eq, [], nf) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Con{+x, +rest}:
+      h => Affects.started_of.at(x, rest, bb, nf, Trees.Binding.is_eq(x, bb), {==}, en, h2 => Affects.started_of(rest, bb, nf, en)(h2))(h)
+
+# a branch whose first tip the log of a store holds is among its names
+def Affects.started_in(
+  ~d: Led(),
+  +l: L(d),
+  +rt: Replicas.Tip,
+  +lx: List<&2, Trees.Binding>,
+  +elx: {Tree.range(~d, l, Replicas.Tip.log(rt), [5]) == Some{lx}: Maybe<&2, List<&2, Trees.Binding>>},
+  +nf: String,
+  +ws: List<&2, U32>,
+  +ews: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, rt, Replicas.Log.start(nf)) == Some{ws}: Maybe<&2, List<&2, U32>>}
+) -> {List.contains(~String, ~String.eq, Branches.names(lx), nf) == True{}: Bool}:
+  +look0 = Replicas.Tree.look(~Requests.Ask.machine(), ~d, l, Replicas.Tip.log(rt), Replicas.Log.start(nf))
+  Affects.started_of(
+    lx,
+    Trees.Binding{Replicas.Log.start(nf), ws},
+    nf,
+    Codes.Code.whole_read(~String, ~Codes.Code.text, ~Codes.Code.text.read, ~(a => r => Codes.Code.text_read(a, r)), nf)
+  )(
+    Equal.trans(
+      Bool,
+      List.contains(~Trees.Binding, ~Trees.Binding.is_eq, lx, Trees.Binding{Replicas.Log.start(nf), ws}),
+      Bool.and(
+        Trees.Key.leads([5], Replicas.Log.start(nf)),
+        Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Trees.Look.value(look0), Some{ws})
+      ),
+      True{},
+      Affects.range_has(~d, l, Replicas.Tip.log(rt), [5], lx, elx, Replicas.Log.start(nf), ws),
+      Affects.cast(
+        Maybe<&2, List<&2, U32>>,
+        z => {
+          Bool.and(
+            Trees.Key.leads([5], Replicas.Log.start(nf)),
+            Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), z, Some{ws})
+          )
+            == True{}: Bool
+        },
+        Some{ws},
+        Trees.Look.value(look0),
+        Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Look.value(look0), Some{ws}, ews),
+        Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), ws)
+      )
+    )
+  )
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
