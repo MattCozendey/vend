@@ -2847,6 +2847,146 @@ def Kernel(-d: Led()) -> Type:
 # Laws
 # ----
 
+# Answer.merged follows itself: a clash that is open or shut after the merge k
+# gives Conflicted or Written, and both may follow each other
+def Answer.merged_follows.at(
+  p: Bool,
+  p2: Bool,
+  +k: Ledgers.Id
+) -> {
+  Answer.follows(
+    Shared.Bool.when(Answer, p, u => Answer.Conflicted{k}, u => Answer.Written{}),
+    Some{Shared.Bool.when(Answer, p2, u => Answer.Conflicted{k}, u => Answer.Written{})}
+  )
+    == True{}: Bool
+}:
+  match p p2:
+    case True{} True{}:
+      Ledgers.Id.is_eq_refl(k)
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# Answer.merged follows itself at another ledger and tree
+def Answer.merged_follows(
+  ~d: Led(),
+  l: L(d),
+  l2: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  h2: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id
+) -> {Answer.follows(Answer.merged(~d, l, h, k), Some{Answer.merged(~d, l2, h2, k)}) == True{}: Bool}:
+  Answer.merged_follows.at(Clash.left(~d, l, h, k), Clash.left(~d, l2, h2, k), k)
+
+# Answer.taken follows itself at another ledger and tree: the merge that a
+# change names is its own
+def Answer.taken_follows(
+  ~d: Led(),
+  l: L(d),
+  l2: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  h2: Maybe<&2, Hashes.Hash>,
+  +i: Ledgers.Id,
+  +q: Requests.Ask
+) -> {Answer.follows(Answer.taken(~d, l, h, i, q), Some{Answer.taken(~d, l2, h2, i, q)}) == True{}: Bool}:
+  match q:
+    case Requests.Ask.Start{os}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Branch{n, at}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Group{n, ms}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Own{g, at, os}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Write{n, base, x}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Resolve{k, n, x}}:
+      Answer.merged_follows(~d, l, l2, h, h2, k)
+    case Requests.Ask.On{st, b, Requests.Change.Merge{v, base}}:
+      Answer.merged_follows(~d, l, l2, h, h2, i)
+    case Requests.Ask.On{st, b, Requests.Change.Move{v}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Mark{m, text}}:
+      {==}
+    case Requests.Ask.On{st, b, Requests.Change.Key{n, k}}:
+      {==}
+
+# Answer.out follows itself once it is known whether the entry of the outcome
+# is the request (p): Stale and Refused are final
+def Answer.out_follows.stale(
+  +p: Bool
+) -> {
+  Answer.follows(
+    Shared.Bool.when(Answer, p, u => Answer.Stale{}, u => Answer.Refused{}),
+    Some{Shared.Bool.when(Answer, p, u => Answer.Stale{}, u => Answer.Refused{})}
+  )
+    == True{}: Bool
+}:
+  match p:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# Answer.out follows itself for a taken outcome once it is known whether the
+# entry of the outcome is the request (p)
+def Answer.out_follows.taken(
+  ~d: Led(),
+  l: L(d),
+  l2: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  h2: Maybe<&2, Hashes.Hash>,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +p: Bool
+) -> {
+  Answer.follows(
+    Shared.Bool.when(Answer, p, u => Answer.taken(~d, l, h, i, q), u => Answer.Refused{}),
+    Some{Shared.Bool.when(Answer, p, u => Answer.taken(~d, l2, h2, i, q), u => Answer.Refused{})}
+  )
+    == True{}: Bool
+}:
+  match p:
+    case True{}:
+      Answer.taken_follows(~d, l, l2, h, h2, i, q)
+    case False{}:
+      {==}
+
+# Answer.out follows itself for one outcome, at another ledger and tip: a
+# request that has an outcome keeps its answer, but for the clash of a merge
+def Answer.out_follows(
+  ~d: Led(),
+  l: L(d),
+  l2: L(d),
+  t: Replicas.Tip,
+  t2: Replicas.Tip,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  +a: Hashes.Hash,
+  o: Maybe<&2, Replicas.Out>
+) -> {
+  Answer.follows(Answer.out(~d, l, t, i, q, a, o), Some{Answer.out(~d, l2, t2, i, q, a, o)}) == True{}: Bool
+}:
+  match o:
+    case None{}:
+      {==}
+    case Some{Replicas.Out.Stale{x}}:
+      Answer.out_follows.stale(Hashes.Hash.is_eq(x, a))
+    case Some{Replicas.Out.Taken{x, n}}:
+      Answer.out_follows.taken(
+        ~d,
+        l,
+        l2,
+        Replicas.Tip.content(t),
+        Replicas.Tip.content(t2),
+        i,
+        q,
+        Hashes.Hash.is_eq(x, a)
+      )
+
 # answers only move forward: as the ledger grows, and while its ballots are
 # honest, a request that a node answers stays answered; Stale and Refused are
 # final; a taken change stays taken (Answer.follows)
