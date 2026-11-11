@@ -3263,6 +3263,9 @@ law Line.get_grows:
     l => Line.get(~mach, ~d, ~kern, l, c, key)
   )
 
+def Line.get_grows(mach, d, kern, c, key):
+  ?TODO
+
 # a step gives each of its requests an outcome: after a run, the log holds an
 # outcome of the ID of each request of the step
 law Step.run_outs:
