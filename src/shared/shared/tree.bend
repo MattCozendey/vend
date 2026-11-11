@@ -839,7 +839,8 @@ def Mst.merge.at(
       None{}
 
 # the tree of the keys of a, below the level ua, then of b, below the level
-# ub, when each key of a is before each of b, at most f levels down
+# ub, when each key of a is before each of b, at most f levels down. A side
+# that stands alone is opened too: it may rise to a higher bound
 def Mst.merge(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -851,10 +852,12 @@ def Mst.merge(
   b: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Edit>:
   match f a b:
-    case x None{} y:
-      Some{Edit{y, []}}
-    case x y None{}:
-      Some{Edit{y, []}}
+    case x None{} None{}:
+      Some{Edit{None{}, []}}
+    case x None{} Some{+hb}:
+      Maybe.map(&2, Node, Edit, n => Edit{Some{hb}, []}, Mst.node.below(~S, ~fetch, s, hb, ub))
+    case x Some{+ha} None{}:
+      Maybe.map(&2, Node, Edit, n => Edit{Some{ha}, []}, Mst.node.below(~S, ~fetch, s, ha, ua))
     case 0n y z:
       None{}
     case 1n+p Some{+ha} Some{+hb}:
