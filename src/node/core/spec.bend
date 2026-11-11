@@ -8579,6 +8579,430 @@ def Affects.none_in(-P: Touch -> Type, +ts: List<&2, Touch>, +x: Touch, e: {Some
     )
   )
 
+# that P holds of each touch of the version v of from, whose tree is h and
+# came after the tree h0, on the branch b whose tree is hb: of each resource c
+# that v wrote and that b does not hold as v gave it, for each resource u of
+# used that is c or that uses it by the users graph
+def Affects.HpEach(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +v: Ledgers.Id,
+  +h0: Maybe<&2, Hashes.Hash>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  -P: Touch -> Type
+) -> Type:
+  @c: Resources.Name -> {Res.differs(~d, l, h, h0, c) == Some{True{}}: Maybe<&2, Bool>}
+    -> {Res.differs(~d, l, h, hb, c) == Some{True{}}: Maybe<&2, Bool>}
+    -> @u2: Resources.Name -> {List.contains(~Resources.Name, ~Resources.Name.is_eq, used, u2) == True{}: Bool}
+    -> {
+      List.any.if(w => Crits.Dict.has(Unit, Reaches.Graph.reach(users, Name.key(c)), Name.key(u2)), Resources.Name.is_eq(u2, c))
+        == True{}: Bool
+    } -> P(Touch{from, v, c, b, u2})
+
+# Affects.touched_in once the first test w is known
+def Affects.touched_in.at(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +v: Ledgers.Id,
+  +h0: Maybe<&2, Hashes.Hash>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +c: Resources.Name,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  -P: Touch -> Type,
+  w: Bool,
+  +ew: {Res.differs(~d, l, h, h0, c) == Some{w}: Maybe<&2, Bool>},
+  +e2: {
+    Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c), u => Some{False{}}) == Some{True{}}: Maybe<&2, Bool>
+  },
+  hp: Affects.HpEach(~d, l, from, v, h0, h, b, hb, used, users, P),
+  +x: Touch
+) -> {
+  List.contains(~Touch, ~Touch.is_eq, Touches.of(from, v, c, b, used, Reaches.Graph.reach(users, Name.key(c))), x) == True{}: Bool
+} -> P(x):
+  match w:
+    case True{}:
+      hc => Affects.of_in(from, v, c, b, used, Reaches.Graph.reach(users, Name.key(c)), P, hp(c)(ew)(e2), x)(hc)
+    case False{}:
+      hc => Empty.absurd(P(x), Shared.Bool.false_ne_true(Shared.Maybe.some_inj(Bool, False{}, True{}, e2)))
+
+# each touch of a resource c that Touches.each touches
+def Affects.touched_in(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +v: Ledgers.Id,
+  +h0: Maybe<&2, Hashes.Hash>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +c: Resources.Name,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  -P: Touch -> Type,
+  touched: Bool,
+  +et: {
+    Maybe.bind(
+      &2,
+      Bool,
+      Bool,
+      Res.differs(~d, l, h, h0, c),
+      w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c), u => Some{False{}})
+    )
+      == Some{touched}: Maybe<&2, Bool>
+  },
+  hp: Affects.HpEach(~d, l, from, v, h0, h, b, hb, used, users, P),
+  +x: Touch
+) -> {List.contains(~Touch, ~Touch.is_eq, Touches.when(touched, from, v, c, b, used, users), x) == True{}: Bool} -> P(x):
+  match touched:
+    case False{}:
+      hc => Empty.absurd(P(x), Shared.Bool.false_ne_true(hc))
+    case True{}:
+      +hc => Affects.bind_some(
+        Bool,
+        Bool,
+        P(x),
+        Res.differs(~d, l, h, h0, c),
+        w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c), u => Some{False{}}),
+        True{},
+        +w => ew => e2 => Affects.touched_in.at(~d, l, from, v, h0, h, c, b, hb, used, users, P, w, ew, e2, hp, x)(hc)
+      )(et)
+
+# each touch that Touches.each gives
+def Affects.each_in(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +v: Ledgers.Id,
+  +h0: Maybe<&2, Hashes.Hash>,
+  +h: Maybe<&2, Hashes.Hash>,
+  changed: List<&2, Resources.Name>,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  -P: Touch -> Type,
+  hp: Affects.HpEach(~d, l, from, v, h0, h, b, hb, used, users, P),
+  +x: Touch
+) -> @ts: List<&2, Touch> -> {
+  Touches.each(~d, l, from, v, h0, h, changed, b, hb, used, users) == Some{ts}: Maybe<&2, List<&2, Touch>>
+} -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool} -> P(x):
+  match changed:
+    case Nil{}:
+      +ts => e => hc => Affects.none_in(P, ts, x, e)(hc)
+    case Con{+c, +rest}:
+      +ts => e => +hc => Affects.bind_some(
+        Bool,
+        List<&2, Touch>,
+        P(x),
+        Maybe.bind(
+          &2,
+          Bool,
+          Bool,
+          Res.differs(~d, l, h, h0, c),
+          w => Shared.Bool.when(Maybe<&2, Bool>, w, u => Res.differs(~d, l, h, hb, c), u => Some{False{}})
+        ),
+        touched => Maybe.map(
+          &2,
+          List<&2, Touch>,
+          List<&2, Touch>,
+          r => List.append(&2, Touch, Touches.when(touched, from, v, c, b, used, users), r),
+          Touches.each(~d, l, from, v, h0, h, rest, b, hb, used, users)
+        ),
+        ts,
+        +touched => +et => e2 => Affects.map_some(
+          List<&2, Touch>,
+          List<&2, Touch>,
+          P(x),
+          r => List.append(&2, Touch, Touches.when(touched, from, v, c, b, used, users), r),
+          Touches.each(~d, l, from, v, h0, h, rest, b, hb, used, users),
+          ts,
+          +r => +er => +eapp => Affects.app_in(
+            Affects.HpEach(~d, l, from, v, h0, h, b, hb, used, users, P),
+            P,
+            Touches.when(touched, from, v, c, b, used, users),
+            r,
+            x,
+            hp,
+            hp1 => ha => Affects.touched_in(~d, l, from, v, h0, h, c, b, hb, used, users, P, touched, et, hp1, x)(ha),
+            hp2 => hr => Affects.each_in(~d, l, from, v, h0, h, rest, b, hb, used, users, P, hp2, x)(r)(er)(hr)
+          )(
+            Affects.cast(
+              List<&2, Touch>,
+              z => {List.contains(~Touch, ~Touch.is_eq, z, x) == True{}: Bool},
+              ts,
+              List.append(&2, Touch, Touches.when(touched, from, v, c, b, used, users), r),
+              Equal.sym(List<&2, Touch>, List.append(&2, Touch, Touches.when(touched, from, v, c, b, used, users), r), ts, eapp),
+              hc
+            )
+          )
+        )(e2)
+      )(e)
+
+# that P holds of each touch of each version of the listing at the tip tf of
+# the branch from: of a version of the ID i whose number m reads back, whose
+# tree hy came after hz
+def Affects.HpAll(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +tf: Replicas.Tip,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  -P: Touch -> Type
+) -> Type:
+  @i: Ledgers.Id -> @hz: Maybe<&2, Hashes.Hash> -> @hy: Maybe<&2, Hashes.Hash> -> @m: U32
+    -> {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i) == Some{m}: Maybe<&2, U32>}
+    -> {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, m) == Some{hz}: Maybe<&2, Maybe<&2, Hashes.Hash>>}
+    -> {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, m) == Some{Replicas.Taken{i, hy}}: Maybe<&2, Replicas.Taken>}
+    -> Affects.HpEach(~d, l, from, i, hz, hy, b, hb, used, users, P)
+
+# each touch of the version i of the listing, whose number m is n
+def Affects.all_hit(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +tf: Replicas.Tip,
+  +i: Ledgers.Id,
+  +hy: Maybe<&2, Hashes.Hash>,
+  +ks: List<&2, List<&2, U32>>,
+  +m: U32,
+  +n: U32,
+  +h0: Maybe<&2, Hashes.Hash>,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  -P: Touch -> Type,
+  +enum: {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i) == Some{m}: Maybe<&2, U32>},
+  +eb: {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, n) == Some{h0}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+  +etk: {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, l, tf, n) == Some{Replicas.Taken{i, hy}}: Maybe<&2, Replicas.Taken>},
+  +a: List<&2, Touch>,
+  +ea: {
+    Shared.Bool.when(
+      Maybe<&2, List<&2, Touch>>,
+      U32.is_eq(m, n),
+      u => Touches.each(~d, l, from, i, h0, hy, Keys.names(ks), b, hb, used, users),
+      u => Some{[]}
+    )
+      == Some{a}: Maybe<&2, List<&2, Touch>>
+  },
+  hp: Affects.HpAll(~d, l, from, tf, b, hb, used, users, P),
+  +x: Touch
+) -> {List.contains(~Touch, ~Touch.is_eq, a, x) == True{}: Bool} -> P(x):
+  +hc => Affects.when_is(
+    Maybe<&2, List<&2, Touch>>,
+    P(x),
+    U32.is_eq(m, n),
+    u => Touches.each(~d, l, from, i, h0, hy, Keys.names(ks), b, hb, used, users),
+    u => Some{[]},
+    Some{a},
+    +eqt => e1 => Affects.each_in(
+      ~d,
+      l,
+      from,
+      i,
+      h0,
+      hy,
+      Keys.names(ks),
+      b,
+      hb,
+      used,
+      users,
+      P,
+      hp(i)(h0)(hy)(n)(
+        Affects.cast(
+          U32,
+          z => {Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i) == Some{z}: Maybe<&2, U32>},
+          m,
+          n,
+          Shared.U32.is_eq_sound(m, n)(eqt),
+          enum
+        )
+      )(eb)(etk),
+      x
+    )(a)(e1)(hc),
+    eqf => e2 => Affects.none_in(P, a, x, e2)(hc)
+  )(ea)
+
+# each touch that Touches.all gives, of a listing of k versions from the
+# number n, whose tree before is h0
+def Affects.all_in(
+  ~d: Led(),
+  +l: L(d),
+  +from: Branch,
+  +tf: Replicas.Tip,
+  xs: List<&2, Replicas.Taken>,
+  +n: U32,
+  +h0: Maybe<&2, Hashes.Hash>,
+  +b: Branch,
+  +hb: Maybe<&2, Hashes.Hash>,
+  +used: List<&2, Resources.Name>,
+  +users: Reaches.Graph,
+  -P: Touch -> Type,
+  hp: Affects.HpAll(~d, l, from, tf, b, hb, used, users, P),
+  k: Nat,
+  +eb: {Replicas.Tip.before(~Requests.Ask.machine(), ~d, l, tf, n) == Some{h0}: Maybe<&2, Maybe<&2, Hashes.Hash>>},
+  +ev: {Replicas.Tip.versions(~Requests.Ask.machine(), ~d, k, l, tf, n) == Some{xs}: Maybe<&2, List<&2, Replicas.Taken>>},
+  +x: Touch
+) -> @ts: List<&2, Touch> -> {
+  Touches.all(~d, l, from, tf, xs, n, h0, b, hb, used, users) == Some{ts}: Maybe<&2, List<&2, Touch>>
+} -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool} -> P(x):
+  match xs k:
+    case Nil{} j:
+      +ts => e => hc => Affects.none_in(P, ts, x, e)(hc)
+    case Con{Replicas.Taken{+i, +hy}, +rest} 0n:
+      ts => e => hc => Empty.absurd(
+        P(x),
+        Affects.nil_ne_cons(
+          Replicas.Taken,
+          Replicas.Taken{i, hy},
+          rest,
+          Shared.Maybe.some_inj(List<&2, Replicas.Taken>, [], Replicas.Taken{i, hy} <> rest, ev)
+        )
+      )
+    case Con{Replicas.Taken{+i, +hy}, +rest} 1n+(+p):
+      +ts => e => +hc => Affects.versions_cons(
+        ~d,
+        l,
+        tf,
+        p,
+        n,
+        Replicas.Taken{i, hy},
+        rest,
+        P(x),
+        +elt => +etk => +evr => Affects.bind_some(
+          List<&2, List<&2, U32>>,
+          List<&2, Touch>,
+          P(x),
+          Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, h0, hy),
+          ks => Maybe.bind(
+            &2,
+            U32,
+            List<&2, Touch>,
+            Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i),
+            m => Maybe.bind(
+              &2,
+              List<&2, Touch>,
+              List<&2, Touch>,
+              Shared.Bool.when(
+                Maybe<&2, List<&2, Touch>>,
+                U32.is_eq(m, n),
+                u => Touches.each(~d, l, from, i, h0, hy, Keys.names(ks), b, hb, used, users),
+                u => Some{[]}
+              ),
+              a => Maybe.map(
+                &2,
+                List<&2, Touch>,
+                List<&2, Touch>,
+                r => List.append(&2, Touch, a, r),
+                Touches.all(~d, l, from, tf, rest, U32.inc(n), hy, b, hb, used, users)
+              )
+            )
+          ),
+          ts,
+          +ks => eks => e1 => Affects.bind_some(
+            U32,
+            List<&2, Touch>,
+            P(x),
+            Replicas.Tip.number(~Requests.Ask.machine(), ~d, l, tf, i),
+            m => Maybe.bind(
+              &2,
+              List<&2, Touch>,
+              List<&2, Touch>,
+              Shared.Bool.when(
+                Maybe<&2, List<&2, Touch>>,
+                U32.is_eq(m, n),
+                u => Touches.each(~d, l, from, i, h0, hy, Keys.names(ks), b, hb, used, users),
+                u => Some{[]}
+              ),
+              a => Maybe.map(
+                &2,
+                List<&2, Touch>,
+                List<&2, Touch>,
+                r => List.append(&2, Touch, a, r),
+                Touches.all(~d, l, from, tf, rest, U32.inc(n), hy, b, hb, used, users)
+              )
+            ),
+            ts,
+            +m => +enum => e2 => Affects.bind_some(
+              List<&2, Touch>,
+              List<&2, Touch>,
+              P(x),
+              Shared.Bool.when(
+                Maybe<&2, List<&2, Touch>>,
+                U32.is_eq(m, n),
+                u => Touches.each(~d, l, from, i, h0, hy, Keys.names(ks), b, hb, used, users),
+                u => Some{[]}
+              ),
+              a => Maybe.map(
+                &2,
+                List<&2, Touch>,
+                List<&2, Touch>,
+                r => List.append(&2, Touch, a, r),
+                Touches.all(~d, l, from, tf, rest, U32.inc(n), hy, b, hb, used, users)
+              ),
+              ts,
+              +a => +ea => e3 => Affects.map_some(
+                List<&2, Touch>,
+                List<&2, Touch>,
+                P(x),
+                r => List.append(&2, Touch, a, r),
+                Touches.all(~d, l, from, tf, rest, U32.inc(n), hy, b, hb, used, users),
+                ts,
+                +r => +er => +eapp => Affects.app_in(
+                  Affects.HpAll(~d, l, from, tf, b, hb, used, users, P),
+                  P,
+                  a,
+                  r,
+                  x,
+                  hp,
+                  hp1 => ha => Affects.all_hit(~d, l, from, tf, i, hy, ks, m, n, h0, b, hb, used, users, P, enum, eb, etk, a, ea, hp1, x)(ha),
+                  hp2 => hr => Affects.all_in(
+                    ~d,
+                    l,
+                    from,
+                    tf,
+                    rest,
+                    U32.inc(n),
+                    hy,
+                    b,
+                    hb,
+                    used,
+                    users,
+                    P,
+                    hp2,
+                    p,
+                    Affects.before_next(~d, l, tf, n, Replicas.Taken{i, hy}, elt, etk),
+                    evr,
+                    x
+                  )(r)(er)(hr)
+                )(
+                  Affects.cast(
+                    List<&2, Touch>,
+                    z => {List.contains(~Touch, ~Touch.is_eq, z, x) == True{}: Bool},
+                    ts,
+                    List.append(&2, Touch, a, r),
+                    Equal.sym(List<&2, Touch>, List.append(&2, Touch, a, r), ts, eapp),
+                    hc
+                  )
+                )
+              )(e3)
+            )(e2)
+          )(e1)
+        )(e)
+      )(ev)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
