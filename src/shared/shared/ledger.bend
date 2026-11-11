@@ -2594,7 +2594,71 @@ def Book.head_ne(+x: U32, +y: U32, -xs: List<&2, U32>, -ys: List<&2, U32>) -> {U
 
 # names with the same key are the same
 def Name.key_inj(a: Name, b: Name) -> {Name.key(a) == Name.key(b): List<&2, U32>} -> {a == b: Name}:
-  ?TODO
+  match a b:
+    case Name.Ask{Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7}} Name.Ask{Hashes.Hash{y0, y1, y2, y3, y4, y5, y6, y7}}:
+      e =>
+        Equal.cong(
+          List<&2, U32>,
+          Name,
+          l => Name.Ask{Codes.Code.read_value(Hashes.Hash, Hashes.Hash.code.read(List.drop(&2, U32, l, 1n)), Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7})},
+          Name.key(Name.Ask{Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7}}),
+          Name.key(Name.Ask{Hashes.Hash{y0, y1, y2, y3, y4, y5, y6, y7}}),
+          e
+        )
+    case Name.Ask{+x} Name.Ballot{+y}:
+      e => Empty.absurd({Name.Ask{x} == Name.Ballot{y}: Name}, Book.head_ne(0, 1, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Ask{+x} Name.Data{+y}:
+      e => Empty.absurd({Name.Ask{x} == Name.Data{y}: Name}, Book.head_ne(0, 2, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Ask{+x} Name.Lie{+y}:
+      e => Empty.absurd({Name.Ask{x} == Name.Lie{y}: Name}, Book.head_ne(0, 3, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Ballot{+x} Name.Ask{+y}:
+      e => Empty.absurd({Name.Ballot{x} == Name.Ask{y}: Name}, Book.head_ne(1, 0, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Ballot{Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7}} Name.Ballot{Hashes.Hash{y0, y1, y2, y3, y4, y5, y6, y7}}:
+      e =>
+        Equal.cong(
+          List<&2, U32>,
+          Name,
+          l => Name.Ballot{Codes.Code.read_value(Hashes.Hash, Hashes.Hash.code.read(List.drop(&2, U32, l, 1n)), Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7})},
+          Name.key(Name.Ballot{Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7}}),
+          Name.key(Name.Ballot{Hashes.Hash{y0, y1, y2, y3, y4, y5, y6, y7}}),
+          e
+        )
+    case Name.Ballot{+x} Name.Data{+y}:
+      e => Empty.absurd({Name.Ballot{x} == Name.Data{y}: Name}, Book.head_ne(1, 2, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Ballot{+x} Name.Lie{+y}:
+      e => Empty.absurd({Name.Ballot{x} == Name.Lie{y}: Name}, Book.head_ne(1, 3, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Data{+x} Name.Ask{+y}:
+      e => Empty.absurd({Name.Data{x} == Name.Ask{y}: Name}, Book.head_ne(2, 0, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Data{+x} Name.Ballot{+y}:
+      e => Empty.absurd({Name.Data{x} == Name.Ballot{y}: Name}, Book.head_ne(2, 1, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Data{Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7}} Name.Data{Hashes.Hash{y0, y1, y2, y3, y4, y5, y6, y7}}:
+      e =>
+        Equal.cong(
+          List<&2, U32>,
+          Name,
+          l => Name.Data{Codes.Code.read_value(Hashes.Hash, Hashes.Hash.code.read(List.drop(&2, U32, l, 1n)), Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7})},
+          Name.key(Name.Data{Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7}}),
+          Name.key(Name.Data{Hashes.Hash{y0, y1, y2, y3, y4, y5, y6, y7}}),
+          e
+        )
+    case Name.Data{+x} Name.Lie{+y}:
+      e => Empty.absurd({Name.Data{x} == Name.Lie{y}: Name}, Book.head_ne(2, 3, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Lie{+x} Name.Ask{+y}:
+      e => Empty.absurd({Name.Lie{x} == Name.Ask{y}: Name}, Book.head_ne(3, 0, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Lie{+x} Name.Ballot{+y}:
+      e => Empty.absurd({Name.Lie{x} == Name.Ballot{y}: Name}, Book.head_ne(3, 1, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Lie{+x} Name.Data{+y}:
+      e => Empty.absurd({Name.Lie{x} == Name.Data{y}: Name}, Book.head_ne(3, 2, Hashes.Hash.code(x, []), Hashes.Hash.code(y, []))({==})(e))
+    case Name.Lie{Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7}} Name.Lie{Hashes.Hash{y0, y1, y2, y3, y4, y5, y6, y7}}:
+      e =>
+        Equal.cong(
+          List<&2, U32>,
+          Name,
+          l => Name.Lie{Codes.Code.read_value(Hashes.Hash, Hashes.Hash.code.read(List.drop(&2, U32, l, 1n)), Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7})},
+          Name.key(Name.Lie{Hashes.Hash{x0, x1, x2, x3, x4, x5, x6, x7}}),
+          Name.key(Name.Lie{Hashes.Hash{y0, y1, y2, y3, y4, y5, y6, y7}}),
+          e
+        )
 
 # the key of a name has nine words
 def Name.key_len(n: Name) -> {List.length(&2, U32, Name.key(n)) == 9n: Nat}:
@@ -2909,7 +2973,63 @@ def Book.key_tail.asks(-Q: Data, e: Entry<Q>, +n: Name, -p: Nat, -k: List<&2, U3
 def Book.keys_one(-Q: Data, +i: Nat, e1: Entry<Q>, +n1: Name, e2: Entry<Q>, +n2: Name, -k: List<&2, U32>) -> {
   Keys.at(Entry.keys(Q, e1, n1), i) == Some{k}: Maybe<&2, List<&2, U32>>
 } -> {Keys.at(Entry.keys(Q, e2, n2), i) == Some{k}: Maybe<&2, List<&2, U32>>} -> {Name.key(n1) == Name.key(n2): List<&2, U32>}:
-  ?TODO
+  match i:
+    case 0n:
+      h1 => h2 =>
+        Equal.trans(
+          List<&2, U32>,
+          Name.key(n1),
+          Codes.Code.read_value(List<&2, U32>, Codes.Read.then(String, List<&2, U32>, Codes.Read.then(Place, String, Place.code.read(k), p => r => Codes.Code.text.read(r)), a => r => Some{Codes.Read{r, []}}), []),
+          Name.key(n2),
+          Equal.sym(List<&2, U32>, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(String, List<&2, U32>, Codes.Read.then(Place, String, Place.code.read(k), p => r => Codes.Code.text.read(r)), a => r => Some{Codes.Read{r, []}}), []), Name.key(n1), Book.key_tail.ballots(Q, e1, n1, k)(h1)),
+          Book.key_tail.ballots(Q, e2, n2, k)(h2)
+        )
+    case 1n+i1:
+      match i1:
+        case 0n:
+          h1 => h2 =>
+            Equal.trans(
+              List<&2, U32>,
+              Name.key(n1),
+              List.drop(&2, U32, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}), []), Nat.sub(List.length(&2, U32, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}), [])), 9n)),
+              Name.key(n2),
+              Equal.sym(List<&2, U32>, List.drop(&2, U32, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}), []), Nat.sub(List.length(&2, U32, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}), [])), 9n)), Name.key(n1), Book.key_tail.rounds(Q, e1, n1, k)(h1)),
+              Book.key_tail.rounds(Q, e2, n2, k)(h2)
+            )
+        case 1n+i2:
+          match i2:
+            case 0n:
+              h1 => h2 =>
+                Equal.trans(
+                  List<&2, U32>,
+                  Name.key(n1),
+                  List.drop(&2, U32, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}), []), Nat.sub(List.length(&2, U32, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}), [])), 9n)),
+                  Name.key(n2),
+                  Equal.sym(List<&2, U32>, List.drop(&2, U32, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}), []), Nat.sub(List.length(&2, U32, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Line, List<&2, U32>, Line.code.read(k), a => r => Some{Codes.Read{r, []}}), [])), 9n)), Name.key(n1), Book.key_tail.heights(Q, e1, n1, k)(h1)),
+                  Book.key_tail.heights(Q, e2, n2, k)(h2)
+                )
+            case 1n+i3:
+              match i3:
+                case 0n:
+                  h1 => h2 =>
+                    Equal.trans(
+                      List<&2, U32>,
+                      Name.key(n1),
+                      Codes.Code.read_value(List<&2, U32>, Codes.Read.then(String, List<&2, U32>, Codes.Read.then(Hashes.Hash, String, Hashes.Hash.code.read(k), p => r => Codes.Code.text.read(r)), a => r => Some{Codes.Read{r, []}}), []),
+                      Name.key(n2),
+                      Equal.sym(List<&2, U32>, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(String, List<&2, U32>, Codes.Read.then(Hashes.Hash, String, Hashes.Hash.code.read(k), p => r => Codes.Code.text.read(r)), a => r => Some{Codes.Read{r, []}}), []), Name.key(n1), Book.key_tail.liars(Q, e1, n1, k)(h1)),
+                      Book.key_tail.liars(Q, e2, n2, k)(h2)
+                    )
+                case 1n+p:
+                  h1 => h2 =>
+                    Equal.trans(
+                      List<&2, U32>,
+                      Name.key(n1),
+                      Codes.Code.read_value(List<&2, U32>, Codes.Read.then(String, List<&2, U32>, Codes.Code.text.read(k), a => r => Some{Codes.Read{r, []}}), []),
+                      Name.key(n2),
+                      Equal.sym(List<&2, U32>, Codes.Code.read_value(List<&2, U32>, Codes.Read.then(String, List<&2, U32>, Codes.Code.text.read(k), a => r => Some{Codes.Read{r, []}}), []), Name.key(n1), Book.key_tail.asks(Q, e1, n1, p, k)(h1)),
+                      Book.key_tail.asks(Q, e2, n2, p, k)(h2)
+                    )
 
 # an add keeps a book in its one shape
 law Book.ok_add:
