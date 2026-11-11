@@ -1025,3 +1025,475 @@ def Mst.put(
       Mst.insert(~S, ~fetch, Mst.depth(), s, m, k, v, Key.level(k))
     case None{}:
       Mst.delete(~S, ~fetch, Mst.depth(), s, m, k, Key.level(k))
+
+# Reads of many keys
+# ------------------
+# A listing and a difference read a tree as pieces, and check each node that
+# they open (Mst.open): its hash, its code, its level, and its keys in their
+# bounds. So they answer only of a tree in its one shape, whoever made its
+# root, and two roots that list the same bindings are the same root.
+
+# a piece of a tree, as a walk reads it: a binding, or the subtree of the hash
+# h, whose node must have a level below up and keys after lo and before hi
+type Piece is Data:
+  Piece.Bind{key: List<&2, U32>, value: List<&2, U32>}
+  Piece.Sub{hash: Hashes.Hash, up: Nat, lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>}
+
+# the key k comes after the bound lo (none: no bound)
+def Bound.after(lo: Maybe<&2, List<&2, U32>>, k: List<&2, U32>) -> Bool:
+  match lo:
+    case None{}:
+      True{}
+    case Some{a}:
+      Key.is_lt(a, k)
+
+# the key k comes before the bound hi (none: no bound)
+def Bound.before(k: List<&2, U32>, hi: Maybe<&2, List<&2, U32>>) -> Bool:
+  match hi:
+    case None{}:
+      True{}
+    case Some{b}:
+      Key.is_lt(k, b)
+
+# the piece of the subtree m of a node of the level l, between lo and hi,
+# before the pieces rest (none: no piece)
+def Piece.sub(
+  m: Maybe<&2, Hashes.Hash>,
+  l: Nat,
+  lo: Maybe<&2, List<&2, U32>>,
+  hi: Maybe<&2, List<&2, U32>>,
+  rest: List<&2, Piece>
+) -> List<&2, Piece>:
+  match m:
+    case None{}:
+      rest
+    case Some{h}:
+      Piece.Sub{h, l, lo, hi} <> rest
+
+# the pieces of the items xs of a node of the level l, after the subtree
+# prev, between lo and hi (none: a key is not of the level l, or not in order
+# between the bounds)
+def Mst.pieces(
+  xs: List<&2, Item>,
+  +l: Nat,
+  prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> Maybe<&2, List<&2, Piece>>:
+  match xs:
+    case Nil{}:
+      Some{Piece.sub(prev, l, lo, hi, [])}
+    case Con{Item{+k, v, r}, rest}:
+      Shared.Maybe.when(
+        List<&2, Piece>,
+        Bool.and(Nat.is_eq(Key.level(k), l), Bool.and(Bound.after(lo, k), Bound.before(k, hi))),
+        u => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          ps => Piece.sub(prev, l, lo, Some{k}, Piece.Bind{k, v} <> ps),
+          Mst.pieces(rest, l, r, Some{k}, hi)
+        )
+      )
+
+# the pieces of the node n, below the level up and between lo and hi (none:
+# it has no item, its level is not below up, or its items are not so)
+def Mst.open.node(
+  n: Node,
+  up: Nat,
+  lo: Maybe<&2, List<&2, U32>>,
+  hi: Maybe<&2, List<&2, U32>>
+) -> Maybe<&2, List<&2, Piece>>:
+  match n:
+    case Node{+l, left, +xs}:
+      Shared.Maybe.when(
+        List<&2, Piece>,
+        Bool.and(Nat.is_lt(l, up), Bool.not(List.is_empty(&2, Item, xs))),
+        u => Mst.pieces(xs, l, left, lo, hi)
+      )
+
+# the pieces of the node of the hash h, checked (none: the depot s lacks it,
+# its words do not have the hash h or are not the code of one node, or the
+# node is not in its one shape below up and between lo and hi)
+def Mst.open(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  +h: Hashes.Hash,
+  up: Nat,
+  lo: Maybe<&2, List<&2, U32>>,
+  hi: Maybe<&2, List<&2, U32>>
+) -> Maybe<&2, List<&2, Piece>>:
+  Maybe.bind(
+    &2,
+    List<&2, U32>,
+    List<&2, Piece>,
+    fetch(s)(h),
+    +ws => Shared.Maybe.when(
+      List<&2, Piece>,
+      Hashes.Hash.is_eq(Hashes.Sha.hash(ws), h),
+      u => Maybe.bind(
+        &2,
+        Node,
+        List<&2, Piece>,
+        Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+        n => Mst.open.node(n, up, lo, hi)
+      )
+    )
+  )
+
+# the pieces of the tree of the root m
+def Mst.root(m: Maybe<&2, Hashes.Hash>) -> List<&2, Piece>:
+  Piece.sub(m, Mst.depth(), None{}, None{}, [])
+
+# Listings
+
+# a key that starts with p may come after the bound lo
+def Bound.meets_lo(+p: List<&2, U32>, lo: Maybe<&2, List<&2, U32>>) -> Bool:
+  match lo:
+    case None{}:
+      True{}
+    case Some{+a}:
+      Bool.or(Key.is_lt(a, p), Key.leads(p, a))
+
+# a key that starts with p may come before the bound hi
+def Bound.meets_hi(p: List<&2, U32>, hi: Maybe<&2, List<&2, U32>>) -> Bool:
+  match hi:
+    case None{}:
+      True{}
+    case Some{b}:
+      Key.is_lt(p, b)
+
+# the bindings under the prefix p among the pieces ps, at most f levels down:
+# a subtree whose bounds hold no key that starts with p is not read
+def Mst.range.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  ps: List<&2, Piece>
+) -> Maybe<&2, List<&2, Binding>>:
+  match f ps:
+    case x Nil{}:
+      Some{[]}
+    case 0n Con{x, rest}:
+      None{}
+    case 1n+(+q) Con{Piece.Bind{+k, +v}, rest}:
+      Maybe.map(
+        &2,
+        List<&2, Binding>,
+        List<&2, Binding>,
+        +bs => Shared.Bool.when(List<&2, Binding>, Key.leads(p, k), u => Binding{k, v} <> bs, u => bs),
+        Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+      )
+    case 1n+(+q) Con{Piece.Sub{h, up, +lo, +hi}, +rest}:
+      Shared.Bool.when(
+        Maybe<&2, List<&2, Binding>>,
+        Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)),
+        u => Maybe.bind(
+          &2,
+          List<&2, Piece>,
+          List<&2, Binding>,
+          Mst.open(~S, ~fetch, s, h, up, lo, hi),
+          ks => Maybe.bind(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, q, s, p, ks),
+            a => Maybe.map(
+              &2,
+              List<&2, Binding>,
+              List<&2, Binding>,
+              b => List.append(&2, Binding, a, b),
+              Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+            )
+          )
+        ),
+        u => Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+      )
+
+# the bindings whose keys start with p, in the tree of the root m, in the
+# order of their keys (none: the depot lacks a node, or a node is not in its
+# one shape)
+def Mst.range(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  m: Maybe<&2, Hashes.Hash>,
+  p: List<&2, U32>
+) -> Maybe<&2, List<&2, Binding>>:
+  Mst.range.go(~S, ~fetch, Mst.depth(), s, p, Mst.root(m))
+
+# Differences
+# -----------
+# A difference walks both trees in rounds, one level of nodes a round. A round
+# cuts the pieces of both at each key that both hold as a binding; of each run
+# between two cuts, it drops the pieces at its ends that both trees share (a
+# subtree of one hash, in the same bounds, reads the same in both), and opens
+# each subtree that is left. So a difference opens only the nodes on the paths
+# to the keys that differ.
+
+# the pieces a and b are the same: one binding, or one subtree in the same
+# bounds
+def Piece.same(a: Piece, b: Piece) -> Bool:
+  match a b:
+    case Piece.Bind{k1, v1} Piece.Bind{k2, v2}:
+      Bool.and(Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2), Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2))
+    case Piece.Sub{h1, u1, lo1, hi1} Piece.Sub{h2, u2, lo2, hi2}:
+      Bool.and(
+        Hashes.Hash.is_eq(h1, h2),
+        Bool.and(
+          Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), lo1, lo2),
+          Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), hi1, hi2)
+        )
+      )
+    case x y:
+      False{}
+
+# two runs of pieces over the same keys, one of each tree
+type Runs is Data:
+  Runs{a: List<&2, Piece>, b: List<&2, Piece>}
+
+# what a round gives: keys that differ, and the runs to read on
+type Round is Data:
+  Round{keys: List<&2, List<&2, U32>>, pairs: List<&2, Runs>}
+
+# the keys of a round
+def Round.keys(r: Round) -> List<&2, List<&2, U32>>:
+  match r:
+    case Round{ks, ps}:
+      ks
+
+# the runs of a round
+def Round.pairs(r: Round) -> List<&2, Runs>:
+  match r:
+    case Round{ks, ps}:
+      ps
+
+# the round r with the run p first
+def Round.cons(p: Runs, r: Round) -> Round:
+  match r:
+    case Round{ks, ps}:
+      Round{ks, p <> ps}
+
+# the round r with the key k, when the values v1 and v2 of it differ
+def Round.differs(+k: List<&2, U32>, v1: List<&2, U32>, v2: List<&2, U32>, r: Round) -> Round:
+  match r:
+    case Round{+ks, ps}:
+      Round{Shared.Bool.when(List<&2, List<&2, U32>>, Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2), u => ks, u => k <> ks), ps}
+
+# the rounds a and b, one after the other
+def Round.append(a: Round, b: Round) -> Round:
+  match a b:
+    case Round{k1, p1} Round{k2, p2}:
+      Round{List.append(&2, List<&2, U32>, k1, k2), List.append(&2, Runs, p1, p2)}
+
+# the pieces as and bs cut at each key that both hold as a binding, after the
+# pieces sa and sb of the run so far, last first
+def Mst.cut(as: List<&2, Piece>, bs: List<&2, Piece>, +sa: List<&2, Piece>, +sb: List<&2, Piece>) -> Round:
+  match as bs:
+    case Nil{} Nil{}:
+      Round{[], [Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}]}
+    case Nil{} Con{y, rb}:
+      Mst.cut([], rb, sa, y <> sb)
+    case Con{x, ra} Nil{}:
+      Mst.cut(ra, [], x <> sa, sb)
+    case Con{Piece.Sub{h, u, lo, hi}, ra} ys:
+      Mst.cut(ra, ys, Piece.Sub{h, u, lo, hi} <> sa, sb)
+    case Con{Piece.Bind{k1, v1}, ra} Con{Piece.Sub{h, u, lo, hi}, rb}:
+      Mst.cut(Con{Piece.Bind{k1, v1}, ra}, rb, sa, Piece.Sub{h, u, lo, hi} <> sb)
+    case Con{Piece.Bind{+k1, +v1}, +ra} Con{Piece.Bind{+k2, +v2}, +rb}:
+      +c = Key.cmp(k1, k2)
+      Shared.Bool.when(
+        Round,
+        Cmp.is_lt(c),
+        w => Mst.cut(ra, Con{Piece.Bind{k2, v2}, rb}, Piece.Bind{k1, v1} <> sa, sb),
+        w => Shared.Bool.when(
+          Round,
+          Cmp.is_eq(c),
+          w2 => Round.cons(
+            Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)},
+            Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))
+          ),
+          w2 => Mst.cut(Con{Piece.Bind{k1, v1}, ra}, rb, sa, Piece.Bind{k2, v2} <> sb)
+        )
+      )
+
+# the runs as and bs without the pieces at their fronts that both share
+def Mst.trim(as: List<&2, Piece>, bs: List<&2, Piece>) -> Runs:
+  match as bs:
+    case Con{+x, +ra} Con{+y, +rb}:
+      Shared.Bool.when(Runs, Piece.same(x, y), u => Mst.trim(ra, rb), u => Runs{x <> ra, y <> rb})
+    case xs ys:
+      Runs{xs, ys}
+
+# the runs r, read back to front
+def Runs.reverse(r: Runs) -> Runs:
+  match r:
+    case Runs{a, b}:
+      Runs{List.reverse(&2, Piece, a), List.reverse(&2, Piece, b)}
+
+# the runs r without their front pieces that both share
+def Runs.trim_front(r: Runs) -> Runs:
+  match r:
+    case Runs{a, b}:
+      Mst.trim(a, b)
+
+# the run p without the pieces at either end that both runs share
+def Runs.trim(p: Runs) -> Runs:
+  Runs.reverse(Runs.trim_front(Runs.reverse(Runs.trim_front(p))))
+
+# the run ps holds a subtree
+def Pieces.has_sub(ps: List<&2, Piece>) -> Bool:
+  match ps:
+    case Nil{}:
+      False{}
+    case Con{Piece.Sub{h, u, lo, hi}, rest}:
+      True{}
+    case Con{Piece.Bind{k, v}, rest}:
+      Pieces.has_sub(rest)
+
+# the keys of the bindings of the run ps, before ks
+def Pieces.keys(ps: List<&2, Piece>, ks: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>>:
+  match ps:
+    case Nil{}:
+      ks
+    case Con{Piece.Bind{k, v}, rest}:
+      k <> Pieces.keys(rest, ks)
+    case Con{Piece.Sub{h, u, lo, hi}, rest}:
+      Pieces.keys(rest, ks)
+
+# the run ps with each subtree opened one level (none: a node does not read)
+def Mst.open.all(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  ps: List<&2, Piece>
+) -> Maybe<&2, List<&2, Piece>>:
+  match ps:
+    case Nil{}:
+      Some{[]}
+    case Con{Piece.Bind{k, v}, rest}:
+      Maybe.map(
+        &2,
+        List<&2, Piece>,
+        List<&2, Piece>,
+        r => Piece.Bind{k, v} <> r,
+        Mst.open.all(~S, ~fetch, s, rest)
+      )
+    case Con{Piece.Sub{h, u, lo, hi}, rest}:
+      Maybe.bind(
+        &2,
+        List<&2, Piece>,
+        List<&2, Piece>,
+        Mst.open(~S, ~fetch, s, h, u, lo, hi),
+        a => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          b => List.append(&2, Piece, a, b),
+          Mst.open.all(~S, ~fetch, s, rest)
+        )
+      )
+
+# a run between two cuts, trimmed (Runs.trim): the keys of its bindings, when
+# neither side holds a subtree (no key there is in both trees); else the run
+# with each subtree opened, to read on
+def Mst.step.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  p: Runs
+) -> Maybe<&2, Round>:
+  match p:
+    case Runs{+a, +b}:
+      Shared.Bool.when(
+        Maybe<&2, Round>,
+        Bool.or(Pieces.has_sub(a), Pieces.has_sub(b)),
+        u => Maybe.bind(
+          &2,
+          List<&2, Piece>,
+          Round,
+          Mst.open.all(~S, ~fetch, s, a),
+          a2 => Maybe.map(
+            &2,
+            List<&2, Piece>,
+            Round,
+            b2 => Round{[], [Runs{a2, b2}]},
+            Mst.open.all(~S, ~fetch, s, b)
+          )
+        ),
+        u => Some{Round{Pieces.keys(a, Pieces.keys(b, [])), []}}
+      )
+
+# the round of each of the runs ps between two cuts
+def Mst.step(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  ps: List<&2, Runs>
+) -> Maybe<&2, Round>:
+  match ps:
+    case Nil{}:
+      Some{Round{[], []}}
+    case Con{p, rest}:
+      Maybe.bind(
+        &2,
+        Round,
+        Round,
+        Mst.step.at(~S, ~fetch, s, Runs.trim(p)),
+        a => Maybe.map(&2, Round, Round, b => Round.append(a, b), Mst.step(~S, ~fetch, s, rest))
+      )
+
+# the keys that differ in each of the runs ps, at most f rounds on
+def Mst.diff.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  ps: List<&2, Runs>
+) -> Maybe<&2, List<&2, List<&2, U32>>>:
+  match f ps:
+    case x Nil{}:
+      Some{[]}
+    case 0n Con{p, rest}:
+      None{}
+    case 1n+(+q) Con{Runs{a, b}, rest}:
+      +c = Mst.cut(a, b, [], [])
+      Maybe.bind(
+        &2,
+        Round,
+        List<&2, List<&2, U32>>,
+        Mst.step(~S, ~fetch, s, Round.pairs(c)),
+        +r => Maybe.bind(
+          &2,
+          List<&2, List<&2, U32>>,
+          List<&2, List<&2, U32>>,
+          Mst.diff.go(~S, ~fetch, q, s, Round.pairs(r)),
+          k3 => Maybe.map(
+            &2,
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            k4 => List.append(
+              &2,
+              List<&2, U32>,
+              Round.keys(c),
+              List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))
+            ),
+            Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+          )
+        )
+      )
+
+# the keys that the trees of the roots a and b read differently (none: the
+# depot lacks a node on a path where they differ, or a node there is not in
+# its one shape)
+def Mst.diff(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  s: S,
+  a: Maybe<&2, Hashes.Hash>,
+  b: Maybe<&2, Hashes.Hash>
+) -> Maybe<&2, List<&2, List<&2, U32>>>:
+  Mst.diff.go(~S, ~fetch, Mst.depth(), s, [Runs{Mst.root(a), Mst.root(b)}])
