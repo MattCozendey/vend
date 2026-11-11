@@ -10162,6 +10162,176 @@ def Affects.each_has(
         )(e2)
       )(ea)
 
+# Affects.step_le once it is known whether n is below m as a Nat (b)
+def Affects.step_le.at(
+  +n: U32,
+  +m: U32,
+  b: Bool,
+  eb: {Nat.is_le(1n+U32.to_nat(n), U32.to_nat(m)) == b: Bool},
+  +ele: {Nat.is_le(U32.to_nat(n), U32.to_nat(m)) == True{}: Bool},
+  +eq: {U32.is_eq(m, n) == False{}: Bool}
+) -> {b == True{}: Bool}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      Empty.absurd(
+        {False{} == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            U32.is_eq(m, n),
+            True{},
+            Equal.sym(Bool, U32.is_eq(m, n), False{}, eq),
+            Equal.trans(
+              Bool,
+              U32.is_eq(m, n),
+              Nat.is_eq(U32.to_nat(m), U32.to_nat(n)),
+              True{},
+              Equal.cong(Cmp, Bool, Cmp.is_eq, U32.cmp(m, n), Nat.cmp(U32.to_nat(m), U32.to_nat(n)), Shared.U32.cmp_to_nat(m, n)),
+              Affects.cast(
+                Nat,
+                z => {Nat.is_eq(U32.to_nat(m), z) == True{}: Bool},
+                U32.to_nat(m),
+                U32.to_nat(n),
+                Equal.sym(Nat, U32.to_nat(n), U32.to_nat(m), Shared.Nat.le_nlt_eq(U32.to_nat(n), U32.to_nat(m))(ele)(eb)),
+                Shared.Nat.is_eq_refl(U32.to_nat(m))
+              )
+            )
+          )
+        )
+      )
+
+# a number at most m that is not m is below m
+def Affects.step_le(
+  +n: U32,
+  +m: U32,
+  +ele: {Nat.is_le(U32.to_nat(n), U32.to_nat(m)) == True{}: Bool},
+  +eq: {U32.is_eq(m, n) == False{}: Bool}
+) -> {Nat.is_le(1n+U32.to_nat(n), U32.to_nat(m)) == True{}: Bool}:
+  Equal.trans(
+    Bool,
+    Nat.is_le(1n+U32.to_nat(n), U32.to_nat(m)),
+    Nat.is_le(1n+U32.to_nat(n), U32.to_nat(m)),
+    True{},
+    {==},
+    Affects.step_le.at(n, m, Nat.is_le(1n+U32.to_nat(n), U32.to_nat(m)), {==}, ele, eq)
+  )
+
+# a read of a version that is some taken request gives no empty listing
+def Affects.con_nil(
+  m: Maybe<&2, Maybe<&2, Replicas.Taken>>,
+  rest: Unit -> Maybe<&2, List<&2, Replicas.Taken>>
+) -> {Replicas.Taken.con(m, rest) == Some{[]}: Maybe<&2, List<&2, Replicas.Taken>>} -> Empty:
+  match m:
+    case None{}:
+      e => Shared.Maybe.none_ne_some(List<&2, Replicas.Taken>, [], e)
+    case Some{None{}}:
+      e => Shared.Maybe.none_ne_some(List<&2, Replicas.Taken>, [], e)
+    case Some{Some{+x}}:
+      e => Affects.map_some(
+        List<&2, Replicas.Taken>,
+        List<&2, Replicas.Taken>,
+        Empty,
+        r => x <> r,
+        rest(Unit{}),
+        [],
+        +r0 => er0 => e0 => Affects.nil_ne_cons(Replicas.Taken, x, r0, Equal.sym(List<&2, Replicas.Taken>, x <> r0, [], e0))
+      )(e)
+
+# a listing of k versions from n holds the version m, when n is at most m,
+# m is below n and k, and below the count
+def Affects.versions_nil(
+  ~d: Led(),
+  +l: L(d),
+  +tf: Replicas.Tip,
+  k: Nat,
+  +n: U32,
+  +m: U32,
+  +ele: {Nat.is_le(U32.to_nat(n), U32.to_nat(m)) == True{}: Bool},
+  +eltk: {Nat.is_lt(U32.to_nat(m), Nat.add(U32.to_nat(n), k)) == True{}: Bool},
+  +elt: {U32.is_lt(m, Replicas.Tip.count(tf)) == True{}: Bool}
+) -> {Replicas.Tip.versions(~Requests.Ask.machine(), ~d, k, l, tf, n) == Some{[]}: Maybe<&2, List<&2, Replicas.Taken>>} -> Empty:
+  match k:
+    case 0n:
+      e => Shared.Bool.false_ne_true(
+        Equal.trans(
+          Bool,
+          False{},
+          Nat.is_lt(U32.to_nat(n), U32.to_nat(n)),
+          True{},
+          Equal.sym(Bool, Nat.is_lt(U32.to_nat(n), U32.to_nat(n)), False{}, Shared.Nat.lt_irrefl(U32.to_nat(n))),
+          Shared.Nat.le_lt(U32.to_nat(n), U32.to_nat(m), U32.to_nat(n))(ele)(
+            Affects.cast(
+              Nat,
+              z => {Nat.is_lt(U32.to_nat(m), z) == True{}: Bool},
+              Nat.add(U32.to_nat(n), 0n),
+              U32.to_nat(n),
+              Shared.Nat.add_zero(U32.to_nat(n)),
+              eltk
+            )
+          )
+        )
+      )
+    case 1n+p:
+      e => Affects.when_is(
+        Maybe<&2, List<&2, Replicas.Taken>>,
+        Empty,
+        U32.is_lt(n, Replicas.Tip.count(tf)),
+        u => Replicas.Taken.con(
+          Replicas.Tip.known(
+            ~Replicas.Taken,
+            ~Replicas.Taken.code,
+            ~Replicas.Taken.code.read,
+            Replicas.Tip.find(~Requests.Ask.machine(), ~d, l, tf, Replicas.Log.taken(n))
+          ),
+          u2 => Replicas.Tip.versions(~Requests.Ask.machine(), ~d, p, l, tf, U32.inc(n))
+        ),
+        u => Some{[]},
+        Some{[]},
+        et => e1 => Affects.con_nil(
+          Replicas.Tip.known(
+            ~Replicas.Taken,
+            ~Replicas.Taken.code,
+            ~Replicas.Taken.code.read,
+            Replicas.Tip.find(~Requests.Ask.machine(), ~d, l, tf, Replicas.Log.taken(n))
+          ),
+          u2 => Replicas.Tip.versions(~Requests.Ask.machine(), ~d, p, l, tf, U32.inc(n))
+        )(e1),
+        ef => e2 => Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            U32.is_lt(n, Replicas.Tip.count(tf)),
+            True{},
+            Equal.sym(Bool, U32.is_lt(n, Replicas.Tip.count(tf)), False{}, ef),
+            Equal.trans(
+              Bool,
+              U32.is_lt(n, Replicas.Tip.count(tf)),
+              Nat.is_lt(U32.to_nat(n), U32.to_nat(Replicas.Tip.count(tf))),
+              True{},
+              Shared.U32.is_lt_to_nat(n, Replicas.Tip.count(tf)),
+              Shared.Nat.le_lt(U32.to_nat(n), U32.to_nat(m), U32.to_nat(Replicas.Tip.count(tf)))(ele)(
+                Equal.trans(
+                  Bool,
+                  Nat.is_lt(U32.to_nat(m), U32.to_nat(Replicas.Tip.count(tf))),
+                  U32.is_lt(m, Replicas.Tip.count(tf)),
+                  True{},
+                  Equal.sym(
+                    Bool,
+                    U32.is_lt(m, Replicas.Tip.count(tf)),
+                    Nat.is_lt(U32.to_nat(m), U32.to_nat(Replicas.Tip.count(tf))),
+                    Shared.U32.is_lt_to_nat(m, Replicas.Tip.count(tf))
+                  ),
+                  elt
+                )
+              )
+            )
+          )
+        )
+      )(e)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
