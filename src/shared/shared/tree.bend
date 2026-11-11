@@ -219,8 +219,8 @@ def Laws.PutFinal(-S: Data, -grows: S -> S -> Bool, -o: Tree.Ops(S)) -> Type:
   } -> {grows(s, s2) == True{}: Bool} -> {Ops.put(S, o)(s2)(h)(k)(m) == Some{e}: Maybe<&2, Edit>}
 
 # a write changes its key and no other: in a depot that grows and holds the
-# new nodes, the new root reads the key as written, and every other key as
-# the old root does
+# new nodes, the new root reads the key as written, and tells of every other
+# key what the old root tells (a read that could not tell may tell after)
 def Laws.Write(
   -S: Data,
   -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -235,9 +235,11 @@ def Laws.Write(
     Ops.look(S, o)(s2)(Edit.root(e))(k) == Look.of(m): Look
   }
     & (
-      @k2: List<&2, U32> -> {
+      @k2: List<&2, U32> -> @x: Maybe<&2, List<&2, U32>> -> {
         Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool
-      } -> {Ops.look(S, o)(s2)(Edit.root(e))(k2) == Ops.look(S, o)(s2)(h)(k2): Look}
+      } -> {
+        Look.known(Ops.look(S, o)(s2)(h)(k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      } -> {Look.known(Ops.look(S, o)(s2)(Edit.root(e))(k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
     )
 
 # a root is a function of the bindings alone: two trees that list the same
@@ -520,14 +522,75 @@ def Node.code_read(n: Node, r: List<&2, U32>) -> {
         r
       )
 
-# the node n, when it may sit below a node of the level up: its level is below
-# up, and it has an item
-def Node.below(n: Node, up: Nat) -> Maybe<&2, Node>:
-  match n:
-    case Node{+l, left, +xs}:
+# Rooms
+# -----
+# A read or a write opens a node only where it may sit: below the level of its
+# parent, with an item, and with its keys in order between the keys beside it
+# in its parent. So in any tree that a read or a write walks, the levels fall
+# along each path, no path outruns Mst.depth, and a key is where the order of
+# keys puts it.
+
+# where a subtree sits: its node has a level below up, and keys after lo and
+# before hi (none: no bound)
+type Room is Data:
+  Room{up: Nat, lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>}
+
+# no tree is deeper than this many levels, and no level of a node reaches
+# it: levels fall along each path
+def Mst.depth() -> Nat:
+  64n
+
+# the room of a root
+def Room.top() -> Room:
+  Room{Mst.depth(), None{}, None{}}
+
+# the key k comes after the bound lo (none: no bound)
+def Bound.after(lo: Maybe<&2, List<&2, U32>>, k: List<&2, U32>) -> Bool:
+  match lo:
+    case None{}:
+      True{}
+    case Some{a}:
+      Key.is_lt(a, k)
+
+# the key k comes before the bound hi (none: no bound)
+def Bound.before(k: List<&2, U32>, hi: Maybe<&2, List<&2, U32>>) -> Bool:
+  match hi:
+    case None{}:
+      True{}
+    case Some{b}:
+      Key.is_lt(k, b)
+
+# the keys of the items xs come in order, after lo and before hi
+def Items.fit(xs: List<&2, Item>, lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{Item{+k, v, r}, rest}:
+      Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Items.fit(rest, Some{k}, hi))
+
+# the key of the first of the items xs, else m
+def Items.head_key(xs: List<&2, Item>, m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, List<&2, U32>>:
+  match xs:
+    case Nil{}:
+      m
+    case Con{Item{k, v, r}, rest}:
+      Some{k}
+
+# the key of the last of the items xs, else m
+def Items.last_key(xs: List<&2, Item>, m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, List<&2, U32>>:
+  match xs:
+    case Nil{}:
+      m
+    case Con{Item{k, v, r}, rest}:
+      Items.last_key(rest, Some{k})
+
+# the node n, when it may sit in the room r
+def Node.in(n: Node, r: Room) -> Maybe<&2, Node>:
+  match n r:
+    case Node{+l, left, +xs} Room{up, lo, hi}:
       Shared.Maybe.when(
         Node,
-        Bool.and(Nat.is_lt(l, up), Bool.not(List.is_empty(&2, Item, xs))),
+        Bool.and(Bool.and(Nat.is_lt(l, up), Bool.not(List.is_empty(&2, Item, xs))), Items.fit(xs, lo, hi)),
         u => Some{Node{l, left, xs}}
       )
 
@@ -541,71 +604,74 @@ def Mst.node(
 ) -> Maybe<&2, Node>:
   Codes.Code.whole.of(~Node, ~Node.code, ~Node.code.read, fetch(s)(h))
 
-# the node that the depot s holds under the hash h, when it may sit below a
-# node of the level up: its level is below up, and it has an item. So the
-# levels fall along each path, and no path is longer than up nodes (none: s
-# lacks it, or it is not so)
-def Mst.node.below(
+# the node of the hash h, when it may sit in the room r (none: the depot s
+# lacks it, or it may not sit there)
+def Mst.node.in(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   s: S,
   h: Hashes.Hash,
-  up: Nat
+  r: Room
 ) -> Maybe<&2, Node>:
-  Maybe.bind(&2, Node, Node, Mst.node(~S, ~fetch, s, h), n => Node.below(n, up))
+  Maybe.bind(&2, Node, Node, Mst.node(~S, ~fetch, s, h), n => Node.in(n, r))
 
-# what a read of a node finds: the value of the key, or the subtree to go on in
+# the room of a subtree of a node of the level l, after the key lo and
+# before hi
+def Room.of(+l: Nat, lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> Room:
+  Room{l, lo, hi}
+
+# Reads
+# -----
+
+# what a read of a node finds: the value of the key, or the subtree to go on
+# in and its room
 type Pick is Data:
   Pick.Hit{value: List<&2, U32>}
-  Pick.Down{sub: Maybe<&2, Hashes.Hash>}
+  Pick.Down{sub: Maybe<&2, Hashes.Hash>, room: Room}
 
-# the pick of the key k among the items xs, whose subtree before is prev
-def Mst.pick(xs: List<&2, Item>, prev: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>) -> Pick:
+# the pick of the key k among the items xs of a node of the level l, whose
+# subtree before them is prev, after the key lo, and before hi
+def Mst.pick(xs: List<&2, Item>, prev: Maybe<&2, Hashes.Hash>, +l: Nat, lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>, +k: List<&2, U32>) -> Pick:
   match xs:
     case Nil{}:
-      Pick.Down{prev}
+      Pick.Down{prev, Room.of(l, lo, hi)}
     case Con{Item{+ik, +iv, +r}, +rest}:
       +c = Key.cmp(k, ik)
       Shared.Bool.when(
         Pick,
         Cmp.is_lt(c),
-        u => Pick.Down{prev},
-        u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, k))
+        u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+        u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, l, Some{ik}, hi, k))
       )
 
 # the read that a pick in the node of the hash h, of the level l, gives for
 # the key k: its value, when the node is of the level of k (else the tree is
 # not in its one shape, and the read cannot tell); or the read of its subtree
 # (go)
-def Mst.look.pick(p: Pick, h: Hashes.Hash, l: Nat, k: List<&2, U32>, go: Maybe<&2, Hashes.Hash> -> Look) -> Look:
+def Mst.look.pick(p: Pick, h: Hashes.Hash, l: Nat, k: List<&2, U32>, go: Maybe<&2, Hashes.Hash> -> Room -> Look) -> Look:
   match p:
     case Pick.Hit{v}:
       Shared.Bool.when(Look, Nat.is_eq(Key.level(k), l), u => Look.Found{v}, u => Look.Missing{h})
-    case Pick.Down{m}:
-      go(m)
+    case Pick.Down{m, r}:
+      go(m)(r)
 
-# the read of the key k in the node m of the hash h, with go reading a
-# subtree below the node's level
-def Mst.look.at(
-  h: Hashes.Hash,
-  m: Maybe<&2, Node>,
-  +k: List<&2, U32>,
-  go: Nat -> Maybe<&2, Hashes.Hash> -> Look
-) -> Look:
-  match m:
-    case None{}:
+# the read of the key k in the node m of the hash h, in the room r, with go
+# reading a subtree
+def Mst.look.at(h: Hashes.Hash, m: Maybe<&2, Node>, r: Room, +k: List<&2, U32>, go: Maybe<&2, Hashes.Hash> -> Room -> Look) -> Look:
+  match m r:
+    case None{} x:
       Look.Missing{h}
-    case Some{Node{+l, left, xs}}:
-      Mst.look.pick(Mst.pick(xs, left, k), h, l, k, go(l))
+    case Some{Node{+l, left, xs}} Room{up, lo, hi}:
+      Mst.look.pick(Mst.pick(xs, left, l, lo, hi, k), h, l, k, go)
 
-# the read of the key k in the tree of the root m, below the level up, at
-# most f levels down
+# the read of the key k in the tree of the root m, in the room r, at most f
+# levels down
 def Mst.look.go(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   f: Nat,
   +s: S,
-  up: Nat,
+  +r: Room,
   m: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>
 ) -> Look:
@@ -615,12 +681,7 @@ def Mst.look.go(
     case 0n Some{h}:
       Look.Missing{h}
     case 1n+p Some{+h}:
-      Mst.look.at(h, Mst.node.below(~S, ~fetch, s, h, up), k, u2 => m2 => Mst.look.go(~S, ~fetch, p, s, u2, m2, k))
-
-# no tree is deeper than this many levels, and no level of a node reaches
-# it: levels fall along each path (Mst.node.below)
-def Mst.depth() -> Nat:
-  64n
+      Mst.look.at(h, Mst.node.in(~S, ~fetch, s, h, r), r, k, m2 => r2 => Mst.look.go(~S, ~fetch, p, s, r2, m2, k))
 
 # the read of the key k in the tree of the root m
 def Mst.look(
@@ -630,13 +691,15 @@ def Mst.look(
   m: Maybe<&2, Hashes.Hash>,
   k: List<&2, U32>
 ) -> Look:
-  Mst.look.go(~S, ~fetch, Mst.depth(), s, Mst.depth(), m, k)
+  Mst.look.go(~S, ~fetch, Mst.depth(), s, Room.top(), m, k)
 
 # Writes
 # ------
 # A write changes only the nodes on the path to its key: an insert splits the
 # subtree where the key goes, a delete merges the two subtrees beside it, and
-# every node it rebuilds is new; all others stay shared.
+# every node it rebuilds is new; all others stay shared. It opens each node
+# in its room, so what it builds from them is in order; a subtree that a
+# merge lifts into a wider room has its inner edge read in its old room.
 
 # the node n stored: its hash, and its words in front of the new nodes acc
 def Mst.store(n: Node, acc: List<&2, List<&2, U32>>) -> Edit:
@@ -675,6 +738,13 @@ def Part.gap(p: Part) -> Maybe<&2, Hashes.Hash>:
   match p:
     case Part{b, g, a}:
       g
+
+# the room of the gap of the part p of a node of the level l, after the key
+# lo and before hi
+def Part.room(p: Part, +l: Nat, lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> Room:
+  match p:
+    case Part{b, g, a}:
+      Room.of(l, Items.head_key(b, lo), Items.head_key(a, hi))
 
 # the part p cuts its node at a key k that the node holds
 def Part.hits(p: Part, k: List<&2, U32>) -> Bool:
@@ -718,34 +788,34 @@ def Mst.split.done(+l: Nat, +left: Maybe<&2, Hashes.Hash>, p: Part, m: Maybe<&2,
       +hi = Mst.make(l, chi, a, Edit.nodes(lo))
       Some{Halves{Edit.root(lo), Edit.root(hi), Edit.nodes(hi)}}
 
-# the node m split at the key k, with go splitting a subtree below the node's
-# level
+# the node m, in the room r, split at the key k, with go splitting a subtree
 def Mst.split.at(
   m: Maybe<&2, Node>,
+  r: Room,
   +k: List<&2, U32>,
-  go: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>
+  go: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>
 ) -> Maybe<&2, Halves>:
-  match m:
-    case None{}:
+  match m r:
+    case None{} x:
       None{}
-    case Some{Node{+l, +left, xs}}:
+    case Some{Node{+l, +left, xs}} Room{up, lo, hi}:
       +p = Mst.part(xs, left, k, [])
       Shared.Bool.when(
         Maybe<&2, Halves>,
         Part.hits(p, k),
         u => None{},
-        u => Mst.split.done(l, left, p, go(l)(Part.gap(p)))
+        u => Mst.split.done(l, left, p, go(Part.room(p, l, lo, hi))(Part.gap(p)))
       )
 
-# the tree of the root m, below the level up, split at the key k, which it
-# lacks, at most f levels down (none: a node holds k, so the tree is not in
-# its one shape)
+# the tree of the root m, in the room r, split at the key k, which it lacks,
+# at most f levels down (none: a node holds k, so the tree is not in its one
+# shape)
 def Mst.split(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   f: Nat,
   +s: S,
-  up: Nat,
+  +r: Room,
   m: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>
 ) -> Maybe<&2, Halves>:
@@ -755,7 +825,7 @@ def Mst.split(
     case 0n Some{h}:
       None{}
     case 1n+p Some{h}:
-      Mst.split.at(Mst.node.below(~S, ~fetch, s, h, up), k, u2 => c => Mst.split(~S, ~fetch, p, s, u2, c, k))
+      Mst.split.at(Mst.node.in(~S, ~fetch, s, h, r), r, k, r2 => c => Mst.split(~S, ~fetch, p, s, r2, c, k))
 
 # the subtree at the end of a node: the right of its last item, else its left
 def Mst.last(xs: List<&2, Item>, left: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Hashes.Hash>:
@@ -821,58 +891,110 @@ def Mst.with_both(
     case Some{Edit{+mc, ns}}:
       Some{Mst.make(l, Mst.end_left(xa, left, mc), List.append(&2, Item, Mst.set_last(xa, mc), xb), ns)}
 
-# the merge of the node a of the level la, below the level ua, and the node b
-# of the level lb, below the level ub, by how la compares to lb (c), with go
-# merging two subtrees, each below its level
+# the subtree m, in the room r, with each node of its left edge in its room
+# (go reads the next one): no key of it comes before the lower bound of r,
+# even once that bound widens
+def Mst.edge.left.at(m: Maybe<&2, Node>, r: Room, go: Room -> Maybe<&2, Hashes.Hash> -> Bool) -> Bool:
+  match m r:
+    case None{} x:
+      False{}
+    case Some{Node{+l, left, xs}} Room{up, lo, hi}:
+      go(Room.of(l, lo, Items.head_key(xs, hi)))(left)
+
+# the subtree m, in the room r, with each node of its right edge in its room
+# (go reads the next one): no key of it comes after the upper bound of r,
+# even once that bound widens
+def Mst.edge.right.at(m: Maybe<&2, Node>, r: Room, go: Room -> Maybe<&2, Hashes.Hash> -> Bool) -> Bool:
+  match m r:
+    case None{} x:
+      False{}
+    case Some{Node{+l, left, +xs}} Room{up, lo, hi}:
+      go(Room.of(l, Items.last_key(xs, lo), hi))(Mst.last(xs, left))
+
+# the nodes of the left (left: True) or right edge of the tree of the root
+# m, in the room r, each sit in their rooms, at most f levels down
+def Mst.edge(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +left: Bool,
+  +r: Room,
+  m: Maybe<&2, Hashes.Hash>
+) -> Bool:
+  match f m:
+    case x None{}:
+      True{}
+    case 0n Some{h}:
+      False{}
+    case 1n+(+p) Some{h}:
+      +n = Mst.node.in(~S, ~fetch, s, h, r)
+      Shared.Bool.when(
+        Bool,
+        left,
+        u => Mst.edge.left.at(n, r, r2 => c => Mst.edge(~S, ~fetch, p, s, left, r2, c)),
+        u => Mst.edge.right.at(n, r, r2 => c => Mst.edge(~S, ~fetch, p, s, left, r2, c))
+      )
+
+# the merge of the node a of the level la, in the room ra, and the node b of
+# the level lb, in the room rb, by how la compares to lb (c), with go merging
+# two subtrees, each in its room
 def Mst.merge.nodes(
   c: Cmp,
   +ha: Hashes.Hash,
-  +ua: Nat,
+  +ra: Room,
   +la: Nat,
   +lefta: Maybe<&2, Hashes.Hash>,
   +xa: List<&2, Item>,
   +hb: Hashes.Hash,
-  +ub: Nat,
+  +rb: Room,
   +lb: Nat,
   +leftb: Maybe<&2, Hashes.Hash>,
   +xb: List<&2, Item>,
-  go: Nat -> Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
+  go: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
 ) -> Maybe<&2, Edit>:
-  match c:
-    case GT{}:
-      Mst.with_last(la, lefta, xa, go(la)(ub)(Mst.last(xa, lefta))(Some{hb}))
-    case LT{}:
-      Mst.with_first(lb, xb, go(ua)(lb)(Some{ha})(leftb))
-    case EQ{}:
-      Mst.with_both(la, lefta, xa, xb, go(la)(lb)(Mst.last(xa, lefta))(leftb))
+  match c ra rb:
+    case GT{} Room{ua, loa, hia} y:
+      Mst.with_last(la, lefta, xa, go(Room.of(la, Items.last_key(xa, loa), hia))(rb)(Mst.last(xa, lefta))(Some{hb}))
+    case LT{} x Room{ub, lob, hib}:
+      Mst.with_first(lb, xb, go(ra)(Room.of(lb, lob, Items.head_key(xb, hib)))(Some{ha})(leftb))
+    case EQ{} Room{ua, loa, hia} Room{ub, lob, hib}:
+      Mst.with_both(
+        la,
+        lefta,
+        xa,
+        xb,
+        go(Room.of(la, Items.last_key(xa, loa), hia))(Room.of(lb, lob, Items.head_key(xb, hib)))(Mst.last(xa, lefta))(leftb)
+      )
 
-# the merge of the nodes na, below the level ua, and nb, below the level ub,
-# of the hashes ha and hb
+# the merge of the nodes na, in the room ra, and nb, in the room rb, of the
+# hashes ha and hb
 def Mst.merge.at(
   na: Maybe<&2, Node>,
   nb: Maybe<&2, Node>,
   +ha: Hashes.Hash,
-  +ua: Nat,
+  +ra: Room,
   +hb: Hashes.Hash,
-  +ub: Nat,
-  go: Nat -> Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
+  +rb: Room,
+  go: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
 ) -> Maybe<&2, Edit>:
   match na nb:
     case Some{Node{+la, lefta, xa}} Some{Node{+lb, leftb, xb}}:
-      Mst.merge.nodes(Nat.cmp(la, lb), ha, ua, la, lefta, xa, hb, ub, lb, leftb, xb, go)
+      Mst.merge.nodes(Nat.cmp(la, lb), ha, ra, la, lefta, xa, hb, rb, lb, leftb, xb, go)
     case x y:
       None{}
 
-# the tree of the keys of a, below the level ua, then of b, below the level
-# ub, when each key of a is before each of b, at most f levels down. A side
-# that stands alone is opened too: it may rise to a higher bound
+# the tree of the keys of a, in the room ra, then of b, in the room rb, when
+# each key of a is before each of b, at most f levels down. A side that stands
+# alone rises into the room of both, so the edge that faces the other side
+# is read in its old room
 def Mst.merge(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   f: Nat,
   +s: S,
-  +ua: Nat,
-  +ub: Nat,
+  +ra: Room,
+  +rb: Room,
   a: Maybe<&2, Hashes.Hash>,
   b: Maybe<&2, Hashes.Hash>
 ) -> Maybe<&2, Edit>:
@@ -880,20 +1002,20 @@ def Mst.merge(
     case x None{} None{}:
       Some{Edit{None{}, []}}
     case x None{} Some{+hb}:
-      Maybe.map(&2, Node, Edit, n => Edit{Some{hb}, []}, Mst.node.below(~S, ~fetch, s, hb, ub))
+      Shared.Maybe.when(Edit, Mst.edge(~S, ~fetch, Mst.depth(), s, True{}, rb, Some{hb}), u => Some{Edit{Some{hb}, []}})
     case x Some{+ha} None{}:
-      Maybe.map(&2, Node, Edit, n => Edit{Some{ha}, []}, Mst.node.below(~S, ~fetch, s, ha, ua))
+      Shared.Maybe.when(Edit, Mst.edge(~S, ~fetch, Mst.depth(), s, False{}, ra, Some{ha}), u => Some{Edit{Some{ha}, []}})
     case 0n y z:
       None{}
     case 1n+p Some{+ha} Some{+hb}:
       Mst.merge.at(
-        Mst.node.below(~S, ~fetch, s, ha, ua),
-        Mst.node.below(~S, ~fetch, s, hb, ub),
+        Mst.node.in(~S, ~fetch, s, ha, ra),
+        Mst.node.in(~S, ~fetch, s, hb, rb),
         ha,
-        ua,
+        ra,
         hb,
-        ub,
-        u1 => u2 => x => y => Mst.merge(~S, ~fetch, p, s, u1, u2, x, y)
+        rb,
+        r1 => r2 => x => y => Mst.merge(~S, ~fetch, p, s, r1, r2, x, y)
       )
 
 # the tree of the level L with only the key k, over the halves of a tree split
@@ -950,58 +1072,68 @@ def Mst.with_gap(+l: Nat, +left: Maybe<&2, Hashes.Hash>, p: Part, e: Maybe<&2, E
     case Part{+b, g, a} Some{Edit{+nc, ns}}:
       Some{Mst.make(l, Mst.left(b, left, nc), Mst.rejoin(b, nc, a), ns)}
 
-# the node of the hash h, of the level l, that gets the key k of the level L,
-# by how l compares to L (c): above it a new node splits the tree (sp); at
-# it, it takes the key (spg splits its gap); below it, the key goes into the
-# gap of its part (ins). A node of another level that holds k is not in its
-# one shape: none
+# the node of the hash h, of the level l, after the key lo and before hi,
+# that gets the key k of the level L, by how l compares to L (c): above it a
+# new node splits the tree (sp); at it, it takes the key (spg splits its gap);
+# below it, the key goes into the gap of its part (ins). A node of another
+# level that holds k is not in its one shape: none
 def Mst.insert.node(
   c: Cmp,
   +h: Hashes.Hash,
   +l: Nat,
   +left: Maybe<&2, Hashes.Hash>,
   xs: List<&2, Item>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
   +k: List<&2, U32>,
   +v: List<&2, U32>,
   +L: Nat,
   sp: Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
-  spg: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
-  ins: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
+  spg: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  ins: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
 ) -> Maybe<&2, Edit>:
   match c:
     case LT{}:
       Mst.insert.top(L, k, v, sp(Some{h}))
     case EQ{}:
-      Mst.insert.here(l, left, k, v, Mst.part(xs, left, k, []), spg(l))
+      +p = Mst.part(xs, left, k, [])
+      Mst.insert.here(l, left, k, v, p, spg(Part.room(p, l, lo, hi)))
     case GT{}:
       +p = Mst.part(xs, left, k, [])
-      Shared.Bool.when(Maybe<&2, Edit>, Part.hits(p, k), u => None{}, u => Mst.with_gap(l, left, p, ins(l)(Part.gap(p))))
+      Shared.Bool.when(
+        Maybe<&2, Edit>,
+        Part.hits(p, k),
+        u => None{},
+        u => Mst.with_gap(l, left, p, ins(Part.room(p, l, lo, hi))(Part.gap(p)))
+      )
 
-# the node m of the hash h with the key k of the level L bound to v
+# the node m of the hash h, in the room r, with the key k of the level L
+# bound to v
 def Mst.insert.at(
   m: Maybe<&2, Node>,
   +h: Hashes.Hash,
+  r: Room,
   +k: List<&2, U32>,
   +v: List<&2, U32>,
   +L: Nat,
   sp: Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
-  spg: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
-  ins: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
+  spg: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Halves>,
+  ins: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>
 ) -> Maybe<&2, Edit>:
-  match m:
-    case None{}:
+  match m r:
+    case None{} x:
       None{}
-    case Some{Node{+l, left, xs}}:
-      Mst.insert.node(Nat.cmp(l, L), h, l, left, xs, k, v, L, sp, spg, ins)
+    case Some{Node{+l, left, xs}} Room{up, lo, hi}:
+      Mst.insert.node(Nat.cmp(l, L), h, l, left, xs, lo, hi, k, v, L, sp, spg, ins)
 
-# the tree of the root m, below the level up, with the key k, of the level L,
+# the tree of the root m, in the room r, with the key k, of the level L,
 # bound to v, at most f levels down
 def Mst.insert(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   f: Nat,
   +s: S,
-  +up: Nat,
+  +r: Room,
   m: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
   +v: List<&2, U32>,
@@ -1014,102 +1146,118 @@ def Mst.insert(
       None{}
     case 1n+(+p) Some{+h}:
       Mst.insert.at(
-        Mst.node.below(~S, ~fetch, s, h, up),
+        Mst.node.in(~S, ~fetch, s, h, r),
         h,
+        r,
         k,
         v,
         L,
-        c => Mst.split(~S, ~fetch, p, s, up, c, k),
-        u2 => c => Mst.split(~S, ~fetch, p, s, u2, c, k),
-        u2 => c => Mst.insert(~S, ~fetch, p, s, u2, c, k, v, L)
+        c => Mst.split(~S, ~fetch, p, s, r, c, k),
+        r2 => c => Mst.split(~S, ~fetch, p, s, r2, c, k),
+        r2 => c => Mst.insert(~S, ~fetch, p, s, r2, c, k, v, L)
       )
 
-# the tree of the hash h, unchanged, once a read of k in its subtree m, below
-# the level l, finds that it is absent (lk reads); else none: the tree holds
-# k where it does not belong, or the read cannot tell
-def Mst.delete.none(+h: Hashes.Hash, l: Nat, m: Maybe<&2, Hashes.Hash>, lk: Nat -> Maybe<&2, Hashes.Hash> -> Look) -> Maybe<&2, Edit>:
-  Shared.Maybe.when(Edit, Look.is_absent(lk(l)(m)), u => Some{Edit{Some{h}, []}})
+# the tree of the hash h, unchanged, once a read (lk) finds k absent from its
+# subtree m in the room r; else none: the tree holds k where it does not
+# belong, or the read cannot tell
+def Mst.delete.none(+h: Hashes.Hash, r: Room, m: Maybe<&2, Hashes.Hash>, lk: Room -> Maybe<&2, Hashes.Hash> -> Look) -> Maybe<&2, Edit>:
+  Shared.Maybe.when(Edit, Look.is_absent(lk(r)(m)), u => Some{Edit{Some{h}, []}})
 
-# a node of the level l, split at k by its part p, without the key k: the two
-# subtrees beside k merge (mg); a node that lacks k stays (h), once its gap
-# lacks k too (lk)
+# a node of the level l, after the key lo and before hi, split at k by its
+# part p, without the key k: the two subtrees beside k merge (mg); a node
+# that lacks k stays (h), once its gap lacks k too (lk)
 def Mst.delete.here(
   +h: Hashes.Hash,
   +l: Nat,
   +left: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
   p: Part,
-  mg: Nat -> Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
-  lk: Nat -> Maybe<&2, Hashes.Hash> -> Look
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  mg: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  lk: Room -> Maybe<&2, Hashes.Hash> -> Look
 ) -> Maybe<&2, Edit>:
   match p:
     case Part{+b, +g, Con{Item{+ik, iv, +r}, +rest}}:
       Shared.Bool.when(
         Maybe<&2, Edit>,
         Cmp.is_eq(Key.cmp(ik, k)),
-        u => Mst.with_gap(l, left, Part{b, g, rest}, mg(l)(l)(g)(r)),
-        u => Mst.delete.none(h, l, g, lk)
+        u => Mst.with_gap(
+          l,
+          left,
+          Part{b, g, rest},
+          mg(Room.of(l, Items.head_key(b, lo), Some{ik}))(Room.of(l, Some{ik}, Items.head_key(rest, hi)))(g)(r)
+        ),
+        u => Mst.delete.none(h, Room.of(l, Items.head_key(b, lo), Some{ik}), g, lk)
       )
     case Part{b, g, Nil{}}:
-      Mst.delete.none(h, l, g, lk)
+      Mst.delete.none(h, Room.of(l, Items.head_key(b, lo), hi), g, lk)
 
-# the pick p of k in a node of the level l lacks k, and so does the subtree
-# it goes on in (lk reads)
-def Mst.delete.lacks(p: Pick, l: Nat, lk: Nat -> Maybe<&2, Hashes.Hash> -> Look) -> Bool:
+# the pick p of k in a node lacks k, and so does the subtree it goes on in
+# (lk reads)
+def Mst.delete.lacks(p: Pick, lk: Room -> Maybe<&2, Hashes.Hash> -> Look) -> Bool:
   match p:
     case Pick.Hit{v}:
       False{}
-    case Pick.Down{m}:
-      Look.is_absent(lk(l)(m))
+    case Pick.Down{m, r}:
+      Look.is_absent(lk(r)(m))
 
-# the node of the hash h, of the level l, without the key k of the level L,
-# by how l compares to L (c). Below it, k is not there, once a read (lk)
-# finds it absent; a node of another level that holds k is not in its one
-# shape: none
+# the node of the hash h, of the level l, after the key lo and before hi,
+# without the key k of the level L, by how l compares to L (c). Below it, k is
+# not there, once a read (lk) finds it absent; a node of another level that
+# holds k is not in its one shape: none
 def Mst.delete.node(
   c: Cmp,
   +h: Hashes.Hash,
   +l: Nat,
   +left: Maybe<&2, Hashes.Hash>,
   xs: List<&2, Item>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
   +k: List<&2, U32>,
-  mg: Nat -> Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
-  del: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
-  lk: Nat -> Maybe<&2, Hashes.Hash> -> Look
+  mg: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  del: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  lk: Room -> Maybe<&2, Hashes.Hash> -> Look
 ) -> Maybe<&2, Edit>:
   match c:
     case LT{}:
-      Shared.Maybe.when(Edit, Mst.delete.lacks(Mst.pick(xs, left, k), l, lk), u => Some{Edit{Some{h}, []}})
+      Shared.Maybe.when(Edit, Mst.delete.lacks(Mst.pick(xs, left, l, lo, hi, k), lk), u => Some{Edit{Some{h}, []}})
     case EQ{}:
-      Mst.delete.here(h, l, left, k, Mst.part(xs, left, k, []), mg, lk)
+      Mst.delete.here(h, l, left, k, Mst.part(xs, left, k, []), lo, hi, mg, lk)
     case GT{}:
       +p = Mst.part(xs, left, k, [])
-      Shared.Bool.when(Maybe<&2, Edit>, Part.hits(p, k), u => None{}, u => Mst.with_gap(l, left, p, del(l)(Part.gap(p))))
+      Shared.Bool.when(
+        Maybe<&2, Edit>,
+        Part.hits(p, k),
+        u => None{},
+        u => Mst.with_gap(l, left, p, del(Part.room(p, l, lo, hi))(Part.gap(p)))
+      )
 
-# the node m of the hash h without the key k of the level L
+# the node m of the hash h, in the room r, without the key k of the level L
 def Mst.delete.at(
   m: Maybe<&2, Node>,
   +h: Hashes.Hash,
+  r: Room,
   +k: List<&2, U32>,
   +L: Nat,
-  mg: Nat -> Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
-  del: Nat -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
-  lk: Nat -> Maybe<&2, Hashes.Hash> -> Look
+  mg: Room -> Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  del: Room -> Maybe<&2, Hashes.Hash> -> Maybe<&2, Edit>,
+  lk: Room -> Maybe<&2, Hashes.Hash> -> Look
 ) -> Maybe<&2, Edit>:
-  match m:
-    case None{}:
+  match m r:
+    case None{} x:
       None{}
-    case Some{Node{+l, left, xs}}:
-      Mst.delete.node(Nat.cmp(l, L), h, l, left, xs, k, mg, del, lk)
+    case Some{Node{+l, left, xs}} Room{up, lo, hi}:
+      Mst.delete.node(Nat.cmp(l, L), h, l, left, xs, lo, hi, k, mg, del, lk)
 
-# the tree of the root m, below the level up, without the key k, of the level
-# L, at most f levels down
+# the tree of the root m, in the room r, without the key k, of the level L,
+# at most f levels down
 def Mst.delete(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   f: Nat,
   +s: S,
-  up: Nat,
+  +r: Room,
   m: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
   +L: Nat
@@ -1121,13 +1269,14 @@ def Mst.delete(
       None{}
     case 1n+(+p) Some{+h}:
       Mst.delete.at(
-        Mst.node.below(~S, ~fetch, s, h, up),
+        Mst.node.in(~S, ~fetch, s, h, r),
         h,
+        r,
         k,
         L,
-        u1 => u2 => x => y => Mst.merge(~S, ~fetch, p, s, u1, u2, x, y),
-        u2 => c => Mst.delete(~S, ~fetch, p, s, u2, c, k, L),
-        u2 => c => Mst.look.go(~S, ~fetch, p, s, u2, c, k)
+        r1 => r2 => x => y => Mst.merge(~S, ~fetch, p, s, r1, r2, x, y),
+        r2 => c => Mst.delete(~S, ~fetch, p, s, r2, c, k, L),
+        r2 => c => Mst.look.go(~S, ~fetch, p, s, r2, c, k)
       )
 
 # the tree of the root m with the key k set to the value of m2 (none: deleted)
@@ -1141,9 +1290,9 @@ def Mst.put(
 ) -> Maybe<&2, Edit>:
   match m2:
     case Some{v}:
-      Mst.insert(~S, ~fetch, Mst.depth(), s, Mst.depth(), m, k, v, Key.level(k))
+      Mst.insert(~S, ~fetch, Mst.depth(), s, Room.top(), m, k, v, Key.level(k))
     case None{}:
-      Mst.delete(~S, ~fetch, Mst.depth(), s, Mst.depth(), m, k, Key.level(k))
+      Mst.delete(~S, ~fetch, Mst.depth(), s, Room.top(), m, k, Key.level(k))
 
 # Reads of many keys
 # ------------------
@@ -1157,22 +1306,6 @@ def Mst.put(
 type Piece is Data:
   Piece.Bind{key: List<&2, U32>, value: List<&2, U32>}
   Piece.Sub{hash: Hashes.Hash, up: Nat, lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>}
-
-# the key k comes after the bound lo (none: no bound)
-def Bound.after(lo: Maybe<&2, List<&2, U32>>, k: List<&2, U32>) -> Bool:
-  match lo:
-    case None{}:
-      True{}
-    case Some{a}:
-      Key.is_lt(a, k)
-
-# the key k comes before the bound hi (none: no bound)
-def Bound.before(k: List<&2, U32>, hi: Maybe<&2, List<&2, U32>>) -> Bool:
-  match hi:
-    case None{}:
-      True{}
-    case Some{b}:
-      Key.is_lt(k, b)
 
 # the piece of the subtree m of a node of the level l, between lo and hi,
 # before the pieces rest (none: no piece)
