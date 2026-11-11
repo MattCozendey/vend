@@ -3815,6 +3815,313 @@ def Affects.link_new(+g: Reaches.Graph, +k: List<&2, Bool>, +t: List<&2, Bool>) 
     )
   )
 
+# each node of g that has an entry is one of its nodes
+def Affects.Has(g: Reaches.Graph) -> Type:
+  match g:
+    case Reaches.Graph{+e, +ns}:
+      @p: List<&2, Bool> -> {
+        Maybe.is_some(&2, List<&2, List<&2, Bool>>, Tries.Trie.get(List<&2, List<&2, Bool>>, e, p)) == True{}: Bool
+      } -> {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ns, p) == True{}: Bool}
+
+# the graph with no node has no entry
+def Affects.has_new() -> Affects.Has(Reaches.Graph.new()):
+  p => h => Empty.absurd(
+    {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, [], p) == True{}: Bool},
+    Shared.Bool.false_ne_true(h)
+  )
+
+# Affects.has_link at a new node k, once it is known whether p is k (b)
+def Affects.has_pick.new(
+  +e: Tries.Trie<List<&2, List<&2, Bool>>>,
+  +ns: List<&2, List<&2, Bool>>,
+  +k: List<&2, Bool>,
+  +p: List<&2, Bool>,
+  b: Bool,
+  eb: {Tries.Trie.same_key(p, k) == b: Bool},
+  -v: List<&2, List<&2, Bool>>,
+  hg: Affects.Has(Reaches.Graph{e, ns})
+) -> {
+  Maybe.is_some(
+    &2,
+    List<&2, List<&2, Bool>>,
+    Bool.pick(Maybe<&2, List<&2, List<&2, Bool>>>, b, Some{v}, Tries.Trie.get(List<&2, List<&2, Bool>>, e, p))
+  )
+    == True{}: Bool
+} -> {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, k <> ns, p) == True{}: Bool}:
+  match b:
+    case True{}:
+      h => Affects.cast(
+        List<&2, Bool>,
+        z => {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, k <> ns, z) == True{}: Bool},
+        k,
+        p,
+        Equal.sym(List<&2, Bool>, p, k, Tries.Trie.same_key_sound(p, k)(eb)),
+        Affects.contains_head(~List<&2, Bool>, ~Tries.Trie.same_key, ~Affects.key_laws(), k, ns)
+      )
+    case False{}:
+      h => Shared.List.contains_cons(~List<&2, Bool>, ~Tries.Trie.same_key, k, ns, p)(hg(p)(h))
+
+# Affects.has_link at a node k that has an entry, once it is known whether p
+# is k (b)
+def Affects.has_pick.old(
+  +e: Tries.Trie<List<&2, List<&2, Bool>>>,
+  +ns: List<&2, List<&2, Bool>>,
+  +k: List<&2, Bool>,
+  +p: List<&2, Bool>,
+  b: Bool,
+  eb: {Tries.Trie.same_key(p, k) == b: Bool},
+  -v: List<&2, List<&2, Bool>>,
+  +ek: {
+    Maybe.is_some(&2, List<&2, List<&2, Bool>>, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k)) == True{}: Bool
+  },
+  hg: Affects.Has(Reaches.Graph{e, ns})
+) -> {
+  Maybe.is_some(
+    &2,
+    List<&2, List<&2, Bool>>,
+    Bool.pick(Maybe<&2, List<&2, List<&2, Bool>>>, b, Some{v}, Tries.Trie.get(List<&2, List<&2, Bool>>, e, p))
+  )
+    == True{}: Bool
+} -> {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ns, p) == True{}: Bool}:
+  match b:
+    case True{}:
+      h => Affects.cast(
+        List<&2, Bool>,
+        z => {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ns, z) == True{}: Bool},
+        k,
+        p,
+        Equal.sym(List<&2, Bool>, p, k, Tries.Trie.same_key_sound(p, k)(eb)),
+        hg(k)(ek)
+      )
+    case False{}:
+      h => hg(p)(h)
+
+# a read of t set at k, as a pick
+def Affects.set_get(
+  +e: Tries.Trie<List<&2, List<&2, Bool>>>,
+  +k: List<&2, Bool>,
+  +v: List<&2, List<&2, Bool>>,
+  +p: List<&2, Bool>
+) -> {
+  Maybe.is_some(
+    &2,
+    List<&2, List<&2, Bool>>,
+    Tries.Trie.get(List<&2, List<&2, Bool>>, Tries.Trie.set(List<&2, List<&2, Bool>>, e, k, v), p)
+  )
+    == True{}: Bool
+} -> {
+  Maybe.is_some(
+    &2,
+    List<&2, List<&2, Bool>>,
+    Bool.pick(
+      Maybe<&2, List<&2, List<&2, Bool>>>,
+      Tries.Trie.same_key(p, k),
+      Some{v},
+      Tries.Trie.get(List<&2, List<&2, Bool>>, e, p)
+    )
+  )
+    == True{}: Bool
+}:
+  h => Affects.cast(
+    Maybe<&2, List<&2, List<&2, Bool>>>,
+    z => {Maybe.is_some(&2, List<&2, List<&2, Bool>>, z) == True{}: Bool},
+    Tries.Trie.get(List<&2, List<&2, Bool>>, Tries.Trie.set(List<&2, List<&2, Bool>>, e, k, v), p),
+    Bool.pick(
+      Maybe<&2, List<&2, List<&2, Bool>>>,
+      Tries.Trie.same_key(p, k),
+      Some{v},
+      Tries.Trie.get(List<&2, List<&2, Bool>>, e, p)
+    ),
+    Tries.Trie.get_set(List<&2, List<&2, Bool>>, e, k, v, p),
+    h
+  )
+
+# Affects.has_link once the successors m of k are known
+def Affects.has_link.at(
+  +e: Tries.Trie<List<&2, List<&2, Bool>>>,
+  +ns: List<&2, List<&2, Bool>>,
+  +k: List<&2, Bool>,
+  +t: List<&2, Bool>,
+  m: Maybe<&2, List<&2, List<&2, Bool>>>,
+  +em: {Tries.Trie.get(List<&2, List<&2, Bool>>, e, k) == m: Maybe<&2, List<&2, List<&2, Bool>>>},
+  hg: Affects.Has(Reaches.Graph{e, ns})
+) -> Affects.Has(Reaches.Graph.link.at(e, ns, k, t, m)):
+  match m:
+    case None{}:
+      +p => h => Affects.has_pick.new(e, ns, k, p, Tries.Trie.same_key(p, k), {==}, [t], hg)(Affects.set_get(e, k, [t], p)(h))
+    case Some{+ts}:
+      +p => h => Affects.has_pick.old(
+        e,
+        ns,
+        k,
+        p,
+        Tries.Trie.same_key(p, k),
+        {==},
+        t <> ts,
+        Affects.cast(
+          Maybe<&2, List<&2, List<&2, Bool>>>,
+          z => {Maybe.is_some(&2, List<&2, List<&2, Bool>>, z) == True{}: Bool},
+          Some{ts},
+          Tries.Trie.get(List<&2, List<&2, Bool>>, e, k),
+          Equal.sym(Maybe<&2, List<&2, List<&2, Bool>>>, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k), Some{ts}, em),
+          {==}
+        ),
+        hg
+      )(Affects.set_get(e, k, t <> ts, p)(h))
+
+# each node with an entry is a node, still, with t as one more successor of k
+def Affects.has_link(+g: Reaches.Graph, +k: List<&2, Bool>, +t: List<&2, Bool>, hg: Affects.Has(g)) -> Affects.Has(Reaches.Graph.link(g, k, t)):
+  match g:
+    case Reaches.Graph{+e, +ns}:
+      Affects.has_link.at(e, ns, k, t, Tries.Trie.get(List<&2, List<&2, Bool>>, e, k), {==}, hg)
+
+# each node with an entry is a node, still, with the successors ts of k
+def Affects.has_links(
+  ts: List<&2, List<&2, Bool>>,
+  +k: List<&2, Bool>,
+  +g: Reaches.Graph,
+  hg: Affects.Has(g)
+) -> Affects.Has(Reaches.Graph.links(ts, k, g)):
+  match ts:
+    case Nil{}:
+      hg
+    case Con{+t, r}:
+      Affects.has_links(r, k, Reaches.Graph.link(g, k, t), Affects.has_link(g, k, t, hg))
+
+# each node with an entry is a node, still, with t a successor of each of ks
+def Affects.has_back(
+  ks: List<&2, List<&2, Bool>>,
+  +t: List<&2, Bool>,
+  +g: Reaches.Graph,
+  hg: Affects.Has(g)
+) -> Affects.Has(Reaches.Graph.back(ks, t, g)):
+  match ks:
+    case Nil{}:
+      hg
+    case Con{+k, r}:
+      Affects.has_back(r, t, Reaches.Graph.link(g, k, t), Affects.has_link(g, k, t, hg))
+
+# Affects.has_live once the entry m of p is known
+def Affects.has_live.at(
+  m: Maybe<&2, List<&2, List<&2, Bool>>>,
+  +q: List<&2, Bool>,
+  -R: Type,
+  hc: {
+    List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Maybe.default(&2, List<&2, List<&2, Bool>>, m, []), q)
+      == True{}: Bool
+  },
+  hs: {Maybe.is_some(&2, List<&2, List<&2, Bool>>, m) == True{}: Bool} -> R
+) -> R:
+  match m:
+    case None{}:
+      Empty.absurd(R, Shared.Bool.false_ne_true(hc))
+    case Some{ts}:
+      hs({==})
+
+# a node with a successor is a node of the graph
+def Affects.has_live(
+  +g: Reaches.Graph,
+  hg: Affects.Has(g),
+  +p: List<&2, Bool>,
+  +q: List<&2, Bool>
+) -> Affects.Edge(g, p, q) -> {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, Reaches.Graph.nodes(g), p) == True{}: Bool}:
+  match g:
+    case Reaches.Graph{+e, +ns}:
+      h => Affects.has_live.at(
+        Tries.Trie.get(List<&2, List<&2, Bool>>, e, p),
+        q,
+        {List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ns, p) == True{}: Bool},
+        h,
+        hg(p)
+      )
+
+# the edges of g2 are those of g1, reversed
+def Affects.Inv(g1: Reaches.Graph, g2: Reaches.Graph) -> Type:
+  (@p: List<&2, Bool> -> @q: List<&2, Bool> -> Affects.Edge(g1, p, q) -> Affects.Edge(g2, q, p))
+    & (@p: List<&2, Bool> -> @q: List<&2, Bool> -> Affects.Edge(g2, p, q) -> Affects.Edge(g1, q, p))
+
+# the graph with no node is its own reverse
+def Affects.inv_new() -> Affects.Inv(Reaches.Graph.new(), Reaches.Graph.new()):
+  (
+    p => q => h => Empty.absurd(Affects.Edge(Reaches.Graph.new(), q, p), Shared.Bool.false_ne_true(h)),
+    p => q => h => Empty.absurd(Affects.Edge(Reaches.Graph.new(), q, p), Shared.Bool.false_ne_true(h))
+  )
+
+# an edge from k to t, and the same edge reversed, keep two graphs reversed
+def Affects.inv_link(
+  +g1: Reaches.Graph,
+  +g2: Reaches.Graph,
+  +k: List<&2, Bool>,
+  +t: List<&2, Bool>,
+  i: Affects.Inv(g1, g2)
+) -> Affects.Inv(Reaches.Graph.link(g1, k, t), Reaches.Graph.link(g2, t, k)):
+  (i1, i2) = i
+  (
+    +p => +q => h => Affects.link_in(
+      g1,
+      k,
+      t,
+      p,
+      q,
+      Affects.Edge(Reaches.Graph.link(g2, t, k), q, p),
+      a => b => Affects.cast(
+        List<&2, Bool>,
+        z => Affects.Edge(Reaches.Graph.link(g2, t, k), q, z),
+        k,
+        p,
+        Equal.sym(List<&2, Bool>, p, k, Tries.Trie.same_key_sound(p, k)(a)),
+        Affects.cast(
+          List<&2, Bool>,
+          z => Affects.Edge(Reaches.Graph.link(g2, t, k), z, k),
+          t,
+          q,
+          Tries.Trie.same_key_sound(t, q)(b),
+          Affects.link_new(g2, t, k)
+        )
+      ),
+      c => Affects.link_keep(g2, t, k, q, p)(i1(p)(q)(c))
+    )(h),
+    +p => +q => h => Affects.link_in(
+      g2,
+      t,
+      k,
+      p,
+      q,
+      Affects.Edge(Reaches.Graph.link(g1, k, t), q, p),
+      a => b => Affects.cast(
+        List<&2, Bool>,
+        z => Affects.Edge(Reaches.Graph.link(g1, k, t), q, z),
+        t,
+        p,
+        Equal.sym(List<&2, Bool>, p, t, Tries.Trie.same_key_sound(p, t)(a)),
+        Affects.cast(
+          List<&2, Bool>,
+          z => Affects.Edge(Reaches.Graph.link(g1, k, t), z, t),
+          k,
+          q,
+          Tries.Trie.same_key_sound(k, q)(b),
+          Affects.link_new(g1, k, t)
+        )
+      ),
+      c => Affects.link_keep(g1, k, t, q, p)(i2(p)(q)(c))
+    )(h)
+  )
+
+# the successors ts of k, and k as a successor of each of ts, keep two graphs
+# reversed
+def Affects.inv_links(
+  ts: List<&2, List<&2, Bool>>,
+  +k: List<&2, Bool>,
+  +g1: Reaches.Graph,
+  +g2: Reaches.Graph,
+  i: Affects.Inv(g1, g2)
+) -> Affects.Inv(Reaches.Graph.links(ts, k, g1), Reaches.Graph.back(ts, k, g2)):
+  match ts:
+    case Nil{}:
+      i
+    case Con{+t, r}:
+      Affects.inv_links(r, k, Reaches.Graph.link(g1, k, t), Reaches.Graph.link(g2, t, k), Affects.inv_link(g1, g2, k, t, i))
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
