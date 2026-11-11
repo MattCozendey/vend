@@ -1,7 +1,7 @@
 import Base
 import ./shared/shared/code.bend as Codes
-import ./shared/shared/side.bend as Sides
 import ./shared/shared/shared.bend as Shared
+import ./shared/shared/side.bend as Sides
 import ./shared/text.bend as Texts
 
 # Forks
@@ -845,7 +845,7 @@ type Decision is Data:
   Decision.Pieces{}
 
 # what a merge of x and y, two changes of b, takes before any format looks
-def Merge.decide(+b: Texts.Bytes(), +x: Texts.Bytes(), +y: Texts.Bytes()) -> Decision:
+def Merge.decide(b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.Bytes()) -> Decision:
   Decision.Side{Sides.Side.of(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), b, x, y)}
 
 # the change that the decision d takes of x and y, none for both
@@ -856,9 +856,6 @@ def Decision.take(d: Decision, x: Texts.Bytes(), y: Texts.Bytes()) -> Maybe<&2, 
     case Decision.Pieces{}:
       None{}
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Embedding
 # ---------
 # An embedding holds regions of another format between an opening and a
@@ -1519,7 +1516,12 @@ def View.get(vs: List<&2, Cond>, +x: Texts.Bytes()) -> Maybe<&2, Bool>:
 def Cond.holds(vs: List<&2, Cond>, c: Cond) -> Bool:
   match c:
     case Cond{x, h}:
-      Maybe.default(&2, Bool, Maybe.bind(&2, Bool, Bool, View.get(vs, x), v => Some{Shared.Bool.is_eq(v, h)}), True{})
+      Maybe.default(
+        &2,
+        Bool,
+        Maybe.bind(&2, Bool, Bool, View.get(vs, x), v => Some{Shared.Bool.is_eq(v, h)}),
+        True{}
+      )
 
 # each of the conditions cs holds under the view vs
 def Conds.hold(+vs: List<&2, Cond>, cs: List<&2, Cond>) -> Bool:
@@ -2392,7 +2394,7 @@ def Format.items(f: Format, b: Texts.Bytes()) -> List<&2, Item>:
   [Item{"content", [], 0n, b, []}]
 
 # the item x is one of those that the names ns ask for
-def Item.asked(+ns: List<&2, Texts.Bytes()>, x: Item) -> Bool:
+def Item.asked(ns: List<&2, Texts.Bytes()>, x: Item) -> Bool:
   match x:
     case Item{k, n, at, b, us}:
       List.contains(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), ns, n)
@@ -2420,33 +2422,11 @@ def Import.pool(x: Import, xs: List<&2, Item>) -> List<&2, Item>:
 # A format is data: a resource keeps its own, by hash, so every node reads a
 # resource in the same format, whatever its name.
 
-# the value x read, with the words r after it
-def Read.give(-A: Data, x: A, r: List<&2, U32>) -> Maybe<&2, Codes.Read<A>>:
-  Some{Codes.Read{x, r}}
-
-# the bit b, then r
-def Bit.code(b: Bool, r: List<&2, U32>) -> List<&2, U32>:
-  match b:
-    case False{}:
-      0 <> r
-    case True{}:
-      1 <> r
-
-# a bit
-def Bit.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Bool>>:
-  match ts:
-    case Con{0, r}:
-      Some{Codes.Read{False{}, r}}
-    case Con{1, r}:
-      Some{Codes.Read{True{}, r}}
-    case _:
-      None{}
-
 # the condition c, then r
 def Cond.code(c: Cond, r: List<&2, U32>) -> List<&2, U32>:
   match c:
     case Cond{x, h}:
-      Codes.Code.words(x, Bit.code(h, r))
+      Codes.Code.words(x, Codes.Code.bool(h, r))
 
 # a condition
 def Cond.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Cond>>:
@@ -2455,10 +2435,33 @@ def Cond.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Cond>>:
     ~Bool,
     ~Cond,
     ~Codes.Code.words.read,
-    ~Bit.code.read,
+    ~Codes.Code.bool.read,
     x => h => Cond{x, h},
     ts
   )
+
+# a condition reads back
+def Cond.code_read(
+  c: Cond,
+  r: List<&2, U32>
+) -> {Cond.code.read(Cond.code(c, r)) == Some{Codes.Read{c, r}}: Maybe<&2, Codes.Read<Cond>>}:
+  match c:
+    case Cond{x, h}:
+      Codes.Code.two_read(
+        ~Texts.Bytes(),
+        ~Bool,
+        ~Cond,
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.bool.codec(),
+        a => b => Cond{a, b},
+        x,
+        h,
+        r
+      )
+
+# the code of conditions
+def Cond.codec() -> Codes.Codec(Cond):
+  (Cond.code, (Cond.code.read, c => r => Cond.code_read(c, r)))
 
 # the edge e, then r
 def Edge.code(e: Edge, r: List<&2, U32>) -> List<&2, U32>:
@@ -2493,6 +2496,35 @@ def Edge.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Edge>>:
     ts
   )
 
+# an edge reads back
+def Edge.code_read(
+  e: Edge,
+  r: List<&2, U32>
+) -> {Edge.code.read(Edge.code(e, r)) == Some{Codes.Read{e, r}}: Maybe<&2, Codes.Read<Edge>>}:
+  match e:
+    case Edge{t, a, ns, cs}:
+      Codes.Code.four_read(
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~List<&2, Texts.Bytes()>,
+        ~List<&2, Cond>,
+        ~Edge,
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.list.codec(~Texts.Bytes(), ~Codes.Code.words.codec()),
+        ~Codes.Code.list.codec(~Cond, ~Cond.codec()),
+        w => x => y => z => Edge{w, x, y, z},
+        t,
+        a,
+        ns,
+        cs,
+        r
+      )
+
+# the code of edges
+def Edge.codec() -> Codes.Codec(Edge):
+  (Edge.code, (Edge.code.read, e => r => Edge.code_read(e, r)))
+
 # what an import brings, then r
 def Brings.code(b: Brings, r: List<&2, U32>) -> List<&2, U32>:
   match b:
@@ -2515,17 +2547,22 @@ def Brings.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Brings>>:
     case _:
       None{}
 
-# the character c, then r
-def Char.code(c: Char, r: List<&2, U32>) -> List<&2, U32>:
-  Char.to_u32(c) <> r
+# what an import brings reads back
+def Brings.code_read(
+  b: Brings,
+  r: List<&2, U32>
+) -> {Brings.code.read(Brings.code(b, r)) == Some{Codes.Read{b, r}}: Maybe<&2, Codes.Read<Brings>>}:
+  match b:
+    case Brings.Named{}:
+      {==}
+    case Brings.Whole{}:
+      {==}
+    case Brings.Through{}:
+      {==}
 
-# a character
-def Char.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Char>>:
-  match ts:
-    case Con{x, r}:
-      Some{Codes.Read{Chr{x}, r}}
-    case Nil{}:
-      None{}
+# the code of what imports bring
+def Brings.codec() -> Codes.Codec(Brings):
+  (Brings.code, (Brings.code.read, b => r => Brings.code_read(b, r)))
 
 # how a target is found, then r
 def Find.code(f: Find, r: List<&2, U32>) -> List<&2, U32>:
@@ -2533,11 +2570,16 @@ def Find.code(f: Find, r: List<&2, U32>) -> List<&2, U32>:
     case Find{s, l, rs, ss}:
       Codes.Code.maybe(
         ~Char,
-        ~Char.code,
+        ~Codes.Code.char,
         s,
-        Bit.code(
+        Codes.Code.bool(
           l,
-          Codes.Code.list(~String, ~Codes.Code.text, rs, Codes.Code.list(~String, ~Codes.Code.text, ss, r))
+          Codes.Code.list(
+            ~String,
+            ~Codes.Code.text,
+            rs,
+            Codes.Code.list(~String, ~Codes.Code.text, ss, r)
+          )
         )
       )
 
@@ -2549,13 +2591,42 @@ def Find.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Find>>:
     ~List<&2, String>,
     ~List<&2, String>,
     ~Find,
-    ~(m => Codes.Code.maybe.read(~Char, ~Char.code.read, m)),
-    ~Bit.code.read,
+    ~(m => Codes.Code.maybe.read(~Char, ~Codes.Code.char.read, m)),
+    ~Codes.Code.bool.read,
     ~(m => Codes.Code.list.read(~String, ~Codes.Code.text.read, m)),
     ~(m => Codes.Code.list.read(~String, ~Codes.Code.text.read, m)),
     s => l => rs => ss => Find{s, l, rs, ss},
     ts
   )
+
+# how a target is found reads back
+def Find.code_read(
+  f: Find,
+  r: List<&2, U32>
+) -> {Find.code.read(Find.code(f, r)) == Some{Codes.Read{f, r}}: Maybe<&2, Codes.Read<Find>>}:
+  match f:
+    case Find{s, l, rs, ss}:
+      Codes.Code.four_read(
+        ~Maybe<&2, Char>,
+        ~Bool,
+        ~List<&2, String>,
+        ~List<&2, String>,
+        ~Find,
+        ~Codes.Code.maybe.codec(~Char, ~Codes.Code.char.codec()),
+        ~Codes.Code.bool.codec(),
+        ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
+        ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
+        w => x => y => z => Find{w, x, y, z},
+        s,
+        l,
+        rs,
+        ss,
+        r
+      )
+
+# the code of how targets are found
+def Find.codec() -> Codes.Codec(Find):
+  (Find.code, (Find.code.read, f => r => Find.code_read(f, r)))
 
 # the import x, then r
 def Import.code(x: Import, r: List<&2, U32>) -> List<&2, U32>:
@@ -2577,26 +2648,31 @@ def Import.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Import>>:
     ts
   )
 
-# the rule x, then r
-def Rule.code(x: Rule, r: List<&2, U32>) -> List<&2, U32>:
+# an import reads back
+def Import.code_read(
+  x: Import,
+  r: List<&2, U32>
+) -> {Import.code.read(Import.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Import>>}:
   match x:
-    case Rule{st, op, cl, al, wh, ot, en, br, fi}:
-      Codes.Code.words(
-        st,
-        Codes.Code.words(
-          op,
-          Codes.Code.words(
-            cl,
-            Codes.Code.words(
-              al,
-              Codes.Code.words(
-                wh,
-                Codes.Code.words(ot, Codes.Code.words(en, Brings.code(br, Find.code(fi, r))))
-              )
-            )
-          )
-        )
+    case Import{e, b, f}:
+      Codes.Code.three_read(
+        ~Edge,
+        ~Brings,
+        ~Find,
+        ~Import,
+        ~Edge.codec(),
+        ~Brings.codec(),
+        ~Find.codec(),
+        u => v => w => Import{u, v, w},
+        e,
+        b,
+        f,
+        r
       )
+
+# the code of imports
+def Import.codec() -> Codes.Codec(Import):
+  (Import.code, (Import.code.read, x => r => Import.code_read(x, r)))
 
 # the markers of a rule
 type Marks is Data:
@@ -2604,13 +2680,19 @@ type Marks is Data:
 
 # the markers of conditions, what a rule brings, and how it finds targets
 type Tail is Data:
-  Tail{when: Texts.Bytes(), otherwise: Texts.Bytes(), end: Texts.Bytes(), brings: Brings, find: Find}
+  Tail{
+    when: Texts.Bytes(),
+    otherwise: Texts.Bytes(),
+    end: Texts.Bytes(),
+    brings: Brings,
+    find: Find
+  }
 
-# the rule of the markers m and the tail x
-def Rule.of(m: Marks, x: Tail) -> Rule:
-  match m x:
-    case Marks{st, op, cl, al} Tail{wh, ot, en, br, fi}:
-      Rule{st, op, cl, al, wh, ot, en, br, fi}
+# the markers m, then r
+def Marks.code(m: Marks, r: List<&2, U32>) -> List<&2, U32>:
+  match m:
+    case Marks{st, op, cl, al}:
+      Codes.Code.words(st, Codes.Code.words(op, Codes.Code.words(cl, Codes.Code.words(al, r))))
 
 # the markers of a rule
 def Marks.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Marks>>:
@@ -2628,26 +2710,105 @@ def Marks.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Marks>>:
     ts
   )
 
+# the markers of a rule read back
+def Marks.code_read(
+  m: Marks,
+  r: List<&2, U32>
+) -> {Marks.code.read(Marks.code(m, r)) == Some{Codes.Read{m, r}}: Maybe<&2, Codes.Read<Marks>>}:
+  match m:
+    case Marks{st, op, cl, al}:
+      Codes.Code.four_read(
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~Marks,
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        w => x => y => z => Marks{w, x, y, z},
+        st,
+        op,
+        cl,
+        al,
+        r
+      )
+
+# the code of markers
+def Marks.codec() -> Codes.Codec(Marks):
+  (Marks.code, (Marks.code.read, m => r => Marks.code_read(m, r)))
+
+# the tail x, then r
+def Tail.code(x: Tail, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Tail{wh, ot, en, br, fi}:
+      Codes.Code.words(
+        wh,
+        Codes.Code.words(ot, Codes.Code.words(en, Brings.code(br, Find.code(fi, r))))
+      )
+
 # the end of a rule
 def Tail.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Tail>>:
-  Codes.Read.then(
-    Texts.Bytes(),
-    Tail,
-    Codes.Code.words.read(ts),
-    wh => r => Codes.Code.four.read(
-      ~Texts.Bytes(),
-      ~Texts.Bytes(),
-      ~Brings,
-      ~Find,
-      ~Tail,
-      ~Codes.Code.words.read,
-      ~Codes.Code.words.read,
-      ~Brings.code.read,
-      ~Find.code.read,
-      ot => en => br => fi => Tail{wh, ot, en, br, fi},
-      r
-    )
+  Codes.Code.five.read(
+    ~Texts.Bytes(),
+    ~Texts.Bytes(),
+    ~Texts.Bytes(),
+    ~Brings,
+    ~Find,
+    ~Tail,
+    ~Codes.Code.words.read,
+    ~Codes.Code.words.read,
+    ~Codes.Code.words.read,
+    ~Brings.code.read,
+    ~Find.code.read,
+    wh => ot => en => br => fi => Tail{wh, ot, en, br, fi},
+    ts
   )
+
+# the end of a rule reads back
+def Tail.code_read(
+  x: Tail,
+  r: List<&2, U32>
+) -> {Tail.code.read(Tail.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Tail>>}:
+  match x:
+    case Tail{wh, ot, en, br, fi}:
+      Codes.Code.five_read(
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~Brings,
+        ~Find,
+        ~Tail,
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Brings.codec(),
+        ~Find.codec(),
+        v => w => y => z => q => Tail{v, w, y, z, q},
+        wh,
+        ot,
+        en,
+        br,
+        fi,
+        r
+      )
+
+# the code of ends of rules
+def Tail.codec() -> Codes.Codec(Tail):
+  (Tail.code, (Tail.code.read, x => r => Tail.code_read(x, r)))
+
+# the rule of the markers m and the tail x
+def Rule.of(m: Marks, x: Tail) -> Rule:
+  match m x:
+    case Marks{st, op, cl, al} Tail{wh, ot, en, br, fi}:
+      Rule{st, op, cl, al, wh, ot, en, br, fi}
+
+# the rule x, then r: its markers, then its tail
+def Rule.code(x: Rule, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Rule{st, op, cl, al, wh, ot, en, br, fi}:
+      Marks.code(Marks{st, op, cl, al}, Tail.code(Tail{wh, ot, en, br, fi}, r))
 
 # a rule
 def Rule.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Rule>>:
@@ -2660,6 +2821,29 @@ def Rule.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Rule>>:
     m => x => Rule.of(m, x),
     ts
   )
+
+# a rule reads back
+def Rule.code_read(
+  x: Rule,
+  r: List<&2, U32>
+) -> {Rule.code.read(Rule.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Rule>>}:
+  match x:
+    case Rule{st, op, cl, al, wh, ot, en, br, fi}:
+      Codes.Code.two_read(
+        ~Marks,
+        ~Tail,
+        ~Rule,
+        ~Marks.codec(),
+        ~Tail.codec(),
+        m => t => Rule.of(m, t),
+        Marks{st, op, cl, al},
+        Tail{wh, ot, en, br, fi},
+        r
+      )
+
+# the code of rules
+def Rule.codec() -> Codes.Codec(Rule):
+  (Rule.code, (Rule.code.read, x => r => Rule.code_read(x, r)))
 
 # the leaf k, then r
 def Leaf.code(k: Leaf, r: List<&2, U32>) -> List<&2, U32>:
@@ -2683,18 +2867,51 @@ def Leaf.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Leaf>>:
     case _:
       None{}
 
-# the format f, then r
-def Format.code(f: Format, r: List<&2, U32>) -> List<&2, U32>:
+# a leaf reads back
+def Leaf.code_read(
+  k: Leaf,
+  r: List<&2, U32>
+) -> {Leaf.code.read(Leaf.code(k, r)) == Some{Codes.Read{k, r}}: Maybe<&2, Codes.Read<Leaf>>}:
+  match k:
+    case Leaf.Lines{}:
+      {==}
+    case Leaf.Whole{}:
+      {==}
+    case Leaf.Module{}:
+      {==}
+
+# the code of leaves
+def Leaf.codec() -> Codes.Codec(Leaf):
+  (Leaf.code, (Leaf.code.read, k => r => Leaf.code_read(k, r)))
+
+# the count of the formats in f: itself and each that it holds
+def Format.size(f: Format) -> Nat:
+  match f:
+    case Format.Leaf{k}:
+      1n
+    case Format.Embed{o, op, cl, i}:
+      so si = Format.size(o) Format.size(i)
+      1n+Nat.add(so, si)
+    case Format.Code{b, x, im}:
+      1n+Format.size(b)
+
+# the parts of the format f, then r: its tag, then what its kind holds
+def Format.body(f: Format, r: List<&2, U32>) -> List<&2, U32>:
   match f:
     case Format.Leaf{k}:
       0 <> Leaf.code(k, r)
     case Format.Embed{o, op, cl, i}:
-      1 <> Format.code(o, Codes.Code.words(op, Codes.Code.words(cl, Format.code(i, r))))
+      1 <> Format.body(o, Codes.Code.words(op, Codes.Code.words(cl, Format.body(i, r))))
     case Format.Code{b, x, im}:
-      2 <> Format.code(b, Rule.code(x, Codes.Code.list(~Import, ~Import.code, im, r)))
+      2 <> Format.body(b, Rule.code(x, Codes.Code.list(~Import, ~Import.code, im, r)))
 
-# a format, in at most f steps: each step reads one tag, then the parts of
-# its kind
+# the format f, then r: its size, then its parts, so that a read of it ends
+def Format.code(f: Format, r: List<&2, U32>) -> List<&2, U32>:
+  +f = f
+  Codes.Code.count(Format.size(f), Format.body(f, r))
+
+# the parts of a format of at most f formats: each step reads one tag, then
+# the parts of its kind
 def Format.code.read.go(f: Nat, ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Format>>:
   match f ts:
     case 0n x:
@@ -2725,7 +2942,7 @@ def Format.code.read.go(f: Nat, ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Forma
                   Format,
                   Format,
                   Format.code.read.go(p, r3),
-                  i => r4 => Read.give(Format, Format.Embed{o, op, cl, i}, r4)
+                  i => r4 => Some{Codes.Read{Format.Embed{o, op, cl, i}, r4}}
                 )
               )
             )
@@ -2752,16 +2969,196 @@ def Format.code.read.go(f: Nat, ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Forma
         )
       )
 
-# a format: a code has no more tags than words
+# a format: its size, then its parts
 def Format.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Format>>:
-  +xs = ts
-  Format.code.read.go(List.length(&2, U32, xs), xs)
+  Codes.Read.then(Nat, Format, Codes.Code.count.read(ts), n => r => Format.code.read.go(n, r))
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# the parts of a format read back, in as many steps as it has formats, or more
+def Format.body_read(
+  f: Format,
+  +r: List<&2, U32>,
+  p: Nat,
+  +h: {Nat.is_le(Format.size(f), p) == True{}: Bool}
+) -> {
+  Format.code.read.go(p, Format.body(f, r)) == Some{Codes.Read{f, r}}: Maybe<&2, Codes.Read<Format>>
+}:
+  match f p:
+    case Format.Leaf{k} 0n:
+      Empty.absurd(
+        {
+          Format.code.read.go(
+            0n,
+            Format.body(Format.Leaf{k}, r)
+          )
+            == Some{Codes.Read{Format.Leaf{k}, r}}: Maybe<&2, Codes.Read<Format>>
+        },
+        Shared.Bool.false_ne_true(h)
+      )
+    case Format.Leaf{k} 1n+q:
+      Codes.Code.one_read(~Leaf, ~Format, ~Leaf.codec(), x => Format.Leaf{x}, k, r)
+    case Format.Embed{o, op, cl, i} 0n:
+      Empty.absurd(
+        {
+          Format.code.read.go(
+            0n,
+            Format.body(Format.Embed{o, op, cl, i}, r)
+          )
+            == Some{Codes.Read{Format.Embed{o, op, cl, i}, r}}: Maybe<&2, Codes.Read<Format>>
+        },
+        Shared.Bool.false_ne_true(h)
+      )
+    case Format.Embed{+o, +op, +cl, +i} 1n+(+q):
+      +so = Format.size(o)
+      +si = Format.size(i)
+      +ri = Format.body(i, r)
+      +rc = Codes.Code.words(cl, ri)
+      w = Codes.Code.words(op, rc)
+      e = {Some{Codes.Read{Format.Embed{o, op, cl, i}, r}}: Maybe<&2, Codes.Read<Format>>}
+      %Codes.Read.then_some(
+        Format,
+        Format,
+        Format.code.read.go(q, Format.body(o, w)),
+        o2 => r1 => Codes.Read.then(
+          Texts.Bytes(),
+          Format,
+          Codes.Code.words.read(r1),
+          op2 => r2 => Codes.Read.then(
+            Texts.Bytes(),
+            Format,
+            Codes.Code.words.read(r2),
+            cl2 => r3 => Codes.Read.then(
+              Format,
+              Format,
+              Format.code.read.go(q, r3),
+              i2 => r4 => Some{Codes.Read{Format.Embed{o2, op2, cl2, i2}, r4}}
+            )
+          )
+        ),
+        o,
+        w,
+        Format.body_read(
+          o,
+          w,
+          q,
+          Shared.Nat.le_trans(so, Nat.add(so, si), q)(Shared.Nat.le_add_first(so, si))(h)
+        )
+      ): {_ == e: Maybe<&2, Codes.Read<Format>>}
+      %Codes.Read.then_some(
+        Texts.Bytes(),
+        Format,
+        Codes.Code.words.read(w),
+        op2 => r2 => Codes.Read.then(
+          Texts.Bytes(),
+          Format,
+          Codes.Code.words.read(r2),
+          cl2 => r3 => Codes.Read.then(
+            Format,
+            Format,
+            Format.code.read.go(q, r3),
+            i2 => r4 => Some{Codes.Read{Format.Embed{o, op2, cl2, i2}, r4}}
+          )
+        ),
+        op,
+        rc,
+        Codes.Codec.laws(List<&2, U32>, Codes.Code.words.codec())(op)(rc)
+      ): {_ == e: Maybe<&2, Codes.Read<Format>>}
+      %Codes.Read.then_some(
+        Texts.Bytes(),
+        Format,
+        Codes.Code.words.read(rc),
+        cl2 => r3 => Codes.Read.then(
+          Format,
+          Format,
+          Format.code.read.go(q, r3),
+          i2 => r4 => Some{Codes.Read{Format.Embed{o, op, cl2, i2}, r4}}
+        ),
+        cl,
+        ri,
+        Codes.Codec.laws(List<&2, U32>, Codes.Code.words.codec())(cl)(ri)
+      ): {_ == e: Maybe<&2, Codes.Read<Format>>}
+      %Codes.Read.then_some(
+        Format,
+        Format,
+        Format.code.read.go(q, ri),
+        i2 => r4 => Some{Codes.Read{Format.Embed{o, op, cl, i2}, r4}},
+        i,
+        r,
+        Format.body_read(
+          i,
+          r,
+          q,
+          Shared.Nat.le_trans(si, Nat.add(so, si), q)(Shared.Nat.le_add(so, si))(h)
+        )
+      ): {_ == e: Maybe<&2, Codes.Read<Format>>}
+      {==}
+    case Format.Code{b, x, im} 0n:
+      Empty.absurd(
+        {
+          Format.code.read.go(
+            0n,
+            Format.body(Format.Code{b, x, im}, r)
+          )
+            == Some{Codes.Read{Format.Code{b, x, im}, r}}: Maybe<&2, Codes.Read<Format>>
+        },
+        Shared.Bool.false_ne_true(h)
+      )
+    case Format.Code{+b, +x, +im} 1n+q:
+      rb = Rule.code(x, Codes.Code.list(~Import, ~Import.code, im, r))
+      %Codes.Read.then_some(
+        Format,
+        Format,
+        Format.code.read.go(q, Format.body(b, rb)),
+        b2 => r1 => Codes.Code.two.read(
+          ~Rule,
+          ~List<&2, Import>,
+          ~Format,
+          ~Rule.code.read,
+          ~(m => Codes.Code.list.read(~Import, ~Import.code.read, m)),
+          x2 => im2 => Format.Code{b2, x2, im2},
+          r1
+        ),
+        b,
+        rb,
+        Format.body_read(b, rb, q, h)
+      ): {_ == Some{Codes.Read{Format.Code{b, x, im}, r}}: Maybe<&2, Codes.Read<Format>>}
+      Codes.Code.two_read(
+        ~Rule,
+        ~List<&2, Import>,
+        ~Format,
+        ~Rule.codec(),
+        ~Codes.Code.list.codec(~Import, ~Import.codec()),
+        x2 => im2 => Format.Code{b, x2, im2},
+        x,
+        im,
+        r
+      )
+
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a format reads back from its code
 law Format.code_read:
-  for f: Format
-  for r: List<&2, U32>
+  for +f: Format
+  for +r: List<&2, U32>
   {Format.code.read(Format.code(f, r)) == Some{Codes.Read{f, r}}: Maybe<&2, Codes.Read<Format>>}
+
+def Format.code_read(f, r):
+  %Codes.Read.then_some(
+    Nat,
+    Format,
+    Codes.Code.count.read(Codes.Code.count(Format.size(f), Format.body(f, r))),
+    n => r1 => Format.code.read.go(n, r1),
+    Format.size(f),
+    Format.body(f, r),
+    Codes.Code.count_read(Format.size(f), Format.body(f, r))
+  ): {_ == Some{Codes.Read{f, r}}: Maybe<&2, Codes.Read<Format>>}
+  Format.body_read(f, r, Format.size(f), Shared.Nat.le_refl(Format.size(f)))
+
+# the code of formats
+def Format.codec() -> Codes.Codec(Format):
+  (Format.code, (Format.code.read, f => r => Format.code_read(f, r)))
 
 # Known formats
 # -------------
