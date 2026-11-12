@@ -5816,6 +5816,481 @@ def Mst.reroom(
     fu
   )
 
+# a read of the empty tree finds the key absent
+def Mst.look_none(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  g: Nat,
+  -s: S,
+  -r: Room,
+  -k: List<&2, U32>
+) -> {Mst.look.go(~S, ~fetch, g, s, r, None{}, k) == Look.Absent{}: Look}:
+  match g:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
+
+# a key after k passes every key before k
+def Mst.passes_of_le(xs: List<&2, Item>, +k: List<&2, U32>, +k2: List<&2, U32>) -> {Mst.all_lt(xs, k) == True{}: Bool} -> {
+  Cmp.is_le(Key.cmp(k, k2)) == True{}: Bool
+} -> {Mst.passes(xs, k2) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      +a => +e => {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +a => +e => Shared.Bool.and_both(
+        Cmp.is_gt(Key.cmp(k2, ik)),
+        Mst.passes(rest, k2),
+        Equal.cong(
+          Cmp,
+          Bool,
+          Cmp.is_gt,
+          Key.cmp(k2, ik),
+          GT{},
+          Mst.key_lt_gt(ik, k2)(
+            Mst.key_lt_le(ik, k, k2)(
+              Mst.lt_sound(Key.cmp(ik, k))(Shared.Bool.and_true_left(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a))
+            )(e)
+          )
+        ),
+        Mst.passes_of_le(rest, k, k2)(Shared.Bool.and_true_right(Cmp.is_lt(Key.cmp(ik, k)), Mst.all_lt(rest, k), a))(e)
+      )
+
+# a pick that passes every item goes down after the last
+def Mst.pick_all(
+  +xs: List<&2, Item>,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>
+) -> {Mst.passes(xs, k2) == True{}: Bool} -> {
+  Mst.pick(xs, prev, l, lo, hi, k2) == Pick.Down{Mst.last(xs, prev), Room.of(l, Items.last_key(xs, lo), hi)}: Pick
+}:
+  match xs:
+    case Nil{}:
+      +e => {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +e =>
+        %Equal.sym(
+          Cmp,
+          Key.cmp(k2, ik),
+          GT{},
+          Mst.gt_sound(Key.cmp(k2, ik))(Shared.Bool.and_true_left(Cmp.is_gt(Key.cmp(k2, ik)), Mst.passes(rest, k2), e))
+        ): {
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(_),
+            u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+            u => Shared.Bool.when(Pick, Cmp.is_eq(_), w => Pick.Hit{iv}, w => Mst.pick(rest, r, l, Some{ik}, hi, k2))
+          )
+            == Pick.Down{Mst.last(rest, r), Room.of(l, Items.last_key(rest, Some{ik}), hi)}: Pick
+        }
+        Mst.pick_all(rest, r, l, Some{ik}, hi, k2)(Shared.Bool.and_true_right(Cmp.is_gt(Key.cmp(k2, ik)), Mst.passes(rest, k2), e))
+
+# a pick of a key at or before k stops at once among items after k
+def Mst.stops_first_of_fit(
+  +xs: List<&2, Item>,
+  +k: List<&2, U32>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>
+) -> {Items.fit(xs, Some{k}, hi) == True{}: Bool} -> {List.is_empty(&2, Item, xs) == False{}: Bool} -> {
+  Cmp.is_le(Key.cmp(k2, k)) == True{}: Bool
+} -> {Mst.stops_first(xs, k2) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      +f => +n => +c => Empty.absurd({True{} == True{}: Bool}, Shared.Bool.true_ne_false(n))
+    case Con{Item{+x1, +v1, +r1}, +rest}:
+      +f => +n => +c => Equal.cong(
+        Cmp,
+        Bool,
+        Cmp.is_lt,
+        Key.cmp(k2, x1),
+        LT{},
+        Mst.key_le_lt(k2, k, x1)(c)(
+          Mst.key_lt_of(k, x1)(
+            Shared.Bool.and_true_left(
+              Key.is_lt(k, x1),
+              Bound.before(x1, hi),
+              Shared.Bool.and_true_left(Bool.and(Key.is_lt(k, x1), Bound.before(x1, hi)), Items.fit(rest, Some{x1}, hi), f)
+            )
+          )
+        )
+      )
+
+# the items of a node that opens in a room fit its bounds
+def Mst.opens_fit(
+  +l: Nat,
+  -left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +o: {Mst.opens(Node{l, left, xs}, Room{u, lo, hi}) == True{}: Bool}
+) -> {Items.fit(xs, lo, hi) == True{}: Bool}:
+  Shared.Bool.and_true_right(Bool.and(Nat.is_lt(l, u), Bool.not(List.is_empty(&2, Item, xs))), Items.fit(xs, lo, hi), o)
+
+# a node that opens in a room has an item
+def Mst.opens_full(
+  +l: Nat,
+  -left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +o: {Mst.opens(Node{l, left, xs}, Room{u, lo, hi}) == True{}: Bool}
+) -> {List.is_empty(&2, Item, xs) == False{}: Bool}:
+  Shared.Bool.not_true(List.is_empty(&2, Item, xs))(
+    Shared.Bool.and_true_right(
+      Nat.is_lt(l, u),
+      Bool.not(List.is_empty(&2, Item, xs)),
+      Shared.Bool.and_true_left(Bool.and(Nat.is_lt(l, u), Bool.not(List.is_empty(&2, Item, xs))), Items.fit(xs, lo, hi), o)
+    )
+  )
+
+# a node that opens in a room opens in a room of a higher up and wider
+# bounds where its level is below the up
+def Mst.opens_move(
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +u1: Nat,
+  +lo1: Maybe<&2, List<&2, U32>>,
+  +hi1: Maybe<&2, List<&2, U32>>,
+  +u2: Nat,
+  +lo2: Maybe<&2, List<&2, U32>>,
+  +hi2: Maybe<&2, List<&2, U32>>,
+  +lt: {Nat.is_lt(l, u2) == True{}: Bool},
+  +wl: {Mst.lo_le(lo2, lo1) == True{}: Bool},
+  +wh: {Mst.hi_le(hi1, hi2) == True{}: Bool},
+  +o: {Mst.opens(Node{l, left, xs}, Room{u1, lo1, hi1}) == True{}: Bool}
+) -> {Mst.opens(Node{l, left, xs}, Room{u2, lo2, hi2}) == True{}: Bool}:
+  Mst.opens_lvl(
+    Node{l, left, xs},
+    Room{u1, lo1, hi1},
+    Room{u2, lo2, hi2},
+    lt,
+    Shared.Bool.and_both(Mst.lo_le(lo2, lo1), Mst.hi_le(hi1, hi2), wl, wh)
+  )(o)
+
+# an edge that opens has a root that opens in its room
+def Mst.edge_lvl.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  left: Bool,
+  na: Maybe<&2, Node>,
+  r: Room,
+  -go: Room -> Maybe<&2, Hashes.Hash> -> Bool,
+  +s: S,
+  +h: Hashes.Hash,
+  +en: {Mst.node.in(~S, ~fetch, s, h, r) == na: Maybe<&2, Node>}
+) -> {Shared.Bool.when(Bool, left, u => Mst.edge.left.at(na, r, go), u => Mst.edge.right.at(na, r, go)) == True{}: Bool} -> {
+  Mst.lvl(~S, ~fetch, s, Some{h}, Mst.room_up(r)) == True{}: Bool
+}:
+  match left na r:
+    case True{} None{} Room{+u, +lo, +hi}:
+      +e => Empty.absurd({Mst.lvl(~S, ~fetch, s, Some{h}, u) == True{}: Bool}, Shared.Bool.false_ne_true(e))
+    case False{} None{} Room{+u, +lo, +hi}:
+      +e => Empty.absurd({Mst.lvl(~S, ~fetch, s, Some{h}, u) == True{}: Bool}, Shared.Bool.false_ne_true(e))
+    case b Some{Node{+l, +lf, +xs}} Room{+u, +lo, +hi}:
+      +e => Mst.lvl_of(
+        ~S,
+        ~fetch,
+        s,
+        h,
+        u,
+        l,
+        lf,
+        xs,
+        Mst.in_node(~S, ~fetch, s, h, Room{u, lo, hi}, Node{l, lf, xs})(en),
+        Mst.opens_lt(l, lf, xs, Room{u, lo, hi})(Mst.in_open(~S, ~fetch, s, h, Room{u, lo, hi}, Node{l, lf, xs})(en))
+      )
+
+# an edge that opens has a root whose level is below the up of its room
+def Mst.edge_lvl(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  +s: S,
+  +left: Bool,
+  +r: Room
+) -> {Mst.edge(~S, ~fetch, f, s, left, r, m) == True{}: Bool} -> {Mst.lvl(~S, ~fetch, s, m, Mst.room_up(r)) == True{}: Bool}:
+  match f m:
+    case x None{}:
+      +e => {==}
+    case 0n Some{+h}:
+      +e => Empty.absurd({Mst.lvl(~S, ~fetch, s, Some{h}, Mst.room_up(r)) == True{}: Bool}, Shared.Bool.false_ne_true(e))
+    case 1n+(+p) Some{+h}:
+      Mst.edge_lvl.at(
+        ~S,
+        ~fetch,
+        left,
+        Mst.node.in(~S, ~fetch, s, h, r),
+        r,
+        r2 => c => Mst.edge(~S, ~fetch, p, s, left, r2, c),
+        s,
+        h,
+        {==}
+      )
+
+# Mst.edge_left, at the node na of the root h
+def Mst.edge_left.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  na: Maybe<&2, Node>,
+  g: Nat,
+  +p: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +k: List<&2, U32>,
+  +hr: Maybe<&2, List<&2, U32>>,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>,
+  +en: {Mst.node.in(~S, ~fetch, s, h, Room{ur, Some{k}, hr}) == na: Maybe<&2, Node>},
+  +lv: {Mst.lvl(~S, ~fetch, s, Some{h}, u) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +fu: {Nat.is_le(u, g) == True{}: Bool},
+  +c: {Cmp.is_le(Key.cmp(k2, k)) == True{}: Bool},
+  ih: @l: Nat -> @hr2: Maybe<&2, List<&2, U32>> -> @m: Maybe<&2, Hashes.Hash> -> @g2: Nat -> {
+    Mst.edge(~S, ~fetch, p, s, True{}, Room{l, Some{k}, hr2}, m) == True{}: Bool
+  } -> {Nat.is_le(l, g2) == True{}: Bool} -> {Mst.look.go(~S, ~fetch, g2, s, Room{l, lo, hr2}, m, k2) == Look.Absent{}: Look}
+) -> {
+  Mst.edge.left.at(na, Room{ur, Some{k}, hr}, r2 => c2 => Mst.edge(~S, ~fetch, p, s, True{}, r2, c2)) == True{}: Bool
+} -> {Mst.look.go(~S, ~fetch, g, s, Room{u, lo, hr}, Some{h}, k2) == Look.Absent{}: Look}:
+  match na g:
+    case None{} g0:
+      +e => Empty.absurd({Mst.look.go(~S, ~fetch, g0, s, Room{u, lo, hr}, Some{h}, k2) == Look.Absent{}: Look}, Shared.Bool.false_ne_true(e))
+    case Some{Node{+l, +lf, +xs}} 0n:
+      +e => Empty.absurd(
+        {Look.Missing{h} == Look.Absent{}: Look},
+        Mst.nat_lt_zero(l)(
+          Shared.Nat.lt_le(l, u, 0n)(
+            Mst.lvl_lt(~S, ~fetch, s, h, u, l, lf, xs, lv, Mst.in_node(~S, ~fetch, s, h, Room{ur, Some{k}, hr}, Node{l, lf, xs})(en))
+          )(fu)
+        )
+      )
+    case Some{Node{+l, +lf, +xs}} 1n+(+q):
+      +e =>
+        +o = Mst.in_open(~S, ~fetch, s, h, Room{ur, Some{k}, hr}, Node{l, lf, xs})(en)
+        +lt = Mst.lvl_lt(~S, ~fetch, s, h, u, l, lf, xs, lv, Mst.in_node(~S, ~fetch, s, h, Room{ur, Some{k}, hr}, Node{l, lf, xs})(en))
+        +o2 = Mst.opens_move(l, lf, xs, ur, Some{k}, hr, u, lo, hr, lt, Mst.lo_le_key(lo, k)(a), Mst.hi_le_refl(hr), o)
+        %Equal.sym(
+          Look,
+          Mst.look.go(~S, ~fetch, 1n+q, s, Room{u, lo, hr}, Some{h}, k2),
+          Mst.look.pick(Mst.pick(xs, lf, l, lo, hr, k2), h, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, q, s, r2, m2, k2)),
+          Mst.look_node(
+            ~S,
+            ~fetch,
+            q,
+            s,
+            h,
+            u,
+            lo,
+            hr,
+            l,
+            lf,
+            xs,
+            k2,
+            Mst.in_node(~S, ~fetch, s, h, Room{ur, Some{k}, hr}, Node{l, lf, xs})(en),
+            o2
+          )
+        ): {_ == Look.Absent{}: Look}
+        %Equal.sym(
+          Pick,
+          Mst.pick(xs, lf, l, lo, hr, k2),
+          Pick.Down{lf, Room.of(l, lo, Items.head_key(xs, hr))},
+          Mst.pick_first(xs, lf, l, lo, hr, k2)(
+            Mst.stops_first_of_fit(xs, k, hr, k2)(Mst.opens_fit(l, lf, xs, ur, Some{k}, hr, o))(
+              Mst.opens_full(l, lf, xs, ur, Some{k}, hr, o)
+            )(c)
+          )
+        ): {Mst.look.pick(_, h, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, q, s, r2, m2, k2)) == Look.Absent{}: Look}
+        ih(l)(Items.head_key(xs, hr))(lf)(q)(e)(Mst.opens_fl(l, lf, xs, u, lo, hr, q, o2, fu))
+
+# a read of a key at or before k in a tree whose left edge opens in rooms
+# after k, in a room of wider bounds, finds the key absent
+def Mst.edge_left(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  +g: Nat,
+  +s: S,
+  +ur: Nat,
+  +k: List<&2, U32>,
+  +hr: Maybe<&2, List<&2, U32>>,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>
+) -> {Mst.edge(~S, ~fetch, f, s, True{}, Room{ur, Some{k}, hr}, m) == True{}: Bool} -> {
+  Mst.lvl(~S, ~fetch, s, m, u) == True{}: Bool
+} -> {Bound.after(lo, k) == True{}: Bool} -> {Nat.is_le(u, g) == True{}: Bool} -> {
+  Cmp.is_le(Key.cmp(k2, k)) == True{}: Bool
+} -> {Mst.look.go(~S, ~fetch, g, s, Room{u, lo, hr}, m, k2) == Look.Absent{}: Look}:
+  match f m:
+    case x None{}:
+      +e => +lv => +a => +fu => +c => Mst.look_none(~S, ~fetch, g, s, Room{u, lo, hr}, k2)
+    case 0n Some{+h}:
+      +e => +lv => +a => +fu => +c => Empty.absurd(
+        {Mst.look.go(~S, ~fetch, g, s, Room{u, lo, hr}, Some{h}, k2) == Look.Absent{}: Look},
+        Shared.Bool.false_ne_true(e)
+      )
+    case 1n+(+p) Some{+h}:
+      +e => +lv => +a => +fu => +c => Mst.edge_left.at(
+        ~S,
+        ~fetch,
+        Mst.node.in(~S, ~fetch, s, h, Room{ur, Some{k}, hr}),
+        g,
+        p,
+        s,
+        h,
+        ur,
+        k,
+        hr,
+        u,
+        lo,
+        k2,
+        {==},
+        lv,
+        a,
+        fu,
+        c,
+        +l => +hr2 => +m2 => +g2 => +e2 => +f2 => Mst.edge_left(~S, ~fetch, p, m2, g2, s, l, k, hr2, l, lo, k2)(e2)(
+          Mst.edge_lvl(~S, ~fetch, p, m2, s, True{}, Room{l, Some{k}, hr2})(e2)
+        )(a)(f2)(c)
+      )(e)
+
+# Mst.edge_right, at the node na of the root h
+def Mst.edge_right.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  na: Maybe<&2, Node>,
+  g: Nat,
+  +p: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lr: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +u: Nat,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>,
+  +en: {Mst.node.in(~S, ~fetch, s, h, Room{ur, lr, Some{k}}) == na: Maybe<&2, Node>},
+  +lv: {Mst.lvl(~S, ~fetch, s, Some{h}, u) == True{}: Bool},
+  +b: {Bound.before(k, hi) == True{}: Bool},
+  +fu: {Nat.is_le(u, g) == True{}: Bool},
+  +c: {Cmp.is_le(Key.cmp(k, k2)) == True{}: Bool},
+  ih: @l: Nat -> @lr2: Maybe<&2, List<&2, U32>> -> @m: Maybe<&2, Hashes.Hash> -> @g2: Nat -> {
+    Mst.edge(~S, ~fetch, p, s, False{}, Room{l, lr2, Some{k}}, m) == True{}: Bool
+  } -> {Nat.is_le(l, g2) == True{}: Bool} -> {Mst.look.go(~S, ~fetch, g2, s, Room{l, lr2, hi}, m, k2) == Look.Absent{}: Look}
+) -> {
+  Mst.edge.right.at(na, Room{ur, lr, Some{k}}, r2 => c2 => Mst.edge(~S, ~fetch, p, s, False{}, r2, c2)) == True{}: Bool
+} -> {Mst.look.go(~S, ~fetch, g, s, Room{u, lr, hi}, Some{h}, k2) == Look.Absent{}: Look}:
+  match na g:
+    case None{} g0:
+      +e => Empty.absurd({Mst.look.go(~S, ~fetch, g0, s, Room{u, lr, hi}, Some{h}, k2) == Look.Absent{}: Look}, Shared.Bool.false_ne_true(e))
+    case Some{Node{+l, +lf, +xs}} 0n:
+      +e => Empty.absurd(
+        {Look.Missing{h} == Look.Absent{}: Look},
+        Mst.nat_lt_zero(l)(
+          Shared.Nat.lt_le(l, u, 0n)(
+            Mst.lvl_lt(~S, ~fetch, s, h, u, l, lf, xs, lv, Mst.in_node(~S, ~fetch, s, h, Room{ur, lr, Some{k}}, Node{l, lf, xs})(en))
+          )(fu)
+        )
+      )
+    case Some{Node{+l, +lf, +xs}} 1n+(+q):
+      +e =>
+        +o = Mst.in_open(~S, ~fetch, s, h, Room{ur, lr, Some{k}}, Node{l, lf, xs})(en)
+        +lt = Mst.lvl_lt(~S, ~fetch, s, h, u, l, lf, xs, lv, Mst.in_node(~S, ~fetch, s, h, Room{ur, lr, Some{k}}, Node{l, lf, xs})(en))
+        +o2 = Mst.opens_move(l, lf, xs, ur, lr, Some{k}, u, lr, hi, lt, Mst.lo_le_refl(lr), Mst.hi_le_key(k, hi)(b), o)
+        %Equal.sym(
+          Look,
+          Mst.look.go(~S, ~fetch, 1n+q, s, Room{u, lr, hi}, Some{h}, k2),
+          Mst.look.pick(Mst.pick(xs, lf, l, lr, hi, k2), h, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, q, s, r2, m2, k2)),
+          Mst.look_node(
+            ~S,
+            ~fetch,
+            q,
+            s,
+            h,
+            u,
+            lr,
+            hi,
+            l,
+            lf,
+            xs,
+            k2,
+            Mst.in_node(~S, ~fetch, s, h, Room{ur, lr, Some{k}}, Node{l, lf, xs})(en),
+            o2
+          )
+        ): {_ == Look.Absent{}: Look}
+        %Equal.sym(
+          Pick,
+          Mst.pick(xs, lf, l, lr, hi, k2),
+          Pick.Down{Mst.last(xs, lf), Room.of(l, Items.last_key(xs, lr), hi)},
+          Mst.pick_all(xs, lf, l, lr, hi, k2)(
+            Mst.passes_of_le(xs, k, k2)(Mst.fit_all_lt(xs, lr, k)(Mst.opens_fit(l, lf, xs, ur, lr, Some{k}, o)))(c)
+          )
+        ): {Mst.look.pick(_, h, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, q, s, r2, m2, k2)) == Look.Absent{}: Look}
+        ih(l)(Items.last_key(xs, lr))(Mst.last(xs, lf))(q)(e)(Mst.opens_fl(l, lf, xs, u, lr, hi, q, o2, fu))
+
+# a read of a key at or after k in a tree whose right edge opens in rooms
+# before k, in a room of wider bounds, finds the key absent
+def Mst.edge_right(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  +g: Nat,
+  +s: S,
+  +ur: Nat,
+  +lr: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +u: Nat,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>
+) -> {Mst.edge(~S, ~fetch, f, s, False{}, Room{ur, lr, Some{k}}, m) == True{}: Bool} -> {
+  Mst.lvl(~S, ~fetch, s, m, u) == True{}: Bool
+} -> {Bound.before(k, hi) == True{}: Bool} -> {Nat.is_le(u, g) == True{}: Bool} -> {
+  Cmp.is_le(Key.cmp(k, k2)) == True{}: Bool
+} -> {Mst.look.go(~S, ~fetch, g, s, Room{u, lr, hi}, m, k2) == Look.Absent{}: Look}:
+  match f m:
+    case x None{}:
+      +e => +lv => +b => +fu => +c => Mst.look_none(~S, ~fetch, g, s, Room{u, lr, hi}, k2)
+    case 0n Some{+h}:
+      +e => +lv => +b => +fu => +c => Empty.absurd(
+        {Mst.look.go(~S, ~fetch, g, s, Room{u, lr, hi}, Some{h}, k2) == Look.Absent{}: Look},
+        Shared.Bool.false_ne_true(e)
+      )
+    case 1n+(+p) Some{+h}:
+      +e => +lv => +b => +fu => +c => Mst.edge_right.at(
+        ~S,
+        ~fetch,
+        Mst.node.in(~S, ~fetch, s, h, Room{ur, lr, Some{k}}),
+        g,
+        p,
+        s,
+        h,
+        ur,
+        lr,
+        k,
+        u,
+        hi,
+        k2,
+        {==},
+        lv,
+        b,
+        fu,
+        c,
+        +l => +lr2 => +m2 => +g2 => +e2 => +f2 => Mst.edge_right(~S, ~fetch, p, m2, g2, s, l, lr2, k, l, hi, k2)(e2)(
+          Mst.edge_lvl(~S, ~fetch, p, m2, s, False{}, Room{l, lr2, Some{k}})(e2)
+        )(b)(f2)(c)
+      )(e)
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
