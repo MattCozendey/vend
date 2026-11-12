@@ -135,7 +135,7 @@ class Store {
 }
 
 // ---- the supervisor ----
-type Worker = { p: ReturnType<typeof spawnWorker>; bend: string; job: string | null; warm: string[]; ready: boolean; timer?: ReturnType<typeof setTimeout>; idle?: ReturnType<typeof setTimeout> };
+type Worker = { p: ReturnType<typeof spawnWorker>; bend: string; job: string | null; warm: string[]; ready: boolean; fatal?: string; timer?: ReturnType<typeof setTimeout>; idle?: ReturnType<typeof setTimeout> };
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 type Endpoint = { pid: number; port: number; token: string; version: string };
 const endpoint = (): Endpoint | undefined => { try { const e = JSON.parse(fs.readFileSync(ENDPOINT, "utf8")); return alive(e.pid) ? e : undefined; } catch { return undefined; } };
@@ -161,7 +161,7 @@ async function serve(): Promise<void> {
   const retire = (w: Worker) => { const i = workers.indexOf(w); if (i >= 0) workers.splice(i, 1); try { w.p.kill(); } catch { /* gone */ } };
   const onMsg = (w: Worker, m: FromWorker) => {
     if (m.t === "ready") { w.ready = true; failures = 0; pump(); return; }
-    if (m.t === "fatal") { const j = w.job ? live.get(w.job) : undefined; if (j) { j.status = "error"; j.report = { status: "error", text: "# worker: " + m.message }; save(j); } w.job = null; retire(w); return; }
+    if (m.t === "fatal") { w.fatal = m.message; const j = w.job ? live.get(w.job) : undefined; if (j) { j.status = "error"; j.report = { status: "error", text: "# worker: " + m.message }; save(j); } w.job = null; retire(w); return; }
     if (m.t === "lemma") { store.learn(m.file, m.key, m.text); return; }
     const j = live.get(m.id);
     if (!j) return;
@@ -194,7 +194,7 @@ async function serve(): Promise<void> {
       if (!w.ready && ++failures >= 3) {
         for (const id of queue.splice(0)) {
           const q = live.get(id);
-          if (q && q.bend === w.bend) { q.status = "error"; q.report = { status: "error", text: "# the worker does not start:\n" + logTail(w.p.logStart) }; save(q); }
+          if (q && q.bend === w.bend) { q.status = "error"; q.report = { status: "error", text: "# the worker does not start:\n" + (w.fatal ?? logTail(w.p.logStart)) }; save(q); }
         }
         failures = 0;
         return;

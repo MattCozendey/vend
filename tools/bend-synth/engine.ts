@@ -41,12 +41,12 @@ const PATCHES: Array<[string, string]> = [
   ['export function term_check(book: Book, lhs: LHS, tm: HTerm, qt: Quant, ty: HTerm, ctx: Ctx, d: number): Check {\n',
     'export function term_check(book: Book, lhs: LHS, tm: HTerm, qt: Quant, ty: HTerm, ctx: Ctx, d: number): Check {\n  if (--__B2.f < 0 || (++__B2.t & 4095) === 0) __B2.out();\n'],
   // 4. the parser state has one constructor: a new field in Bend changes this line, and the patch fails
-  ['  const p: Parse = { book, dir, str: src, pos: 0, stk: [], idx: new Map(), frs: 0, ns, al };',
+  ['  const p: Parse = { book, dir, str: src, pos: 0, stk: [], idx: new Map(), frs: 0, ann: new Set(), ns, al };',
     '  const p: Parse = parse_new(book, dir, src, ns, al);'],
 ];
 const PRELUDE = "const __B2 = (globalThis as any).__bendSynth;\n";
 const EPILOGUE = "\nexport function parse_new(book: Book, dir: string, str: string, ns: string, al: Record<Name, Name>): Parse {\n"
-  + "  return { book, dir, str, pos: 0, stk: [], idx: new Map(), frs: 0, ns, al };\n}\n";
+  + "  return { book, dir, str, pos: 0, stk: [], idx: new Map(), frs: 0, ann: new Set(), ns, al };\n}\n";
 const SURFACE = ["book_nil", "book_load", "book_adt", "book_valid", "def_check", "term_check", "term_infer", "term_wnf", "term_snf",
   "term_compare", "term_lower", "term_higher", "term_show", "term_key", "term_force", "term_strip", "term_unapply", "term_apply",
   "parse_new", "parse_push", "parse_block", "parse_body", "parse_tele", "parse_skip", "parse_fail", "parse_book", "body_flatten",
