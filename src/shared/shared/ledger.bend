@@ -986,14 +986,12 @@ def Ballot.root(b: Ballot) -> Hashes.Hash:
     case Ballot{Signed{Place{Line{r, s}, h, k}, n, a}, l}:
       r
 
-# b is a ballot of the voter under the root r whose chain names p as the
-# place of the ballot before it (none: b is the first). A key signs one
-# ballot only, so two such ballots are a lie
-def Ballot.follows(+b: Ballot, r: Hashes.Hash, voter: String, p: Maybe<&2, Place>) -> Bool:
-  Bool.and(
-    Bool.and(Hashes.Hash.is_eq(Ballot.root(b), r), String.eq(Ballot.voter(b), voter)),
-    Shared.Maybe.is_eq(~Place, ~Place.is_eq, Ballot.prev(b), p)
-  )
+# the key that signs the ballot b: the one key that its seal shows for what
+# it signs (none: its seal does not read)
+def Ballot.signer(b: Ballot) -> Maybe<&2, Hashes.Hash>:
+  match b:
+    case Ballot{x, Link{p, k, z}}:
+      Seals.Seal.signer(Ballot.digest(x, p, k), z)
 
 # b is a ballot of the voter at the place w
 def Ballot.is_at(b: Ballot, w: Place, voter: String) -> Bool:
@@ -1057,8 +1055,7 @@ def Ballots.cell(
 # place; a round that no ballot at a height of a line is above; the voters
 # that the ledger holds a proof of a lie against, under a root; a height that
 # no ballot of a line is above; the requests of an author; the ledger
-# without the entry of a name; and the ballots of a voter under a root that
-# follow a place in its chain
+# without the entry of a name; and the ballots that a key signs
 def Ledger.Ops(-Q: Data, -L: Data) -> Type:
   L
     & (
@@ -1077,7 +1074,7 @@ def Ledger.Ops(-Q: Data, -L: Data) -> Type:
                               (L -> Line -> Nat)
                                 & (
                                   (L -> String -> List<&2, Entry<Q>>)
-                                    & ((L -> Name -> L) & (L -> Hashes.Hash -> String -> Maybe<&2, Place> -> List<&2, Ballot>))
+                                    & ((L -> Name -> L) & (L -> Hashes.Hash -> List<&2, Ballot>))
                                 )
                             )
                         )
@@ -1166,12 +1163,8 @@ def Kind.drop(-Q: Data, k: Ledger.Kind(Q)) -> Kind.L(Q, k) -> Name -> Kind.L(Q, 
     case Tuple{l, Tuple{e, Tuple{g, Tuple{a, Tuple{m, Tuple{b, Tuple{r, Tuple{x, Tuple{hs, Tuple{as, Tuple{dr, af}}}}}}}}}}}:
       dr
 
-# the ballots of a voter under a root that follow a place in its chain (none:
-# the first), in a ledger of the kind k
-def Kind.after(
-  -Q: Data,
-  k: Ledger.Kind(Q)
-) -> Kind.L(Q, k) -> Hashes.Hash -> String -> Maybe<&2, Place> -> List<&2, Ballot>:
+# the ballots that a key signs, in a ledger of the kind k
+def Kind.signed(-Q: Data, k: Ledger.Kind(Q)) -> Kind.L(Q, k) -> Hashes.Hash -> List<&2, Ballot>:
   match k:
     case Tuple{l, Tuple{e, Tuple{g, Tuple{a, Tuple{m, Tuple{b, Tuple{r, Tuple{x, Tuple{hs, Tuple{as, Tuple{dr, af}}}}}}}}}}}:
       af
@@ -1382,12 +1375,13 @@ def Laws.LiarsComplete(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q)) -> Type
       == True{}: Bool
   }
 
-# the ballots of a voter under a root that follow a place are the ballots of
-# the ledger that follow it so, and no other: a lie is found in one read
-def Laws.After(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q)) -> Type:
-  @l: Kind.L(Q, k) -> @r: Hashes.Hash -> @voter: String -> @p: Maybe<&2, Place> -> @b: Ballot -> {
-    List.contains(~Ballot, ~Ballot.is_eq, Kind.after(Q, k)(l)(r)(voter)(p), b)
-      == Bool.and(Kind.has(~Q, ~c, ~k, l, Entry.Ballot{b}), Ballot.follows(b, r, voter, p)): Bool
+# the ballots that a key signs are the ballots of the ledger that it seals,
+# and no other: a key signs one ballot, so two of them are a lie, found in one
+# read
+def Laws.Signed(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q)) -> Type:
+  @l: Kind.L(Q, k) -> @key: Hashes.Hash -> @b: Ballot -> {
+    List.contains(~Ballot, ~Ballot.is_eq, Kind.signed(Q, k)(l)(key), b)
+      == Bool.and(Kind.has(~Q, ~c, ~k, l, Entry.Ballot{b}), Ballot.sealed(key, b)): Bool
   }
 
 # the laws of a ledger of the kind k, when c is the code of changes
@@ -1413,7 +1407,7 @@ def Ledger.Laws(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q)) -> Type:
                                       Laws.Asks(Q, c, k)
                                         & (
                                           Laws.Drop(Q, k)
-                                            & (Laws.LiarsSound(Q, c, k) & (Laws.LiarsComplete(Q, c, k) & Laws.After(Q, c, k)))
+                                            & (Laws.LiarsSound(Q, c, k) & (Laws.LiarsComplete(Q, c, k) & Laws.Signed(Q, c, k)))
                                         )
                                     )
                                 )
@@ -2253,8 +2247,7 @@ def Name.key(n: Name) -> List<&2, U32>:
 # a book: the entries by name, and the names of the entries by their keys
 # for the ballots of a voter at a place, the rounds of ballots at a height,
 # the heights of ballots on a line, the proofs of lies under a root, the
-# requests of an author, and the ballots of a voter under a root by the
-# place before them
+# requests of an author, and the ballots that a key signs
 type Book<-Q: Data> is Data:
   Book{
     entries: Crits.Dict(Entry<Q>),
@@ -2263,7 +2256,7 @@ type Book<-Q: Data> is Data:
     heights: Crits.Dict(Name),
     liars: Crits.Dict(Name),
     asks: Crits.Dict(Name),
-    after: Crits.Dict(Name)
+    signed: Crits.Dict(Name)
   }
 
 # the keys of an entry in each index of a book (none: it is not in that one)
@@ -2274,13 +2267,8 @@ type Keys is Data:
     height: Maybe<&2, List<&2, U32>>,
     liar: Maybe<&2, List<&2, U32>>,
     ask: Maybe<&2, List<&2, U32>>,
-    after: Maybe<&2, List<&2, U32>>
+    signer: Maybe<&2, List<&2, U32>>
   }
-
-# the key, then r, of the ballots of a voter under the root rt whose chain
-# names p as the place before them
-def Index.after.key(rt: Hashes.Hash, voter: String, p: Maybe<&2, Place>, r: List<&2, U32>) -> List<&2, U32>:
-  Hashes.Hash.code(rt, Codes.Code.text(voter, Codes.Code.maybe(~Place, ~Place.code, p, r)))
 
 # the root of the line c
 def Line.root(c: Line) -> Hashes.Hash:
@@ -2291,14 +2279,20 @@ def Line.root(c: Line) -> Hashes.Hash:
 # the keys of the ballot b, of the name n
 def Ballot.keys(b: Ballot, +n: Name) -> Keys:
   match b:
-    case Ballot{Signed{Place{+line, +h, +r}, +voter, a}, Link{+p, k, z}}:
+    case Ballot{Signed{Place{+line, +h, +r}, +voter, a}, Link{+p, +k, +z}}:
       Keys{
         Some{Place.code(Place{line, h, r}, Codes.Code.text(voter, Name.key(n)))},
         Some{Line.code(line, h <> Crits.Key.ord(r, Name.key(n)))},
         Some{Line.code(line, Crits.Key.ord(U32.to_nat(h), Name.key(n)))},
         None{},
         None{},
-        Some{Index.after.key(Line.root(line), voter, p, Name.key(n))}
+        Maybe.map(
+          &2,
+          Hashes.Hash,
+          List<&2, U32>,
+          key => Hashes.Hash.code(key, Name.key(n)),
+          Ballot.signer(Ballot{Signed{Place{line, h, r}, voter, a}, Link{p, k, z}})
+        )
       }
 
 # the keys of the entry e, of the name n
@@ -2321,7 +2315,7 @@ def Entry.keys(-Q: Data, e: Entry<Q>, +n: Name) -> Keys:
       Keys{None{}, None{}, None{}, None{}, None{}, None{}}
 
 # the key of an index, of the keys ks: 0 ballots, 1 rounds, 2 heights, 3
-# liars, 4 asks, 5 after
+# liars, 4 asks, 5 signed
 def Keys.at(ks: Keys, i: Nat) -> Maybe<&2, List<&2, U32>>:
   match ks i:
     case Keys{b, r, h, l, a, f} 0n:
@@ -2511,9 +2505,9 @@ def Book.heights(-Q: Data, b: Book<Q>, +line: Line) -> Nat:
 def Book.liars(-Q: Data, +b: Book<Q>, +r: Hashes.Hash) -> List<&2, String>:
   Entries.liars(Q, Book.named(Q, b, Index.under(Book.index(Q, b, 3n), Hashes.Hash.code(r, []))))
 
-# the ballots of the voter under the root rt that follow the place p
-def Book.after(-Q: Data, +b: Book<Q>, rt: Hashes.Hash, voter: String, p: Maybe<&2, Place>) -> List<&2, Ballot>:
-  Entries.ballots(Q, Book.named(Q, b, Index.under(Book.index(Q, b, 5n), Index.after.key(rt, voter, p, []))))
+# the ballots that the key signs
+def Book.signed(-Q: Data, +b: Book<Q>, key: Hashes.Hash) -> List<&2, Ballot>:
+  Entries.ballots(Q, Book.named(Q, b, Index.under(Book.index(Q, b, 5n), Hashes.Hash.code(key, []))))
 
 # the requests of the author
 def Book.asks(-Q: Data, +b: Book<Q>, +author: String) -> List<&2, Entry<Q>>:
@@ -3988,7 +3982,7 @@ def Book.kind(~Q: Data, ~c: Codes.Codec(Q)) -> Ledger.Kind(Q):
                       x => a => Book.asks(Q, Book.L.book(~Q, ~c, x), a),
                       (
                         x => n => Book.L.drop(~Q, ~c, x, n),
-                        x => r => v => p => Book.after(Q, Book.L.book(~Q, ~c, x), r, v, p)
+                        x => key => Book.signed(Q, Book.L.book(~Q, ~c, x), key)
                       )
                     )
                   )
