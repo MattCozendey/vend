@@ -11676,7 +11676,31 @@ def Pieces.has_key_append(a: List<&2, Piece>, +b: List<&2, Piece>, +k: List<&2, 
 def Pieces.apart_key(as: List<&2, Piece>, +bs: List<&2, Piece>, +k: List<&2, U32>) -> {Pieces.apart(as, bs) == True{}: Bool} -> {
   Bool.and(Pieces.has_key(as, k), Pieces.has_key(bs, k)) == False{}: Bool
 }:
-  ?TODO
+  match as:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{+k2, +v}, +rest}:
+      +h => Bool.cases(
+        Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+        {Bool.and(Bool.or(Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), Pieces.has_key(rest, k)), Pieces.has_key(bs, k)) == False{}: Bool},
+        +ct =>
+          %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), True{}, ct): {
+            Bool.and(Bool.or(_, Pieces.has_key(rest, k)), Pieces.has_key(bs, k)) == False{}: Bool
+          }
+          %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), k2, k)(ct): {
+            Bool.and(True{}, Pieces.has_key(bs, _)) == False{}: Bool
+          }
+          Shared.Bool.not_true(
+            Pieces.has_key(bs, k2)
+          )(Shared.Bool.and_true_left(Bool.not(Pieces.has_key(bs, k2)), Pieces.apart(rest, bs))(h)),
+        +cf =>
+          %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), False{}, cf): {
+            Bool.and(Bool.or(_, Pieces.has_key(rest, k)), Pieces.has_key(bs, k)) == False{}: Bool
+          }
+          Pieces.apart_key(rest, bs, k)(Shared.Bool.and_true_right(Bool.not(Pieces.has_key(bs, k2)), Pieces.apart(rest, bs))(h))
+      )
+    case Con{Piece.Sub{h2, u, lo, hi}, +rest}:
+      h => Pieces.apart_key(rest, bs, k)(h)
 
 # pieces apart from bs, after others, are apart from bs
 def Pieces.apart_right(a: List<&2, Piece>, +b: List<&2, Piece>, +bs: List<&2, Piece>) -> {
@@ -11827,13 +11851,40 @@ def Mst.differ_none(x: Maybe<&2, List<&2, U32>>, y: Maybe<&2, List<&2, U32>>) ->
 def Mst.ra_miss(+xs: List<&2, Piece>, +k1: List<&2, U32>, +v1: List<&2, U32>, +ra: List<&2, Piece>, +k: List<&2, U32>) -> {
   Pieces.sorted(List.append(&2, Piece, xs, Piece.Bind{k1, v1} <> ra)) == True{}: Bool
 } -> {Key.is_lt(k1, k) == False{}: Bool} -> {Pieces.covers(ra, k) == False{}: Bool}:
-  ?TODO
+  hs => hk => Bool.false_of(
+    Pieces.covers(ra, k),
+    c => Shared.Bool.true_ne_false(
+      Equal.trans(
+        Bool,
+        True{},
+        Key.is_lt(k1, k),
+        False{},
+        Equal.sym(
+          Bool,
+          Key.is_lt(k1, k),
+          True{},
+          Pieces.above_all(
+            k1,
+            v1,
+            ra,
+            k
+          )(
+            Shared.Bool.and_true_left(
+              Pieces.after_all(Piece.Bind{k1, v1}, ra),
+              Pieces.sorted(ra)
+            )(Pieces.sorted_right(xs, Piece.Bind{k1, v1} <> ra)(hs))
+          )(c)
+        ),
+        hk
+      )
+    )
+  )
 
 # a key not before k1 is not held by pieces before the binding of k1
 def Mst.xs_miss(+xs: List<&2, Piece>, +k1: List<&2, U32>, +v1: List<&2, U32>, +ra: List<&2, Piece>, +k: List<&2, U32>) -> {
   Pieces.sorted(List.append(&2, Piece, xs, Piece.Bind{k1, v1} <> ra)) == True{}: Bool
 } -> {Key.is_lt(k, k1) == False{}: Bool} -> {Pieces.covers(xs, k) == False{}: Bool}:
-  ?TODO
+  x => x1 => Bool.false_of(Pieces.covers(xs, k), x2 => Shared.Bool.true_ne_false((%x1 : {True{} == _ : Bool}; Equal.sym(Bool, Key.is_lt(k, k1), True{}, Pieces.below_all(xs, k1, v1, ra, k)(Pieces.sorted_split(xs, Piece.Bind{k1, v1} <> ra)(x))(x2)))))
 
 # the values of k in the run of xs, then the binding of k1, then ra, by how
 # k compares to k1: before it, the values of xs
@@ -11852,7 +11903,7 @@ def Mst.side_left(
 } -> {
   Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, xs, Piece.Bind{k1, v1} <> ra), k) == Pieces.value(~S, ~fetch, f, s, xs, k): Maybe<&2, List<&2, U32>>
 }:
-  ?TODO
+  x => x1 => x2 => Pieces.value_left(~S, ~fetch, f, s, xs, Piece.Bind{k1, v1} <> ra, k)((%Equal.sym(Bool, Shared.List.is_eq(U32, U32.is_eq, k1, k), False{}, x2) : {Bool.or(_, Pieces.covers(ra, k)) == False{} : Bool}; Mst.ra_miss(xs, k1, v1, ra, k)(x)(x1)))
 
 # the values of k in the run of xs, then the binding of k1, then ra, from k1
 # on: the values of the binding, then ra
@@ -11870,7 +11921,7 @@ def Mst.side_right(
   Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, xs, Piece.Bind{k1, v1} <> ra), k)
     == Pieces.value(~S, ~fetch, f, s, Piece.Bind{k1, v1} <> ra, k): Maybe<&2, List<&2, U32>>
 }:
-  ?TODO
+  x => x1 => Pieces.value_right(~S, ~fetch, f, s, xs, Piece.Bind{k1, v1} <> ra, k)(Mst.xs_miss(xs, k1, v1, ra, k)(x)(x1))
 
 # the difference of runs cut at a key k1 that both hold as a binding: before
 # k1 the runs before it, at k1 the two values, after k1 the runs after it
@@ -11937,7 +11988,134 @@ def Mst.cut_differ(
       Runs.differ(~S, ~fetch, f, s, Round.pairs(Mst.cut(as, bs, sa, sb)), k)
     ): Bool
 }:
-  ?TODO
+  match as bs:
+    case Nil{} Nil{}:
+      ha => hb =>
+        %Equal.sym(List<&2, Piece>, List.append(&2, Piece, List.reverse(&2, Piece, sa), []), List.reverse(&2, Piece, sa), Shared.List.append_nil(Piece, List.reverse(&2, Piece, sa))): {
+          Mst.differ(Pieces.value(~S, ~fetch, f, s, _, k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), []), k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut([], [], sa, sb)), k), Runs.differ(~S, ~fetch, f, s, Round.pairs(Mst.cut([], [], sa, sb)), k)): Bool
+        }
+        %Equal.sym(List<&2, Piece>, List.append(&2, Piece, List.reverse(&2, Piece, sb), []), List.reverse(&2, Piece, sb), Shared.List.append_nil(Piece, List.reverse(&2, Piece, sb))): {
+          Mst.differ(Pieces.value(~S, ~fetch, f, s, List.reverse(&2, Piece, sa), k), Pieces.value(~S, ~fetch, f, s, _, k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut([], [], sa, sb)), k), Runs.differ(~S, ~fetch, f, s, Round.pairs(Mst.cut([], [], sa, sb)), k)): Bool
+        }
+        Shared.Bool.or_false(Mst.differ(Pieces.value(~S, ~fetch, f, s, List.reverse(&2, Piece, sa), k), Pieces.value(~S, ~fetch, f, s, List.reverse(&2, Piece, sb), k)))
+    case Nil{} Con{+y, +rb}:
+      ha => hb =>
+        %List.rev_move(Piece, y, sb, rb): {
+          Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sa), []), k), Pieces.value(~S, ~fetch, f, s, _, k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut([], rb, sa, y <> sb)), k), Runs.differ(~S, ~fetch, f, s, Round.pairs(Mst.cut([], rb, sa, y <> sb)), k)): Bool
+        }
+        Mst.cut_differ(~S, ~fetch, f, s, [], rb, sa, y <> sb, k)(ha)(
+          Equal.trans(Bool, Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, y <> sb), rb)), Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, sb), y <> rb)), True{}, Equal.cong(List<&2, Piece>, Bool, z => Pieces.sorted(z), List.append(&2, Piece, List.reverse(&2, Piece, y <> sb), rb), List.append(&2, Piece, List.reverse(&2, Piece, sb), y <> rb), List.rev_move(Piece, y, sb, rb)), hb)
+        )
+    case Con{+x, +ra} Nil{}:
+      ha => hb =>
+        %List.rev_move(Piece, x, sa, ra): {
+          Mst.differ(Pieces.value(~S, ~fetch, f, s, _, k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), []), k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(ra, [], x <> sa, sb)), k), Runs.differ(~S, ~fetch, f, s, Round.pairs(Mst.cut(ra, [], x <> sa, sb)), k)): Bool
+        }
+        Mst.cut_differ(~S, ~fetch, f, s, ra, [], x <> sa, sb, k)(
+          Equal.trans(Bool, Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, x <> sa), ra)), Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, sa), x <> ra)), True{}, Equal.cong(List<&2, Piece>, Bool, z => Pieces.sorted(z), List.append(&2, Piece, List.reverse(&2, Piece, x <> sa), ra), List.append(&2, Piece, List.reverse(&2, Piece, sa), x <> ra), List.rev_move(Piece, x, sa, ra)), ha)
+        )(hb)
+    case Con{Piece.Sub{+h, +u, +lo, +hi}, +ra} Con{+y, +rb}:
+      ha => hb =>
+        %List.rev_move(Piece, Piece.Sub{h, u, lo, hi}, sa, ra): {
+          Mst.differ(Pieces.value(~S, ~fetch, f, s, _, k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), y <> rb), k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(ra, y <> rb, Piece.Sub{h, u, lo, hi} <> sa, sb)), k), Runs.differ(~S, ~fetch, f, s, Round.pairs(Mst.cut(ra, y <> rb, Piece.Sub{h, u, lo, hi} <> sa, sb)), k)): Bool
+        }
+        Mst.cut_differ(~S, ~fetch, f, s, ra, y <> rb, Piece.Sub{h, u, lo, hi} <> sa, sb, k)(
+          Equal.trans(Bool, Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, Piece.Sub{h, u, lo, hi} <> sa), ra)), Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Sub{h, u, lo, hi} <> ra)), True{}, Equal.cong(List<&2, Piece>, Bool, z => Pieces.sorted(z), List.append(&2, Piece, List.reverse(&2, Piece, Piece.Sub{h, u, lo, hi} <> sa), ra), List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Sub{h, u, lo, hi} <> ra), List.rev_move(Piece, Piece.Sub{h, u, lo, hi}, sa, ra)), ha)
+        )(hb)
+    case Con{Piece.Bind{+k1, +v1}, +ra} Con{Piece.Sub{+h, +u, +lo, +hi}, +rb}:
+      ha => hb =>
+        %List.rev_move(Piece, Piece.Sub{h, u, lo, hi}, sb, rb): {
+          Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra), k), Pieces.value(~S, ~fetch, f, s, _, k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Sub{h, u, lo, hi} <> sb)), k), Runs.differ(~S, ~fetch, f, s, Round.pairs(Mst.cut(Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Sub{h, u, lo, hi} <> sb)), k)): Bool
+        }
+        Mst.cut_differ(~S, ~fetch, f, s, Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Sub{h, u, lo, hi} <> sb, k)(ha)(
+          Equal.trans(Bool, Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, Piece.Sub{h, u, lo, hi} <> sb), rb)), Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Sub{h, u, lo, hi} <> rb)), True{}, Equal.cong(List<&2, Piece>, Bool, z => Pieces.sorted(z), List.append(&2, Piece, List.reverse(&2, Piece, Piece.Sub{h, u, lo, hi} <> sb), rb), List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Sub{h, u, lo, hi} <> rb), List.rev_move(Piece, Piece.Sub{h, u, lo, hi}, sb, rb)), hb)
+        )
+    case Con{Piece.Bind{+k1, +v1}, +ra} Con{Piece.Bind{+k2, +v2}, +rb}:
+      +ha => +hb => Shared.Bool.when_cases(
+        Round,
+        x => {Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra), k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k2, v2} <> rb), k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(x), k), Runs.differ(~S, ~fetch, f, s, Round.pairs(x), k)): Bool},
+        Cmp.is_lt(Key.cmp(k1, k2)),
+        w => Mst.cut(ra, Piece.Bind{k2, v2} <> rb, Piece.Bind{k1, v1} <> sa, sb),
+        w => Shared.Bool.when(Round, Cmp.is_eq(Key.cmp(k1, k2)), w2 => Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))), w2 => Mst.cut(Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb)),
+        e1 =>
+          %List.rev_move(Piece, Piece.Bind{k1, v1}, sa, ra): {
+          Mst.differ(Pieces.value(~S, ~fetch, f, s, _, k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k2, v2} <> rb), k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(ra, Piece.Bind{k2, v2} <> rb, Piece.Bind{k1, v1} <> sa, sb)), k), Runs.differ(~S, ~fetch, f, s, Round.pairs(Mst.cut(ra, Piece.Bind{k2, v2} <> rb, Piece.Bind{k1, v1} <> sa, sb)), k)): Bool
+        }
+        Mst.cut_differ(~S, ~fetch, f, s, ra, Piece.Bind{k2, v2} <> rb, Piece.Bind{k1, v1} <> sa, sb, k)(
+          Equal.trans(Bool, Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, Piece.Bind{k1, v1} <> sa), ra)), Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra)), True{}, Equal.cong(List<&2, Piece>, Bool, z => Pieces.sorted(z), List.append(&2, Piece, List.reverse(&2, Piece, Piece.Bind{k1, v1} <> sa), ra), List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra), List.rev_move(Piece, Piece.Bind{k1, v1}, sa, ra)), ha)
+        )(hb),
+        e1 => Shared.Bool.when_cases(
+          Round,
+          x => {Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra), k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k2, v2} <> rb), k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(x), k), Runs.differ(~S, ~fetch, f, s, Round.pairs(x), k)): Bool},
+          Cmp.is_eq(Key.cmp(k1, k2)),
+          w2 => Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))),
+          w2 => Mst.cut(Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb),
+          e2 =>
+            +kk = Key.cmp_eq(k1, k2)(Shared.Cmp.is_eq_sound(Key.cmp(k1, k2))(e2))
+            %Equal.sym(List<&2, List<&2, U32>>, Round.keys(Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], [])))), Round.keys(Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))), Round.keys_cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], [])))): {
+              Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra), k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k2, v2} <> rb), k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), _, k), Runs.differ(~S, ~fetch, f, s, Round.pairs(Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], [])))), k)): Bool
+            }
+            %Equal.sym(List<&2, List<&2, U32>>, Round.keys(Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))), Shared.Bool.when(List<&2, List<&2, U32>>, Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2), u => Round.keys(Mst.cut(ra, rb, [], [])), u => k1 <> Round.keys(Mst.cut(ra, rb, [], []))), Round.keys_differs(k1, v1, v2, Mst.cut(ra, rb, [], []))): {
+              Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra), k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k2, v2} <> rb), k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), _, k), Runs.differ(~S, ~fetch, f, s, Round.pairs(Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], [])))), k)): Bool
+            }
+            %Equal.sym(List<&2, Runs>, Round.pairs(Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], [])))), Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)} <> Round.pairs(Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))), Round.pairs_cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], [])))): {
+              Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra), k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k2, v2} <> rb), k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Shared.Bool.when(List<&2, List<&2, U32>>, Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2), u => Round.keys(Mst.cut(ra, rb, [], [])), u => k1 <> Round.keys(Mst.cut(ra, rb, [], []))), k), Runs.differ(~S, ~fetch, f, s, _, k)): Bool
+            }
+            %Equal.sym(List<&2, Runs>, Round.pairs(Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))), Round.pairs(Mst.cut(ra, rb, [], [])), Round.pairs_differs(k1, v1, v2, Mst.cut(ra, rb, [], []))): {
+              Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra), k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k2, v2} <> rb), k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Shared.Bool.when(List<&2, List<&2, U32>>, Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2), u => Round.keys(Mst.cut(ra, rb, [], [])), u => k1 <> Round.keys(Mst.cut(ra, rb, [], []))), k), Runs.differ(~S, ~fetch, f, s, Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)} <> _, k)): Bool
+            }
+            %kk: {
+              Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra), k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{_, v2} <> rb), k))
+                == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Shared.Bool.when(List<&2, List<&2, U32>>, Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2), u => Round.keys(Mst.cut(ra, rb, [], [])), u => k1 <> Round.keys(Mst.cut(ra, rb, [], []))), k), Runs.differ(~S, ~fetch, f, s, Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)} <> Round.pairs(Mst.cut(ra, rb, [], [])), k)): Bool
+            }
+            +hb2 = Equal.trans(
+              Bool,
+              Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k1, v2} <> rb)),
+              Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k2, v2} <> rb)),
+              True{},
+              Equal.cong(List<&2, U32>, Bool, z => Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{z, v2} <> rb)), k1, k2, kk),
+              hb
+            )
+            Mst.cut_eq(
+              ~S,
+              ~fetch,
+              f,
+              s,
+              List.reverse(&2, Piece, sa),
+              List.reverse(&2, Piece, sb),
+              k1,
+              v1,
+              v2,
+              ra,
+              rb,
+              Round.keys(Mst.cut(ra, rb, [], [])),
+              Runs.differ(~S, ~fetch, f, s, Round.pairs(Mst.cut(ra, rb, [], [])), k),
+              k,
+              ha,
+              hb2,
+              Mst.cut_differ(
+                ~S,
+                ~fetch,
+                f,
+                s,
+                ra,
+                rb,
+                [],
+                [],
+                k
+              )(Shared.Bool.and_true_right(Pieces.after_all(Piece.Bind{k1, v1}, ra), Pieces.sorted(ra))(Pieces.sorted_right(List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra)(ha)))(
+                Shared.Bool.and_true_right(Pieces.after_all(Piece.Bind{k1, v2}, rb), Pieces.sorted(rb))(Pieces.sorted_right(List.reverse(&2, Piece, sb), Piece.Bind{k1, v2} <> rb)(hb2))
+              )
+            ),
+          e2 =>
+            %List.rev_move(Piece, Piece.Bind{k2, v2}, sb, rb): {
+          Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, List.reverse(&2, Piece, sa), Piece.Bind{k1, v1} <> ra), k), Pieces.value(~S, ~fetch, f, s, _, k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb)), k), Runs.differ(~S, ~fetch, f, s, Round.pairs(Mst.cut(Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb)), k)): Bool
+        }
+        Mst.cut_differ(~S, ~fetch, f, s, Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb, k)(ha)(
+          Equal.trans(Bool, Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, Piece.Bind{k2, v2} <> sb), rb)), Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k2, v2} <> rb)), True{}, Equal.cong(List<&2, Piece>, Bool, z => Pieces.sorted(z), List.append(&2, Piece, List.reverse(&2, Piece, Piece.Bind{k2, v2} <> sb), rb), List.append(&2, Piece, List.reverse(&2, Piece, sb), Piece.Bind{k2, v2} <> rb), List.rev_move(Piece, Piece.Bind{k2, v2}, sb, rb)), hb)
+        )
+        )
+      )
 
 # each run of ps has sorted sides with no key bound on both
 def Runs.good(ps: List<&2, Runs>) -> Bool:
@@ -11969,23 +12147,61 @@ def Pieces.binds_below(xs: List<&2, Piece>, +ys: List<&2, Piece>) -> Bool:
 
 # a key after b has other words than b
 def Key.gt_ne(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.is_lt(b, a) == True{}: Bool} -> {Shared.List.is_eq(~U32, ~U32.is_eq, a, b) == False{}: Bool}:
-  ?TODO
+  +h => Bool.false_of(
+    Shared.List.is_eq(~U32, ~U32.is_eq, a, b),
+    e => Shared.Bool.true_ne_false(
+      Equal.trans(
+        Bool,
+        True{},
+        Key.is_lt(b, a),
+        False{},
+        Equal.sym(Bool, Key.is_lt(b, a), True{}, h),
+        Equal.trans(
+          Bool,
+          Key.is_lt(b, a),
+          Key.is_lt(b, b),
+          False{},
+          Equal.cong(List<&2, U32>, Bool, z => Key.is_lt(b, z), a, b, Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), a, b)(e)),
+          Key.lt_irrefl(b)
+        )
+      )
+    )
+  )
 
 # keys of bindings after k, of y then ys, are those of ys too
 def Pieces.keys_after_tail(+k: List<&2, U32>, y: Piece, +ys: List<&2, Piece>) -> {Pieces.keys_after(k, y <> ys) == True{}: Bool} -> {
   Pieces.keys_after(k, ys) == True{}: Bool
 }:
-  ?TODO
+  match y:
+    case Piece.Bind{key, value}:
+      x => Shared.Bool.and_true_right(Key.is_lt(k, key), Pieces.keys_after(k, ys))(x)
+    case Piece.Sub{hash, up, lo, hi}:
+      x => x
 
 # a or b or c, swapped
 def Bool.or_swap3(a: Bool, b: Bool, -c: Bool) -> {Bool.or(a, Bool.or(b, c)) == Bool.or(Bool.or(b, a), c): Bool}:
-  ?TODO
+  match b:
+    case False{}:
+      {==}
+    case True{}:
+      Shared.Bool.or_true_right(a)
 
 # keys after k are after any key before k
 def Pieces.keys_after_trans(+k1: List<&2, U32>, +k2: List<&2, U32>, ys: List<&2, Piece>) -> {Key.is_lt(k1, k2) == True{}: Bool} -> {
   Pieces.keys_after(k2, ys) == True{}: Bool
 } -> {Pieces.keys_after(k1, ys) == True{}: Bool}:
-  ?TODO
+  match ys:
+    case Nil{}:
+      h => g => {==}
+    case Con{Piece.Bind{+k, v}, +rest}:
+      +h => +g => Shared.Bool.and_both(
+        Key.is_lt(k1, k),
+        Pieces.keys_after(k1, rest)
+      )(Key.lt_trans(k1, k2, k)(h)(Shared.Bool.and_true_left(Key.is_lt(k2, k), Pieces.keys_after(k2, rest))(g)))(
+        Pieces.keys_after_trans(k1, k2, rest)(h)(Shared.Bool.and_true_right(Key.is_lt(k2, k), Pieces.keys_after(k2, rest))(g))
+      )
+    case Con{Piece.Sub{h2, u, lo, hi}, +rest}:
+      h => g => Pieces.keys_after_trans(k1, k2, rest)(h)(g)
 
 # pieces after the binding of k have binding keys after k
 def Pieces.after_keys(+k: List<&2, U32>, +v: List<&2, U32>, ys: List<&2, Piece>) -> {
@@ -12062,7 +12278,12 @@ def Runs.good_emit(+sa: List<&2, Piece>, +as: List<&2, Piece>, +sb: List<&2, Pie
   )
     == True{}: Bool
 }:
-  ?TODO
+  h1 => h2 => h3 => Shared.Bool.and_both(
+    Bool.and(Pieces.sorted(List.reverse(&2, Piece, sa)), Pieces.sorted(List.reverse(&2, Piece, sb))),
+    Pieces.apart(List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb))
+  )(Shared.Bool.and_both(Pieces.sorted(List.reverse(&2, Piece, sa)), Pieces.sorted(List.reverse(&2, Piece, sb)))(Pieces.sorted_left(List.reverse(&2, Piece, sa), as)(h1))(Pieces.sorted_left(List.reverse(&2, Piece, sb), bs)(h2)))(
+    Pieces.apart_rev(sa, [], List.reverse(&2, Piece, sb))(Pieces.apart_rev_right(sa, sb)(h3))({==})
+  )
 
 # the runs that a cut of sorted pieces gives are good, when the pieces cut so
 # far have no binding key on both sides, and each such key comes before each
@@ -12072,6 +12293,110 @@ def Mst.cut_good(as: List<&2, Piece>, bs: List<&2, Piece>, +sa: List<&2, Piece>,
 } -> {Pieces.sorted(List.append(&2, Piece, List.reverse(&2, Piece, sb), bs)) == True{}: Bool} -> {Pieces.apart(sa, sb) == True{}: Bool} -> {
   Pieces.binds_below(sa, bs) == True{}: Bool
 } -> {Pieces.binds_below(sb, as) == True{}: Bool} -> {Runs.good(Round.pairs(Mst.cut(as, bs, sa, sb))) == True{}: Bool}:
+  ?TODO
+
+# both sides of each run of ps are sorted
+def Runs.sorted_all(ps: List<&2, Runs>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{Runs{a, b}, rest}:
+      Bool.and(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Runs.sorted_all(rest))
+
+# a or b, then c or d, shuffled
+def Bool.or_shuffle(a: Bool, b: Bool, -c: Bool, -d: Bool) -> {
+  Bool.or(Bool.or(a, b), Bool.or(c, d)) == Bool.or(Bool.or(a, c), Bool.or(b, d)): Bool
+}:
+  ?TODO
+
+# a or b or c or d, regrouped
+def Bool.or_assoc4(a: Bool, b: Bool, c: Bool, -d: Bool) -> {Bool.or(a, Bool.or(b, Bool.or(c, d))) == Bool.or(Bool.or(a, Bool.or(b, c)), d): Bool}:
+  ?TODO
+
+# the keys of two rounds, one after the other
+def Round.keys_append(a: Round, b: Round) -> {
+  Round.keys(Round.append(a, b)) == List.append(&2, List<&2, U32>, Round.keys(a), Round.keys(b)): List<&2, List<&2, U32>>
+}:
+  ?TODO
+
+# the differences of runs, then other runs
+def Runs.differ_append(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  ps: List<&2, Runs>,
+  +qs: List<&2, Runs>,
+  +k: List<&2, U32>
+) -> {
+  Runs.differ(~S, ~fetch, f, s, List.append(&2, Runs, ps, qs), k) == Bool.or(Runs.differ(~S, ~fetch, f, s, ps, k), Runs.differ(~S, ~fetch, f, s, qs, k)): Bool
+}:
+  ?TODO
+
+# both sides of a root are sorted
+def Mst.root_sorted(m: Maybe<&2, Hashes.Hash>) -> {Pieces.sorted(Mst.root(m)) == True{}: Bool}:
+  ?TODO
+
+# the value of k in the pieces of a root is what a read of k in it finds
+def Mst.value_root(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +s: S, m: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>) -> {
+  Pieces.value(~S, ~fetch, Mst.depth(), s, Mst.root(m), k) == Look.value(Mst.look(~S, ~fetch, s, m, k)): Maybe<&2, List<&2, U32>>
+}:
+  ?TODO
+
+# Pieces.apart_sub_left and right help: a not-or that holds holds for each side
+def Bool.not_or_l(a: Bool, -b: Bool) -> {Bool.not(Bool.or(a, b)) == True{}: Bool} -> {Bool.not(a) == True{}: Bool}:
+  ?TODO
+
+# the second side of a not-or that holds
+def Bool.not_or_r(a: Bool, -b: Bool) -> {Bool.not(Bool.or(a, b)) == True{}: Bool} -> {Bool.not(b) == True{}: Bool}:
+  ?TODO
+
+# a trimmed run of sorted sides with no binding key on both has the same
+def Runs.trim_good(+a: List<&2, Piece>, +b: List<&2, Piece>) -> {Pieces.sorted(a) == True{}: Bool} -> {Pieces.sorted(b) == True{}: Bool} -> {
+  Pieces.apart(a, b) == True{}: Bool
+} -> {Bool.and(Bool.and(Pieces.sorted(Runs.side_a(Runs.trim(Runs{a, b}))), Pieces.sorted(Runs.side_b(Runs.trim(Runs{a, b})))), Pieces.apart(Runs.side_a(Runs.trim(Runs{a, b})), Runs.side_b(Runs.trim(Runs{a, b})))) == True{}: Bool}:
+  ?TODO
+
+# a trim of sorted runs keeps the difference of the values of k
+def Runs.trim_differ(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  +a: List<&2, Piece>,
+  +b: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Pieces.sorted(a) == True{}: Bool} -> {Pieces.sorted(b) == True{}: Bool} -> {
+  Mst.differ(Pieces.value(~S, ~fetch, f, s, a, k), Pieces.value(~S, ~fetch, f, s, b, k)) == Mst.differ(Pieces.value(~S, ~fetch, f, s, Runs.side_a(Runs.trim(Runs{a, b})), k), Pieces.value(~S, ~fetch, f, s, Runs.side_b(Runs.trim(Runs{a, b})), k)): Bool
+}:
+  ?TODO
+
+# a step of a run of sorted sides with no binding key on both: the keys it
+# gives, and the runs one level down, hold the difference of the run
+def Mst.step_at_differ(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +a: List<&2, Piece>,
+  +b: List<&2, Piece>,
+  -r1: Round,
+  +k: List<&2, U32>
+) -> {Mst.step.at(~S, ~fetch, s, Runs{a, b}) == Some{r1}: Maybe<&2, Round>} -> {Pieces.sorted(a) == True{}: Bool} -> {Pieces.sorted(b) == True{}: Bool} -> {
+  Pieces.apart(a, b) == True{}: Bool
+} -> {Mst.differ(Pieces.value(~S, ~fetch, 1n+q, s, a, k), Pieces.value(~S, ~fetch, 1n+q, s, b, k)) == Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r1), k), Runs.differ(~S, ~fetch, q, s, Round.pairs(r1), k)): Bool}:
+  ?TODO
+
+# the runs of a step of a run of sorted sides have sorted sides
+def Mst.step_at_sorted(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +s: S, +a: List<&2, Piece>, +b: List<&2, Piece>, -r1: Round) -> {
+  Mst.step.at(~S, ~fetch, s, Runs{a, b}) == Some{r1}: Maybe<&2, Round>
+} -> {Pieces.sorted(a) == True{}: Bool} -> {Pieces.sorted(b) == True{}: Bool} -> {Runs.sorted_all(Round.pairs(r1)) == True{}: Bool}:
+  ?TODO
+
+# runs with sorted sides, then others, have sorted sides
+def Runs.sorted_all_append(ps: List<&2, Runs>, +qs: List<&2, Runs>) -> {Runs.sorted_all(ps) == True{}: Bool} -> {Runs.sorted_all(qs) == True{}: Bool} -> {
+  Runs.sorted_all(List.append(&2, Runs, ps, qs)) == True{}: Bool
+}:
   ?TODO
 
 # a write to a tree that lists whole reads every node it needs
