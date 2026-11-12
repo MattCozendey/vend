@@ -3328,6 +3328,135 @@ def Cov.names(xs: List<&2, Trees.Binding>, +b: String, +v: List<&2, U32>) -> {
         h
       )
 
+# the law of a listing, of a tree t
+def Cov.range.of(
+  -S: Data,
+  -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -grows: S -> S -> Bool,
+  t: Trees.Tree(S, fetch, grows)
+) -> Trees.Laws.Range(S, Trees.Tree.ops(S, fetch, grows, t)):
+  match t:
+    case Tuple{o, Tuple{f, Tuple{pf, Tuple{w, Tuple{cn, Tuple{rg, r}}}}}}:
+      rg
+
+# the law of a listing, of the tree of the ledger d
+def Cov.range(d: Led()) -> Trees.Laws.Range(L(d), Replicas.Led.tree(Requests.Ask.machine(), d)):
+  match d:
+    case Tuple{x, t}:
+      Cov.range.of(
+        Ledgers.Kind.L(
+          Replicas.Machine.Q(Requests.Ask.machine()),
+          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x)
+        ),
+        Ledgers.Kind.data(
+          Replicas.Machine.Q(Requests.Ask.machine()),
+          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x)
+        ),
+        a => b => Ledgers.Kind.grows(
+          ~Replicas.Machine.Q(Requests.Ask.machine()),
+          ~Replicas.Machine.code(Requests.Ask.machine()),
+          ~Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x),
+          a,
+          b
+        ),
+        t
+      )
+
+# the start of b is read as v, at the start of the log
+def Cov.range_has.and(
+  ~d: Led(),
+  +l: L(d),
+  +ts: Replicas.Tip,
+  +b: String,
+  +v: List<&2, U32>,
+  eg: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> {
+  Bool.and(
+    Trees.Key.leads([5], 5 <> Codes.Code.text(b, [])),
+    Shared.Maybe.is_eq(
+      ~List<&2, U32>,
+      ~Shared.List.is_eq(~U32, ~U32.is_eq),
+      Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)),
+      Some{v}
+    )
+  )
+    == True{}: Bool
+}:
+  %Equal.sym(Maybe<&2, List<&2, U32>>, Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)), Some{v}, eg): {
+    Bool.and(
+      Trees.Key.leads([5], 5 <> Codes.Code.text(b, [])),
+      Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), _, Some{v})
+    )
+      == True{}: Bool
+  }
+  %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, v, v), True{}, Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), v)): {
+    Bool.and(Trees.Key.leads([5], 5 <> Codes.Code.text(b, [])), _) == True{}: Bool
+  }
+  {==}
+
+# the listing of a log under [5] holds the start of b, by the law of a listing
+def Cov.range_has.of(
+  ~d: Led(),
+  +l: L(d),
+  +ts: Replicas.Tip,
+  +b: String,
+  +v: List<&2, U32>,
+  -xs: List<&2, Trees.Binding>,
+  rl: {Trees.Bindings.sorted(xs) == True{}: Bool}
+    & (
+      @k: List<&2, U32> -> @w: List<&2, U32> -> {
+        List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{k, w})
+          == Bool.and(
+            Trees.Key.leads([5], k),
+            Shared.Maybe.is_eq(
+              ~List<&2, U32>,
+              ~Shared.List.is_eq(~U32, ~U32.is_eq),
+              Trees.Look.value(
+                Trees.Ops.look(L(d), Replicas.Led.tree(Requests.Ask.machine(), d))(l)(Replicas.Tip.log(ts))(k)
+              ),
+              Some{w}
+            )
+          ): Bool
+      }
+    ),
+  eg: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> {
+  List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{5 <> Codes.Code.text(b, []), v}) == True{}: Bool
+}:
+  match rl:
+    case Tuple{srt, mem}:
+      Equal.trans(
+        Bool,
+        List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{5 <> Codes.Code.text(b, []), v}),
+        Bool.and(
+          Trees.Key.leads([5], 5 <> Codes.Code.text(b, [])),
+          Shared.Maybe.is_eq(
+            ~List<&2, U32>,
+            ~Shared.List.is_eq(~U32, ~U32.is_eq),
+            Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)),
+            Some{v}
+          )
+        ),
+        True{},
+        mem(5 <> Codes.Code.text(b, []))(v),
+        Cov.range_has.and(~d, l, ts, b, v, eg)
+      )
+
+# the listing of a log under [5] holds the start of b, when the log holds it
+def Cov.range_has(
+  ~d: Led(),
+  +l: L(d),
+  +ts: Replicas.Tip,
+  +b: String,
+  +v: List<&2, U32>,
+  +xs: List<&2, Trees.Binding>,
+  emx: {Tree.range(~d, l, Replicas.Tip.log(ts), [5]) == Some{xs}: Maybe<&2, List<&2, Trees.Binding>>},
+  eg: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> {
+  List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{5 <> Codes.Code.text(b, []), v}) == True{}: Bool
+}:
+  Cov.range_has.of(~d, l, ts, b, v, xs, Cov.range(d)(l)(Replicas.Tip.log(ts))([5])(xs)(emx), eg)
+
 # what Vend asks by itself for a line reads only the tips that Own.deps names
 law Own.reads:
   for ~d: Led()
