@@ -156,12 +156,12 @@ async function serve(): Promise<void> {
   for (const j of store.recent()) if (j.status === "queued" || j.status === "running") { j.status = "interrupted"; store.save(j); }
   const queue: string[] = [];
   const workers: Worker[] = [];
-  let lastActive = Date.now(), failures = 0;
+  let lastActive = Date.now(), failures: string[] = [];
   const get = (id: string): Job => { const j = live.get(id) ?? store.get(id); if (!j) throw new Error("no job " + id); return j; };
   const save = (j: Job) => { j.rev++; if (FINAL.has(j.status) || !["queued", "running"].includes(j.status)) live.delete(j.id); else live.set(j.id, j); store.save(j); };
   const retire = (w: Worker) => { const i = workers.indexOf(w); if (i >= 0) workers.splice(i, 1); try { w.p.kill(); } catch { /* gone */ } };
   const onMsg = (w: Worker, m: FromWorker) => {
-    if (m.t === "ready") { w.ready = true; failures = 0; pump(); return; }
+    if (m.t === "ready") { w.ready = true; failures = []; pump(); return; }
     if (m.t === "fatal") { w.fatal = m.message; const j = w.job ? live.get(w.job) : undefined; if (j) { j.status = "error"; j.report = { status: "error", text: "# worker: " + m.message }; save(j); } w.job = null; retire(w); return; }
     if (m.t === "lemma") { store.learn(m.file, m.key, m.text); return; }
     const j = live.get(m.id);
@@ -191,18 +191,23 @@ async function serve(): Promise<void> {
       if (w.timer) clearTimeout(w.timer);
       const j = w.job ? live.get(w.job) : undefined;
       if (j && j.status === "running") { j.status = "interrupted"; j.report = { ...j.report, text: j.report.text + "\n# the worker stopped (exit " + code + "); resume continues from the proven goals" }; save(j); }
-      // a worker that dies before it is ready (a broken Bend, a bad install): three in a row fail the queue
-      if (!w.ready && ++failures >= 3) {
-        for (const id of queue.splice(0)) {
-          const q = live.get(id);
-          if (q && q.bend === w.bend) { q.status = "error"; q.report = { status: "error", text: "# the worker does not start:\n" + (w.fatal ?? logTail(w.p.logStart)) }; save(q); }
+      // a worker that dies before it is ready (a broken Bend, a bad install): three in a row fail the jobs
+      // that wait for that Bend, each start's exit and reason in the report
+      if (!w.ready) failures.push("exit " + code + ": " + (w.fatal ?? (logTail(w.p.logStart).trim() || "nothing in " + path.join(STATE, "worker.log"))));
+      if (!w.ready && failures.length >= 3) {
+        const text = "# the worker does not start (" + failures.length + " tries, " + MEM_MB + " MiB each):\n" + [...new Set(failures)].join("\n").replace(/^/gm, "#   ");
+        for (const id of queue.filter((id) => live.get(id)?.bend === w.bend)) {
+          const q = live.get(id)!;
+          queue.splice(queue.indexOf(id), 1);
+          q.status = "error"; q.report = { status: "error", text }; save(q);
         }
-        failures = 0;
+        failures = [];
         return;
       }
       pump();
     });
-    try { group?.(w.p.pid); } catch (e) { w.p.kill(); throw e; }
+    // a worker the supervisor cannot contain is a failed start (its exit reports it), never a loose one
+    try { group?.(w.p.pid); } catch (e) { w.fatal = e instanceof Error ? e.message : String(e); w.p.kill(); }
     workers.push(w);
     return w;
   };
