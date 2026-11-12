@@ -11221,6 +11221,586 @@ def Mst.ins_ok.replace(
       )(e)
     )
 
+# Mst.ins_ok.gap.read, for a key other than k, by how it compares to k (c)
+def Mst.ins_ok.gap.k2(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  c: Cmp,
+  +s: S,
+  +h: Hashes.Hash,
+  +hn: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +post: List<&2, Item>,
+  +clo: Maybe<&2, Hashes.Hash>,
+  +chi: Maybe<&2, Hashes.Hash>,
+  +k2: List<&2, U32>,
+  +x: Maybe<&2, List<&2, U32>>,
+  +g1: Nat,
+  +g2: Nat,
+  +ec: {Key.cmp(k2, k) == c: Cmp},
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, post)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, post)}, Room{ur, lo, hi}) == True{}: Bool},
+  +eG: {
+    Mst.node(~S, ~fetch, s, hn)
+      == Some{Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post)}}: Maybe<&2, Node>
+  },
+  +oG: {
+    Mst.opens(Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post)}, Room{ur, lo, hi})
+      == True{}: Bool
+  },
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +pk: {Items.fit(post, Some{k}, hi) == True{}: Bool},
+  +fu: {Nat.is_le(ur, g2) == True{}: Bool},
+  +ne: {Cmp.is_eq(Key.cmp(k2, k)) == False{}: Bool},
+  +lvg: {Mst.lvl(~S, ~fetch, s, Mst.last(pre, left), l) == True{}: Bool},
+  +e: {Look.known(Mst.look.go(~S, ~fetch, g1, s, Room{ur, lo, hi}, Some{h}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  sr: Mst.SplitRead(~S, ~fetch, s, Items.last_key(pre, lo), Items.head_key(post, hi), k, Mst.last(pre, left), clo, chi)
+) -> {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, Some{hn}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match c:
+    case LT{}:
+      (slo, shi) = sr
+      Mst.gap_lo(
+        ~S,
+        ~fetch,
+        g1,
+        g2,
+        s,
+        h,
+        hn,
+        ur,
+        ur,
+        lo,
+        hi,
+        k,
+        l,
+        left,
+        pre,
+        post,
+        Item{k, v, chi} <> post,
+        clo,
+        hi,
+        k2,
+        x,
+        eN,
+        oN,
+        eG,
+        oG,
+        Mst.stops_first_fit(post, k, hi, k2)(pk)(Mst.le_of_lt(Key.cmp(k2, k))(ec)),
+        Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(k2, k), LT{}, ec),
+        fu,
+        +g3 => +g4 => +fl => +e3 => slo(l)(lvg)(k2)(x)(l)(g3)(g4)(ec)(fl)(e3)
+      )(e)
+    case GT{}:
+      (slo, shi) = sr
+      Mst.ins_hi(
+        ~S,
+        ~fetch,
+        g1,
+        g2,
+        s,
+        h,
+        hn,
+        ur,
+        lo,
+        hi,
+        k,
+        v,
+        l,
+        left,
+        pre,
+        post,
+        clo,
+        chi,
+        k2,
+        x,
+        eN,
+        oN,
+        eG,
+        oG,
+        Mst.passes_of_lt(pre, k, k2)(all)(Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(k, k2), LT{}, Mst.key_gt_lt(k2, k)(ec))),
+        ec,
+        fu,
+        +g3 => +g4 => +fl => +e3 => shi(l)(lvg)(k2)(x)(l)(g3)(g4)(ec)(fl)(e3)
+      )(e)
+    case EQ{}:
+      Empty.absurd(
+        {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, Some{hn}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Mst.ne_eq(k2, k, ne, ec)
+      )
+
+# what a write of k into the gap of a node of its level reads, from what the
+# split of the gap reads (bi)
+def Mst.ins_ok.gap.read(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +post: List<&2, Item>,
+  +clo: Maybe<&2, Hashes.Hash>,
+  +chi: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, post)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, post)}, Room{ur, lo, hi}) == True{}: Bool},
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +pk: {Items.fit(post, Some{k}, hi) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  +ell: {Nat.is_eq(Key.level(k), l) == True{}: Bool},
+  +hold: {
+    Depots.Depot.holds(
+      ~S,
+      ~fetch,
+      s,
+      Node.code(Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post)}, []) <> ns
+    )
+      == True{}: Bool
+  },
+  bi: {Mst.lvl(~S, ~fetch, s, Mst.last(pre, left), l) == True{}: Bool}
+    & Mst.SplitRead(~S, ~fetch, s, Items.last_key(pre, lo), Items.head_key(post, hi), k, Mst.last(pre, left), clo, chi)
+) -> Mst.InsRead(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  Some{v},
+  Some{Hashes.Sha.hash(Node.code(Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post)}, []))}
+):
+  (+lvg, sr) = bi
+  +eG = Mst.node_code(
+    ~S,
+    ~fetch,
+    s,
+    Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post)},
+    Mst.holds_head(
+      ~S,
+      ~fetch,
+      s,
+      Node.code(Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post)}, []),
+      ns,
+      hold
+    )
+  )
+  +oG = Mst.opens_set_last(l, left, Mst.end_left(pre, left, clo), pre, clo, Item{k, v, chi} <> post, Room{ur, lo, hi})(
+    Mst.opens_of(
+      l,
+      left,
+      List.append(&2, Item, pre, Item{k, v, chi} <> post),
+      ur,
+      lo,
+      hi,
+      Mst.opens_lt(l, left, List.append(&2, Item, pre, post), Room{ur, lo, hi})(oN),
+      Mst.empty_app_con(pre, Item{k, v, chi}, post),
+      Mst.fit_ins(pre, post, k, v, chi, lo, hi)(Mst.opens_fit(l, left, List.append(&2, Item, pre, post), ur, lo, hi, oN))(all)(a)(bb)(pk)
+    )
+  )
+  (
+    +g => +fu => Mst.new_hit(
+      ~S,
+      ~fetch,
+      g,
+      s,
+      Hashes.Sha.hash(Node.code(Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post)}, [])),
+      ur,
+      lo,
+      hi,
+      l,
+      Mst.end_left(pre, left, clo),
+      List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post),
+      k,
+      v,
+      eG,
+      oG,
+      fu,
+      Equal.trans(
+        Pick,
+        Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post), Mst.end_left(pre, left, clo), l, lo, hi, k),
+        Mst.pick(Item{k, v, chi} <> post, clo, l, Items.last_key(pre, lo), hi, k),
+        Pick.Hit{v},
+        Mst.pick_set_passes(pre, clo, Item{k, v, chi} <> post, left, l, lo, hi, k, Mst.passes_of_all_lt(pre, k)(all)),
+        Mst.hit_first(k, v, chi, post, clo, l, Items.last_key(pre, lo), hi)
+      ),
+      ell
+    ),
+    +k2 => +x => +g1 => +g2 => +ne => +fu => +e => Mst.ins_ok.gap.k2(
+      ~S,
+      ~fetch,
+      Key.cmp(k2, k),
+      s,
+      h,
+      Hashes.Sha.hash(Node.code(Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post)}, [])),
+      ur,
+      lo,
+      hi,
+      k,
+      v,
+      l,
+      left,
+      pre,
+      post,
+      clo,
+      chi,
+      k2,
+      x,
+      g1,
+      g2,
+      {==},
+      eN,
+      oN,
+      eG,
+      oG,
+      all,
+      pk,
+      fu,
+      ne,
+      lvg,
+      e,
+      sr
+    )
+  )
+
+# a write of k into the gap of a node of its level, once the gap is split (ms)
+def Mst.ins_ok.gap(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ms: Maybe<&2, Halves>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +post: List<&2, Item>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, post)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, post)}, Room{ur, lo, hi}) == True{}: Bool},
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +pk: {Items.fit(post, Some{k}, hi) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  +ell: {Nat.is_eq(Key.level(k), l) == True{}: Bool},
+  ihs: Mst.SplitOk(~S, ~fetch, s, l, Items.last_key(pre, lo), Items.head_key(post, hi), k, Mst.last(pre, left), ms)
+) -> Mst.InsOk(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  Some{v},
+  Mst.insert.gap(l, left, k, v, Part{List.reverse.go(&2, Item, pre, []), Mst.last(pre, left), post}, ms)
+):
+  match ms:
+    case None{}:
+      Unit{}
+    case Some{Halves{+clo, +chi, +ns}}:
+      %Equal.sym(
+        Maybe<&2, Hashes.Hash>,
+        Mst.left(List.reverse.go(&2, Item, pre, []), left, clo),
+        Mst.end_left(pre, left, clo),
+        Mst.left_rev(pre, left, clo)
+      ): Mst.InsOk(
+        ~S,
+        ~fetch,
+        s,
+        ur,
+        lo,
+        hi,
+        Some{h},
+        k,
+        Some{v},
+        Some{Mst.store(Node{l, _, Mst.rejoin(List.reverse.go(&2, Item, pre, []), clo, Item{k, v, chi} <> post)}, ns)}
+      )
+      %Equal.sym(
+        List<&2, Item>,
+        Mst.rejoin(List.reverse.go(&2, Item, pre, []), clo, Item{k, v, chi} <> post),
+        List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post),
+        Mst.rejoin_rev(pre, clo, Item{k, v, chi} <> post)
+      ): Mst.InsOk(~S, ~fetch, s, ur, lo, hi, Some{h}, k, Some{v}, Some{Mst.store(Node{l, Mst.end_left(pre, left, clo), _}, ns)})
+      +hold => Mst.ins_ok.gap.read(
+        ~S,
+        ~fetch,
+        s,
+        h,
+        ur,
+        lo,
+        hi,
+        k,
+        v,
+        l,
+        left,
+        pre,
+        post,
+        clo,
+        chi,
+        ns,
+        eN,
+        oN,
+        all,
+        pk,
+        a,
+        bb,
+        ell,
+        hold,
+        ihs(
+          Mst.holds_tail(
+            ~S,
+            ~fetch,
+            s,
+            Node.code(Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), Item{k, v, chi} <> post)}, []),
+            ns,
+            hold
+          )
+        )
+      )
+
+# a write of k to a node of its level whose first item from k on is ik, by
+# whether ik is k (b)
+def Mst.ins_ok.here.b(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  b: Bool,
+  +s: S,
+  +p: Nat,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +ik: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
+  +eb: {Cmp.is_eq(Key.cmp(ik, k)) == b: Bool},
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, Item{ik, iv, r} <> rest)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{ik, iv, r} <> rest)}, Room{ur, lo, hi}) == True{}: Bool},
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +hn: {Mst.head_not_lt(Item{ik, iv, r} <> rest, k) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  +ell: {Nat.is_eq(Key.level(k), l) == True{}: Bool}
+) -> Mst.InsOk(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  Some{v},
+  Shared.Bool.when(
+    Maybe<&2, Edit>,
+    b,
+    u => Some{Mst.store(Node{l, left, Mst.rejoin(List.reverse.go(&2, Item, pre, []), Mst.last(pre, left), Item{k, v, r} <> rest)}, [])},
+    u => Mst.insert.gap(
+      l,
+      left,
+      k,
+      v,
+      Part{List.reverse.go(&2, Item, pre, []), Mst.last(pre, left), Item{ik, iv, r} <> rest},
+      Mst.split(~S, ~fetch, p, s, Room{l, Items.last_key(pre, lo), Some{ik}}, Mst.last(pre, left), k)
+    )
+  )
+):
+  match b:
+    case True{}:
+      +eik = Mst.key_eq(ik, k)(Shared.Cmp.is_eq_sound(Key.cmp(ik, k))(eb))
+      Mst.ins_ok.replace(
+        ~S,
+        ~fetch,
+        s,
+        h,
+        ur,
+        lo,
+        hi,
+        k,
+        v,
+        l,
+        left,
+        pre,
+        iv,
+        r,
+        rest,
+        Equal.trans(
+          Maybe<&2, Node>,
+          Mst.node(~S, ~fetch, s, h),
+          Some{Node{l, left, List.append(&2, Item, pre, Item{ik, iv, r} <> rest)}},
+          Some{Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}},
+          eN,
+          Equal.cong(List<&2, U32>, Maybe<&2, Node>, z => Some{Node{l, left, List.append(&2, Item, pre, Item{z, iv, r} <> rest)}}, ik, k, eik)
+        ),
+        Equal.trans(
+          Bool,
+          Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}, Room{ur, lo, hi}),
+          Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{ik, iv, r} <> rest)}, Room{ur, lo, hi}),
+          True{},
+          Equal.cong(
+            List<&2, U32>,
+            Bool,
+            z => Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{z, iv, r} <> rest)}, Room{ur, lo, hi}),
+            k,
+            ik,
+            Equal.sym(List<&2, U32>, ik, k, eik)
+          ),
+          oN
+        ),
+        all,
+        ell
+      )
+    case False{}:
+      Mst.ins_ok.gap(
+        ~S,
+        ~fetch,
+        Mst.split(~S, ~fetch, p, s, Room{l, Items.last_key(pre, lo), Some{ik}}, Mst.last(pre, left), k),
+        s,
+        h,
+        ur,
+        lo,
+        hi,
+        k,
+        v,
+        l,
+        left,
+        pre,
+        Item{ik, iv, r} <> rest,
+        eN,
+        oN,
+        all,
+        Mst.post_after(Item{ik, iv, r} <> rest, List.reverse.go(&2, Item, pre, []), Mst.last(pre, left), k, Items.last_key(pre, lo), hi)(hn)(eb)(
+          Mst.post_fit(pre, Item{ik, iv, r} <> rest, lo, hi)(Mst.opens_fit(l, left, List.append(&2, Item, pre, Item{ik, iv, r} <> rest), ur, lo, hi, oN))
+        ),
+        a,
+        bb,
+        ell,
+        Mst.split_ok(~S, ~fetch, p, Mst.last(pre, left), s, l, Items.last_key(pre, lo), Some{ik}, k)
+      )
+
+# a write of k to a node of its level, by the items from k on (post)
+def Mst.ins_ok.here(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  post: List<&2, Item>,
+  +s: S,
+  +p: Nat,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, post)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, post)}, Room{ur, lo, hi}) == True{}: Bool},
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +hn: {Mst.head_not_lt(post, k) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  +ell: {Nat.is_eq(Key.level(k), l) == True{}: Bool}
+) -> Mst.InsOk(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  Some{v},
+  Mst.insert.here(
+    l,
+    left,
+    k,
+    v,
+    Part{List.reverse.go(&2, Item, pre, []), Mst.last(pre, left), post},
+    c => Mst.split(~S, ~fetch, p, s, Room{l, Items.last_key(pre, lo), Items.head_key(post, hi)}, c, k)
+  )
+):
+  match post:
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Mst.ins_ok.here.b(
+        ~S,
+        ~fetch,
+        Cmp.is_eq(Key.cmp(ik, k)),
+        s,
+        p,
+        h,
+        ur,
+        lo,
+        hi,
+        k,
+        v,
+        l,
+        left,
+        pre,
+        ik,
+        iv,
+        r,
+        rest,
+        {==},
+        eN,
+        oN,
+        all,
+        hn,
+        a,
+        bb,
+        ell
+      )
+    case Nil{}:
+      Mst.ins_ok.gap(
+        ~S,
+        ~fetch,
+        Mst.split(~S, ~fetch, p, s, Room{l, Items.last_key(pre, lo), hi}, Mst.last(pre, left), k),
+        s,
+        h,
+        ur,
+        lo,
+        hi,
+        k,
+        v,
+        l,
+        left,
+        pre,
+        [],
+        eN,
+        oN,
+        all,
+        {==},
+        a,
+        bb,
+        ell,
+        Mst.split_ok(~S, ~fetch, p, Mst.last(pre, left), s, l, Items.last_key(pre, lo), hi, k)
+      )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
