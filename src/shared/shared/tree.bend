@@ -10496,6 +10496,301 @@ def Mst.open_sorted(
     +l => +left => +xs => ef => eh => en => elt => ee0 => ep => Mst.pieces_sorted(xs, l, left, lo, hi, ks)(ep)
   )(e)
 
+# the opening of a binding, then pieces: the binding, then their opening
+def Mst.open_all_bind(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +k2: List<&2, U32>,
+  +v2: List<&2, U32>,
+  +r: List<&2, Piece>,
+  -a2: List<&2, Piece>,
+  -P: Type,
+  k: @r2: List<&2, Piece> -> {Mst.open.all(~S, ~fetch, s, r) == Some{r2}: Maybe<&2, List<&2, Piece>>} -> {
+    Piece.Bind{k2, v2} <> r2 == a2: List<&2, Piece>
+  } -> P
+) -> {Mst.open.all(~S, ~fetch, s, Piece.Bind{k2, v2} <> r) == Some{a2}: Maybe<&2, List<&2, Piece>>} -> P:
+  e => Maybe.map_cases(
+    List<&2, Piece>,
+    List<&2, Piece>,
+    Mst.open.all(~S, ~fetch, s, r),
+    x => Piece.Bind{k2, v2} <> x,
+    a2,
+    P,
+    r2 => er => ea => k(r2)(er)(ea)
+  )(e)
+
+# the opening of a subtree, then pieces: the pieces of its node, then their
+# opening
+def Mst.open_all_sub(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +r: List<&2, Piece>,
+  -a2: List<&2, Piece>,
+  -P: Type,
+  k: @ks: List<&2, Piece> -> @r2: List<&2, Piece> -> {Mst.open(~S, ~fetch, s, h, u, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {
+    Mst.open.all(~S, ~fetch, s, r) == Some{r2}: Maybe<&2, List<&2, Piece>>
+  } -> {List.append(&2, Piece, ks, r2) == a2: List<&2, Piece>} -> P
+) -> {Mst.open.all(~S, ~fetch, s, Piece.Sub{h, u, lo, hi} <> r) == Some{a2}: Maybe<&2, List<&2, Piece>>} -> P:
+  e => Maybe.bind_cases(
+    List<&2, Piece>,
+    List<&2, Piece>,
+    Mst.open(~S, ~fetch, s, h, u, lo, hi),
+    a => Maybe.map(&2, List<&2, Piece>, List<&2, Piece>, b => List.append(&2, Piece, a, b), Mst.open.all(~S, ~fetch, s, r)),
+    a2,
+    P,
+    +ks => eo => e2 => Maybe.map_cases(
+      List<&2, Piece>,
+      List<&2, Piece>,
+      Mst.open.all(~S, ~fetch, s, r),
+      b => List.append(&2, Piece, ks, b),
+      a2,
+      P,
+      r2 => er => ea => k(ks)(r2)(eo)(er)(ea)
+    )(e2)
+  )(e)
+
+# an opening may hold only keys that what it opens may hold
+def Mst.open_all_covers(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  ps: List<&2, Piece>,
+  -a2: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Mst.open.all(~S, ~fetch, s, ps) == Some{a2}: Maybe<&2, List<&2, Piece>>} -> {Pieces.covers(a2, k) == True{}: Bool} -> {
+  Pieces.covers(ps, k) == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      e => hc => Empty.absurd(
+        {False{} == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Pieces.covers(a2, k),
+            True{},
+            Equal.cong(List<&2, Piece>, Bool, x => Pieces.covers(x, k), [], a2, Shared.Maybe.some_inj(List<&2, Piece>, [], a2, e)),
+            hc
+          )
+        )
+      )
+    case Con{Piece.Bind{+k2, +v2}, +rest}:
+      e => hc => Mst.open_all_bind(
+        ~S,
+        ~fetch,
+        s,
+        k2,
+        v2,
+        rest,
+        a2,
+        {Pieces.covers(Piece.Bind{k2, v2} <> rest, k) == True{}: Bool},
+        +r2 => er => ea =>
+          +hc2 = Equal.trans(
+            Bool,
+            Pieces.covers(Piece.Bind{k2, v2} <> r2, k),
+            Pieces.covers(a2, k),
+            True{},
+            Equal.cong(List<&2, Piece>, Bool, x => Pieces.covers(x, k), Piece.Bind{k2, v2} <> r2, a2, ea),
+            hc
+          )
+          Bool.cases(
+            Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+            {Pieces.covers(Piece.Bind{k2, v2} <> rest, k) == True{}: Bool},
+            ct => Bool.or_true_left(Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), Pieces.covers(rest, k))(ct),
+            cf => Bool.or_true_of(
+              Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+              Pieces.covers(rest, k)
+            )(
+              Mst.open_all_covers(
+                ~S,
+                ~fetch,
+                s,
+                rest,
+                r2,
+                k
+              )(er)(
+                Equal.trans(
+                  Bool,
+                  Pieces.covers(r2, k),
+                  Bool.or(Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), Pieces.covers(r2, k)),
+                  True{},
+                  Equal.cong(
+                    Bool,
+                    Bool,
+                    t => Bool.or(t, Pieces.covers(r2, k)),
+                    False{},
+                    Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+                    Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), False{}, cf)
+                  ),
+                  hc2
+                )
+              )
+            )
+          )
+      )(e)
+    case Con{Piece.Sub{+h, +u, +lo, +hi}, +rest}:
+      e => hc => Mst.open_all_sub(
+        ~S,
+        ~fetch,
+        s,
+        h,
+        u,
+        lo,
+        hi,
+        rest,
+        a2,
+        {Pieces.covers(Piece.Sub{h, u, lo, hi} <> rest, k) == True{}: Bool},
+        +ks => +r2 => eo => er => ea =>
+          +hc2 = Equal.trans(
+            Bool,
+            Bool.or(Pieces.covers(ks, k), Pieces.covers(r2, k)),
+            Pieces.covers(a2, k),
+            True{},
+            Equal.trans(
+              Bool,
+              Bool.or(Pieces.covers(ks, k), Pieces.covers(r2, k)),
+              Pieces.covers(List.append(&2, Piece, ks, r2), k),
+              Pieces.covers(a2, k),
+              Equal.sym(Bool, Pieces.covers(List.append(&2, Piece, ks, r2), k), Bool.or(Pieces.covers(ks, k), Pieces.covers(r2, k)), Pieces.covers_append(ks, r2, k)),
+              Equal.cong(List<&2, Piece>, Bool, x => Pieces.covers(x, k), List.append(&2, Piece, ks, r2), a2, ea)
+            ),
+            hc
+          )
+          Bool.cases(
+            Pieces.covers(ks, k),
+            {Pieces.covers(Piece.Sub{h, u, lo, hi} <> rest, k) == True{}: Bool},
+            ct => Bool.or_true_left(
+              Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+              Pieces.covers(rest, k)
+            )(
+              Pieces.inside_covers(
+                ks,
+                lo,
+                hi,
+                k
+              )(Shared.Bool.and_true_right(Pieces.sorted(ks), Pieces.inside(ks, lo, hi))(Mst.open_sorted(~S, ~fetch, s, h, u, lo, hi, ks)(eo)))(ct)
+            ),
+            cf => Bool.or_true_of(
+              Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+              Pieces.covers(rest, k)
+            )(
+              Mst.open_all_covers(
+                ~S,
+                ~fetch,
+                s,
+                rest,
+                r2,
+                k
+              )(er)(
+                Equal.trans(
+                  Bool,
+                  Pieces.covers(r2, k),
+                  Bool.or(Pieces.covers(ks, k), Pieces.covers(r2, k)),
+                  True{},
+                  Equal.cong(Bool, Bool, t => Bool.or(t, Pieces.covers(r2, k)), False{}, Pieces.covers(ks, k), Equal.sym(Bool, Pieces.covers(ks, k), False{}, cf)),
+                  hc2
+                )
+              )
+            )
+          )
+      )(e)
+
+# a piece before pieces is before their opening
+def Mst.open_all_after(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +w: Piece,
+  ps: List<&2, Piece>,
+  -a2: List<&2, Piece>
+) -> {Mst.open.all(~S, ~fetch, s, ps) == Some{a2}: Maybe<&2, List<&2, Piece>>} -> {Pieces.after_all(w, ps) == True{}: Bool} -> {
+  Pieces.after_all(w, a2) == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      e => h =>
+        %Shared.Maybe.some_inj(List<&2, Piece>, [], a2, e): {Pieces.after_all(w, _) == True{}: Bool}
+        {==}
+    case Con{Piece.Bind{+k2, +v2}, +rest}:
+      e => +h => Mst.open_all_bind(
+        ~S,
+        ~fetch,
+        s,
+        k2,
+        v2,
+        rest,
+        a2,
+        {Pieces.after_all(w, a2) == True{}: Bool},
+        +r2 => er => ea =>
+          %ea: {Pieces.after_all(w, _) == True{}: Bool}
+          Shared.Bool.and_both(
+            Piece.before(w, Piece.Bind{k2, v2}),
+            Pieces.after_all(w, r2)
+          )(Shared.Bool.and_true_left(Piece.before(w, Piece.Bind{k2, v2}), Pieces.after_all(w, rest))(h))(
+            Mst.open_all_after(~S, ~fetch, s, w, rest, r2)(er)(Shared.Bool.and_true_right(Piece.before(w, Piece.Bind{k2, v2}), Pieces.after_all(w, rest))(h))
+          )
+      )(e)
+    case Con{Piece.Sub{+h2, +u, +lo, +hi}, +rest}:
+      e => +h => Mst.open_all_sub(
+        ~S,
+        ~fetch,
+        s,
+        h2,
+        u,
+        lo,
+        hi,
+        rest,
+        a2,
+        {Pieces.after_all(w, a2) == True{}: Bool},
+        +ks => +r2 => eo => er => ea =>
+          %ea: {Pieces.after_all(w, _) == True{}: Bool}
+          Pieces.after_all_append(
+            w,
+            ks,
+            r2
+          )(
+            Pieces.refine_right_all(
+              w,
+              ks,
+              lo,
+              hi,
+              h2,
+              u
+            )(Shared.Bool.and_true_left(Piece.before(w, Piece.Sub{h2, u, lo, hi}), Pieces.after_all(w, rest))(h))(
+              Shared.Bool.and_true_right(Pieces.sorted(ks), Pieces.inside(ks, lo, hi))(Mst.open_sorted(~S, ~fetch, s, h2, u, lo, hi, ks)(eo))
+            )
+          )(Mst.open_all_after(~S, ~fetch, s, w, rest, r2)(er)(Shared.Bool.and_true_right(Piece.before(w, Piece.Sub{h2, u, lo, hi}), Pieces.after_all(w, rest))(h)))
+      )(e)
+
+# pieces before others are before their opening
+def Mst.before_all_open(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  ws: List<&2, Piece>,
+  +ps: List<&2, Piece>,
+  +a2: List<&2, Piece>
+) -> {Mst.open.all(~S, ~fetch, s, ps) == Some{a2}: Maybe<&2, List<&2, Piece>>} -> {Pieces.before_all(ws, ps) == True{}: Bool} -> {
+  Pieces.before_all(ws, a2) == True{}: Bool
+}:
+  match ws:
+    case Nil{}:
+      e => h => {==}
+    case Con{+w, +rest}:
+      +e => +h => Shared.Bool.and_both(
+        Pieces.after_all(w, a2),
+        Pieces.before_all(rest, a2)
+      )(Mst.open_all_after(~S, ~fetch, s, w, ps, a2)(e)(Shared.Bool.and_true_left(Pieces.after_all(w, ps), Pieces.before_all(rest, ps))(h)))(
+        Mst.before_all_open(~S, ~fetch, s, rest, ps, a2)(e)(Shared.Bool.and_true_right(Pieces.after_all(w, ps), Pieces.before_all(rest, ps))(h))
+      )
+
 # a write to a tree that lists whole reads every node it needs
 def Mst.put_some(
   ~S: Data,
