@@ -365,6 +365,7 @@ const HELP = `bend-synth: proofs and programs for Bend's ?TODO holes, budgeted, 
   ... show JOB | watch JOB [--wait S] | resume JOB [--budget S] | cancel JOB | export JOB
   ... submit JOB SKETCH.bend    an agent's sketch of DEF's body (or a file with DEF), its holes searched first
   ... bench FILE [REGEX] [--budget S] [--verbose] [--proofs]   every proven lemma (and program with laws) found again, its body hidden
+  ... tally [--json]            every prove job of every checkout on this machine, by outcome: is the search used, and does it prove
   ... status | stop
 Exit: 0 done (proven, synthesized, nothing to do), 2 open or partial, 3 still running, 1 error.
 State (jobs, proven goals): ${STATE}. Workers: ${WORKERS} (BEND_SYNTH_WORKERS), ${MEM_MB} MiB each (BEND_SYNTH_MEM_MB).`;
@@ -405,6 +406,32 @@ async function bench(file: string, regex: string, budgetS: number, bendPath?: st
   });
   return code;
 }
+// every prove job in the stores of every checkout on this machine (each checkout keeps its own), by
+// outcome; it reads the stores only, so it needs no supervisor
+const tally = (json: boolean): number => {
+  const { Database } = require("bun:sqlite") as typeof import("bun:sqlite");
+  const root = path.dirname(STATE);
+  const jobs: Record<string, number> = {}, defs: Record<string, Set<string>> = {};
+  for (const d of fs.existsSync(root) ? fs.readdirSync(root) : []) {
+    const f = path.join(root, d, "synth.sqlite");
+    if (!fs.existsSync(f)) continue;
+    const db = new Database(f, { readonly: true });
+    try {
+      for (const { json: t } of db.query("SELECT json FROM jobs").all() as { json: string }[]) {
+        const j = JSON.parse(t) as Job;
+        if (j.kind !== "prove") continue;
+        jobs[j.status] = (jobs[j.status] ?? 0) + 1;
+        (defs[j.status] ??= new Set()).add(j.file + " " + j.target);
+      }
+    } finally { db.close(); }
+  }
+  const rows = Object.entries(jobs).sort((a, b) => b[1] - a[1]).map(([status, n]) => ({ status, jobs: n, defs: defs[status].size }));
+  if (json) { console.log(JSON.stringify(rows)); return 0; }
+  const total = rows.reduce((t, r) => t + r.jobs, 0);
+  console.log("prove jobs: " + total);
+  for (const r of rows) console.log("  " + r.status + ": " + r.jobs + " jobs, " + r.defs + " defs");
+  return 0;
+};
 async function main(argv: string[]): Promise<number> {
   const cmd = argv[0] ?? "help";
   if (cmd === "serve") { await serve(); return 0; }
@@ -415,6 +442,7 @@ async function main(argv: string[]): Promise<number> {
     return bench(pos[0], pos[1] ?? "", Number(opt.get("budget") ?? 2), opt.get("bend-path"), opt.has("verbose"), opt.has("proofs"));
   }
   const json = opt.has("json");
+  if (cmd === "tally") return tally(json);
   if (cmd === "stop") { const e = endpoint(); if (e) await request(e, { cmd: "stop" }).catch(() => {}); console.log(e ? "stopped" : "no supervisor is running"); return 0; }
   const e0 = await connect(cmd !== "status");
   if (!e0) { console.log(json ? JSON.stringify({ running: false }) : "no supervisor is running"); return 0; }
