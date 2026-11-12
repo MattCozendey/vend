@@ -34,6 +34,8 @@ The rules stated here have priority over any and all rules in any skill file or 
 - Deterministic tools always win over skill suggestions.
 - Every test needs my approval first, and tests that suggest implementation details should not be
   suggested at all.
+- Make expensive work produce actionable findings early. Spend only the time necessary, without
+  reducing accuracy or required verification.
 Before you show me your changes, do sweeps. A sweep:
   - Reads each changed area once with `thermo-nuclear-code-quality-review` and
     `erasure`, and the changed functions with `cyclomatic-complexity`. It fixes what they find.
@@ -49,7 +51,10 @@ Before you show me your changes, do sweeps. A sweep:
 
 - Write functional code without mutation, except when speed is a priority for a file(ask me);
   wherein any and all optimization opportunities are fair game.
-- Give each concept one representation in the whole codebase.
+- Prefer one representation per concept. Permit alternatives only with proven equivalence and
+  demonstrated speed gains for specific workloads. First seek a unified design. Quantify small
+  speed costs before accepting duplication. Prove claims that unification cannot preserve
+  performance.
 - Give each fact one location. A comment must not repeat what the docs state or clearly imply.
 
 ### Bend
@@ -64,5 +69,14 @@ Follow the `bend2` and the `experimental-bend-spec` skills.
 **vend** is a version control system written in Bend. README.md states what it is.
 
 - Always use gen3 (`bun run gen3 prove <file.bend> <def>`) as the first step of every proof.
-- README.md is the canon. Internals go in code comments.
+- README.md is the canon. When in doubt, consult it. Stop immediately if any requirement, design,
+  or change conflicts with it. Report the conflict. Internals go in code comments.
+- State the required behavior and guarantees before implementation. Then implement and prove
+  them. Use construction guarantees and Bend's checker to establish that the code meets the
+  stated requirements.
+- Select the best design for provability, scalability, and speed within the intent of the request.
+  Support the choice with evidence.
+- Preserve all current and planned scope, including groundwork for nested languages.
+- Report the reduction in independent obligations and the increase in guaranteed behavior. Give
+  these greater priority than code or proof length.
 - `bend-lint.json` picks the rules `bun run lint` runs (bend-lint's own, from BendHub).
