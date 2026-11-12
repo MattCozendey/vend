@@ -9761,6 +9761,311 @@ def Pieces.inside_covers(ps: List<&2, Piece>, +lo: Maybe<&2, List<&2, U32>>, +hi
         )
       )
 
+# an upper bound is not after itself
+def Bound.hi_le_refl(hi: Maybe<&2, List<&2, U32>>) -> {Bound.hi_le(hi, hi) == True{}: Bool}:
+  match hi:
+    case None{}:
+      {==}
+    case Some{+b}:
+      Key.le_refl(b)
+
+# a key before hi, as an upper bound, is not after hi
+def Bound.hi_le_of(+ik: List<&2, U32>, hi: Maybe<&2, List<&2, U32>>) -> {Bound.before(ik, hi) == True{}: Bool} -> {Bound.hi_le(Some{ik}, hi) == True{}: Bool}:
+  match hi:
+    case None{}:
+      h => {==}
+    case Some{+b}:
+      h => Key.lt_le_of(ik, b)(h)
+
+# a lower bound after ik is after any bound before ik
+def Bound.lo_le_widen(lo: Maybe<&2, List<&2, U32>>, +ik: List<&2, U32>, lo2: Maybe<&2, List<&2, U32>>) -> {
+  Bound.lo_le(Some{ik}, lo2) == True{}: Bool
+} -> {Bound.after(lo, ik) == True{}: Bool} -> {Bound.lo_le(lo, lo2) == True{}: Bool}:
+  match lo lo2:
+    case None{} y:
+      h => g => {==}
+    case Some{a} None{}:
+      h => g => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Some{+a} Some{+c}:
+      h => g => Key.lt_le_of(a, c)(Key.lt_le(a, ik, c)(g)(h))
+
+# a piece after ik and before hi lies between any bound before ik and hi
+def Piece.inside_widen(x: Piece, +ik: List<&2, U32>, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Piece.inside(x, Some{ik}, hi) == True{}: Bool
+} -> {Bound.after(lo, ik) == True{}: Bool} -> {Piece.inside(x, lo, hi) == True{}: Bool}:
+  match x:
+    case Piece.Bind{+k, v}:
+      +h => g => Shared.Bool.and_both(
+        Bound.after(lo, k),
+        Bound.before(k, hi)
+      )(Bound.after_trans(lo, ik, k)(g)(Shared.Bool.and_true_left(Key.is_lt(ik, k), Bound.before(k, hi))(h)))(
+        Shared.Bool.and_true_right(Key.is_lt(ik, k), Bound.before(k, hi))(h)
+      )
+    case Piece.Sub{h2, u, +lo2, +hi2}:
+      +h => g => Shared.Bool.and_both(
+        Bound.lo_le(lo, lo2),
+        Bound.hi_le(hi2, hi)
+      )(Bound.lo_le_widen(lo, ik, lo2)(Shared.Bool.and_true_left(Bound.lo_le(Some{ik}, lo2), Bound.hi_le(hi2, hi))(h))(g))(
+        Shared.Bool.and_true_right(Bound.lo_le(Some{ik}, lo2), Bound.hi_le(hi2, hi))(h)
+      )
+
+# pieces after ik and before hi lie between any bound before ik and hi
+def Pieces.inside_widen(ps: List<&2, Piece>, +ik: List<&2, U32>, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Pieces.inside(ps, Some{ik}, hi) == True{}: Bool
+} -> {Bound.after(lo, ik) == True{}: Bool} -> {Pieces.inside(ps, lo, hi) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      h => g => {==}
+    case Con{+x, +rest}:
+      +h => +g => Shared.Bool.and_both(
+        Piece.inside(x, lo, hi),
+        Pieces.inside(rest, lo, hi)
+      )(Piece.inside_widen(x, ik, lo, hi)(Shared.Bool.and_true_left(Piece.inside(x, Some{ik}, hi), Pieces.inside(rest, Some{ik}, hi))(h))(g))(
+        Pieces.inside_widen(rest, ik, lo, hi)(Shared.Bool.and_true_right(Piece.inside(x, Some{ik}, hi), Pieces.inside(rest, Some{ik}, hi))(h))(g)
+      )
+
+# a lower bound after ik is what the binding of ik ends before
+def Bound.at_most_of(+ik: List<&2, U32>, lo2: Maybe<&2, List<&2, U32>>) -> {Bound.lo_le(Some{ik}, lo2) == True{}: Bool} -> {
+  Bound.at_most(ik, lo2) == True{}: Bool
+}:
+  match lo2:
+    case None{}:
+      h => h
+    case Some{c}:
+      h => h
+
+# a lower bound after ik is what a subtree that ends at ik ends before
+def Bound.ends_before_of(+ik: List<&2, U32>, lo2: Maybe<&2, List<&2, U32>>) -> {Bound.lo_le(Some{ik}, lo2) == True{}: Bool} -> {
+  Bound.ends_before(Some{ik}, lo2) == True{}: Bool
+}:
+  match lo2:
+    case None{}:
+      h => h
+    case Some{c}:
+      h => h
+
+# pieces after ik come after the binding of ik
+def Pieces.after_inside_bind(+ik: List<&2, U32>, +iv: List<&2, U32>, ys: List<&2, Piece>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Pieces.inside(ys, Some{ik}, hi) == True{}: Bool
+} -> {Pieces.after_all(Piece.Bind{ik, iv}, ys) == True{}: Bool}:
+  match ys:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{+k, +v}, +rest}:
+      +h => Shared.Bool.and_both(
+        Key.is_lt(ik, k),
+        Pieces.after_all(Piece.Bind{ik, iv}, rest)
+      )(Shared.Bool.and_true_left(Key.is_lt(ik, k), Bound.before(k, hi))(Shared.Bool.and_true_left(Bool.and(Key.is_lt(ik, k), Bound.before(k, hi)), Pieces.inside(rest, Some{ik}, hi))(h)))(
+        Pieces.after_inside_bind(ik, iv, rest, hi)(Shared.Bool.and_true_right(Bool.and(Key.is_lt(ik, k), Bound.before(k, hi)), Pieces.inside(rest, Some{ik}, hi))(h))
+      )
+    case Con{Piece.Sub{+h2, +u, +lo2, +hi2}, +rest}:
+      +h => Shared.Bool.and_both(
+        Bound.at_most(ik, lo2),
+        Pieces.after_all(Piece.Bind{ik, iv}, rest)
+      )(
+        Bound.at_most_of(
+          ik,
+          lo2
+        )(
+          Shared.Bool.and_true_left(
+            Bound.lo_le(Some{ik}, lo2),
+            Bound.hi_le(hi2, hi)
+          )(Shared.Bool.and_true_left(Bool.and(Bound.lo_le(Some{ik}, lo2), Bound.hi_le(hi2, hi)), Pieces.inside(rest, Some{ik}, hi))(h))
+        )
+      )(
+        Pieces.after_inside_bind(
+          ik,
+          iv,
+          rest,
+          hi
+        )(Shared.Bool.and_true_right(Bool.and(Bound.lo_le(Some{ik}, lo2), Bound.hi_le(hi2, hi)), Pieces.inside(rest, Some{ik}, hi))(h))
+      )
+
+# pieces after ik come after a subtree that ends at ik
+def Pieces.after_inside_sub(
+  +h: Hashes.Hash,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +ik: List<&2, U32>,
+  ys: List<&2, Piece>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Pieces.inside(ys, Some{ik}, hi) == True{}: Bool} -> {Pieces.after_all(Piece.Sub{h, u, lo, Some{ik}}, ys) == True{}: Bool}:
+  match ys:
+    case Nil{}:
+      g => {==}
+    case Con{Piece.Bind{+k, +v}, +rest}:
+      +g => Shared.Bool.and_both(
+        Key.le(ik, k),
+        Pieces.after_all(Piece.Sub{h, u, lo, Some{ik}}, rest)
+      )(
+        Key.lt_le_of(
+          ik,
+          k
+        )(Shared.Bool.and_true_left(Key.is_lt(ik, k), Bound.before(k, hi))(Shared.Bool.and_true_left(Bool.and(Key.is_lt(ik, k), Bound.before(k, hi)), Pieces.inside(rest, Some{ik}, hi))(g)))
+      )(
+        Pieces.after_inside_sub(
+          h,
+          u,
+          lo,
+          ik,
+          rest,
+          hi
+        )(Shared.Bool.and_true_right(Bool.and(Key.is_lt(ik, k), Bound.before(k, hi)), Pieces.inside(rest, Some{ik}, hi))(g))
+      )
+    case Con{Piece.Sub{+h2, +u2, +lo2, +hi2}, +rest}:
+      +g => Shared.Bool.and_both(
+        Bound.ends_before(Some{ik}, lo2),
+        Pieces.after_all(Piece.Sub{h, u, lo, Some{ik}}, rest)
+      )(
+        Bound.ends_before_of(
+          ik,
+          lo2
+        )(
+          Shared.Bool.and_true_left(
+            Bound.lo_le(Some{ik}, lo2),
+            Bound.hi_le(hi2, hi)
+          )(Shared.Bool.and_true_left(Bool.and(Bound.lo_le(Some{ik}, lo2), Bound.hi_le(hi2, hi)), Pieces.inside(rest, Some{ik}, hi))(g))
+        )
+      )(
+        Pieces.after_inside_sub(
+          h,
+          u,
+          lo,
+          ik,
+          rest,
+          hi
+        )(Shared.Bool.and_true_right(Bool.and(Bound.lo_le(Some{ik}, lo2), Bound.hi_le(hi2, hi)), Pieces.inside(rest, Some{ik}, hi))(g))
+      )
+
+# Mst.pieces_sorted at the subtree prev before the item of the key ik
+def Mst.pieces_sorted.con(
+  m: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ik: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +ks2: List<&2, Piece>,
+  hs: {Pieces.sorted(Piece.Bind{ik, iv} <> ks2) == True{}: Bool},
+  hin: {Pieces.inside(Piece.Bind{ik, iv} <> ks2, lo, hi) == True{}: Bool},
+  ins2: {Pieces.inside(ks2, Some{ik}, hi) == True{}: Bool},
+  bh: {Bound.before(ik, hi) == True{}: Bool}
+) -> {
+  Bool.and(
+    Pieces.sorted(Piece.sub(m, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2)),
+    Pieces.inside(Piece.sub(m, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2), lo, hi)
+  )
+    == True{}: Bool
+}:
+  match m:
+    case None{}:
+      Shared.Bool.and_both(Pieces.sorted(Piece.Bind{ik, iv} <> ks2), Pieces.inside(Piece.Bind{ik, iv} <> ks2, lo, hi))(hs)(hin)
+    case Some{+h}:
+      Shared.Bool.and_both(
+        Pieces.sorted(Piece.Sub{h, l, lo, Some{ik}} <> (Piece.Bind{ik, iv} <> ks2)),
+        Pieces.inside(Piece.Sub{h, l, lo, Some{ik}} <> (Piece.Bind{ik, iv} <> ks2), lo, hi)
+      )(
+        Shared.Bool.and_both(
+          Pieces.after_all(Piece.Sub{h, l, lo, Some{ik}}, Piece.Bind{ik, iv} <> ks2),
+          Pieces.sorted(Piece.Bind{ik, iv} <> ks2)
+        )(Shared.Bool.and_both(Key.le(ik, ik), Pieces.after_all(Piece.Sub{h, l, lo, Some{ik}}, ks2))(Key.le_refl(ik))(Pieces.after_inside_sub(h, l, lo, ik, ks2, hi)(ins2)))(
+          hs
+        )
+      )(
+        Shared.Bool.and_both(
+          Piece.inside(Piece.Sub{h, l, lo, Some{ik}}, lo, hi),
+          Pieces.inside(Piece.Bind{ik, iv} <> ks2, lo, hi)
+        )(Shared.Bool.and_both(Bound.lo_le(lo, lo), Bound.hi_le(Some{ik}, hi))(Bound.lo_le_refl(lo))(Bound.hi_le_of(ik, hi)(bh)))(hin)
+      )
+
+# Mst.pieces_sorted with no item: at most the subtree before
+def Mst.pieces_sorted.nil(m: Maybe<&2, Hashes.Hash>, +l: Nat, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Bool.and(Pieces.sorted(Piece.sub(m, l, lo, hi, [])), Pieces.inside(Piece.sub(m, l, lo, hi, []), lo, hi)) == True{}: Bool
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{+h}:
+      Shared.Bool.and_both(
+        Pieces.sorted([Piece.Sub{h, l, lo, hi}]),
+        Pieces.inside([Piece.Sub{h, l, lo, hi}], lo, hi)
+      )({==})(
+        Shared.Bool.and_both(Piece.inside(Piece.Sub{h, l, lo, hi}, lo, hi), True{})(
+          Shared.Bool.and_both(Bound.lo_le(lo, lo), Bound.hi_le(hi, hi))(Bound.lo_le_refl(lo))(Bound.hi_le_refl(hi))
+        )({==})
+      )
+
+# the pieces of a node's items are sorted and lie in its bounds
+def Mst.pieces_sorted(
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {
+  Bool.and(Pieces.sorted(ks), Pieces.inside(ks, lo, hi)) == True{}: Bool
+}:
+  match xs:
+    case Nil{}:
+      ep =>
+        %Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev, l, lo, hi, []), ks, ep): {
+          Bool.and(Pieces.sorted(_), Pieces.inside(_, lo, hi)) == True{}: Bool
+        }
+        Mst.pieces_sorted.nil(prev, l, lo, hi)
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      ep => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(
+          Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+          Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+        ),
+        u => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          Mst.pieces(rest, l, r, Some{ik}, hi)
+        ),
+        ks,
+        {Bool.and(Pieces.sorted(ks), Pieces.inside(ks, lo, hi)) == True{}: Bool},
+        +c => e2 => Maybe.map_cases(
+          List<&2, Piece>,
+          List<&2, Piece>,
+          Mst.pieces(rest, l, r, Some{ik}, hi),
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          ks,
+          {Bool.and(Pieces.sorted(ks), Pieces.inside(ks, lo, hi)) == True{}: Bool},
+          +ks2 => e3 => e4 =>
+            +ih = Mst.pieces_sorted(rest, l, r, Some{ik}, hi, ks2)(e3)
+            +ins2 = Shared.Bool.and_true_right(Pieces.sorted(ks2), Pieces.inside(ks2, Some{ik}, hi))(ih)
+            +cb = Shared.Bool.and_true_right(
+              Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+              Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+            )(c)
+            %e4: {Bool.and(Pieces.sorted(_), Pieces.inside(_, lo, hi)) == True{}: Bool}
+            Mst.pieces_sorted.con(
+              prev,
+              l,
+              lo,
+              hi,
+              ik,
+              iv,
+              ks2,
+              Shared.Bool.and_both(
+                Pieces.after_all(Piece.Bind{ik, iv}, ks2),
+                Pieces.sorted(ks2)
+              )(Pieces.after_inside_bind(ik, iv, ks2, hi)(ins2))(Shared.Bool.and_true_left(Pieces.sorted(ks2), Pieces.inside(ks2, Some{ik}, hi))(ih)),
+              Shared.Bool.and_both(
+                Bool.and(Bound.after(lo, ik), Bound.before(ik, hi)),
+                Pieces.inside(ks2, lo, hi)
+              )(cb)(Pieces.inside_widen(ks2, ik, lo, hi)(ins2)(Shared.Bool.and_true_left(Bound.after(lo, ik), Bound.before(ik, hi))(cb))),
+              ins2,
+              Shared.Bool.and_true_right(Bound.after(lo, ik), Bound.before(ik, hi))(cb)
+            )
+        )(e2)
+      )(ep)
+
 # a write to a tree that lists whole reads every node it needs
 def Mst.put_some(
   ~S: Data,
