@@ -8796,6 +8796,248 @@ def Key.lt_le(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>) -> {Key.i
     )
   )
 
+# a key is not after itself
+def Key.le_refl(+a: List<&2, U32>) -> {Key.le(a, a) == True{}: Bool}:
+  %Equal.sym(Bool, Key.is_lt(a, a), False{}, Key.lt_irrefl(a)): {Bool.not(_) == True{}: Bool}
+  {==}
+
+# a key before b is not after b
+def Key.lt_le_of(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.is_lt(a, b) == True{}: Bool} -> {Key.le(a, b) == True{}: Bool}:
+  h =>
+    %Equal.sym(Bool, Key.is_lt(b, a), False{}, Key.lt_asym(a, b)(h)): {Bool.not(_) == True{}: Bool}
+    {==}
+
+# a <= b and b <= c give a <= c
+def Key.le_trans(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>) -> {Key.le(a, b) == True{}: Bool} -> {Key.le(b, c) == True{}: Bool} -> {
+  Key.le(a, c) == True{}: Bool
+}:
+  +h => +g => Key.cases.at(
+    Key.cmp(c, a),
+    c,
+    a,
+    {Key.le(a, c) == True{}: Bool},
+    {==},
+    el => Empty.absurd(
+      {Key.le(a, c) == True{}: Bool},
+      Shared.Bool.true_ne_false(
+        Equal.trans(
+          Bool,
+          True{},
+          Key.is_lt(c, b),
+          False{},
+          Equal.sym(
+            Bool,
+            Key.is_lt(c, b),
+            True{},
+            Key.lt_le(c, a, b)(Equal.trans(Bool, Key.is_lt(c, a), Cmp.is_lt(Key.cmp(c, a)), True{}, Key.is_lt_cmp(c, a), Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(c, a), LT{}, el)))(h)
+          ),
+          Shared.Bool.not_true(Key.is_lt(c, b))(g)
+        )
+      )
+    ),
+    ee =>
+      %Equal.sym(Bool, Key.is_lt(c, a), Cmp.is_lt(Key.cmp(c, a)), Key.is_lt_cmp(c, a)): {Bool.not(_) == True{}: Bool}
+      %Equal.sym(Cmp, Key.cmp(c, a), EQ{}, ee): {Bool.not(Cmp.is_lt(_)) == True{}: Bool}
+      {==},
+    eg =>
+      %Equal.sym(Bool, Key.is_lt(c, a), Cmp.is_lt(Key.cmp(c, a)), Key.is_lt_cmp(c, a)): {Bool.not(_) == True{}: Bool}
+      %Equal.sym(Cmp, Key.cmp(c, a), GT{}, eg): {Bool.not(Cmp.is_lt(_)) == True{}: Bool}
+      {==}
+  )
+
+# the key k comes no later than the bound lo, which a subtree after k starts
+# at (none: no bound, so no subtree is after k)
+def Bound.at_most(k: List<&2, U32>, lo: Maybe<&2, List<&2, U32>>) -> Bool:
+  match lo:
+    case None{}:
+      False{}
+    case Some{a}:
+      Key.le(k, a)
+
+# the bound hi, which a subtree before k ends at, comes no later than k
+def Bound.at_least(hi: Maybe<&2, List<&2, U32>>, k: List<&2, U32>) -> Bool:
+  match hi:
+    case None{}:
+      False{}
+    case Some{b}:
+      Key.le(b, k)
+
+# a subtree that ends at hi is before one that starts at lo
+def Bound.ends_before(hi: Maybe<&2, List<&2, U32>>, lo: Maybe<&2, List<&2, U32>>) -> Bool:
+  match hi lo:
+    case Some{b} Some{a}:
+      Key.le(b, a)
+    case x y:
+      False{}
+
+# each key of the piece x comes before each key of the piece y
+def Piece.before(x: Piece, y: Piece) -> Bool:
+  match x y:
+    case Piece.Bind{k1, v1} Piece.Bind{k2, v2}:
+      Key.is_lt(k1, k2)
+    case Piece.Bind{k, v} Piece.Sub{h, u, lo, hi}:
+      Bound.at_most(k, lo)
+    case Piece.Sub{h, u, lo, hi} Piece.Bind{k, v}:
+      Bound.at_least(hi, k)
+    case Piece.Sub{h1, u1, lo1, hi1} Piece.Sub{h2, u2, lo2, hi2}:
+      Bound.ends_before(hi1, lo2)
+
+# the piece x may hold the key k: a binding of k, or a subtree whose bounds
+# hold k
+def Piece.covers(x: Piece, +k: List<&2, U32>) -> Bool:
+  match x:
+    case Piece.Bind{k2, v}:
+      Shared.List.is_eq(~U32, ~U32.is_eq, k2, k)
+    case Piece.Sub{h, u, +lo, +hi}:
+      Bool.and(Bound.after(lo, k), Bound.before(k, hi))
+
+# a piece of the pieces ps may hold k
+def Pieces.covers(ps: List<&2, Piece>, +k: List<&2, U32>) -> Bool:
+  match ps:
+    case Nil{}:
+      False{}
+    case Con{+x, rest}:
+      Bool.or(Piece.covers(x, k), Pieces.covers(rest, k))
+
+# the value of k that the piece x gives, read f levels down
+def Piece.value(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +f: Nat, +s: S, x: Piece, +k: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  match x:
+    case Piece.Bind{k2, v}:
+      Some{v}
+    case Piece.Sub{h, u, lo, hi}:
+      Look.value(Mst.look.go(~S, ~fetch, f, s, Room{u, lo, hi}, Some{h}, k))
+
+# the value of k that the first piece of ps that may hold it gives (none: no
+# piece may hold it)
+def Pieces.value(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match ps:
+    case Nil{}:
+      None{}
+    case Con{+x, rest}:
+      Shared.Bool.when(
+        Maybe<&2, List<&2, U32>>,
+        Piece.covers(x, k),
+        u => Piece.value(~S, ~fetch, f, s, x, k),
+        u => Pieces.value(~S, ~fetch, f, s, rest, k)
+      )
+
+# each piece of ps comes after the piece x
+def Pieces.after_all(+x: Piece, ps: List<&2, Piece>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{y, rest}:
+      Bool.and(Piece.before(x, y), Pieces.after_all(x, rest))
+
+# the pieces ps come in the order of their keys, each after the ones before
+def Pieces.sorted(ps: List<&2, Piece>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{+x, +rest}:
+      Bool.and(Pieces.after_all(x, rest), Pieces.sorted(rest))
+
+# the first side of a False or is False
+def Bool.or_false_l(a: Bool, -b: Bool) -> {Bool.or(a, b) == False{}: Bool} -> {a == False{}: Bool}:
+  match a:
+    case True{}:
+      h => h
+    case False{}:
+      h => {==}
+
+# the second side of a False or is False
+def Bool.or_false_r(a: Bool, -b: Bool) -> {Bool.or(a, b) == False{}: Bool} -> {b == False{}: Bool}:
+  match a:
+    case True{}:
+      h => Empty.absurd({b == False{}: Bool}, Shared.Bool.true_ne_false(h))
+    case False{}:
+      h => h
+
+# pieces that may not hold k give no value of it
+def Pieces.value_none(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Pieces.covers(ps, k) == False{}: Bool} -> {Pieces.value(~S, ~fetch, f, s, ps, k) == None{}: Maybe<&2, List<&2, U32>>}:
+  match ps:
+    case Nil{}:
+      h => {==}
+    case Con{+x, +rest}:
+      +h =>
+        %Equal.sym(Bool, Piece.covers(x, k), False{}, Bool.or_false_l(Piece.covers(x, k), Pieces.covers(rest, k))(h)): {
+          Shared.Bool.when(
+            Maybe<&2, List<&2, U32>>,
+            _,
+            u => Piece.value(~S, ~fetch, f, s, x, k),
+            u => Pieces.value(~S, ~fetch, f, s, rest, k)
+          )
+            == None{}: Maybe<&2, List<&2, U32>>
+        }
+        Pieces.value_none(~S, ~fetch, f, s, rest, k)(Bool.or_false_r(Piece.covers(x, k), Pieces.covers(rest, k))(h))
+
+# pieces that may not hold k, then others: the others give its value
+def Pieces.value_right(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +qs: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Pieces.covers(ps, k) == False{}: Bool} -> {
+  Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, ps, qs), k) == Pieces.value(~S, ~fetch, f, s, qs, k): Maybe<&2, List<&2, U32>>
+}:
+  match ps:
+    case Nil{}:
+      h => {==}
+    case Con{+x, +rest}:
+      +h =>
+        %Equal.sym(Bool, Piece.covers(x, k), False{}, Bool.or_false_l(Piece.covers(x, k), Pieces.covers(rest, k))(h)): {
+          Shared.Bool.when(
+            Maybe<&2, List<&2, U32>>,
+            _,
+            u => Piece.value(~S, ~fetch, f, s, x, k),
+            u => Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, rest, qs), k)
+          )
+            == Pieces.value(~S, ~fetch, f, s, qs, k): Maybe<&2, List<&2, U32>>
+        }
+        Pieces.value_right(~S, ~fetch, f, s, rest, qs, k)(Bool.or_false_r(Piece.covers(x, k), Pieces.covers(rest, k))(h))
+
+# pieces, then others that may not hold k: the first give its value
+def Pieces.value_left(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +qs: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Pieces.covers(qs, k) == False{}: Bool} -> {
+  Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, ps, qs), k) == Pieces.value(~S, ~fetch, f, s, ps, k): Maybe<&2, List<&2, U32>>
+}:
+  match ps:
+    case Nil{}:
+      h => Pieces.value_none(~S, ~fetch, f, s, qs, k)(h)
+    case Con{+x, +rest}:
+      h => Equal.cong(
+        Maybe<&2, List<&2, U32>>,
+        Maybe<&2, List<&2, U32>>,
+        z => Shared.Bool.when(Maybe<&2, List<&2, U32>>, Piece.covers(x, k), u => Piece.value(~S, ~fetch, f, s, x, k), u => z),
+        Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, rest, qs), k),
+        Pieces.value(~S, ~fetch, f, s, rest, k),
+        Pieces.value_left(~S, ~fetch, f, s, rest, qs, k)(h)
+      )
+
 def Mst.canon(ty, fetch):
   +s => +h1 => +h2 => +bs => e1 => e2 => Mst.range_list(
     ~ty,
