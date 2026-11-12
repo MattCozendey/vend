@@ -594,7 +594,8 @@ const isLemmaType = (k: string): boolean => {
 
 // ---- books ----
 type Lemma = { k: string; order: number; n: number; np: number; guarded: boolean };
-type Src = { file: string; header: string; body: string; bodyLine: number };
+// stub: no text in the file (a law with no def yet); the search's def goes at the end of the file
+type Src = { file: string; header: string; body: string; bodyLine: number; stub?: true };
 type Book = {
   entry: string; top: string; book: Term; raw: Record<string, Term>; n0: number; order: Map<string, number>; files: Map<string, Term>;
   texts: Map<string, string>; src: Map<string, Src | null>; seen: string[]; stamp: string; hashes: Record<string, string>;
@@ -706,8 +707,25 @@ const defSrc = (k: string): Src | null => {
     while (be > he + 1 && (lines[be - 1].trim() === "" || lines[be - 1].trim().startsWith("#"))) be--;
     res = { file, header: lines.slice(li, he + 1).join("\n"), body: lines.slice(he + 1, be).join("\n"), bodyLine: he + 1 };
   }
-  BK.src.set(k, res);
-  return res;
+  BK.src.set(k, res ?? lawStub(k, file));
+  return BK.src.get(k)!;
+};
+// a law with no def yet: its fill as Bend reads one, `def NAME(clause names):` (bare names, one per `for`
+// clause), with the body ?TODO
+const lawStub = (k: string, file: string): Src | null => {
+  const t = BK.raw[k];
+  if (t?.$ !== "Def" || t.l !== true || t.v !== null) return null;
+  const names: string[] = [];
+  let T: Term = t.T;
+  for (let j = 0; j < t.n; j++) {
+    const s = B.term_strip(T);
+    if (s.$ !== "All") return null;
+    let x = /^[A-Za-z_]\w*$/.test(s.k) && !KEYWORD.test(s.k) ? s.k : "x" + j;
+    while (names.includes(x)) x += "_";
+    names.push(x);
+    T = s.B(B.Var(x, FRESH + j));
+  }
+  return { file, header: "def " + shortOf(k) + "(" + names.join(", ") + "):", body: "  ?TODO", bodyLine: -1, stub: true };
 };
 const openNames = new Map<string, Set<string>>();
 const isOpen = (k: string): boolean => {
@@ -2496,7 +2514,7 @@ function* synthesize(k: string, own: Owner, ds: Src, insts: Inst[], laws: string
         return { status: "partial", text: "# " + own.short + ": the evidence (" + lawsText + ") does not pin a body down: this passes it, and so do bodies that answer differently (" + open.map((o) => o.alt).join("; ") + "). Add an example or a law.\n" + body, body };
       }
       const tidy = yield* step(() => trimPlus((x) => checkErr(k, x) === null, body));
-      return { status: "synthesized", text: head + "\n" + tidy + (notes.length ? "\n" + notes.join("\n") : ""), body: tidy, edit: { file: ds.file, from: ds.header + "\n" + ds.body, to: ds.header + "\n" + tidy } };
+      return { status: "synthesized", text: head + "\n" + tidy + (notes.length ? "\n" + notes.join("\n") : ""), body: tidy, edit: editOf(ds, [], tidy) };
     }
   }
   uninstall(k);
@@ -2578,7 +2596,8 @@ const printed = (hs: Extract<Pf, { t: "def" }>[]): Printed[] => hs.map((h) => ({
 const defsText = (hs: Printed[]) => hs.map((h) => h.head + "\n" + h.body + "\n").join("\n");
 const helperBlock = (hs: Printed[], k: string, proven: boolean): string =>
   hs.length ? "# helper defs (" + (proven ? "proven" : "some open") + "): paste them above `def " + shortOf(k) + "(`\n" + defsText(hs) + "# the body of " + shortOf(k) + ":\n" : "";
-const editOf = (ds: Src, hs: Printed[], body: string) => ({ file: ds.file, from: ds.header + "\n" + ds.body, to: (hs.length ? defsText(hs) + "\n" : "") + ds.header + "\n" + body });
+// from "": a stub's def has no text to replace, and goes at the end of the file
+const editOf = (ds: Src, hs: Printed[], body: string) => ({ file: ds.file, from: ds.stub ? "" : ds.header + "\n" + ds.body, to: (hs.length ? defsText(hs) + "\n" : "") + ds.header + "\n" + body });
 const PLUS_LINE = /^[ \t]*\+([A-Za-z_]\w*) = \1[ \t]*\n/gm;
 const trimPlus = (checks: (body: string) => boolean, body: string): string => {
   const cuts = [...body.matchAll(PLUS_LINE)].map((m) => ({ at: m.index!, n: m[0].length })).sort((a, b) => b.at - a.at);
@@ -2737,7 +2756,8 @@ const newSession = (t: Task, L: Book): Session | Report => {
   const whole = ds.body.trim() === "?TODO", holes = todoAt(ds.body).length > 0;
   const bench = t.kind === "bench";
   if (!whole && !holes && !bench) return { status: "nothing", text: "# " + shortOf(k) + ": no ?TODO in its body (nothing to search; `bend " + path.basename(L.entry) + " --check-only` checks it)" };
-  const own = owner(k);
+  // a law's stub goes at the end of the file: every def of the file is above it
+  const own = ds.stub ? { ...owner(k), order: BK.book.order.length } : owner(k);
   if (returnsSort(k)) return { status: "nothing", text: "# " + shortOf(k) + ": its result is a sort (a type definition): there is no program to search for it" };
   const kind = isLemmaType(k) ? "proof" : "synth";
   const s: Session = { id: t.id, entry: L.entry, stamp: L.stamp, k, own, ds: bench ? { ...ds, body: "  ?TODO" } : ds, kind, hide: bench, sketches: [], subs: 0, started: Date.now(), spent: 0, t0: performance.now() };
@@ -2880,7 +2900,8 @@ const slice = async (t: Task, until: number, done: Done, loaded: (L: Book) => vo
     send({ t: "progress", id: t.id, report: { status: "running", text: HONEST + "\n" + withHidden(s, () => firstHints(s!)) } });
   }
   const sess = s;
-  const notes = withHidden(sess, () => addSubmissions(sess, t));
+  const notes = [...(sess.ds.stub ? ["# " + sess.own.short + " is a law with no def: searched as `" + sess.ds.header + "` at the end of " + path.basename(sess.ds.file)] : []),
+    ...withHidden(sess, () => addSubmissions(sess, t))];
   if (t.kind === "goals") return done({ status: "open", text: HONEST + "\n" + withHidden(sess, () => goalsText(sess)) }, true, sess);
   if (sess.kind === "proof") {
     S = sess.search!;

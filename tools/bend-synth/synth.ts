@@ -386,6 +386,8 @@ const applyEdit = (r: Report): string => {
   const e = r.edit;
   if (!e) return "# --write: nothing to write";
   const text = fs.readFileSync(e.file, "utf8");
+  // a law's new def (no text to replace) goes at the end of the file
+  if (e.from === "") { fs.writeFileSync(e.file, text.replace(/\s*$/, "\n\n") + e.to + "\n"); return "# --write: appended to " + e.file; }
   const n = text.split(e.from).length - 1;
   if (n !== 1) return "# --write: " + path.basename(e.file) + " changed meanwhile (the def's text is " + (n ? "not unique" : "gone") + "); nothing written";
   fs.writeFileSync(e.file, text.replace(e.from, () => e.to));
