@@ -195,19 +195,25 @@ def Seal.public(seed: Hashes.Hash) -> Hashes.Hash:
 def Seal.sign(seed: Hashes.Hash, m: Hashes.Hash) -> Seal:
   Seal{Seal.shows(Seal.digits(m), seed, 0)}
 
-# the ends m, if any, give the key pub
-def Seal.check.ends(pub: Hashes.Hash, m: Maybe<&2, List<&2, Hashes.Hash>>) -> Bool:
+# the public key that the seal s of the message m shows: the key of the ends
+# of its chains (none: s is not a seal of m). One seal of one message shows
+# one key
+def Seal.signer(m: Hashes.Hash, s: Seal) -> Maybe<&2, Hashes.Hash>:
+  match s:
+    case Seal{vs}:
+      Maybe.map(&2, List<&2, Hashes.Hash>, Hashes.Hash, Seal.key, Seal.ends(Seal.digits(m), vs))
+
+# the key m, if any, is pub
+def Seal.is(pub: Hashes.Hash, m: Maybe<&2, Hashes.Hash>) -> Bool:
   match m:
     case None{}:
       False{}
-    case Some{es}:
-      Hashes.Hash.is_eq(pub, Seal.key(es))
+    case Some{k}:
+      Hashes.Hash.is_eq(pub, k)
 
 # s is a seal of the message m by the seed of the public key pub
 def Seal.check(pub: Hashes.Hash, m: Hashes.Hash, s: Seal) -> Bool:
-  match s:
-    case Seal{vs}:
-      Seal.check.ends(pub, Seal.ends(Seal.digits(m), vs))
+  Seal.is(pub, Seal.signer(m, s))
 
 # Laws
 # ----
@@ -372,7 +378,7 @@ def Seal.check_sign(seed, m):
     Seal.ends(Seal.digits(m), Seal.shows(Seal.digits(m), seed, 0)),
     Some{Seal.tops(List.length(&2, Nibble, Seal.digits(m)), seed, 0)},
     Seal.ends_shows(Seal.digits(m), seed, 0)
-  ): {Seal.check.ends(Seal.public(seed), _) == True{}: Bool}
+  ): {Seal.is(Seal.public(seed), Maybe.map(&2, List<&2, Hashes.Hash>, Hashes.Hash, Seal.key, _)) == True{}: Bool}
   %Equal.sym(
     Nat,
     List.length(&2, Nibble, Seal.digits(m)),
