@@ -12796,17 +12796,6 @@ def Move.act_kept.at.g3(
         Acts.Kept(d, lf, _)
       Equal.sym(Bool, True{}, Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, Trees.Ops.range(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), lf, Source.root(s), []), bs => Some{Res.all_held(d, lf, bs)}), False{}), hx)
 
-def Move.act_kept.at(
-  ~d: Led(),
-  +lf: L(d),
-  p: Bool,
-  +s: Requests.Source,
-  +a: Replicas.Act,
-  ep: {Tree.kept(~d, lf, Source.root(s)) == p: Bool},
-  ec: {Tree.when_kept(~d, lf, Source.root(s), u => Some{Replicas.Act.Taken{None{}, Source.root(s), []}}) == Some{a}: Maybe<&2, Replicas.Act>}
-) -> Acts.Kept(~d, lf, a):
-  Move.act_kept.at.g3(~d, lf, p, s, a, Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, Trees.Ops.range(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), lf, Source.root(s), []), bs => Some{Res.all_held(d, lf, bs)}), False{}), {==}, ep, ec)
-
 # a move gives a kept tree
 def Move.act_kept.g3(
   ~d: Led(),
@@ -13136,23 +13125,6 @@ def When.holds(
     case False{}:
       hg(e)
 
-# a property of what a default gives, when the read that it defaults gives a
-# value that has it, and the default has it
-def Default.holds(
-  -B: Data,
-  -P: B -> Type,
-  m: Maybe<&2, Maybe<&2, B>>,
-  d: Maybe<&2, B>,
-  +y: B,
-  hm: @z: Maybe<&2, B> -> {z == Some{y}: Maybe<&2, B>} -> P(y),
-  hd: {d == Some{y}: Maybe<&2, B>} -> P(y),
-  e: {Maybe.default(&2, Maybe<&2, B>, m, d) == Some{y}: Maybe<&2, B>}
-) -> P(y):
-  match m:
-    case None{}:
-      hd(e)
-    case Some{+z}:
-      hm(z)(e)
 # what a pick of a merge leaves the ledger to hold: the resource that it takes,
 # or the format of the resource that it makes
 def Pick.Held(~d: Led(), lf: L(d), p: Pick) -> Data:
