@@ -12514,6 +12514,266 @@ def Mst.ins_ok(
         +ur2 => +lo2 => +hi2 => +m2 => Mst.ins_ok(~S, ~fetch, p, m2, s, ur2, lo2, hi2, k, v, ll)
       )
 
+# a room is at least as wide as itself
+def Mst.room_le_refl(r: Room) -> {Mst.room_le(r, r) == True{}: Bool}:
+  match r:
+    case Room{+u, +lo, +hi}:
+      Mst.room_le_of(u, lo, lo, hi, hi, Mst.lo_le_refl(lo), Mst.hi_le_refl(hi))
+
+# the room of a pick that goes down is of the level of the node
+def Mst.PickUp(l: Nat, p: Pick) -> Type:
+  match p:
+    case Pick.Hit{v}:
+      Unit
+    case Pick.Down{m, r}:
+      {Mst.room_up(r) == l: Nat}
+
+# a pick goes down into a room of the level of the node
+def Mst.pick_up(
+  +xs: List<&2, Item>,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>
+) -> Mst.PickUp(l, Mst.pick(xs, prev, l, lo, hi, k)):
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      Mst.case_cmp(
+        c => Mst.PickUp(
+          l,
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(c),
+            u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+            u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, l, Some{ik}, hi, k))
+          )
+        ),
+        Key.cmp(k, ik),
+        +q => {==},
+        +q => Unit{},
+        +q => Mst.pick_up(rest, r, l, Some{ik}, hi, k)
+      )
+
+# a read of a node whose pick of k goes down to a subtree where k is absent
+# finds k absent
+def Mst.del_same(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +g: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +k: List<&2, U32>,
+  +p: Nat,
+  +m: Maybe<&2, Hashes.Hash>,
+  +a: Maybe<&2, List<&2, U32>>,
+  +b: Maybe<&2, List<&2, U32>>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, xs}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, xs}, Room{u, lo, hi}) == True{}: Bool},
+  +fu: {Nat.is_le(u, g) == True{}: Bool},
+  +ep: {Mst.pick(xs, left, l, lo, hi, k) == Pick.Down{m, Room{l, a, b}}: Pick},
+  +ab: {Look.is_absent(Mst.look.go(~S, ~fetch, p, s, Room{l, a, b}, m, k)) == True{}: Bool}
+) -> {Look.known(Mst.look.go(~S, ~fetch, g, s, Room{u, lo, hi}, Some{h}, k)) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  Mst.new_down(
+    ~S,
+    ~fetch,
+    g,
+    s,
+    h,
+    u,
+    lo,
+    hi,
+    l,
+    left,
+    xs,
+    k,
+    None{},
+    m,
+    a,
+    b,
+    eN,
+    oN,
+    fu,
+    ep,
+    +g4 => +fl => Mst.look.wide(
+      ~S,
+      ~fetch,
+      g4,
+      p,
+      m,
+      s,
+      Room{l, a, b},
+      Room{l, a, b},
+      k,
+      None{},
+      Mst.hop_of(~S, ~fetch, s, m, Room{l, a, b}, Room{l, a, b}, Mst.room_le_refl(Room{l, a, b})),
+      Mst.room_bounds(Room{l, a, b}, Room{l, a, b})(Mst.room_le_refl(Room{l, a, b})),
+      fl
+    )(Look.absent_known(Mst.look.go(~S, ~fetch, p, s, Room{l, a, b}, m, k))(ab))
+  )
+
+# a tree read with more fuel in the same room tells the same
+def Mst.del_keep(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +g1: Nat,
+  +g2: Nat,
+  +s: S,
+  +m: Maybe<&2, Hashes.Hash>,
+  +r: Room,
+  +k2: List<&2, U32>,
+  -x: Maybe<&2, List<&2, U32>>,
+  +fu: {Nat.is_le(Mst.room_up(r), g2) == True{}: Bool}
+) -> {Look.known(Mst.look.go(~S, ~fetch, g1, s, r, m, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>} -> {
+  Look.known(Mst.look.go(~S, ~fetch, g2, s, r, m, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  Mst.look.wide(
+    ~S,
+    ~fetch,
+    g2,
+    g1,
+    m,
+    s,
+    r,
+    r,
+    k2,
+    x,
+    Mst.hop_of(~S, ~fetch, s, m, r, r, Mst.room_le_refl(r)),
+    Mst.room_bounds(r, r)(Mst.room_le_refl(r)),
+    fu
+  )
+
+# a delete that leaves the tree as it is, once a read finds k absent (bb)
+def Mst.del_ok.when(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  bb: Bool,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  -t: Look,
+  +ebb: {Look.is_absent(t) == bb: Bool},
+  d1: {Look.is_absent(t) == True{}: Bool} -> @g: Nat -> {Nat.is_le(ur, g) == True{}: Bool} -> {
+    Look.known(Mst.look.go(~S, ~fetch, g, s, Room{ur, lo, hi}, Some{h}, k)) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  }
+) -> Mst.InsOk(~S, ~fetch, s, ur, lo, hi, Some{h}, k, None{}, Shared.Maybe.when(Edit, bb, u => Some{Edit{Some{h}, []}})):
+  match bb:
+    case False{}:
+      Unit{}
+    case True{}:
+      +hold => (
+        d1(ebb),
+        +k2 => +x => +g1 => +g2 => +ne => +fu => Mst.del_keep(~S, ~fetch, g1, g2, s, Some{h}, Room{ur, lo, hi}, k2, x, fu)
+      )
+
+# a delete from an empty tree
+def Mst.del_ok.none(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>
+) -> Mst.InsOk(~S, ~fetch, s, ur, lo, hi, None{}, k, None{}, Some{Edit{None{}, []}}):
+  +hold => (
+    +g => +fu => Equal.cong(
+      Look,
+      Maybe<&2, Maybe<&2, List<&2, U32>>>,
+      Look.known,
+      Mst.look.go(~S, ~fetch, g, s, Room{ur, lo, hi}, None{}, k),
+      Look.Absent{},
+      Mst.look_none(~S, ~fetch, g, s, Room{ur, lo, hi}, k)
+    ),
+    +k2 => +x => +g1 => +g2 => +ne => +fu => Mst.none_kept(~S, ~fetch, g1, g2, s, Room{ur, lo, hi}, Room{ur, lo, hi}, k2, x)
+  )
+
+# items with one item k taken out fit as before
+def Mst.fit_del(
+  +pre: List<&2, Item>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Items.fit(List.append(&2, Item, pre, Item{k, iv, r} <> rest), lo, hi) == True{}: Bool} -> {
+  Items.fit(List.append(&2, Item, pre, rest), lo, hi) == True{}: Bool
+}:
+  +f =>
+    +both = Equal.trans(
+      Bool,
+      Bool.and(Items.fit(pre, lo, hi), Items.fit(Item{k, iv, r} <> rest, Items.last_key(pre, lo), hi)),
+      Items.fit(List.append(&2, Item, pre, Item{k, iv, r} <> rest), lo, hi),
+      True{},
+      Equal.sym(
+        Bool,
+        Items.fit(List.append(&2, Item, pre, Item{k, iv, r} <> rest), lo, hi),
+        Bool.and(Items.fit(pre, lo, hi), Items.fit(Item{k, iv, r} <> rest, Items.last_key(pre, lo), hi)),
+        Mst.fit_append(pre, Item{k, iv, r} <> rest, lo, hi)
+      ),
+      f
+    )
+    +fk = Shared.Bool.and_true_right(Items.fit(pre, lo, hi), Items.fit(Item{k, iv, r} <> rest, Items.last_key(pre, lo), hi), both)
+    Equal.trans(
+      Bool,
+      Items.fit(List.append(&2, Item, pre, rest), lo, hi),
+      Bool.and(Items.fit(pre, lo, hi), Items.fit(rest, Items.last_key(pre, lo), hi)),
+      True{},
+      Mst.fit_append(pre, rest, lo, hi),
+      Shared.Bool.and_both(
+        Items.fit(pre, lo, hi),
+        Items.fit(rest, Items.last_key(pre, lo), hi),
+        Shared.Bool.and_true_left(Items.fit(pre, lo, hi), Items.fit(Item{k, iv, r} <> rest, Items.last_key(pre, lo), hi), both),
+        Mst.fit_wide(
+          rest,
+          Some{k},
+          Items.last_key(pre, lo),
+          hi,
+          hi,
+          Mst.lo_le_key(Items.last_key(pre, lo), k)(
+            Shared.Bool.and_true_left(
+              Bound.after(Items.last_key(pre, lo), k),
+              Bound.before(k, hi),
+              Shared.Bool.and_true_left(
+                Bool.and(Bound.after(Items.last_key(pre, lo), k), Bound.before(k, hi)),
+                Items.fit(rest, Some{k}, hi),
+                fk
+              )
+            )
+          ),
+          Mst.hi_le_refl(hi)
+        )(Shared.Bool.and_true_right(Bool.and(Bound.after(Items.last_key(pre, lo), k), Bound.before(k, hi)), Items.fit(rest, Some{k}, hi), fk))
+      )
+    )
+
+# the items after k of items that fit, k among them, fit after k
+def Mst.fit_rest(
+  +pre: List<&2, Item>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Items.fit(List.append(&2, Item, pre, Item{k, iv, r} <> rest), lo, hi) == True{}: Bool} -> {Items.fit(rest, Some{k}, hi) == True{}: Bool}:
+  +f => Shared.Bool.and_true_right(
+    Bool.and(Bound.after(Items.last_key(pre, lo), k), Bound.before(k, hi)),
+    Items.fit(rest, Some{k}, hi),
+    Mst.post_fit(pre, Item{k, iv, r} <> rest, lo, hi)(f)
+  )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
