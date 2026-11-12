@@ -29,6 +29,24 @@ Do not run `--verdict` unless the user asks.
   def that only passes its arguments on is not.
 - A def calls only defs above it: put operations before laws.
 - Above each law, write a comment that says what it asks.
+- Challenge whether each concept is truly domain-specific. Extract general structure that makes
+  both shared and domain code smaller.
+- Before designing a shared abstraction, check whether it is a known problem with established
+  solutions. Consult primary sources. Verify their assumptions, guarantees, and costs against
+  our requirements. Prefer the best applicable solution over a custom design.
+- Require types to add useful semantic properties. Reject aliases and tags that only simulate
+  meaning.
+
+## Performance
+
+- Prevent quadratic or worse cost growth. Choose data structures for expected workloads. Consider
+  lazy and parallel evaluation. Prefer proven deltas where useful. Optimize structure before
+  adding caches.
+- If a naive implementation is necessary, provide a fast equivalent and prove equivalence. Use
+  the fast implementation.
+- Suggest a cheaper, use-specific partial or approximate operation when useful. State and prove
+  its guarantees, including when it can give up or its error bound. Ask before implementing any
+  such operation.
 
 ## Names
 
@@ -52,6 +70,9 @@ Use the repo's conventions. Where they say nothing, name defs as Base does:
 
 Make the bug impossible to write: give it a type that cannot hold a bad value. Use a law only when a
 type cannot rule the bug out. Use a test only when a law cannot state the behavior.
+
+Prove the strongest relevant laws. Remove laws that stronger guarantees subsume. Do not weaken
+guarantees because proofs require substantial work.
 
 | Kind        | It checks                                               | Example                                  |
 | ----------- | ------------------------------------------------------- | ---------------------------------------- |

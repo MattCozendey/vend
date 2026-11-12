@@ -86,6 +86,9 @@ A test starts with a comment that says why steps 1 and 2 cannot state the behavi
 
 ## Folder structure and shared modules
 
+- Establish general guarantees in the appropriate shared layer. Preserve every caller guarantee.
+  Keep only genuine domain-specific requirements in domain code. Require extraction to reduce
+  total complexity.
 - Features are onion-like. For each layer(probably in `src` or `features`), there may be a
   `shared.bend` file XOR a `shared` folder if the utility earns it(file grows too large or has
   effects, for example). A `shared` folder, being a feature, may too contain `shared.bend` XOR a
