@@ -4604,41 +4604,48 @@ def Book.starts_append(+p: List<&2, U32>, +r: List<&2, U32>) -> {Crits.Key.start
       %Equal.sym(Bool, U32.is_eq(x, x), True{}, Shared.U32.is_eq_refl(x)): {Bool.and(_, Crits.Key.starts(rest, List.append(&2, U32, rest, r))) == True{}: Bool}
       Book.starts_append(rest, r)
 
+# the map of a dict is well formed
+def Book.dict_wf(~V: Data, d: Crits.Dict(V)) -> {Crits.Crit.wf(~V, Crits.Dict.crit(V, d), 0n) == True{}: Bool}:
+  match d:
+    case Tuple{m, w}:
+      w
+
+# a key of the part of the index d under p starts with p, and the index holds it
+def Book.under_key(+d: Crits.Dict(Name), +p: List<&2, U32>, +k: List<&2, U32>, +x: Name) -> {Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k) == Some{x}: Maybe<&2, Name>} -> {Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>}:
+  +hl =>
+    +hp = Equal.trans(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k), Some{x}, Equal.sym(Maybe<&2, Name>, Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k), Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Crits.Crit.under_lookup(~Name, Crits.Dict.crit(Name, d), p, k)(Book.dict_wf(~Name, d))), hl)
+    Book.by({Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>}, Crits.Key.starts(p, k))(
+      +t => (t, Equal.trans(Maybe<&2, Name>, Crits.Dict.get(Name, d, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Some{x}, Crits.Crit.get_lookup(~Name, Crits.Dict.crit(Name, d), k)(Book.dict_wf(~Name, d)), Equal.trans(Maybe<&2, Name>, Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Some{x}, Equal.sym(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Book.pick_true(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{})(t)), hp)))
+    )(
+      +f => Empty.absurd({Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>}, Shared.Maybe.none_ne_some(Name, x, Equal.trans(Maybe<&2, Name>, None{}, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Some{x}, Equal.sym(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), None{}, Book.pick_false(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{})(f)), hp)))
+    )
+
+# a key of the index d that starts with p is a key of the part under p
+def Book.under_lookup_of(+d: Crits.Dict(Name), +p: List<&2, U32>, +k: List<&2, U32>, +x: Name) -> {Crits.Key.starts(p, k) == True{}: Bool} -> {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>} -> {Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k) == Some{x}: Maybe<&2, Name>}:
+  hs => hg =>
+    Equal.trans(Maybe<&2, Name>, Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k), Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Some{x}, Crits.Crit.under_lookup(~Name, Crits.Dict.crit(Name, d), p, k)(Book.dict_wf(~Name, d)), Equal.trans(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Some{x}, Book.pick_true(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{})(hs), Equal.trans(Maybe<&2, Name>, Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Crits.Dict.get(Name, d, k), Some{x}, Equal.sym(Maybe<&2, Name>, Crits.Dict.get(Name, d, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Crits.Crit.get_lookup(~Name, Crits.Dict.crit(Name, d), k)(Book.dict_wf(~Name, d))), hg)))
+
+# Book.under_sound once the key is found in the index
+def Book.under_sound.fin(+d: Crits.Dict(Name), +p: List<&2, U32>, +x: Name, +k: List<&2, U32>, +v: Name, +he: {Name.is_eq(v, x) == True{}: Bool}, pr: {Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{v}: Maybe<&2, Name>}) -> Exists(List<&2, U32>, k => {Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>}):
+  match pr:
+    case Tuple{+st, +gv}:
+      (k, (st, Equal.trans(Maybe<&2, Name>, Crits.Dict.get(Name, d, k), Some{v}, Some{x}, gv, Equal.cong(Name, Maybe<&2, Name>, s => Some{s}, v, x, Name.is_eq_sound(v, x)(he)))))
+
 # Book.under_sound once a key of the part under p is found
-def Book.under_sound.of(+m: Crits.Crit<Name>, +w: {Crits.Crit.wf(~Name, m, 0n) == True{}: Bool}, +p: List<&2, U32>, +x: Name, ex: Exists(List<&2, U32>, k => Exists(Name, v => {Crits.Crit.lookup(Name, Crits.Crit.under(Name, m, p), k) == Some{v}: Maybe<&2, Name>} & {Name.is_eq(v, x) == True{}: Bool}))) -> Exists(List<&2, U32>, k => {Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Crit.get(Name, m, k) == Some{x}: Maybe<&2, Name>}):
+def Book.under_sound.of(+d: Crits.Dict(Name), +p: List<&2, U32>, +x: Name, ex: Exists(List<&2, U32>, k => Exists(Name, v => {Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k) == Some{v}: Maybe<&2, Name>} & {Name.is_eq(v, x) == True{}: Bool}))) -> Exists(List<&2, U32>, k => {Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>}):
   match ex:
-    case Tuple{+k, Tuple{+v, Tuple{+hl, he}}}:
-      +hu = Equal.trans(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{}), Crits.Crit.lookup(Name, Crits.Crit.under(Name, m, p), k), Some{v}, Equal.sym(Maybe<&2, Name>, Crits.Crit.lookup(Name, Crits.Crit.under(Name, m, p), k), Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{}), Crits.Crit.under_lookup(~Name, m, p, k)(w)), hl)
-      +hx = Equal.trans(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{}), Some{v}, Some{x}, hu, Equal.cong(Name, Maybe<&2, Name>, z => Some{z}, v, x, Name.is_eq_sound(v, x)(he)))
-      Book.by(Exists(List<&2, U32>, k => {Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Crit.get(Name, m, k) == Some{x}: Maybe<&2, Name>}), Crits.Key.starts(p, k))(
-        +t =>
-          (
-            k,
-            (
-              t,
-              Equal.trans(Maybe<&2, Name>, Crits.Crit.get(Name, m, k), Crits.Crit.lookup(Name, m, k), Some{x}, Crits.Crit.get_lookup(~Name, m, k)(w), Equal.trans(Maybe<&2, Name>, Crits.Crit.lookup(Name, m, k), Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{}), Some{x}, Equal.sym(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{}), Crits.Crit.lookup(Name, m, k), Book.pick_true(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{})(t)), hx))
-            )
-          )
-      )(
-        +f => Empty.absurd(Exists(List<&2, U32>, k => {Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Crit.get(Name, m, k) == Some{x}: Maybe<&2, Name>}), Shared.Maybe.none_ne_some(Name, v, Equal.trans(Maybe<&2, Name>, None{}, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{}), Some{v}, Equal.sym(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{}), None{}, Book.pick_false(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{})(f)), hu)))
-      )
+    case Tuple{+k, Tuple{+v, Tuple{hl, he}}}:
+      Book.under_sound.fin(d, p, x, k, v, he, Book.under_key(d, p, k, v)(hl))
 
 # a name under p in the index d is under a key that starts with p
-def Book.under_sound(d: Crits.Dict(Name), +p: List<&2, U32>, +x: Name) -> {List.contains(~Name, ~Name.is_eq, Index.under(d, p), x) == True{}: Bool} -> Exists(List<&2, U32>, k => {Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>}):
-  match d:
-    case Tuple{+m, +w}:
-      h => Book.under_sound.of(m, w, p, x, Book.vals_sound(~Name, ~Name.is_eq, Crits.Crit.entries(Name, Crits.Crit.under(Name, m, p)), x, Crits.Crit.under(Name, m, p))(Crits.Crit.sub_to_list(Name, Crits.Crit.under(Name, m, p), [], Crits.Crit.under(Name, m, p))(Crits.Crit.sub_self(~Name, Crits.Crit.under(Name, m, p), 0n)(Crits.Crit.under_wf(~Name, m, p)(w)))(Unit{}))(h))
+def Book.under_sound(+d: Crits.Dict(Name), +p: List<&2, U32>, +x: Name) -> {List.contains(~Name, ~Name.is_eq, Index.under(d, p), x) == True{}: Bool} -> Exists(List<&2, U32>, k => {Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>}):
+  h => Book.under_sound.of(d, p, x, Book.vals_sound(~Name, ~Name.is_eq, Crits.Crit.entries(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p)), x, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p))(Crits.Crit.sub_to_list(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), [], Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p))(Crits.Crit.sub_self(~Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), 0n)(Crits.Crit.under_wf(~Name, Crits.Dict.crit(Name, d), p)(Book.dict_wf(~Name, d))))(Unit{}))(h))
 
 # a name of the index d under a key that starts with p is under p
-def Book.under_complete(d: Crits.Dict(Name), +p: List<&2, U32>, +k: List<&2, U32>, +x: Name) -> {Crits.Key.starts(p, k) == True{}: Bool} -> {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>} -> {
+def Book.under_complete(+d: Crits.Dict(Name), +p: List<&2, U32>, +k: List<&2, U32>, +x: Name) -> {Crits.Key.starts(p, k) == True{}: Bool} -> {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>} -> {
   List.contains(~Name, ~Name.is_eq, Index.under(d, p), x) == True{}: Bool
 }:
-  match d:
-    case Tuple{+m, +w}:
-      hs => hg =>
-        Book.vals_complete(~Name, ~Name.is_eq, Crits.Crit.under(Name, m, p), [], k, x, x)(
-          Equal.trans(Maybe<&2, Name>, Crits.Crit.lookup(Name, Crits.Crit.under(Name, m, p), k), Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{}), Some{x}, Crits.Crit.under_lookup(~Name, m, p, k)(w), Equal.trans(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{}), Crits.Crit.lookup(Name, m, k), Some{x}, Book.pick_true(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, m, k), None{})(hs), Equal.trans(Maybe<&2, Name>, Crits.Crit.lookup(Name, m, k), Crits.Crit.get(Name, m, k), Some{x}, Equal.sym(Maybe<&2, Name>, Crits.Crit.get(Name, m, k), Crits.Crit.lookup(Name, m, k), Crits.Crit.get_lookup(~Name, m, k)(w)), hg)))
-        )(Name.is_eq_refl(x))
+  hs => hg => Book.vals_complete(~Name, ~Name.is_eq, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), [], k, x, x)(Book.under_lookup_of(d, p, k, x)(hs)(hg))(Name.is_eq_refl(x))
 
 # an entry that a maybe then r holds, and the maybe is not, r holds
 def Book.cons_rest(~Q: Data, ~c: Codes.Codec(Q), m: Maybe<&2, Entry<Q>>, -r: List<&2, Entry<Q>>, +y: Entry<Q>) -> {
@@ -4907,20 +4914,26 @@ def Book.under_named.of1(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +i: Nat, +ho
 def Book.under_named_sound(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +i: Nat, +ho: {Book.ok.at(Q, b, i) == True{}: Bool}, +p: List<&2, U32>, +y: Entry<Q>) -> {List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Book.named(Q, b, Index.under(Book.index(Q, b, i), p)), y) == True{}: Bool} -> Exists(Name, n => Exists(List<&2, U32>, k => {Crits.Key.starts(p, k) == True{}: Bool} & ({Book.get(Q, b, n) == Some{y}: Maybe<&2, Entry<Q>>} & {Keys.at(Entry.keys(Q, y, n), i) == Some{k}: Maybe<&2, List<&2, U32>>}))):
   h => Book.under_named.of1(~Q, ~c, b, i, ho, p, y, Book.named_sound(~Q, ~c, b, Index.under(Book.index(Q, b, i), p), y)(h))
 
-# an entry of a book with a key in the index i that starts with p is among the entries that the names under p name
-def Book.under_named_complete(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +wk: {Book.ok(~Q, ~c, b) == True{}: Bool}, +i: Nat, +p: List<&2, U32>, +n: Name, +y: Entry<Q>, +k: List<&2, U32>) -> {Book.get(Q, b, n) == Some{y}: Maybe<&2, Entry<Q>>} -> {
+# the index i of a book in its one shape holds the name of each entry under its key there
+def Book.index_has(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +wk: {Book.ok(~Q, ~c, b) == True{}: Bool}, +i: Nat, +n: Name, +y: Entry<Q>, +k: List<&2, U32>) -> {Book.get(Q, b, n) == Some{y}: Maybe<&2, Entry<Q>>} -> {
   Keys.at(Entry.keys(Q, y, n), i) == Some{k}: Maybe<&2, List<&2, U32>>
-} -> {Crits.Key.starts(p, k) == True{}: Bool} -> {List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Book.named(Q, b, Index.under(Book.index(Q, b, i), p)), y) == True{}: Bool}:
-  +g => +hk => +hs =>
+} -> {Crits.Dict.get(Name, Book.index(Q, b, i), k) == Some{n}: Maybe<&2, Name>}:
+  +g => +hk =>
     +hc = Book.ok.entries_get(~Q, ~c, b, Book.entries(Q, b), Name.key(n), y)(Shared.Bool.and_true_left(Book.ok.entries(~Q, ~c, b, Crits.Dict.entries(Entry<Q>, Book.entries(Q, b))), Bool.and(Bool.and(Book.ok.at(Q, b, 0n), Book.ok.at(Q, b, 1n)), Bool.and(Bool.and(Book.ok.at(Q, b, 2n), Book.ok.at(Q, b, 3n)), Bool.and(Book.ok.at(Q, b, 4n), Book.ok.at(Q, b, 5n)))))(wk))(g)
     +en = Name.key_inj(Entry.name(~Q, ~c, y), n)(Crits.Key.is_eq_sound(Name.key(Entry.name(~Q, ~c, y)), Name.key(n))(Shared.Bool.and_true_left(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, y)), Name.key(n)), Book.indexed(Q, b, Entry.keys(Q, y, Entry.name(~Q, ~c, y)), Entry.name(~Q, ~c, y)))(hc)))
     +hi = Equal.trans(Bool, Book.indexed(Q, b, Entry.keys(Q, y, n), n), Book.indexed(Q, b, Entry.keys(Q, y, Entry.name(~Q, ~c, y)), Entry.name(~Q, ~c, y)), True{}, Equal.sym(Bool, Book.indexed(Q, b, Entry.keys(Q, y, Entry.name(~Q, ~c, y)), Entry.name(~Q, ~c, y)), Book.indexed(Q, b, Entry.keys(Q, y, n), n), Equal.cong(Name, Bool, +t => Book.indexed(Q, b, Entry.keys(Q, y, t), t), Entry.name(~Q, ~c, y), n, en)), Shared.Bool.and_true_right(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, y)), Name.key(n)), Book.indexed(Q, b, Entry.keys(Q, y, Entry.name(~Q, ~c, y)), Entry.name(~Q, ~c, y)))(hc))
     +hh = Book.indexed_at(Q, b, Entry.keys(Q, y, n), n, i)(hi)
-    +hh2 = Equal.trans(Bool, Index.holds(Book.index(Q, b, i), Some{k}, n), Index.holds(Book.index(Q, b, i), Keys.at(Entry.keys(Q, y, n), i), n), True{}, Equal.sym(Bool, Index.holds(Book.index(Q, b, i), Keys.at(Entry.keys(Q, y, n), i), n), Index.holds(Book.index(Q, b, i), Some{k}, n), Equal.cong(Maybe<&2, List<&2, U32>>, Bool, t => Index.holds(Book.index(Q, b, i), t, n), Keys.at(Entry.keys(Q, y, n), i), Some{k}, hk)), hh)
+    Shared.Maybe.is_eq_sound(~Name, ~Name.is_eq, s1 => s2 => Name.is_eq_sound(s1, s2), Crits.Dict.get(Name, Book.index(Q, b, i), k), Some{n})(
+      Equal.trans(Bool, Index.holds(Book.index(Q, b, i), Some{k}, n), Index.holds(Book.index(Q, b, i), Keys.at(Entry.keys(Q, y, n), i), n), True{}, Equal.sym(Bool, Index.holds(Book.index(Q, b, i), Keys.at(Entry.keys(Q, y, n), i), n), Index.holds(Book.index(Q, b, i), Some{k}, n), Equal.cong(Maybe<&2, List<&2, U32>>, Bool, t => Index.holds(Book.index(Q, b, i), t, n), Keys.at(Entry.keys(Q, y, n), i), Some{k}, hk)), hh)
+    )
+
+# an entry of a book with a key in the index i that starts with p is among the entries that the names under p name
+def Book.under_named_complete(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +wk: {Book.ok(~Q, ~c, b) == True{}: Bool}, +i: Nat, +p: List<&2, U32>, +n: Name, +y: Entry<Q>, +k: List<&2, U32>) -> {Book.get(Q, b, n) == Some{y}: Maybe<&2, Entry<Q>>} -> {
+  Keys.at(Entry.keys(Q, y, n), i) == Some{k}: Maybe<&2, List<&2, U32>>
+} -> {Crits.Key.starts(p, k) == True{}: Bool} -> {List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Book.named(Q, b, Index.under(Book.index(Q, b, i), p)), y) == True{}: Bool}:
+  +g => hk => hs =>
     Book.named_complete(~Q, ~c, b, Index.under(Book.index(Q, b, i), p), n, y)(
-      Book.under_complete(Book.index(Q, b, i), p, k, n)(hs)(
-        Shared.Maybe.is_eq_sound(~Name, ~Name.is_eq, s1 => s2 => Name.is_eq_sound(s1, s2), Crits.Dict.get(Name, Book.index(Q, b, i), k), Some{n})(hh2)
-      )
+      Book.under_complete(Book.index(Q, b, i), p, k, n)(hs)(Book.index_has(~Q, ~c, b, wk, i, n, y, k)(g)(hk))
     )(g)
 
 # Book.law.ballots.sound once the name and the key are found
@@ -5159,27 +5172,6 @@ def Book.law.liars_sound.at(~Q: Data, ~c: Codes.Codec(Q), x: Book.L(~Q, ~c), +r:
     case Tuple{+b, +wk}:
       h => Book.law.liars_sound.of1(~Q, ~c, b, wk, r, voter, Book.liars_sound_list(~Q, ~c, Book.named(Q, b, Index.under(Book.index(Q, b, 3n), Hashes.Hash.code(r, []))), voter)(h))
 
-# the map of a dict is well formed
-def Book.dict_wf(~V: Data, d: Crits.Dict(V)) -> {Crits.Crit.wf(~V, Crits.Dict.crit(V, d), 0n) == True{}: Bool}:
-  match d:
-    case Tuple{m, w}:
-      w
-
-# a key of the part of the index d under p starts with p, and the index holds it
-def Book.under_key(+d: Crits.Dict(Name), +p: List<&2, U32>, +k: List<&2, U32>, +x: Name) -> {Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k) == Some{x}: Maybe<&2, Name>} -> {Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>}:
-  +hl =>
-    +hp = Equal.trans(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k), Some{x}, Equal.sym(Maybe<&2, Name>, Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k), Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Crits.Crit.under_lookup(~Name, Crits.Dict.crit(Name, d), p, k)(Book.dict_wf(~Name, d))), hl)
-    Book.by({Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>}, Crits.Key.starts(p, k))(
-      +t => (t, Equal.trans(Maybe<&2, Name>, Crits.Dict.get(Name, d, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Some{x}, Crits.Crit.get_lookup(~Name, Crits.Dict.crit(Name, d), k)(Book.dict_wf(~Name, d)), Equal.trans(Maybe<&2, Name>, Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Some{x}, Equal.sym(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Book.pick_true(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{})(t)), hp)))
-    )(
-      +f => Empty.absurd({Crits.Key.starts(p, k) == True{}: Bool} & {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>}, Shared.Maybe.none_ne_some(Name, x, Equal.trans(Maybe<&2, Name>, None{}, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Some{x}, Equal.sym(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), None{}, Book.pick_false(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{})(f)), hp)))
-    )
-
-# a key of the index d that starts with p is a key of the part under p
-def Book.under_lookup_of(+d: Crits.Dict(Name), +p: List<&2, U32>, +k: List<&2, U32>, +x: Name) -> {Crits.Key.starts(p, k) == True{}: Bool} -> {Crits.Dict.get(Name, d, k) == Some{x}: Maybe<&2, Name>} -> {Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k) == Some{x}: Maybe<&2, Name>}:
-  hs => hg =>
-    Equal.trans(Maybe<&2, Name>, Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k), Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Some{x}, Crits.Crit.under_lookup(~Name, Crits.Dict.crit(Name, d), p, k)(Book.dict_wf(~Name, d)), Equal.trans(Maybe<&2, Name>, Bool.pick(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{}), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Some{x}, Book.pick_true(Maybe<&2, Name>, Crits.Key.starts(p, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), None{})(hs), Equal.trans(Maybe<&2, Name>, Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Crits.Dict.get(Name, d, k), Some{x}, Equal.sym(Maybe<&2, Name>, Crits.Dict.get(Name, d, k), Crits.Crit.lookup(Name, Crits.Dict.crit(Name, d), k), Crits.Crit.get_lookup(~Name, Crits.Dict.crit(Name, d), k)(Book.dict_wf(~Name, d))), hg)))
-
 # Book.last_bound once the last key is known to be p then the number n2
 def Book.last_bound.fin(+d: Crits.Dict(Name), +p: List<&2, U32>, +k: List<&2, U32>, +x: Name, +nn: Nat, +kk: List<&2, U32>, +kl: List<&2, U32>, +hl: {Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), k) == Some{x}: Maybe<&2, Name>}, +ek: {k == List.append(&2, U32, p, Crits.Key.ord(nn, kk)): List<&2, U32>}, hq: @q: List<&2, U32> -> {
   Maybe.is_some(&2, Name, Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), q)) == True{}: Bool
@@ -5250,19 +5242,6 @@ def Book.last_found.at(+d: Crits.Dict(Name), +p: List<&2, U32>, mm: Maybe<&2, Cr
 # a number of the last key under p that is not 0 is that of a key of the index d
 def Book.last_found(+d: Crits.Dict(Name), +p: List<&2, U32>) -> {Nat.is_eq(Index.last(d, p), 0n) == False{}: Bool} -> Exists(List<&2, U32>, ka => Exists(Name, xa => {Crits.Crit.lookup(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p), ka) == Some{xa}: Maybe<&2, Name>} & {Index.last(d, p) == Maybe.default(&2, Nat, Crits.Key.ord.value(List.drop(&2, U32, ka, List.length(&2, U32, p))), 0n): Nat})):
   Book.last_found.at(d, p, Crits.Crit.last(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p)))({==})
-
-# the index i of a book in its one shape holds the name of each entry under its key there
-def Book.index_has(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +wk: {Book.ok(~Q, ~c, b) == True{}: Bool}, +i: Nat, +n: Name, +y: Entry<Q>, +k: List<&2, U32>) -> {Book.get(Q, b, n) == Some{y}: Maybe<&2, Entry<Q>>} -> {
-  Keys.at(Entry.keys(Q, y, n), i) == Some{k}: Maybe<&2, List<&2, U32>>
-} -> {Crits.Dict.get(Name, Book.index(Q, b, i), k) == Some{n}: Maybe<&2, Name>}:
-  +g => +hk =>
-    +hc = Book.ok.entries_get(~Q, ~c, b, Book.entries(Q, b), Name.key(n), y)(Shared.Bool.and_true_left(Book.ok.entries(~Q, ~c, b, Crits.Dict.entries(Entry<Q>, Book.entries(Q, b))), Bool.and(Bool.and(Book.ok.at(Q, b, 0n), Book.ok.at(Q, b, 1n)), Bool.and(Bool.and(Book.ok.at(Q, b, 2n), Book.ok.at(Q, b, 3n)), Bool.and(Book.ok.at(Q, b, 4n), Book.ok.at(Q, b, 5n)))))(wk))(g)
-    +en = Name.key_inj(Entry.name(~Q, ~c, y), n)(Crits.Key.is_eq_sound(Name.key(Entry.name(~Q, ~c, y)), Name.key(n))(Shared.Bool.and_true_left(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, y)), Name.key(n)), Book.indexed(Q, b, Entry.keys(Q, y, Entry.name(~Q, ~c, y)), Entry.name(~Q, ~c, y)))(hc)))
-    +hi = Equal.trans(Bool, Book.indexed(Q, b, Entry.keys(Q, y, n), n), Book.indexed(Q, b, Entry.keys(Q, y, Entry.name(~Q, ~c, y)), Entry.name(~Q, ~c, y)), True{}, Equal.sym(Bool, Book.indexed(Q, b, Entry.keys(Q, y, Entry.name(~Q, ~c, y)), Entry.name(~Q, ~c, y)), Book.indexed(Q, b, Entry.keys(Q, y, n), n), Equal.cong(Name, Bool, +t => Book.indexed(Q, b, Entry.keys(Q, y, t), t), Entry.name(~Q, ~c, y), n, en)), Shared.Bool.and_true_right(Crits.Key.is_eq(Name.key(Entry.name(~Q, ~c, y)), Name.key(n)), Book.indexed(Q, b, Entry.keys(Q, y, Entry.name(~Q, ~c, y)), Entry.name(~Q, ~c, y)))(hc))
-    +hh = Book.indexed_at(Q, b, Entry.keys(Q, y, n), n, i)(hi)
-    Shared.Maybe.is_eq_sound(~Name, ~Name.is_eq, s1 => s2 => Name.is_eq_sound(s1, s2), Crits.Dict.get(Name, Book.index(Q, b, i), k), Some{n})(
-      Equal.trans(Bool, Index.holds(Book.index(Q, b, i), Some{k}, n), Index.holds(Book.index(Q, b, i), Keys.at(Entry.keys(Q, y, n), i), n), True{}, Equal.sym(Bool, Index.holds(Book.index(Q, b, i), Keys.at(Entry.keys(Q, y, n), i), n), Index.holds(Book.index(Q, b, i), Some{k}, n), Equal.cong(Maybe<&2, List<&2, U32>>, Bool, t => Index.holds(Book.index(Q, b, i), t, n), Keys.at(Entry.keys(Q, y, n), i), Some{k}, hk)), hh)
-    )
 
 # a name under a key of the index i of a book in its one shape names an entry with that key
 def Book.key_entry(-Q: Data, +b: Book<Q>, +i: Nat, +ho: {Book.ok.at(Q, b, i) == True{}: Bool}, +k: List<&2, U32>, +x: Name, mm: Maybe<&2, Entry<Q>>) -> {Book.get(Q, b, x) == mm: Maybe<&2, Entry<Q>>} -> {
