@@ -3537,42 +3537,6 @@ def Answer.of_follows(
         t => t2 => e1 => e2 => kn(c)(t)(t2)(e1)(e2)
       )
 
-# an entry that a holds is held by b, when b holds what a held under its name
-def Answer.has_grows.at(
-  ~A: Data,
-  ~same: A -> A -> Bool,
-  ma: Maybe<&2, A>,
-  mb: Maybe<&2, A>,
-  +e: A,
-  keep: @x: A -> {ma == Some{x}: Maybe<&2, A>} -> {mb == Some{x}: Maybe<&2, A>}
-) -> {Shared.Maybe.is_eq(~A, ~same, ma, Some{e}) == True{}: Bool}
-  -> {Shared.Maybe.is_eq(~A, ~same, mb, Some{e}) == True{}: Bool}:
-  match ma:
-    case None{}:
-      h => Empty.absurd({Shared.Maybe.is_eq(~A, ~same, mb, Some{e}) == True{}: Bool}, Shared.Bool.false_ne_true(h))
-    case Some{+x}:
-      h =>
-        %Equal.sym(Maybe<&2, A>, mb, Some{x}, keep(x)({==})): {Shared.Maybe.is_eq(~A, ~same, _, Some{e}) == True{}: Bool}
-        h
-
-# a ledger that grows holds each entry that it held
-def Answer.has_grows(
-  ~d: Led(),
-  +a: L(d),
-  +b: L(d),
-  +e: Ledgers.Entry<Requests.Ask>,
-  grows: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
-) -> {Replicas.Led.has(~Requests.Ask.machine(), ~d, a, e) == True{}: Bool}
-  -> {Replicas.Led.has(~Requests.Ask.machine(), ~d, b, e) == True{}: Bool}:
-  Answer.has_grows.at(
-    ~Ledgers.Entry<Requests.Ask>,
-    ~Ledgers.Entry.same(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine())),
-    Replicas.Led.get(~Requests.Ask.machine(), ~d, a, Replicas.Entry.name(~Requests.Ask.machine(), e)),
-    Replicas.Led.get(~Requests.Ask.machine(), ~d, b, Replicas.Entry.name(~Requests.Ask.machine(), e)),
-    e,
-    x => hx => grows(Replicas.Entry.name(~Requests.Ask.machine(), e))(x)(hx)
-  )
-
 # Node.answer follows itself once it is known whether each ledger holds the
 # request (pa, pb), and the answers that they give (A1, A2) follow
 def Node.answer_follows.when(
@@ -3622,7 +3586,7 @@ def Node.answer_follows.go(
     Answer.of(~d, ~kern, a, i, q, Ledgers.Name.hash(Replicas.Entry.name(~Requests.Ask.machine(), Ledgers.Entry.Ask{i, time, q})), Requests.Ask.arrival(q)),
     Answer.of(~d, ~kern, b, i, q, Ledgers.Name.hash(Replicas.Entry.name(~Requests.Ask.machine(), Ledgers.Entry.Ask{i, time, q})), Requests.Ask.arrival(q)),
     x,
-    Answer.has_grows(~d, a, b, Ledgers.Entry.Ask{i, time, q}, Replicas.Led.later_grows(~Requests.Ask.machine(), ~d, a, b)(g)),
+    Replicas.Hist.has_grows(~Requests.Ask.machine(), ~d, a, b, Ledgers.Entry.Ask{i, time, q}, Replicas.Led.later_grows(~Requests.Ask.machine(), ~d, a, b)(g)),
     Answer.of_follows(
       ~d,
       ~kern,
@@ -3727,66 +3691,6 @@ def Merge.or_keeps(
 ) -> {Maybe.or(&2, A, a, b) == Some{x}: Maybe<&2, A>}:
   %Equal.sym(Maybe<&2, A>, a, Some{x}, e): {Maybe.or(&2, A, _, b) == Some{x}: Maybe<&2, A>}
   {==}
-
-# a ledger with one more entry holds each entry that it held
-def Merge.add_grows(
-  ~d: Led(),
-  +l: L(d),
-  +e: Ledgers.Entry<Requests.Ask>
-) -> Replicas.Led.Grows(Requests.Ask.machine(), d, l, Replicas.Led.add(~Requests.Ask.machine(), ~d, l, e)):
-  +n => +e2 => h => Equal.trans(
-    Maybe<&2, Ledgers.Entry<Requests.Ask>>,
-    Replicas.Led.get(~Requests.Ask.machine(), ~d, Replicas.Led.add(~Requests.Ask.machine(), ~d, l, e), n),
-    Maybe.or(
-      &2,
-      Ledgers.Entry<Requests.Ask>,
-      Replicas.Led.get(~Requests.Ask.machine(), ~d, l, n),
-      Merge.new_entry(~d, e, n)
-    ),
-    Some{e2},
-    Merge.get_add(~d)(l)(e)(n),
-    Merge.or_keeps(
-      Ledgers.Entry<Requests.Ask>,
-      Replicas.Led.get(~Requests.Ask.machine(), ~d, l, n),
-      Merge.new_entry(~d, e, n),
-      e2,
-      h
-    )
-  )
-
-# a ledger grows from itself
-def Merge.grows_refl(~d: Led(), +a: L(d)) -> Replicas.Led.Grows(Requests.Ask.machine(), d, a, a):
-  n => e => h => h
-
-# a ledger that grows from a ledger that grows from a grows from a
-def Merge.grows_trans(
-  ~d: Led(),
-  +a: L(d),
-  +b: L(d),
-  +c: L(d),
-  g1: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
-  g2: Replicas.Led.Grows(Requests.Ask.machine(), d, b, c)
-) -> Replicas.Led.Grows(Requests.Ask.machine(), d, a, c):
-  +n => +e => h => g2(n)(e)(g1(n)(e)(h))
-
-# a ledger grows by each list of data that it gets
-def Merge.puts_grows(
-  ~d: Led(),
-  ns: List<&2, List<&2, U32>>,
-  +l: L(d)
-) -> Replicas.Led.Grows(Requests.Ask.machine(), d, l, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l)):
-  match ns:
-    case Nil{}:
-      Merge.grows_refl(~d, l)
-    case Con{+ws, +rest}:
-      Merge.grows_trans(
-        ~d,
-        l,
-        Replicas.Led.add(~Requests.Ask.machine(), ~d, l, Ledgers.Entry.Data{ws}),
-        Replicas.Led.puts(~Requests.Ask.machine(), ~d, rest, Replicas.Led.add(~Requests.Ask.machine(), ~d, l, Ledgers.Entry.Data{ws})),
-        Merge.add_grows(~d, l, Ledgers.Entry.Data{ws}),
-        Merge.puts_grows(~d, rest, Replicas.Led.add(~Requests.Ask.machine(), ~d, l, Ledgers.Entry.Data{ws}))
-      )
 
 # a ledger that gets some data, then some more, is a ledger that gets both
 def Merge.puts_append(
@@ -3899,27 +3803,6 @@ def Merge.holds_fetch(
         c,
         Merge.holds_fetch(~d, s, rest, w)
       )
-
-# what a read of a tree could tell, it tells in each ledger that grows
-def Merge.final(d: Led()) -> Trees.Laws.Final(
-  L(d),
-  a => b => Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
-  Replicas.Led.tree(Requests.Ask.machine(), d)
-):
-  match d:
-    case Tuple{x, Tuple{o, Tuple{fin, rest}}}:
-      fin
-
-# a write changes its key and no other, in a ledger that holds its nodes
-def Merge.write(d: Led()) -> Trees.Laws.Write(
-  L(d),
-  Ledgers.Kind.data(Requests.Ask, Replicas.Led.kind(Requests.Ask.machine(), d)),
-  a => b => Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
-  Replicas.Led.tree(Requests.Ask.machine(), d)
-):
-  match d:
-    case Tuple{x, Tuple{o, Tuple{fin, Tuple{pf, Tuple{wr, rest}}}}}:
-      wr
 
 # the ledger of the work w
 def Merge.ledger(~d: Led(), w: Work<L(d)>) -> L(d):
@@ -4057,7 +3940,7 @@ def Merge.grows_of(
     Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l),
     _
   )
-  Merge.puts_grows(~d, ex, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l))
+  Replicas.Hist.puts(~Requests.Ask.machine(), ~d, ex, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ps, l))
 
 # what a write of the key kw to the value m, to the tree hc, gives in the ledger
 # lf: the new tree h1 reads the key as written, and each other key as hc did
@@ -4199,7 +4082,7 @@ def Merge.set_core(
       Empty.absurd(Merge.Writes(~d, lf, Merge.root(~d, W1), hc, kw, m), Shared.Maybe.none_ne_some(Work<L(d)>, W1, e1))
     case Some{+e}:
       %Merge.put_root(~d, lc, P, e, W1, e1): Merge.Writes(~d, lf, _, hc, kw, m)
-      Merge.write(d)(lc)(lf)(hc)(kw)(m)(e)(ep)(
+      Replicas.Hist.write(Requests.Ask.machine(), d)(lc)(lf)(hc)(kw)(m)(e)(ep)(
         Merge.grows_of(~d, l, lc, lf, P, N, wc, wf, Merge.nodes_drop(P, Trees.Edit.nodes(e), N, Merge.put_nodes(~d, lc, P, e, W1, e1, N, nd)))
       )(+w => c => Merge.holds_fetch(~d, lf, N, w)(held)(Merge.nodes_contains(P, Trees.Edit.nodes(e), N, Merge.put_nodes(~d, lc, P, e, W1, e1, N, nd), w, c)))
 
