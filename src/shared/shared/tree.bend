@@ -26482,13 +26482,15 @@ def Mst.look_absent(
 def Nat.fuel_down(l: Nat, u: Nat, p: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(u, 1n+p) == True{}: Bool} -> {
   Nat.is_le(l, p) == True{}: Bool
 }:
-  ?TODO
+  +l = l
+  +p = p
+  x => x1 => Shared.Nat.lt_succ_le(l, p)(Shared.Nat.lt_le(l, u, 1n+p)(x)(x1))
 
 # the fuel of an insert, one level down
 def Nat.fuel_ins(l: Nat, u: Nat, p: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(1n+(1n+u), 1n+p) == True{}: Bool} -> {
   Nat.is_le(1n+(1n+l), p) == True{}: Bool
 }:
-  ?TODO
+  x => x1 => Nat.fuel_down(2n+l, 2n+u, p)(x)(x1)
 
 # the fuel of a delete, one level down
 def Nat.fuel_del(l: Nat, u: Nat, p: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(1n+Nat.add(u, u), 1n+p) == True{}: Bool} -> {
@@ -26631,6 +26633,217 @@ def Mst.with_both_some(+l: Nat, +left: Maybe<&2, Hashes.Hash>, +xa: List<&2, Ite
 def Mst.delete.none_some(+h: Hashes.Hash, r: Room, m: Maybe<&2, Hashes.Hash>, lk: Room -> Maybe<&2, Hashes.Hash> -> Look) -> {
   Look.is_absent(lk(r)(m)) == True{}: Bool
 } -> {Maybe.is_some(&2, Edit, Mst.delete.none(h, r, m, lk)) == True{}: Bool}:
+  ?TODO
+
+# a comparison, by its three cases
+def Cmp.elim(
+  c: Cmp,
+  -P: Cmp -> Type,
+  lt: {c == LT{}: Cmp} -> P(LT{}),
+  eq: {c == EQ{}: Cmp} -> P(EQ{}),
+  gt: {c == GT{}: Cmp} -> P(GT{})
+) -> P(c):
+  ?TODO
+
+# the edge of a whole tree, with fuel for its levels, sits in its rooms
+def Mst.edge_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  fw: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  f: Nat,
+  +s: S,
+  +left: Bool,
+  +u: Nat,
+  +r: Room
+) -> {Mst.wf(~S, ~fetch, fw, s, u, r, m) == True{}: Bool} -> {Nat.is_le(u, f) == True{}: Bool} -> {
+  Mst.edge(~S, ~fetch, f, s, left, r, m) == True{}: Bool
+}:
+  ?TODO
+
+# a split of whole items of a level below k's is done
+def Mst.split_at_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +fw: Nat,
+  +s: S,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  -up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +p: Nat
+) -> {Mst.wf.items(~S, ~fetch, fw, s, xs, l, left, lo, hi) == True{}: Bool} -> {Nat.is_le(l, p) == True{}: Bool} -> {
+  Nat.is_lt(l, Key.level(k)) == True{}: Bool
+} -> {
+  Maybe.is_some(&2, Halves, Mst.split.at(Some{Node{l, left, xs}}, Room{up, lo, hi}, k, r2 => c => Mst.split(~S, ~fetch, p, s, r2, c, k))) == True{}: Bool
+}:
+  ?TODO
+
+# a split of a whole tree of levels below k's, with fuel for its levels, is
+# done
+def Mst.split_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  fw: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  f: Nat,
+  +s: S,
+  +u: Nat,
+  +r: Room,
+  +k: List<&2, U32>
+) -> {Mst.wf(~S, ~fetch, fw, s, u, r, m) == True{}: Bool} -> {Nat.is_le(u, f) == True{}: Bool} -> {Nat.is_le(u, Key.level(k)) == True{}: Bool} -> {
+  Maybe.is_some(&2, Halves, Mst.split(~S, ~fetch, f, s, r, m, k)) == True{}: Bool
+}:
+  ?TODO
+
+# a split of a node of a level below k's, found in its room, is done
+def Mst.split_node_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +fw: Nat,
+  p: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>
+) -> {Mst.node.in(~S, ~fetch, s, h, Room{up, lo, hi}) == Some{Node{l, left, xs}}: Maybe<&2, Node>} -> {
+  Mst.wf.items(~S, ~fetch, fw, s, xs, l, left, lo, hi) == True{}: Bool
+} -> {Nat.is_le(1n+l, p) == True{}: Bool} -> {Nat.is_lt(l, Key.level(k)) == True{}: Bool} -> {
+  Maybe.is_some(&2, Halves, Mst.split(~S, ~fetch, p, s, Room{up, lo, hi}, Some{h}, k)) == True{}: Bool
+}:
+  ?TODO
+
+# a node of k's level takes k, once the gap of its part splits
+def Mst.here_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  P: Part,
+  +p: Nat,
+  +s: S,
+  +room: Room
+) -> {Maybe.is_some(&2, Halves, Mst.split(~S, ~fetch, p, s, room, Part.gap(P), k)) == True{}: Bool} -> {
+  Maybe.is_some(&2, Edit, Mst.insert.here(l, left, k, v, P, c => Mst.split(~S, ~fetch, p, s, room, c, k))) == True{}: Bool
+}:
+  ?TODO
+
+# an insert into a whole tree, with fuel for its levels, is an edit
+def Mst.ins_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  fw: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  f: Nat,
+  +s: S,
+  +u: Nat,
+  +r: Room,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +L: Nat
+) -> {Mst.wf(~S, ~fetch, fw, s, u, r, m) == True{}: Bool} -> {Nat.is_le(1n+(1n+u), f) == True{}: Bool} -> {Key.level(k) == L: Nat} -> {
+  Maybe.is_some(&2, Edit, Mst.insert(~S, ~fetch, f, s, r, m, k, v, L)) == True{}: Bool
+}:
+  ?TODO
+
+# a merge of two whole trees, with fuel for both their levels, is an edit
+def Mst.merge_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  fa: Nat,
+  ma: Maybe<&2, Hashes.Hash>,
+  fb: Nat,
+  mb: Maybe<&2, Hashes.Hash>,
+  f: Nat,
+  +s: S,
+  +ua: Nat,
+  +ra: Room,
+  +ub: Nat,
+  +rb: Room
+) -> {Mst.wf(~S, ~fetch, fa, s, ua, ra, ma) == True{}: Bool} -> {Mst.wf(~S, ~fetch, fb, s, ub, rb, mb) == True{}: Bool} -> {
+  Nat.is_le(1n+Nat.add(ua, ub), f) == True{}: Bool
+} -> {Nat.is_le(ua, Mst.depth()) == True{}: Bool} -> {Nat.is_le(ub, Mst.depth()) == True{}: Bool} -> {
+  Maybe.is_some(&2, Edit, Mst.merge(~S, ~fetch, f, s, ra, rb, ma, mb)) == True{}: Bool
+}:
+  ?TODO
+
+# a pick into a whole subtree of levels below k's lacks k
+def Mst.lacks_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -fw: Nat,
+  +p: Nat,
+  +s: S,
+  pk: Pick,
+  +l: Nat,
+  +k: List<&2, U32>
+) -> {Pick.ok(~S, ~fetch, fw, s, l, pk) == True{}: Bool} -> {Nat.is_le(l, p) == True{}: Bool} -> {Nat.is_le(l, Key.level(k)) == True{}: Bool} -> {
+  Mst.delete.lacks(pk, r2 => c => Mst.look.go(~S, ~fetch, p, s, r2, c, k)) == True{}: Bool
+}:
+  ?TODO
+
+# a delete of k from a node of k's level, by the part at k of whole items,
+# is an edit
+def Mst.del_here_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +fw: Nat,
+  +p: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  P: Part,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {
+  Mst.wf.items(~S, ~fetch, fw, s, Part.after(P), l, Part.gap(P), Items.head_key(Part.before(P), lo), hi) == True{}: Bool
+} -> {Nat.is_le(1n+Nat.add(l, l), p) == True{}: Bool} -> {Nat.is_le(l, Mst.depth()) == True{}: Bool} -> {Key.level(k) == l: Nat} -> {
+  Maybe.is_some(
+    &2,
+    Edit,
+    Mst.delete.here(
+      h,
+      l,
+      left,
+      k,
+      P,
+      lo,
+      hi,
+      r1 => r2 => x => y => Mst.merge(~S, ~fetch, p, s, r1, r2, x, y),
+      r2 => c => Mst.look.go(~S, ~fetch, p, s, r2, c, k)
+    )
+  )
+    == True{}: Bool
+}:
+  ?TODO
+
+# a delete from a whole tree, with fuel for its levels, is an edit
+def Mst.del_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  fw: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  f: Nat,
+  +s: S,
+  +u: Nat,
+  +r: Room,
+  +k: List<&2, U32>,
+  +L: Nat
+) -> {Mst.wf(~S, ~fetch, fw, s, u, r, m) == True{}: Bool} -> {Nat.is_le(1n+Nat.add(u, u), f) == True{}: Bool} -> {
+  Nat.is_le(u, Mst.depth()) == True{}: Bool
+} -> {Key.level(k) == L: Nat} -> {Maybe.is_some(&2, Edit, Mst.delete(~S, ~fetch, f, s, r, m, k, L)) == True{}: Bool}:
   ?TODO
 
 # a write to a tree that lists whole reads every node it needs
