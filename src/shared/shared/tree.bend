@@ -11047,6 +11047,159 @@ def Mst.open_all_value(
           )
       )(e)
 
+# the values x and y differ
+def Mst.differ(x: Maybe<&2, List<&2, U32>>, y: Maybe<&2, List<&2, U32>>) -> Bool:
+  Bool.not(Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), x, y))
+
+# a value does not differ from itself
+def Mst.differ_self(x: Maybe<&2, List<&2, U32>>) -> {Mst.differ(x, x) == False{}: Bool}:
+  match x:
+    case None{}:
+      {==}
+    case Some{value}:
+      %Equal.sym(Bool, Shared.List.is_eq(U32, U32.is_eq, value, value), True{}, Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), value)) :
+        {Bool.not(_) == False{} : Bool}
+      {==}
+
+# pieces that Piece.same calls the same are equal
+def Piece.same_eq(x: Piece, y: Piece) -> {Piece.same(x, y) == True{}: Bool} -> {x == y: Piece}:
+  match x y:
+    case Piece.Bind{+k1, +v1} Piece.Bind{+k2, +v2}:
+      +h =>
+        %Shared.List.is_eq_sound(
+          ~U32,
+          ~U32.is_eq,
+          ~Shared.U32.laws(),
+          k1,
+          k2
+        )(Shared.Bool.and_true_left(Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2), Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2))(h)): {
+          Piece.Bind{k1, v1} == Piece.Bind{_, v2}: Piece
+        }
+        %Shared.List.is_eq_sound(
+          ~U32,
+          ~U32.is_eq,
+          ~Shared.U32.laws(),
+          v1,
+          v2
+        )(Shared.Bool.and_true_right(Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2), Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2))(h)): {
+          Piece.Bind{k1, v1} == Piece.Bind{k1, _}: Piece
+        }
+        {==}
+    case Piece.Sub{+h1, +u1, +lo1, +hi1} Piece.Sub{+h2, +u2, +lo2, +hi2}:
+      +h =>
+        +a = Shared.Bool.and_true_left(
+          Bool.and(Hashes.Hash.is_eq(h1, h2), Nat.is_eq(u1, u2)),
+          Bool.and(
+            Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), lo1, lo2),
+            Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), hi1, hi2)
+          )
+        )(h)
+        +b = Shared.Bool.and_true_right(
+          Bool.and(Hashes.Hash.is_eq(h1, h2), Nat.is_eq(u1, u2)),
+          Bool.and(
+            Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), lo1, lo2),
+            Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), hi1, hi2)
+          )
+        )(h)
+        %Hashes.Hash.is_eq_sound(h1, h2)(Shared.Bool.and_true_left(Hashes.Hash.is_eq(h1, h2), Nat.is_eq(u1, u2))(a)): {
+          Piece.Sub{h1, u1, lo1, hi1} == Piece.Sub{_, u2, lo2, hi2}: Piece
+        }
+        %Shared.Nat.is_eq_sound(u1, u2)(Shared.Bool.and_true_right(Hashes.Hash.is_eq(h1, h2), Nat.is_eq(u1, u2))(a)): {
+          Piece.Sub{h1, u1, lo1, hi1} == Piece.Sub{h1, _, lo2, hi2}: Piece
+        }
+        %Shared.Maybe.is_eq_sound(
+          ~List<&2, U32>,
+          ~Shared.List.is_eq(~U32, ~U32.is_eq),
+          x2 => y2 => Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), x2, y2),
+          lo1,
+          lo2
+        )(
+          Shared.Bool.and_true_left(
+            Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), lo1, lo2),
+            Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), hi1, hi2)
+          )(b)
+        ): {Piece.Sub{h1, u1, lo1, hi1} == Piece.Sub{h1, u1, _, hi2}: Piece}
+        %Shared.Maybe.is_eq_sound(
+          ~List<&2, U32>,
+          ~Shared.List.is_eq(~U32, ~U32.is_eq),
+          x2 => y2 => Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), x2, y2),
+          hi1,
+          hi2
+        )(
+          Shared.Bool.and_true_right(
+            Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), lo1, lo2),
+            Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), hi1, hi2)
+          )(b)
+        ): {Piece.Sub{h1, u1, lo1, hi1} == Piece.Sub{h1, u1, lo1, _}: Piece}
+        {==}
+    case Piece.Bind{k1, v1} Piece.Sub{h2, u2, lo2, hi2}:
+      h => Empty.absurd({Piece.Bind{k1, v1} == Piece.Sub{h2, u2, lo2, hi2}: Piece}, Shared.Bool.false_ne_true(h))
+    case Piece.Sub{h1, u1, lo1, hi1} Piece.Bind{k2, v2}:
+      h => Empty.absurd({Piece.Sub{h1, u1, lo1, hi1} == Piece.Bind{k2, v2}: Piece}, Shared.Bool.false_ne_true(h))
+
+# a reversal onto acc is the reversal, then acc
+def List.rev_acc(-A: Data, xs: List<&2, A>, acc: List<&2, A>) -> {
+  List.reverse.go(&2, A, xs, acc) == List.append(&2, A, List.reverse(&2, A, xs), acc): List<&2, A>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      +head = head
+      +tail = tail
+      +acc = acc
+      %Equal.sym(List<&2, A>, List.reverse.go(&2, A, tail, [head]), List.append(&2, A, List.reverse(&2, A, tail), [head]), List.rev_acc(A, tail, [head])) :
+        {List.reverse.go(&2, A, tail, head <> acc) == List.append(&2, A, _, acc) : List<&2, A>}
+      %Equal.sym(List<&2, A>, List.append(&2, A, List.append(&2, A, List.reverse.go(&2, A, tail, []), [head]), acc), List.append(&2, A, List.reverse.go(&2, A, tail, []), List.append(&2, A, [head], acc)), Shared.List.append_assoc(A, List.reverse.go(&2, A, tail, []), [head], acc)) :
+        {List.reverse.go(&2, A, tail, head <> acc) == _ : List<&2, A>}
+      List.rev_acc(A, tail, head <> acc)
+
+# the reversal of xs, then ys, is the reversal of ys, then of xs
+def List.rev_append.g2(
+  -A: Data,
+  +xs: List<&2, A>,
+  +ys: List<&2, A>,
+  +x: List<&2, A>,
+  hx: {x == List.reverse.go(&2, A, ys, []) : List<&2, A>}) ->
+  {List.reverse.go(&2, A, List.append(&2, A, xs, ys), []) == List.append(&2, A, x, List.reverse.go(&2, A, xs, [])) : List<&2, A>}:
+  match xs:
+    case Nil{}:
+      %Equal.sym(List<&2, A>, List.append(&2, A, x, []), x, Shared.List.append_nil(A, x)) :
+        {List.reverse.go(&2, A, ys, []) == _ : List<&2, A>}
+      Equal.sym(List<&2, A>, x, List.reverse.go(&2, A, ys, []), hx)
+    case Con{head, tail}:
+      %Equal.sym(List<&2, A>, List.reverse.go(&2, A, List.append(&2, A, tail, ys), [head]), List.append(&2, A, List.reverse(&2, A, List.append(&2, A, tail, ys)), [head]), List.rev_acc(A, List.append(&2, A, tail, ys), [head])) :
+        {_ == List.append(&2, A, x, List.reverse.go(&2, A, tail, [head])) : List<&2, A>}
+      %Equal.sym(List<&2, A>, List.reverse.go(&2, A, List.append(&2, A, tail, ys), []), List.append(&2, A, x, List.reverse.go(&2, A, tail, [])), List.rev_append.g2(A, tail, ys, x, hx)) :
+        {List.append(&2, A, _, [head]) == List.append(&2, A, x, List.reverse.go(&2, A, tail, [head])) : List<&2, A>}
+      %Equal.sym(List<&2, A>, List.reverse.go(&2, A, tail, [head]), List.append(&2, A, List.reverse(&2, A, tail), [head]), List.rev_acc(A, tail, [head])) :
+        {List.append(&2, A, List.append(&2, A, x, List.reverse.go(&2, A, tail, [])), [head]) == List.append(&2, A, x, _) : List<&2, A>}
+      Shared.List.append_assoc(A, x, List.reverse.go(&2, A, tail, []), [head])
+
+def List.rev_append(-A: Data, xs: List<&2, A>, ys: List<&2, A>) -> {
+  List.reverse(&2, A, List.append(&2, A, xs, ys)) == List.append(&2, A, List.reverse(&2, A, ys), List.reverse(&2, A, xs)): List<&2, A>
+}:
+  +ys = ys
+  List.rev_append.g2(A, xs, ys, List.reverse.go(&2, A, ys, []), {==})
+
+# a list reversed twice is itself
+def List.rev_rev(-A: Data, xs: List<&2, A>) -> {List.reverse(&2, A, List.reverse(&2, A, xs)) == xs: List<&2, A>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      %Equal.sym(List<&2, A>, List.reverse.go(&2, A, r, [x]), List.append(&2, A, List.reverse(&2, A, r), [x]), List.rev_acc(A, r, [x])): {
+        List.reverse(&2, A, _) == x <> r: List<&2, A>
+      }
+      %Equal.sym(
+        List<&2, A>,
+        List.reverse(&2, A, List.append(&2, A, List.reverse(&2, A, r), [x])),
+        List.append(&2, A, List.reverse(&2, A, [x]), List.reverse(&2, A, List.reverse(&2, A, r))),
+        List.rev_append(A, List.reverse(&2, A, r), [x])
+      ): {_ == x <> r: List<&2, A>}
+      %Equal.sym(List<&2, A>, List.reverse(&2, A, List.reverse(&2, A, r)), r, List.rev_rev(A, r)): {x <> _ == x <> r: List<&2, A>}
+      {==}
+
 # a write to a tree that lists whole reads every node it needs
 def Mst.put_some(
   ~S: Data,
