@@ -3152,6 +3152,806 @@ def Kernel.Rules(-d: Led(), -kern: Kern(d)) -> Type:
 def Kernel(-d: Led()) -> Type:
   &kern: Kern(d) -> Kernel.Rules(d, kern)
 
+# Proofs of the reads of Own.due
+# ------------------------------
+
+# a line is the same line as itself
+def Cov.line_refl(c: Ledgers.Line) -> {Ledgers.Line.is_eq(c, c) == True{}: Bool}:
+  match c:
+    case Ledgers.Line{+r, None{}}:
+      %Equal.sym(Bool, Hashes.Hash.is_eq(r, r), True{}, Hashes.Hash.is_eq_refl(r)): {
+        List.all.if(u => Ledgers.Sub.is_eq(None{}, None{}), _) == True{}: Bool
+      }
+      {==}
+    case Ledgers.Line{+r, Some{+b}}:
+      %Equal.sym(Bool, Hashes.Hash.is_eq(r, r), True{}, Hashes.Hash.is_eq_refl(r)): {
+        List.all.if(u => Ledgers.Sub.is_eq(Some{b}, Some{b}), _) == True{}: Bool
+      }
+      Texts.String.eq_refl(b)
+
+# an "any" whose rest holds holds
+def Cov.any_rest(s: Bool, -rest: Unit -> Bool) -> {rest(Unit{}) == True{}: Bool} -> {List.any.if(rest, s) == True{}: Bool}:
+  match s:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => h
+
+# a list of lines that starts with c holds c
+def Cov.head(+c: Ledgers.Line, rest: List<&2, Ledgers.Line>) -> {
+  List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, c <> rest, c) == True{}: Bool
+}:
+  %Equal.sym(Bool, Ledgers.Line.is_eq(c, c), True{}, Cov.line_refl(c)): {
+    List.any.if(u => List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, rest, c), _) == True{}: Bool
+  }
+  {==}
+
+# the lines that read the root line st, once its branches are known (mb):
+# they hold it
+def Cov.self.at(
+  +st: Hashes.Hash,
+  mb: Maybe<&2, List<&2, Branch>>,
+  -w1: List<&2, Ledgers.Line>
+) -> {
+  Maybe.map(&2, List<&2, Branch>, List<&2, Ledgers.Line>, bs => Ledgers.Line{st, None{}} <> Branches.lines(bs), mb)
+    == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>
+} -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, Ledgers.Line{st, None{}}) == True{}: Bool}:
+  match mb:
+    case None{}:
+      e => Empty.absurd(
+        {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, Ledgers.Line{st, None{}}) == True{}: Bool},
+        Shared.Maybe.none_ne_some(List<&2, Ledgers.Line>, w1, e)
+      )
+    case Some{bs}:
+      e =>
+        %Shared.Maybe.some_inj(List<&2, Ledgers.Line>, Ledgers.Line{st, None{}} <> Branches.lines(bs), w1, e): {
+          List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, _, Ledgers.Line{st, None{}}) == True{}: Bool
+        }
+        Cov.head(Ledgers.Line{st, None{}}, Branches.lines(bs))
+
+# the lines that read a line hold it
+def Cov.self(~d: Led(), ~kern: Kern(d), +l: L(d), c: Ledgers.Line, -w1: List<&2, Ledgers.Line>) -> {
+  Own.watch.one(~d, ~kern, l, c) == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>
+} -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, c) == True{}: Bool}:
+  match c:
+    case Ledgers.Line{+st, None{}}:
+      Cov.self.at(st, Store.branches(~d, l, st, Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st)), w1)
+    case Ledgers.Line{+st, Some{+b}}:
+      e =>
+        %Shared.Maybe.some_inj(List<&2, Ledgers.Line>, [Ledgers.Line{st, Some{b}}], w1, e): {
+          List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, _, Ledgers.Line{st, Some{b}}) == True{}: Bool
+        }
+        Cov.head(Ledgers.Line{st, Some{b}}, [])
+
+# the branch b is among the branches of the store st whose names ns name it
+def Cov.lines(+st: Hashes.Hash, ns: List<&2, String>, +b: String) -> {
+  List.contains(~String, ~String.eq, ns, b) == True{}: Bool
+} -> {
+  List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Branches.lines(Branches.of(st, ns)), Ledgers.Line{st, Some{b}})
+    == True{}: Bool
+}:
+  match ns:
+    case Nil{}:
+      h => Empty.absurd(
+        {
+          List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Branches.lines(Branches.of(st, [])), Ledgers.Line{st, Some{b}})
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{+n, +rest}:
+      h =>
+        %Equal.sym(Bool, Hashes.Hash.is_eq(st, st), True{}, Hashes.Hash.is_eq_refl(st)): {
+          List.any.if(
+            u => List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Branches.lines(Branches.of(st, rest)), Ledgers.Line{st, Some{b}}),
+            List.all.if(u => Ledgers.Sub.is_eq(Some{n}, Some{b}), _)
+          )
+            == True{}: Bool
+        }
+        Replicas.Ext.any_cases(
+          String.eq(n, b),
+          u => List.contains(~String, ~String.eq, rest, b),
+          {
+            List.any.if(
+              u => List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Branches.lines(Branches.of(st, rest)), Ledgers.Line{st, Some{b}}),
+              String.eq(n, b)
+            )
+              == True{}: Bool
+          },
+          hn =>
+            %Equal.sym(Bool, String.eq(n, b), True{}, hn): {
+              List.any.if(
+                u => List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Branches.lines(Branches.of(st, rest)), Ledgers.Line{st, Some{b}}),
+                _
+              )
+                == True{}: Bool
+            }
+            {==},
+          hr => Cov.any_rest(
+            String.eq(n, b),
+            u => List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Branches.lines(Branches.of(st, rest)), Ledgers.Line{st, Some{b}})
+          )(Cov.lines(st, rest, b)(hr)),
+          h
+        )
+
+# a binding at the key of the start of b names b
+def Cov.started(x: Trees.Binding, +b: String, v: List<&2, U32>) -> {
+  Trees.Binding.is_eq(x, Trees.Binding{5 <> Codes.Code.text(b, []), v}) == True{}: Bool
+} -> {Branch.started(x) == Some{b}: Maybe<&2, String>}:
+  match x:
+    case Trees.Binding{+k, vx}:
+      h =>
+        %Equal.sym(
+          List<&2, U32>,
+          k,
+          5 <> Codes.Code.text(b, []),
+          Shared.List.is_eq_sound(
+            ~U32,
+            ~U32.is_eq,
+            ~Shared.U32.laws(),
+            k,
+            5 <> Codes.Code.text(b, [])
+          )(Shared.List.all.if_hit(Shared.List.is_eq(~U32, ~U32.is_eq, k, 5 <> Codes.Code.text(b, [])), u => Shared.List.is_eq(~U32, ~U32.is_eq, vx, v))(h))
+        ): {Branch.started(Trees.Binding{_, vx}) == Some{b}: Maybe<&2, String>}
+        Codes.Code.whole_read(~String, ~Codes.Code.text, ~Codes.Code.text.read, ~(y => r => Codes.Code.text_read(y, r)), b)
+
+# a name in a list stays in it with one more name, if any
+def Cov.mcons(m: Maybe<&2, String>, r: List<&2, String>, +b: String) -> {
+  List.contains(~String, ~String.eq, r, b) == True{}: Bool
+} -> {List.contains(~String, ~String.eq, Shared.Maybe.cons(String, m, r), b) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => h
+    case Some{y}:
+      h => Shared.List.contains_cons(~String, ~String.eq, y, r, b)(h)
+
+# the bindings of a log that hold the start of b name b
+def Cov.names(xs: List<&2, Trees.Binding>, +b: String, +v: List<&2, U32>) -> {
+  List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{5 <> Codes.Code.text(b, []), v}) == True{}: Bool
+} -> {List.contains(~String, ~String.eq, Branches.names(xs), b) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      h => Empty.absurd(
+        {List.contains(~String, ~String.eq, Branches.names([]), b) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{+x, +rest}:
+      h => Replicas.Ext.any_cases(
+        Trees.Binding.is_eq(x, Trees.Binding{5 <> Codes.Code.text(b, []), v}),
+        u => List.contains(~Trees.Binding, ~Trees.Binding.is_eq, rest, Trees.Binding{5 <> Codes.Code.text(b, []), v}),
+        {List.contains(~String, ~String.eq, Branches.names(x <> rest), b) == True{}: Bool},
+        hx =>
+          %Equal.sym(Maybe<&2, String>, Branch.started(x), Some{b}, Cov.started(x, b, v)(hx)): {
+            List.contains(~String, ~String.eq, Shared.Maybe.cons(String, _, Branches.names(rest)), b) == True{}: Bool
+          }
+          %Equal.sym(Bool, String.eq(b, b), True{}, Texts.String.eq_refl(b)): {
+            List.any.if(u => List.contains(~String, ~String.eq, Branches.names(rest), b), _) == True{}: Bool
+          }
+          {==},
+        hr => Cov.mcons(Branch.started(x), Branches.names(rest), b)(Cov.names(rest, b, v)(hr)),
+        h
+      )
+
+# the law of a listing, of a tree t
+def Cov.range.of(
+  -S: Data,
+  -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -grows: S -> S -> Bool,
+  t: Trees.Tree(S, fetch, grows)
+) -> Trees.Laws.Range(S, Trees.Tree.ops(S, fetch, grows, t)):
+  match t:
+    case Tuple{o, Tuple{f, Tuple{pf, Tuple{w, Tuple{cn, Tuple{rg, r}}}}}}:
+      rg
+
+# the law of a listing, of the tree of the ledger d
+def Cov.range(d: Led()) -> Trees.Laws.Range(L(d), Replicas.Led.tree(Requests.Ask.machine(), d)):
+  match d:
+    case Tuple{x, t}:
+      Cov.range.of(
+        Ledgers.Kind.L(
+          Replicas.Machine.Q(Requests.Ask.machine()),
+          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x)
+        ),
+        Ledgers.Kind.data(
+          Replicas.Machine.Q(Requests.Ask.machine()),
+          Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x)
+        ),
+        a => b => Ledgers.Kind.grows(
+          ~Replicas.Machine.Q(Requests.Ask.machine()),
+          ~Replicas.Machine.code(Requests.Ask.machine()),
+          ~Ledgers.Ledger.kind(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Machine.code(Requests.Ask.machine()), x),
+          a,
+          b
+        ),
+        t
+      )
+
+# the start of b is read as v, at the start of the log
+def Cov.range_has.and(
+  ~d: Led(),
+  +l: L(d),
+  +ts: Replicas.Tip,
+  +b: String,
+  +v: List<&2, U32>,
+  eg: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> {
+  Bool.and(
+    Trees.Key.leads([5], 5 <> Codes.Code.text(b, [])),
+    Shared.Maybe.is_eq(
+      ~List<&2, U32>,
+      ~Shared.List.is_eq(~U32, ~U32.is_eq),
+      Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)),
+      Some{v}
+    )
+  )
+    == True{}: Bool
+}:
+  %Equal.sym(Maybe<&2, List<&2, U32>>, Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)), Some{v}, eg): {
+    Bool.and(
+      Trees.Key.leads([5], 5 <> Codes.Code.text(b, [])),
+      Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), _, Some{v})
+    )
+      == True{}: Bool
+  }
+  %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, v, v), True{}, Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), v)): {
+    Bool.and(Trees.Key.leads([5], 5 <> Codes.Code.text(b, [])), _) == True{}: Bool
+  }
+  {==}
+
+# the listing of a log under [5] holds the start of b, by the law of a listing
+def Cov.range_has.of(
+  ~d: Led(),
+  +l: L(d),
+  +ts: Replicas.Tip,
+  +b: String,
+  +v: List<&2, U32>,
+  -xs: List<&2, Trees.Binding>,
+  rl: {Trees.Bindings.sorted(xs) == True{}: Bool}
+    & (
+      @k: List<&2, U32> -> @w: List<&2, U32> -> {
+        List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{k, w})
+          == Bool.and(
+            Trees.Key.leads([5], k),
+            Shared.Maybe.is_eq(
+              ~List<&2, U32>,
+              ~Shared.List.is_eq(~U32, ~U32.is_eq),
+              Trees.Look.value(
+                Trees.Ops.look(L(d), Replicas.Led.tree(Requests.Ask.machine(), d))(l)(Replicas.Tip.log(ts))(k)
+              ),
+              Some{w}
+            )
+          ): Bool
+      }
+    ),
+  eg: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> {
+  List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{5 <> Codes.Code.text(b, []), v}) == True{}: Bool
+}:
+  match rl:
+    case Tuple{srt, mem}:
+      Equal.trans(
+        Bool,
+        List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{5 <> Codes.Code.text(b, []), v}),
+        Bool.and(
+          Trees.Key.leads([5], 5 <> Codes.Code.text(b, [])),
+          Shared.Maybe.is_eq(
+            ~List<&2, U32>,
+            ~Shared.List.is_eq(~U32, ~U32.is_eq),
+            Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)),
+            Some{v}
+          )
+        ),
+        True{},
+        mem(5 <> Codes.Code.text(b, []))(v),
+        Cov.range_has.and(~d, l, ts, b, v, eg)
+      )
+
+# the listing of a log under [5] holds the start of b, when the log holds it
+def Cov.range_has(
+  ~d: Led(),
+  +l: L(d),
+  +ts: Replicas.Tip,
+  +b: String,
+  +v: List<&2, U32>,
+  +xs: List<&2, Trees.Binding>,
+  emx: {Tree.range(~d, l, Replicas.Tip.log(ts), [5]) == Some{xs}: Maybe<&2, List<&2, Trees.Binding>>},
+  eg: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> {
+  List.contains(~Trees.Binding, ~Trees.Binding.is_eq, xs, Trees.Binding{5 <> Codes.Code.text(b, []), v}) == True{}: Bool
+}:
+  Cov.range_has.of(~d, l, ts, b, v, xs, Cov.range(d)(l)(Replicas.Tip.log(ts))([5])(xs)(emx), eg)
+
+# the lines that read the root line st hold its branch b, once its listing is
+# known (mx)
+def Cov.branch.range(
+  ~d: Led(),
+  +l: L(d),
+  +st: Hashes.Hash,
+  +ts: Replicas.Tip,
+  +b: String,
+  +v: List<&2, U32>,
+  mx: Maybe<&2, List<&2, Trees.Binding>>,
+  emx: {Tree.range(~d, l, Replicas.Tip.log(ts), [5]) == mx: Maybe<&2, List<&2, Trees.Binding>>},
+  eg: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)) == Some{v}: Maybe<&2, List<&2, U32>>},
+  -w1: List<&2, Ledgers.Line>
+) -> {
+  Maybe.map(
+    &2,
+    List<&2, Branch>,
+    List<&2, Ledgers.Line>,
+    bs => Ledgers.Line{st, None{}} <> Branches.lines(bs),
+    Maybe.map(&2, List<&2, Trees.Binding>, List<&2, Branch>, xs => Branches.of(st, Branches.names(xs)), mx)
+  )
+    == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>
+} -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, Ledgers.Line{st, Some{b}}) == True{}: Bool}:
+  match mx:
+    case None{}:
+      e => Empty.absurd(
+        {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, Ledgers.Line{st, Some{b}}) == True{}: Bool},
+        Shared.Maybe.none_ne_some(List<&2, Ledgers.Line>, w1, e)
+      )
+    case Some{+xs}:
+      e =>
+        %Shared.Maybe.some_inj(
+          List<&2, Ledgers.Line>,
+          Ledgers.Line{st, None{}} <> Branches.lines(Branches.of(st, Branches.names(xs))),
+          w1,
+          e
+        ): {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, _, Ledgers.Line{st, Some{b}}) == True{}: Bool}
+        Shared.List.contains_cons(
+          ~Ledgers.Line,
+          ~Ledgers.Line.is_eq,
+          Ledgers.Line{st, None{}},
+          Branches.lines(Branches.of(st, Branches.names(xs))),
+          Ledgers.Line{st, Some{b}}
+        )(Cov.lines(st, Branches.names(xs), b)(Cov.names(xs, b, v)(Cov.range_has(~d, l, ts, b, v, xs, emx, eg))))
+
+# Cov.branch.at once the read of the start of b is known (mg)
+def Cov.branch.get(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +st: Hashes.Hash,
+  +b: String,
+  +ts: Replicas.Tip,
+  mg: Maybe<&2, List<&2, U32>>,
+  emg: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)) == mg: Maybe<&2, List<&2, U32>>},
+  hs: {
+    Maybe.is_some(
+      &2,
+      Replicas.Tip,
+      Replicas.Line.head.of(
+        ~Requests.Ask.machine(),
+        ~d,
+        ~kern,
+        l,
+        Ledgers.Line{st, Some{b}},
+        Maybe.bind(&2, List<&2, U32>, Replicas.Tip, mg, ws => Replicas.Tip.named(~Requests.Ask.machine(), ~d, l, ws))
+      )
+    )
+      == True{}: Bool
+  },
+  -w1: List<&2, Ledgers.Line>
+) -> {
+  Maybe.map(
+    &2,
+    List<&2, Branch>,
+    List<&2, Ledgers.Line>,
+    bs => Ledgers.Line{st, None{}} <> Branches.lines(bs),
+    Store.branches(~d, l, st, Some{ts})
+  )
+    == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>
+} -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, Ledgers.Line{st, Some{b}}) == True{}: Bool}:
+  match mg:
+    case None{}:
+      Empty.absurd(
+        {
+          Maybe.map(
+            &2,
+            List<&2, Branch>,
+            List<&2, Ledgers.Line>,
+            bs => Ledgers.Line{st, None{}} <> Branches.lines(bs),
+            Store.branches(~d, l, st, Some{ts})
+          )
+            == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>
+        }
+          -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, Ledgers.Line{st, Some{b}}) == True{}: Bool},
+        Shared.Bool.false_ne_true(hs)
+      )
+    case Some{+v}:
+      Cov.branch.range(
+        ~d,
+        l,
+        st,
+        ts,
+        b,
+        v,
+        Tree.range(~d, l, Replicas.Tip.log(ts), [5]),
+        {==},
+        emg,
+        w1
+      )
+
+# the lines that read the root line st hold its branch b, which has a head,
+# once the newest tip of the root line is known (mr)
+def Cov.branch.at(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +st: Hashes.Hash,
+  +b: String,
+  mr: Maybe<&2, Replicas.Tip>,
+  hs: {
+    Maybe.is_some(
+      &2,
+      Replicas.Tip,
+      Replicas.Line.head.of(
+        ~Requests.Ask.machine(),
+        ~d,
+        ~kern,
+        l,
+        Ledgers.Line{st, Some{b}},
+        Replicas.Sub.start(~Requests.Ask.machine(), ~d, l, b, mr)
+      )
+    )
+      == True{}: Bool
+  },
+  -w1: List<&2, Ledgers.Line>
+) -> {
+  Maybe.map(
+    &2,
+    List<&2, Branch>,
+    List<&2, Ledgers.Line>,
+    bs => Ledgers.Line{st, None{}} <> Branches.lines(bs),
+    Store.branches(~d, l, st, mr)
+  )
+    == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>
+} -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, Ledgers.Line{st, Some{b}}) == True{}: Bool}:
+  match mr:
+    case None{}:
+      Empty.absurd(
+        {
+          Maybe.map(
+            &2,
+            List<&2, Branch>,
+            List<&2, Ledgers.Line>,
+            bs => Ledgers.Line{st, None{}} <> Branches.lines(bs),
+            Store.branches(~d, l, st, None{})
+          )
+            == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>
+        }
+          -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, Ledgers.Line{st, Some{b}}) == True{}: Bool},
+        Shared.Bool.false_ne_true(hs)
+      )
+    case Some{+ts}:
+      Cov.branch.get(
+        ~d,
+        ~kern,
+        l,
+        st,
+        b,
+        ts,
+        Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, ts, Replicas.Log.start(b)),
+        {==},
+        hs,
+        w1
+      )
+
+# the lines that read the root line of the store of c hold c, when c has a head
+def Cov.root(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  c: Ledgers.Line,
+  -w1: List<&2, Ledgers.Line>,
+  hs: {Maybe.is_some(&2, Replicas.Tip, Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c)) == True{}: Bool}
+) -> {
+  Own.watch.one(~d, ~kern, l, Replicas.Root.line(Ledgers.Line.root(c))) == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>
+} -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, c) == True{}: Bool}:
+  match c:
+    case Ledgers.Line{+st, None{}}:
+      Cov.self(~d, ~kern, l, Ledgers.Line{st, None{}}, w1)
+    case Ledgers.Line{+st, Some{+b}}:
+      Cov.branch.at(~d, ~kern, l, st, b, Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st), hs, w1)
+
+# the lines that read x are those that read m, when x is m
+def Cov.move(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +x: Ledgers.Line,
+  +m: Ledgers.Line,
+  -w1: List<&2, Ledgers.Line>,
+  e1: {Own.watch.one(~d, ~kern, l, m) == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>},
+  ex: {x == m: Ledgers.Line}
+) -> {Own.watch.one(~d, ~kern, l, x) == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>}:
+  %Equal.sym(Ledgers.Line, x, m, ex): {Own.watch.one(~d, ~kern, l, _) == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>}
+  e1
+
+# an "any" of nothing else holds only by its hit
+def Cov.only(x: Bool) -> {List.any.if(u => False{}, x) == True{}: Bool} -> {x == True{}: Bool}:
+  match x:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => h
+
+# Cov.one once whether c has a head is known (hs)
+def Cov.one.at(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +c: Ledgers.Line,
+  +m: Ledgers.Line,
+  -w1: List<&2, Ledgers.Line>,
+  hs: Bool,
+  +ehs: {Maybe.is_some(&2, Replicas.Tip, Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c)) == hs: Bool},
+  hd: {
+    List.contains(
+      ~Ledgers.Line,
+      ~Ledgers.Line.is_eq,
+      Shared.Bool.when(
+        List<&2, Ledgers.Line>,
+        hs,
+        u => [c, Replicas.Root.line(Ledgers.Line.root(c))],
+        u => [c]
+      ),
+      m
+    )
+      == True{}: Bool
+  },
+  +e1: {Own.watch.one(~d, ~kern, l, m) == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>}
+) -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, c) == True{}: Bool}:
+  match hs:
+    case False{}:
+      Cov.self(~d, ~kern, l, c, w1)(
+        Cov.move(~d, ~kern, l, c, m, w1, e1, Replicas.Line.is_eq_sound(c, m)(Cov.only(Ledgers.Line.is_eq(c, m))(hd)))
+      )
+    case True{}:
+      Replicas.Ext.any_cases(
+        Ledgers.Line.is_eq(c, m),
+        u => List.any.if(u2 => False{}, Ledgers.Line.is_eq(Replicas.Root.line(Ledgers.Line.root(c)), m)),
+        {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, c) == True{}: Bool},
+        hc => Cov.self(~d, ~kern, l, c, w1)(Cov.move(~d, ~kern, l, c, m, w1, e1, Replicas.Line.is_eq_sound(c, m)(hc))),
+        hr => Cov.root(
+          ~d,
+          ~kern,
+          l,
+          c,
+          w1,
+          ehs
+        )(
+          Cov.move(
+            ~d,
+            ~kern,
+            l,
+            Replicas.Root.line(Ledgers.Line.root(c)),
+            m,
+            w1,
+            e1,
+            Replicas.Line.is_eq_sound(
+              Replicas.Root.line(Ledgers.Line.root(c)),
+              m
+            )(Cov.only(Ledgers.Line.is_eq(Replicas.Root.line(Ledgers.Line.root(c)), m))(hr))
+          )
+        ),
+        hd
+      )
+
+# the lines that read a line that c reads hold c
+def Cov.one(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +c: Ledgers.Line,
+  +m: Ledgers.Line,
+  -w1: List<&2, Ledgers.Line>,
+  hd: {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Own.deps(~d, ~kern, l, c), m) == True{}: Bool},
+  +e1: {Own.watch.one(~d, ~kern, l, m) == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>}
+) -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, c) == True{}: Bool}:
+  Cov.one.at(
+    ~d,
+    ~kern,
+    l,
+    c,
+    m,
+    w1,
+    Maybe.is_some(&2, Replicas.Tip, Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c)),
+    {==},
+    hd,
+    e1
+  )
+
+# the lines that read m, within the lines that watch names: ws is pre, then
+# them, then post
+def Cov.Found(-d: Led(), -kern: Kern(d), -l: L(d), -m: Ledgers.Line, -ws: List<&2, Ledgers.Line>) -> Type:
+  Exists(
+    List<&2, Ledgers.Line>,
+    pre => Exists(
+      List<&2, Ledgers.Line>,
+      w1 => Exists(
+        List<&2, Ledgers.Line>,
+        post => {Own.watch.one(~d, ~kern, l, m) == Some{w1}: Maybe<&2, List<&2, Ledgers.Line>>}
+          & {
+            ws
+              == List.append(&2, Ledgers.Line, pre, List.append(&2, Ledgers.Line, w1, post)): List<&2, Ledgers.Line>
+          }
+      )
+    )
+  )
+
+# lines found in r are found in a then r
+def Cov.found.shift(
+  -d: Led(),
+  -kern: Kern(d),
+  -l: L(d),
+  +a: List<&2, Ledgers.Line>,
+  -r: List<&2, Ledgers.Line>,
+  -ws: List<&2, Ledgers.Line>,
+  -m: Ledgers.Line,
+  ews: {ws == List.append(&2, Ledgers.Line, a, r): List<&2, Ledgers.Line>},
+  ex: Cov.Found(d, kern, l, m, r)
+) -> Cov.Found(d, kern, l, m, ws):
+  match ex:
+    case Tuple{+pre, Tuple{+w1, Tuple{+post, Tuple{e1, er}}}}:
+      Tuple{
+        List.append(&2, Ledgers.Line, a, pre),
+        Tuple{
+          w1,
+          Tuple{
+            post,
+            Tuple{
+              e1,
+              Equal.trans(
+                List<&2, Ledgers.Line>,
+                ws,
+                List.append(&2, Ledgers.Line, a, r),
+                List.append(&2, Ledgers.Line, List.append(&2, Ledgers.Line, a, pre), List.append(&2, Ledgers.Line, w1, post)),
+                ews,
+                Equal.trans(
+                  List<&2, Ledgers.Line>,
+                  List.append(&2, Ledgers.Line, a, r),
+                  List.append(&2, Ledgers.Line, a, List.append(&2, Ledgers.Line, pre, List.append(&2, Ledgers.Line, w1, post))),
+                  List.append(&2, Ledgers.Line, List.append(&2, Ledgers.Line, a, pre), List.append(&2, Ledgers.Line, w1, post)),
+                  Equal.cong(
+                    List<&2, Ledgers.Line>,
+                    List<&2, Ledgers.Line>,
+                    z => List.append(&2, Ledgers.Line, a, z),
+                    r,
+                    List.append(&2, Ledgers.Line, pre, List.append(&2, Ledgers.Line, w1, post)),
+                    er
+                  ),
+                  Equal.sym(
+                    List<&2, Ledgers.Line>,
+                    List.append(&2, Ledgers.Line, List.append(&2, Ledgers.Line, a, pre), List.append(&2, Ledgers.Line, w1, post)),
+                    List.append(&2, Ledgers.Line, a, List.append(&2, Ledgers.Line, pre, List.append(&2, Ledgers.Line, w1, post))),
+                    Shared.List.append_assoc(Ledgers.Line, a, pre, List.append(&2, Ledgers.Line, w1, post))
+                  )
+                )
+              )
+            }
+          }
+        }
+      }
+
+# Cov.find once the lines that read the first line and the rest are known
+# (ma, mr)
+def Cov.find.at(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  +m1: Ledgers.Line,
+  -rest: List<&2, Ledgers.Line>,
+  -ws: List<&2, Ledgers.Line>,
+  +m: Ledgers.Line,
+  ma: Maybe<&2, List<&2, Ledgers.Line>>,
+  +ema: {Own.watch.one(~d, ~kern, l, m1) == ma: Maybe<&2, List<&2, Ledgers.Line>>},
+  mr: Maybe<&2, List<&2, Ledgers.Line>>,
+  +emr: {Own.watch(~d, ~kern, l, rest) == mr: Maybe<&2, List<&2, Ledgers.Line>>},
+  e: {
+    Maybe.bind(
+      &2,
+      List<&2, Ledgers.Line>,
+      List<&2, Ledgers.Line>,
+      ma,
+      a => Maybe.map(&2, List<&2, Ledgers.Line>, List<&2, Ledgers.Line>, r => List.append(&2, Ledgers.Line, a, r), mr)
+    )
+      == Some{ws}: Maybe<&2, List<&2, Ledgers.Line>>
+  },
+  h: {
+    List.any.if(u => List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, rest, m), Ledgers.Line.is_eq(m1, m)) == True{}: Bool
+  },
+  ih: @r: List<&2, Ledgers.Line> -> {Own.watch(~d, ~kern, l, rest) == Some{r}: Maybe<&2, List<&2, Ledgers.Line>>}
+    -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, rest, m) == True{}: Bool} -> Cov.Found(d, kern, l, m, r)
+) -> Cov.Found(d, kern, l, m, ws):
+  match ma mr:
+    case None{} y:
+      Empty.absurd(Cov.Found(d, kern, l, m, ws), Shared.Maybe.none_ne_some(List<&2, Ledgers.Line>, ws, e))
+    case Some{a} None{}:
+      Empty.absurd(Cov.Found(d, kern, l, m, ws), Shared.Maybe.none_ne_some(List<&2, Ledgers.Line>, ws, e))
+    case Some{+a} Some{+r}:
+      +ews = Equal.sym(
+        List<&2, Ledgers.Line>,
+        List.append(&2, Ledgers.Line, a, r),
+        ws,
+        Shared.Maybe.some_inj(List<&2, Ledgers.Line>, List.append(&2, Ledgers.Line, a, r), ws, e)
+      )
+      Replicas.Ext.any_cases(
+        Ledgers.Line.is_eq(m1, m),
+        u => List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, rest, m),
+        Cov.Found(d, kern, l, m, ws),
+        hx => Tuple{
+          [],
+          Tuple{
+            a,
+            Tuple{
+              r,
+              Tuple{
+                %Replicas.Line.is_eq_sound(m1, m)(hx): {Own.watch.one(~d, ~kern, l, _) == Some{a}: Maybe<&2, List<&2, Ledgers.Line>>}
+                ema,
+                ews
+              }
+            }
+          }
+        },
+        hr => Cov.found.shift(d, kern, l, a, r, ws, m, ews, ih(r)(emr)(hr)),
+        h
+      )
+
+# the lines that watch names, for lines among which is m, hold the lines that
+# read m
+def Cov.find(~d: Led(), ~kern: Kern(d), +l: L(d), ms: List<&2, Ledgers.Line>, -ws: List<&2, Ledgers.Line>, +m: Ledgers.Line) -> {
+  Own.watch(~d, ~kern, l, ms) == Some{ws}: Maybe<&2, List<&2, Ledgers.Line>>
+} -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, ms, m) == True{}: Bool} -> Cov.Found(d, kern, l, m, ws):
+  match ms:
+    case Nil{}:
+      e => h => Empty.absurd(Cov.Found(d, kern, l, m, ws), Shared.Bool.false_ne_true(h))
+    case Con{+m1, +rest}:
+      e => h => Cov.find.at(
+        ~d,
+        ~kern,
+        l,
+        m1,
+        rest,
+        ws,
+        m,
+        Own.watch.one(~d, ~kern, l, m1),
+        {==},
+        Own.watch(~d, ~kern, l, rest),
+        {==},
+        e,
+        h,
+        r => Cov.find(~d, ~kern, l, rest, r, m)
+      )
+
+# Own.covers, once the lines that read m are found in ws
+def Cov.go.of(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +l: L(d),
+  -ws: List<&2, Ledgers.Line>,
+  +c: Ledgers.Line,
+  +m: Ledgers.Line,
+  ex: Cov.Found(d, kern, l, m, ws),
+  hd: {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Own.deps(~d, ~kern, l, c), m) == True{}: Bool}
+) -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, ws, c) == True{}: Bool}:
+  match ex:
+    case Tuple{+pre, Tuple{+w1, Tuple{+post, Tuple{+e1, er}}}}:
+      %Equal.sym(
+        List<&2, Ledgers.Line>,
+        ws,
+        List.append(&2, Ledgers.Line, pre, List.append(&2, Ledgers.Line, w1, post)),
+        er
+      ): {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, _, c) == True{}: Bool}
+      Shared.List.contains_right(
+        ~Ledgers.Line,
+        ~Ledgers.Line.is_eq,
+        pre,
+        List.append(&2, Ledgers.Line, w1, post),
+        c,
+        Shared.List.contains_left(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, post, c, Cov.one(~d, ~kern, l, c, m, w1, hd, e1))
+      )
+
 # what Vend asks by itself for a line reads only the tips that Own.deps names
 law Own.reads:
   for ~d: Led()
@@ -3169,6 +3969,9 @@ law Own.covers:
     l => c => Own.deps(~d, ~kern, l, c),
     l => ms => Own.watch(~d, ~kern, l, ms)
   )
+
+def Own.covers(d, kern):
+  +l => moved => ws => c => +m => ew => hm => hd => Cov.go.of(~d, ~kern, l, ws, c, m, Cov.find(~d, ~kern, l, moved, ws, m)(ew)(hm), hd)
 
 # the acts of the rules of Vend stay as the ledger grows: each rule reads the
 # ledger and the tip of its line, and waits for what it lacks
