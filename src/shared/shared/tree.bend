@@ -11200,6 +11200,114 @@ def List.rev_rev(-A: Data, xs: List<&2, A>) -> {List.reverse(&2, A, List.reverse
       %Equal.sym(List<&2, A>, List.reverse(&2, A, List.reverse(&2, A, r)), r, List.rev_rev(A, r)): {x <> _ == x <> r: List<&2, A>}
       {==}
 
+# the pieces of the first tree of a run
+def Runs.side_a(r: Runs) -> List<&2, Piece>:
+  match r:
+    case Runs{a, b}:
+      a
+
+# the pieces of the second tree of a run
+def Runs.side_b(r: Runs) -> List<&2, Piece>:
+  match r:
+    case Runs{a, b}:
+      b
+
+# the pieces at the fronts of as and bs that a trim drops
+def Mst.trim_pre(as: List<&2, Piece>, bs: List<&2, Piece>) -> List<&2, Piece>:
+  match as bs:
+    case Con{+x, ra} Con{y, rb}:
+      Shared.Bool.when(List<&2, Piece>, Piece.same(x, y), u => x <> Mst.trim_pre(ra, rb), u => [])
+    case xs ys:
+      []
+
+# Mst.trim_a at two first pieces x and y that Piece.same calls t
+def Mst.trim_a.at(
+  t: Bool,
+  +x: Piece,
+  -y: Piece,
+  +ra: List<&2, Piece>,
+  -rb: List<&2, Piece>,
+  ih: {List.append(&2, Piece, Mst.trim_pre(ra, rb), Runs.side_a(Mst.trim(ra, rb))) == ra: List<&2, Piece>}
+) -> {
+  List.append(
+    &2,
+    Piece,
+    Shared.Bool.when(List<&2, Piece>, t, u => x <> Mst.trim_pre(ra, rb), u => []),
+    Runs.side_a(Shared.Bool.when(Runs, t, u => Mst.trim(ra, rb), u => Runs{x <> ra, y <> rb}))
+  )
+    == x <> ra: List<&2, Piece>
+}:
+  match t:
+    case False{}:
+      {==}
+    case True{}:
+      %Equal.sym(List<&2, Piece>, List.append(&2, Piece, Mst.trim_pre(ra, rb), Runs.side_a(Mst.trim(ra, rb))), ra, ih) :
+        {x <> _ == x <> ra : List<&2, Piece>}
+      {==}
+
+# a trim drops a front of as and keeps the rest
+def Mst.trim_a(as: List<&2, Piece>, bs: List<&2, Piece>) -> {
+  List.append(&2, Piece, Mst.trim_pre(as, bs), Runs.side_a(Mst.trim(as, bs))) == as: List<&2, Piece>
+}:
+  match as:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      match bs:
+        case Nil{}:
+          {==}
+        case Con{head1, tail1}:
+          +head = head
+          +tail = tail
+          Mst.trim_a.at(Piece.same(head, head1), head, head1, tail, tail1, Mst.trim_a(tail, tail1))
+
+# Mst.trim_b at two first pieces x and y that Piece.same calls t
+def Mst.trim_b.at(
+  t: Bool,
+  +x: Piece,
+  +y: Piece,
+  -ra: List<&2, Piece>,
+  +rb: List<&2, Piece>,
+  et: {Piece.same(x, y) == t: Bool},
+  ih: {List.append(&2, Piece, Mst.trim_pre(ra, rb), Runs.side_b(Mst.trim(ra, rb))) == rb: List<&2, Piece>}
+) -> {
+  List.append(
+    &2,
+    Piece,
+    Shared.Bool.when(List<&2, Piece>, t, u => x <> Mst.trim_pre(ra, rb), u => []),
+    Runs.side_b(Shared.Bool.when(Runs, t, u => Mst.trim(ra, rb), u => Runs{x <> ra, y <> rb}))
+  )
+    == y <> rb: List<&2, Piece>
+}:
+  match t:
+    case False{}:
+      {==}
+    case True{}:
+      Shared.List.cons_eq(Piece, x, y, List.append(&2, Piece, Mst.trim_pre(ra, rb), Runs.side_b(Mst.trim(ra, rb))), rb, Piece.same_eq(x, y)(et), ih)
+
+# a trim drops the same front of bs and keeps the rest
+def Mst.trim_b(as: List<&2, Piece>, bs: List<&2, Piece>) -> {
+  List.append(&2, Piece, Mst.trim_pre(as, bs), Runs.side_b(Mst.trim(as, bs))) == bs: List<&2, Piece>
+}:
+  match as:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      match bs:
+        case Nil{}:
+          {==}
+        case Con{head1, tail1}:
+          +head = head
+          +head1 = head1
+          +tail1 = tail1
+          Mst.trim_b.at(Piece.same(head, head1), head, head1, tail, tail1, {==}, Mst.trim_b(tail, tail1))
+
+# a run is the run of its two sides
+def Runs.eta(r: Runs) -> {r == Runs{Runs.side_a(r), Runs.side_b(r)}: Runs}:
+  match r:
+    case Runs{a, b}:
+      {==}
+
 # a write to a tree that lists whole reads every node it needs
 def Mst.put_some(
   ~S: Data,
