@@ -139,7 +139,8 @@ type Worker = { p: ReturnType<typeof spawnWorker>; bend: string; job: string | n
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 type Endpoint = { pid: number; port: number; token: string; version: string };
 const endpoint = (): Endpoint | undefined => { try { const e = JSON.parse(fs.readFileSync(ENDPOINT, "utf8")); return alive(e.pid) ? e : undefined; } catch { return undefined; } };
-const unchanged = (j: Job) => Object.entries(j.deps).every(([f, h]) => { try { return sha(fs.readFileSync(f, "utf8")).slice(0, 16) === h; } catch { return false; } });
+// the files of a job (its own from the start, its imports after its first slice) that changed or are gone
+const changed = (j: Job): string[] => Object.entries(j.deps).filter(([f, h]) => { try { return sha(fs.readFileSync(f, "utf8")).slice(0, 16) !== h; } catch { return true; } }).map(([f]) => f);
 
 async function serve(): Promise<void> {
   fs.mkdirSync(STATE, { recursive: true });
@@ -224,6 +225,17 @@ async function serve(): Promise<void> {
         continue;
       }
       queue.splice(qi, 1);
+      // a job searches the text it was asked about: once its files change (an edit, a delete) it stops,
+      // and `prove` again starts a job on the new text (the same text again attaches to this one)
+      const gone = changed(j);
+      if (gone.length) {
+        j.status = "changed";
+        j.report = { status: "open", text: "# " + j.target + ": stopped after " + (j.spentMs / 1000).toFixed(1) + " s: " + gone.map((f) => path.basename(f)).join(", ")
+          + " changed (or " + (gone.length > 1 ? "are" : "is") + " gone) since the job began; `prove` again searches the new text" + (j.report.text === "# queued" ? "" : "\n# the last report, of the old text:\n" + j.report.text) };
+        for (const x of workers) if (x.warm.includes(j.id) && !x.job) x.p.send({ t: "drop", id: j.id });
+        save(j);
+        continue;
+      }
       if (w.idle) clearTimeout(w.idle);
       // another job's warm session in this worker is dropped when the worker's warm list overflows
       w.job = j.id;
@@ -264,17 +276,17 @@ async function serve(): Promise<void> {
           const bend = bendDir(a.bendPath ? String(a.bendPath) : undefined, path.dirname(file));
           const kind = a.kind === "goals" ? "goals" : "prove";
           const spec = a.spec as Task["spec"];
-          const bh = bendHash(bend);
-          const key = sha(JSON.stringify([VERSION, bh, file, fs.readFileSync(file, "utf8"), target, kind, spec ?? null, !!a.helpers])).slice(0, 24);
+          const bh = bendHash(bend), text = fs.readFileSync(file, "utf8");
+          const key = sha(JSON.stringify([VERSION, bh, file, text, target, kind, spec ?? null, !!a.helpers])).slice(0, 24);
           const budget = Math.max(200, Math.min(600000, Number(a.budget ?? 30) * 1000));
-          const had = store.byKey(key).map((j) => live.get(j.id) ?? j).find((j) => unchanged(j) && j.status !== "cancelled");
+          const had = store.byKey(key).map((j) => live.get(j.id) ?? j).find((j) => changed(j).length === 0 && j.status !== "cancelled");
           if (had) {
             // the same request attaches; a paused one continues with the budget this call brings
             if (!had.done && !FINAL.has(had.status) && !["queued", "running"].includes(had.status)) { live.set(had.id, had); enqueue(had, budget); }
             return Response.json(view(had));
           }
           const now = Date.now();
-          const j: Job = { id: crypto.randomUUID().slice(0, 8), key, file, target, kind, spec, helpers: !!a.helpers, bend, bendHash: bh, deps: {},
+          const j: Job = { id: crypto.randomUUID().slice(0, 8), key, file, target, kind, spec, helpers: !!a.helpers, bend, bendHash: bh, deps: { [file]: sha(text).slice(0, 16) },
             status: "queued", budgetMs: budget, spentMs: 0, report: { status: "running", text: "# queued" }, submissions: [], created: now, updated: now, rev: 0, done: false };
           live.set(j.id, j);
           enqueue(j, budget);
@@ -288,7 +300,7 @@ async function serve(): Promise<void> {
         }
         if (cmd === "cancel") { j.status = "cancelled"; save(j); for (const w of workers) if (w.warm.includes(j.id) && !w.job) w.p.send({ t: "drop", id: j.id }); return Response.json(view(j)); }
         if (cmd === "resume" || cmd === "submit") {
-          if (!unchanged(j)) throw new Error("the files changed since this job started: start a new job (prove again)");
+          if (changed(j).length) throw new Error("the files changed since this job started: start a new job (prove again)");
           if (cmd === "submit") {
             const src = String(a.source ?? "");
             if (src.length > 262144) throw new Error("a submission is at most 256 KiB");
@@ -486,7 +498,7 @@ async function main(argv: string[]): Promise<number> {
     console.log(rep.text);
     const st = String(r.status);
     if (["queued", "running"].includes(st)) console.log("# job " + r.id + ": still running (" + Math.round(Number(r.spentMs) / 100) / 10 + " s of " + Number(r.budgetMs) / 1000 + " s); the same command attaches to it");
-    else if (!FINAL.has(st)) console.log("# job " + r.id + ": " + st + " after " + Math.round(Number(r.spentMs) / 100) / 10 + " s; `resume " + r.id + "` continues it, `submit " + r.id + " sketch.bend` adds a sketch");
+    else if (!FINAL.has(st) && st !== "changed") console.log("# job " + r.id + ": " + st + " after " + Math.round(Number(r.spentMs) / 100) / 10 + " s; `resume " + r.id + "` continues it, `submit " + r.id + " sketch.bend` adds a sketch");
     if (opt.has("write") && (st === "proven" || st === "synthesized")) console.log(applyEdit(rep));
   }
   return exitOf(String(r.status));
