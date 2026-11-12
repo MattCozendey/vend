@@ -5127,8 +5127,8 @@ def Mst.pick_set_passes(
     )
   )
 
-# a read of a pick tells as a read of the same pick of the same node, in
-# any depot state of the same fuel and a wider fuel for the new one
+# a read of a pick tells as a read of the same pick between wider bounds,
+# in any fuel that reaches the level of the node
 def Mst.look.same_pick(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -5138,31 +5138,35 @@ def Mst.look.same_pick(
   +xs: List<&2, Item>,
   +left: Maybe<&2, Hashes.Hash>,
   +l: Nat,
-  +lo: Maybe<&2, List<&2, U32>>,
-  +hi: Maybe<&2, List<&2, U32>>,
+  +lo1: Maybe<&2, List<&2, U32>>,
+  +lo2: Maybe<&2, List<&2, U32>>,
+  +hi1: Maybe<&2, List<&2, U32>>,
+  +hi2: Maybe<&2, List<&2, U32>>,
   -h1: Hashes.Hash,
   -h2: Hashes.Hash,
   +k: List<&2, U32>,
   -x: Maybe<&2, List<&2, U32>>,
+  +wl: {Mst.lo_le(lo2, lo1) == True{}: Bool},
+  +wh: {Mst.hi_le(hi1, hi2) == True{}: Bool},
   +fl: {Nat.is_le(l, p2) == True{}: Bool}
 ) -> {
-  Look.known(Mst.look.pick(Mst.pick(xs, left, l, lo, hi, k), h1, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k)))
+  Look.known(Mst.look.pick(Mst.pick(xs, left, l, lo1, hi1, k), h1, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k)))
     == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 } -> {
-  Look.known(Mst.look.pick(Mst.pick(xs, left, l, lo, hi, k), h2, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p2, s, r2, m2, k)))
+  Look.known(Mst.look.pick(Mst.pick(xs, left, l, lo2, hi2, k), h2, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p2, s, r2, m2, k)))
     == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   Mst.look.wide.pick(
     l,
-    Mst.pick(xs, left, l, lo, hi, k),
-    Mst.pick(xs, left, l, lo, hi, k),
+    Mst.pick(xs, left, l, lo1, hi1, k),
+    Mst.pick(xs, left, l, lo2, hi2, k),
     h1,
     h2,
     k,
     m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k),
     m2 => r2 => Mst.look.go(~S, ~fetch, p2, s, r2, m2, k),
     x,
-    Mst.pick_wide(xs, left, l, lo, lo, hi, hi, k, Mst.lo_le_refl(lo), Mst.hi_le_refl(hi)),
+    Mst.pick_wide(xs, left, l, lo1, lo2, hi1, hi2, k, wl, wh),
     +m2 => +r3 => +r4 => +w => +eu => Mst.look.wide(
       ~S,
       ~fetch,
@@ -5187,6 +5191,26 @@ def Mst.look.same_pick(
     )
   )
 
+# the last key of the first items, after wider bounds, is at or below
+def Mst.lo_le_last(+pre: List<&2, Item>, +lo1: Maybe<&2, List<&2, U32>>, +lo2: Maybe<&2, List<&2, U32>>, +wl: {
+  Mst.lo_le(lo2, lo1) == True{}: Bool
+}) -> {Mst.lo_le(Items.last_key(pre, lo2), Items.last_key(pre, lo1)) == True{}: Bool}:
+  match pre:
+    case Nil{}:
+      wl
+    case Con{Item{+k, +v, +r}, +rest}:
+      Mst.lo_le_refl(Items.last_key(rest, Some{k}))
+
+# the head key of items, before wider bounds, is at or above
+def Mst.hi_le_head(+post: List<&2, Item>, +hi1: Maybe<&2, List<&2, U32>>, +hi2: Maybe<&2, List<&2, U32>>, +wh: {
+  Mst.hi_le(hi1, hi2) == True{}: Bool
+}) -> {Mst.hi_le(Items.head_key(post, hi1), Items.head_key(post, hi2)) == True{}: Bool}:
+  match post:
+    case Nil{}:
+      wh
+    case Con{Item{+k, +v, +r}, +rest}:
+      Mst.hi_le_refl(Some{k})
+
 # Mst.gap_kept, once a pick passes the items before the gap (b2: whether the
 # pick stops at the first item after it)
 def Mst.gap_kept.first(
@@ -5200,49 +5224,53 @@ def Mst.gap_kept.first(
   +g: Maybe<&2, Hashes.Hash>,
   +nc: Maybe<&2, Hashes.Hash>,
   +l: Nat,
-  +lk: Maybe<&2, List<&2, U32>>,
-  +hi: Maybe<&2, List<&2, U32>>,
+  +lk1: Maybe<&2, List<&2, U32>>,
+  +lk2: Maybe<&2, List<&2, U32>>,
+  +hi1: Maybe<&2, List<&2, U32>>,
+  +hi2: Maybe<&2, List<&2, U32>>,
   -h1: Hashes.Hash,
   -h2: Hashes.Hash,
   +k2: List<&2, U32>,
   -x: Maybe<&2, List<&2, U32>>,
   +eb: {Mst.stops_first(post, k2) == b2: Bool},
+  +wl: {Mst.lo_le(lk2, lk1) == True{}: Bool},
+  +wh: {Mst.hi_le(hi1, hi2) == True{}: Bool},
   +fl: {Nat.is_le(l, p2) == True{}: Bool},
   ih: @g3: Nat -> @g4: Nat -> {Nat.is_le(l, g4) == True{}: Bool} -> {
-    Look.known(Mst.look.go(~S, ~fetch, g3, s, Room{l, lk, Items.head_key(post, hi)}, g, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
-  } -> {Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, lk, Items.head_key(post, hi)}, nc, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+    Look.known(Mst.look.go(~S, ~fetch, g3, s, Room{l, lk1, Items.head_key(post, hi1)}, g, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  } -> {Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, lk2, Items.head_key(post, hi2)}, nc, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
 ) -> {
-  Look.known(Mst.look.pick(Mst.pick(post, g, l, lk, hi, k2), h1, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
+  Look.known(Mst.look.pick(Mst.pick(post, g, l, lk1, hi1, k2), h1, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
     == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 } -> {
-  Look.known(Mst.look.pick(Mst.pick(post, nc, l, lk, hi, k2), h2, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p2, s, r2, m2, k2)))
+  Look.known(Mst.look.pick(Mst.pick(post, nc, l, lk2, hi2, k2), h2, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p2, s, r2, m2, k2)))
     == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   match b2:
     case True{}:
       %Equal.sym(
         Pick,
-        Mst.pick(post, g, l, lk, hi, k2),
-        Pick.Down{g, Room.of(l, lk, Items.head_key(post, hi))},
-        Mst.pick_first(post, g, l, lk, hi, k2)(eb)
+        Mst.pick(post, g, l, lk1, hi1, k2),
+        Pick.Down{g, Room.of(l, lk1, Items.head_key(post, hi1))},
+        Mst.pick_first(post, g, l, lk1, hi1, k2)(eb)
       ): (
         {
           Look.known(Mst.look.pick(_, h1, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
             == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
         }
           -> {
-            Look.known(Mst.look.pick(Mst.pick(post, nc, l, lk, hi, k2), h2, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p2, s, r2, m2, k2)))
+            Look.known(Mst.look.pick(Mst.pick(post, nc, l, lk2, hi2, k2), h2, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p2, s, r2, m2, k2)))
               == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
           }
       )
       %Equal.sym(
         Pick,
-        Mst.pick(post, nc, l, lk, hi, k2),
-        Pick.Down{nc, Room.of(l, lk, Items.head_key(post, hi))},
-        Mst.pick_first(post, nc, l, lk, hi, k2)(eb)
+        Mst.pick(post, nc, l, lk2, hi2, k2),
+        Pick.Down{nc, Room.of(l, lk2, Items.head_key(post, hi2))},
+        Mst.pick_first(post, nc, l, lk2, hi2, k2)(eb)
       ): (
         {
-          Look.known(Mst.look.pick(Pick.Down{g, Room.of(l, lk, Items.head_key(post, hi))}, h1, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
+          Look.known(Mst.look.pick(Pick.Down{g, Room.of(l, lk1, Items.head_key(post, hi1))}, h1, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
             == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
         }
           -> {
@@ -5252,9 +5280,9 @@ def Mst.gap_kept.first(
       )
       ih(p1)(p2)(fl)
     case False{}:
-      %Mst.pick_past(post, g, nc, l, lk, lk, hi, k2)(eb): (
+      %Mst.pick_past(post, g, nc, l, lk2, lk2, hi2, k2)(eb): (
         {
-          Look.known(Mst.look.pick(Mst.pick(post, g, l, lk, hi, k2), h1, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
+          Look.known(Mst.look.pick(Mst.pick(post, g, l, lk1, hi1, k2), h1, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
             == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
         }
           -> {
@@ -5262,7 +5290,7 @@ def Mst.gap_kept.first(
               == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
           }
       )
-      Mst.look.same_pick(~S, ~fetch, p1, p2, s, post, g, l, lk, hi, h1, h2, k2, x, fl)
+      Mst.look.same_pick(~S, ~fetch, p1, p2, s, post, g, l, lk1, lk2, hi1, hi2, h1, h2, k2, x, wl, wh, fl)
 
 # Mst.gap_kept, by whether a pick passes the items before the gap (b)
 def Mst.gap_kept.passes(
@@ -5277,25 +5305,29 @@ def Mst.gap_kept.passes(
   +left: Maybe<&2, Hashes.Hash>,
   +nc: Maybe<&2, Hashes.Hash>,
   +l: Nat,
-  +lo: Maybe<&2, List<&2, U32>>,
-  +hi: Maybe<&2, List<&2, U32>>,
+  +lo1: Maybe<&2, List<&2, U32>>,
+  +lo2: Maybe<&2, List<&2, U32>>,
+  +hi1: Maybe<&2, List<&2, U32>>,
+  +hi2: Maybe<&2, List<&2, U32>>,
   -h1: Hashes.Hash,
   -h2: Hashes.Hash,
   +k2: List<&2, U32>,
   -x: Maybe<&2, List<&2, U32>>,
   +eb: {Mst.passes(pre, k2) == b: Bool},
+  +wl: {Mst.lo_le(lo2, lo1) == True{}: Bool},
+  +wh: {Mst.hi_le(hi1, hi2) == True{}: Bool},
   +fl: {Nat.is_le(l, p2) == True{}: Bool},
   ih: @g3: Nat -> @g4: Nat -> {Nat.is_le(l, g4) == True{}: Bool} -> {
-    Look.known(Mst.look.go(~S, ~fetch, g3, s, Room{l, Items.last_key(pre, lo), Items.head_key(post, hi)}, Mst.last(pre, left), k2))
+    Look.known(Mst.look.go(~S, ~fetch, g3, s, Room{l, Items.last_key(pre, lo1), Items.head_key(post, hi1)}, Mst.last(pre, left), k2))
       == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
   } -> {
-    Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, Items.last_key(pre, lo), Items.head_key(post, hi)}, nc, k2))
+    Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, Items.last_key(pre, lo2), Items.head_key(post, hi2)}, nc, k2))
       == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
   }
 ) -> {
   Look.known(
     Mst.look.pick(
-      Mst.pick(List.append(&2, Item, pre, post), left, l, lo, hi, k2),
+      Mst.pick(List.append(&2, Item, pre, post), left, l, lo1, hi1, k2),
       h1,
       l,
       k2,
@@ -5306,7 +5338,7 @@ def Mst.gap_kept.passes(
 } -> {
   Look.known(
     Mst.look.pick(
-      Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), Mst.end_left(pre, left, nc), l, lo, hi, k2),
+      Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), Mst.end_left(pre, left, nc), l, lo2, hi2, k2),
       h2,
       l,
       k2,
@@ -5319,9 +5351,9 @@ def Mst.gap_kept.passes(
     case True{}:
       %Equal.sym(
         Pick,
-        Mst.pick(List.append(&2, Item, pre, post), left, l, lo, hi, k2),
-        Mst.pick(post, Mst.last(pre, left), l, Items.last_key(pre, lo), hi, k2),
-        Mst.pick_passes(pre, post, left, l, lo, hi, k2)(eb)
+        Mst.pick(List.append(&2, Item, pre, post), left, l, lo1, hi1, k2),
+        Mst.pick(post, Mst.last(pre, left), l, Items.last_key(pre, lo1), hi1, k2),
+        Mst.pick_passes(pre, post, left, l, lo1, hi1, k2)(eb)
       ): (
         {
           Look.known(Mst.look.pick(_, h1, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
@@ -5330,7 +5362,7 @@ def Mst.gap_kept.passes(
           -> {
             Look.known(
               Mst.look.pick(
-                Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), Mst.end_left(pre, left, nc), l, lo, hi, k2),
+                Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), Mst.end_left(pre, left, nc), l, lo2, hi2, k2),
                 h2,
                 l,
                 k2,
@@ -5342,14 +5374,14 @@ def Mst.gap_kept.passes(
       )
       %Equal.sym(
         Pick,
-        Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), Mst.end_left(pre, left, nc), l, lo, hi, k2),
-        Mst.pick(post, nc, l, Items.last_key(pre, lo), hi, k2),
-        Mst.pick_set_passes(pre, nc, post, left, l, lo, hi, k2, eb)
+        Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), Mst.end_left(pre, left, nc), l, lo2, hi2, k2),
+        Mst.pick(post, nc, l, Items.last_key(pre, lo2), hi2, k2),
+        Mst.pick_set_passes(pre, nc, post, left, l, lo2, hi2, k2, eb)
       ): (
         {
           Look.known(
             Mst.look.pick(
-              Mst.pick(post, Mst.last(pre, left), l, Items.last_key(pre, lo), hi, k2),
+              Mst.pick(post, Mst.last(pre, left), l, Items.last_key(pre, lo1), hi1, k2),
               h1,
               l,
               k2,
@@ -5374,13 +5406,17 @@ def Mst.gap_kept.passes(
         Mst.last(pre, left),
         nc,
         l,
-        Items.last_key(pre, lo),
-        hi,
+        Items.last_key(pre, lo1),
+        Items.last_key(pre, lo2),
+        hi1,
+        hi2,
         h1,
         h2,
         k2,
         x,
         {==},
+        Mst.lo_le_last(pre, lo1, lo2, wl),
+        wh,
         fl,
         ih
       )
@@ -5394,7 +5430,7 @@ def Mst.gap_kept.passes(
         {
           Look.known(
             Mst.look.pick(
-              Mst.pick(List.append(&2, Item, pre, post), left, l, lo, hi, k2),
+              Mst.pick(List.append(&2, Item, pre, post), left, l, lo1, hi1, k2),
               h1,
               l,
               k2,
@@ -5406,7 +5442,7 @@ def Mst.gap_kept.passes(
           -> {
             Look.known(
               Mst.look.pick(
-                Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), _, l, lo, hi, k2),
+                Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), _, l, lo2, hi2, k2),
                 h2,
                 l,
                 k2,
@@ -5418,14 +5454,14 @@ def Mst.gap_kept.passes(
       )
       %Equal.sym(
         Pick,
-        Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), left, l, lo, hi, k2),
-        Mst.pick(List.append(&2, Item, pre, post), left, l, lo, hi, k2),
-        Mst.pick_stops_set(pre, nc, post, post, left, l, lo, hi, hi, k2)(eb)
+        Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), left, l, lo2, hi2, k2),
+        Mst.pick(List.append(&2, Item, pre, post), left, l, lo2, hi2, k2),
+        Mst.pick_stops_set(pre, nc, post, post, left, l, lo2, hi2, hi2, k2)(eb)
       ): (
         {
           Look.known(
             Mst.look.pick(
-              Mst.pick(List.append(&2, Item, pre, post), left, l, lo, hi, k2),
+              Mst.pick(List.append(&2, Item, pre, post), left, l, lo1, hi1, k2),
               h1,
               l,
               k2,
@@ -5439,7 +5475,346 @@ def Mst.gap_kept.passes(
               == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
           }
       )
-      Mst.look.same_pick(~S, ~fetch, p1, p2, s, List.append(&2, Item, pre, post), left, l, lo, hi, h1, h2, k2, x, fl)
+      Mst.look.same_pick(~S, ~fetch, p1, p2, s, List.append(&2, Item, pre, post), left, l, lo1, lo2, hi1, hi2, h1, h2, k2, x, wl, wh, fl)
+
+# no node opens below a fuel of 0
+def Mst.opens_fuel(
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +o: {Mst.opens(Node{l, left, xs}, Room{u, lo, hi}) == True{}: Bool},
+  +fu: {Nat.is_le(u, 0n) == True{}: Bool}
+) -> Empty:
+  Mst.nat_lt_zero(l)(Shared.Nat.lt_le(l, u, 0n)(Mst.opens_lt(l, left, xs, Room{u, lo, hi})(o))(fu))
+
+# the level of a node that opens below a fuel of 1+p is at most p
+def Mst.opens_fl(
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +p: Nat,
+  +o: {Mst.opens(Node{l, left, xs}, Room{u, lo, hi}) == True{}: Bool},
+  +fu: {Nat.is_le(u, 1n+p) == True{}: Bool}
+) -> {Nat.is_le(l, p) == True{}: Bool}:
+  Shared.Nat.lt_succ_le(l, p)(Shared.Nat.lt_le(l, u, 1n+p)(Mst.opens_lt(l, left, xs, Room{u, lo, hi})(o))(fu))
+
+# a node with one gap replaced reads every key as before, but in the gap,
+# where it reads as ih says
+def Mst.gap_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  g1: Nat,
+  g2: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +h2: Hashes.Hash,
+  +u1: Nat,
+  +u2: Nat,
+  +lo1: Maybe<&2, List<&2, U32>>,
+  +lo2: Maybe<&2, List<&2, U32>>,
+  +hi1: Maybe<&2, List<&2, U32>>,
+  +hi2: Maybe<&2, List<&2, U32>>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +post: List<&2, Item>,
+  +nc: Maybe<&2, Hashes.Hash>,
+  +k2: List<&2, U32>,
+  -x: Maybe<&2, List<&2, U32>>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, post)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, post)}, Room{u1, lo1, hi1}) == True{}: Bool},
+  +eN2: {
+    Mst.node(~S, ~fetch, s, h2)
+      == Some{Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), post)}}: Maybe<&2, Node>
+  },
+  +oN2: {
+    Mst.opens(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), post)}, Room{u2, lo2, hi2})
+      == True{}: Bool
+  },
+  +wl: {Mst.lo_le(lo2, lo1) == True{}: Bool},
+  +wh: {Mst.hi_le(hi1, hi2) == True{}: Bool},
+  +fu: {Nat.is_le(u2, g2) == True{}: Bool},
+  ih: @g3: Nat -> @g4: Nat -> {Nat.is_le(l, g4) == True{}: Bool} -> {
+    Look.known(Mst.look.go(~S, ~fetch, g3, s, Room{l, Items.last_key(pre, lo1), Items.head_key(post, hi1)}, Mst.last(pre, left), k2))
+      == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  } -> {
+    Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, Items.last_key(pre, lo2), Items.head_key(post, hi2)}, nc, k2))
+      == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  }
+) -> {
+  Look.known(Mst.look.go(~S, ~fetch, g1, s, Room{u1, lo1, hi1}, Some{h}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{u2, lo2, hi2}, Some{h2}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match g1 g2:
+    case 0n y:
+      +e => Empty.absurd(
+        {Look.known(Mst.look.go(~S, ~fetch, y, s, Room{u2, lo2, hi2}, Some{h2}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, x, e)
+      )
+    case 1n+p1 0n:
+      +e => Empty.absurd(
+        {Look.known(Look.Missing{h2}) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Mst.opens_fuel(
+          l,
+          Mst.end_left(pre, left, nc),
+          List.append(&2, Item, Mst.set_last(pre, nc), post),
+          u2,
+          lo2,
+          hi2,
+          oN2,
+          fu
+        )
+      )
+    case 1n+(+p1) 1n+(+p2):
+      %Equal.sym(
+        Look,
+        Mst.look.go(~S, ~fetch, 1n+p1, s, Room{u1, lo1, hi1}, Some{h}, k2),
+        Mst.look.pick(
+          Mst.pick(List.append(&2, Item, pre, post), left, l, lo1, hi1, k2),
+          h,
+          l,
+          k2,
+          m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)
+        ),
+        Mst.look_node(~S, ~fetch, p1, s, h, u1, lo1, hi1, l, left, List.append(&2, Item, pre, post), k2, eN, oN)
+      ): (
+        {Look.known(_) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+          -> {Look.known(Mst.look.go(~S, ~fetch, 1n+p2, s, Room{u2, lo2, hi2}, Some{h2}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+      )
+      %Equal.sym(
+        Look,
+        Mst.look.go(~S, ~fetch, 1n+p2, s, Room{u2, lo2, hi2}, Some{h2}, k2),
+        Mst.look.pick(
+          Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), Mst.end_left(pre, left, nc), l, lo2, hi2, k2),
+          h2,
+          l,
+          k2,
+          m2 => r2 => Mst.look.go(~S, ~fetch, p2, s, r2, m2, k2)
+        ),
+        Mst.look_node(
+          ~S,
+          ~fetch,
+          p2,
+          s,
+          h2,
+          u2,
+          lo2,
+          hi2,
+          l,
+          Mst.end_left(pre, left, nc),
+          List.append(&2, Item, Mst.set_last(pre, nc), post),
+          k2,
+          eN2,
+          oN2
+        )
+      ): (
+        {
+          Look.known(
+            Mst.look.pick(
+              Mst.pick(List.append(&2, Item, pre, post), left, l, lo1, hi1, k2),
+              h,
+              l,
+              k2,
+              m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)
+            )
+          )
+            == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+        }
+          -> {Look.known(_) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+      )
+      Mst.gap_kept.passes(
+        ~S,
+        ~fetch,
+        Mst.passes(pre, k2),
+        p1,
+        p2,
+        s,
+        pre,
+        post,
+        left,
+        nc,
+        l,
+        lo1,
+        lo2,
+        hi1,
+        hi2,
+        h,
+        h2,
+        k2,
+        x,
+        {==},
+        wl,
+        wh,
+        Mst.opens_fl(
+          l,
+          Mst.end_left(pre, left, nc),
+          List.append(&2, Item, Mst.set_last(pre, nc), post),
+          u2,
+          lo2,
+          hi2,
+          p2,
+          oN2,
+          fu
+        ),
+        ih
+      )
+
+# a node with one gap replaced reads the key k there as ih says, when k
+# comes after the items before the gap and before the first after it
+def Mst.gap_k(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  g: Nat,
+  +s: S,
+  +h2: Hashes.Hash,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +post: List<&2, Item>,
+  +nc: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  -t: Look,
+  +eN2: {
+    Mst.node(~S, ~fetch, s, h2)
+      == Some{Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), post)}}: Maybe<&2, Node>
+  },
+  +oN2: {
+    Mst.opens(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), post)}, Room{u, lo, hi})
+      == True{}: Bool
+  },
+  +fu: {Nat.is_le(u, g) == True{}: Bool},
+  +ea: {Mst.all_lt(pre, k) == True{}: Bool},
+  +es: {Mst.stops_first(post, k) == True{}: Bool},
+  ih: @g4: Nat -> {Nat.is_le(l, g4) == True{}: Bool} -> {
+    Mst.look.go(~S, ~fetch, g4, s, Room{l, Items.last_key(pre, lo), Items.head_key(post, hi)}, nc, k) == t: Look
+  }
+) -> {Mst.look.go(~S, ~fetch, g, s, Room{u, lo, hi}, Some{h2}, k) == t: Look}:
+  match g:
+    case 0n:
+      Empty.absurd(
+        {Look.Missing{h2} == t: Look},
+        Mst.opens_fuel(
+          l,
+          Mst.end_left(pre, left, nc),
+          List.append(&2, Item, Mst.set_last(pre, nc), post),
+          u,
+          lo,
+          hi,
+          oN2,
+          fu
+        )
+      )
+    case 1n+(+p):
+      %Equal.sym(
+        Look,
+        Mst.look.go(~S, ~fetch, 1n+p, s, Room{u, lo, hi}, Some{h2}, k),
+        Mst.look.pick(
+          Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), Mst.end_left(pre, left, nc), l, lo, hi, k),
+          h2,
+          l,
+          k,
+          m2 => r2 => Mst.look.go(~S, ~fetch, p, s, r2, m2, k)
+        ),
+        Mst.look_node(
+          ~S,
+          ~fetch,
+          p,
+          s,
+          h2,
+          u,
+          lo,
+          hi,
+          l,
+          Mst.end_left(pre, left, nc),
+          List.append(&2, Item, Mst.set_last(pre, nc), post),
+          k,
+          eN2,
+          oN2
+        )
+      ): {_ == t: Look}
+      %Equal.sym(
+        Pick,
+        Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), Mst.end_left(pre, left, nc), l, lo, hi, k),
+        Mst.pick(post, nc, l, Items.last_key(pre, lo), hi, k),
+        Mst.pick_set_passes(pre, nc, post, left, l, lo, hi, k, Mst.passes_of_all_lt(pre, k)(ea))
+      ): {Mst.look.pick(_, h2, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p, s, r2, m2, k)) == t: Look}
+      %Equal.sym(
+        Pick,
+        Mst.pick(post, nc, l, Items.last_key(pre, lo), hi, k),
+        Pick.Down{nc, Room.of(l, Items.last_key(pre, lo), Items.head_key(post, hi))},
+        Mst.pick_first(post, nc, l, Items.last_key(pre, lo), hi, k)(es)
+      ): {Mst.look.pick(_, h2, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p, s, r2, m2, k)) == t: Look}
+      ih(p)(
+        Mst.opens_fl(
+          l,
+          Mst.end_left(pre, left, nc),
+          List.append(&2, Item, Mst.set_last(pre, nc), post),
+          u,
+          lo,
+          hi,
+          p,
+          oN2,
+          fu
+        )
+      )
+
+# what a read of a node in one room tells, a read of it in a room where it
+# opens tells, with any fuel that reaches that room
+def Mst.reroom(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +g1: Nat,
+  +g: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +r1: Room,
+  +r2: Room,
+  +n: Node,
+  +k: List<&2, U32>,
+  -x: Maybe<&2, List<&2, U32>>,
+  +en: {Mst.node.in(~S, ~fetch, s, h, r2) == Some{n}: Maybe<&2, Node>},
+  +wb: {Mst.bounds_le(r1, r2) == True{}: Bool},
+  +fu: {Nat.is_le(Mst.room_up(r2), g) == True{}: Bool}
+) -> {Look.known(Mst.look.go(~S, ~fetch, g1, s, r1, Some{h}, k)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>} -> {
+  Look.known(Mst.look.go(~S, ~fetch, g, s, r2, Some{h}, k)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  Mst.look.wide(
+    ~S,
+    ~fetch,
+    g,
+    g1,
+    Some{h},
+    s,
+    r1,
+    r2,
+    k,
+    x,
+    +n2 => +e2 => +o =>
+      %Shared.Maybe.some_inj(
+        Node,
+        n,
+        n2,
+        Equal.trans(
+          Maybe<&2, Node>,
+          Some{n},
+          Mst.node(~S, ~fetch, s, h),
+          Some{n2},
+          Equal.sym(Maybe<&2, Node>, Mst.node(~S, ~fetch, s, h), Some{n}, Mst.in_node(~S, ~fetch, s, h, r2, n)(en)),
+          e2
+        )
+      ): {Mst.opens(_, r2) == True{}: Bool}
+      Mst.in_open(~S, ~fetch, s, h, r2, n)(en),
+    wb,
+    fu
+  )
 
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
