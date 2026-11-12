@@ -4466,12 +4466,50 @@ def Rd.due.at(
           +ts => Rd.at(~d, a, b, g, c, t, ts, x)
         )(e)
 
+# Own.due stays as the ledger grows, when the heads that it reads are the same
+def Rd.due(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +c: Ledgers.Line,
+  -x: Maybe<&2, Replicas.Request<Requests.Ask>>,
+  hs: {Replicas.Heads.same(~Requests.Ask.machine(), ~d, ~kern, a, b, Own.deps(~d, ~kern, a, c)) == True{}: Bool}
+) -> {Own.due(~d, ~kern, a, c) == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>}
+  -> {Own.due(~d, ~kern, b, c) == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>}:
+  Rd.due.at(~d, ~kern, a, b, g, c, Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c), {==}, hs, x)
+
 # what Vend asks by itself for a line reads only the tips that Own.deps names
 law Own.reads:
   for ~d: Led()
   for ~kern: Kern(d)
   for ~rules: Kernel.Rules(d, kern)
   Replicas.Kernel.Reads(Requests.Ask.machine(), d, kern, l => c => Own.deps(~d, ~kern, l, c))
+
+def Own.reads(d, kern, rules):
+  +a => +b => +c => x => +later => ef => hs => Equal.trans(
+    Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>,
+    Replicas.Kernel.follow(Requests.Ask.machine(), d, kern)(b)(c),
+    Own.due(~d, ~kern, b, c),
+    Some{x},
+    Rd.rule(d, kern, rules)(b)(c),
+    Rd.due(~d, ~kern, a, b, Replicas.Led.later_grows(~Requests.Ask.machine(), ~d, a, b)(later), c, x, hs)(
+      Equal.trans(
+        Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>,
+        Own.due(~d, ~kern, a, c),
+        Replicas.Kernel.follow(Requests.Ask.machine(), d, kern)(a)(c),
+        Some{x},
+        Equal.sym(
+          Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>,
+          Replicas.Kernel.follow(Requests.Ask.machine(), d, kern)(a)(c),
+          Own.due(~d, ~kern, a, c),
+          Rd.rule(d, kern, rules)(a)(c)
+        ),
+        ef
+      )
+    )
+  )
 
 # Own.watch names each line that reads a line that moved
 law Own.covers:
