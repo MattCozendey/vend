@@ -5233,7 +5233,6 @@ def Mst.gap_kept.first(
   +k2: List<&2, U32>,
   -x: Maybe<&2, List<&2, U32>>,
   +eb: {Mst.stops_first(post, k2) == b2: Bool},
-  +wl: {Mst.lo_le(lk2, lk1) == True{}: Bool},
   +wh: {Mst.hi_le(hi1, hi2) == True{}: Bool},
   +fl: {Nat.is_le(l, p2) == True{}: Bool},
   ih: @g3: Nat -> @g4: Nat -> {Nat.is_le(l, g4) == True{}: Bool} -> {
@@ -5280,7 +5279,7 @@ def Mst.gap_kept.first(
       )
       ih(p1)(p2)(fl)
     case False{}:
-      %Mst.pick_past(post, g, nc, l, lk2, lk2, hi2, k2)(eb): (
+      %Mst.pick_past(post, g, nc, l, lk1, lk2, hi2, k2)(eb): (
         {
           Look.known(Mst.look.pick(Mst.pick(post, g, l, lk1, hi1, k2), h1, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
             == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
@@ -5290,7 +5289,7 @@ def Mst.gap_kept.first(
               == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
           }
       )
-      Mst.look.same_pick(~S, ~fetch, p1, p2, s, post, g, l, lk1, lk2, hi1, hi2, h1, h2, k2, x, wl, wh, fl)
+      Mst.look.same_pick(~S, ~fetch, p1, p2, s, post, g, l, lk1, lk1, hi1, hi2, h1, h2, k2, x, Mst.lo_le_refl(lk1), wh, fl)
 
 # Mst.gap_kept, by whether a pick passes the items before the gap (b)
 def Mst.gap_kept.passes(
@@ -5415,7 +5414,6 @@ def Mst.gap_kept.passes(
         k2,
         x,
         {==},
-        Mst.lo_le_last(pre, lo1, lo2, wl),
         wh,
         fl,
         ih
@@ -7733,7 +7731,6 @@ def Mst.merge_eq_hi(
         k2,
         x,
         {==},
-        Mst.lo_le_key(Items.last_key(xa, lo), k)(ak),
         Mst.hi_le_refl(hi),
         Mst.opens_fl(la, Mst.end_left(xa, lefta, mc), List.append(&2, Item, Mst.set_last(xa, mc), xb), u, lo, hi, p2, oN, fu),
         ih
