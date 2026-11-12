@@ -7044,6 +7044,265 @@ def Mst.merge_ok.gt(
         ih(Mst.holds_tail(~S, ~fetch, s, Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, []), ns, hold))
       )
 
+# what a merge whose b is of a higher level reads, from what the merge of a
+# with the left subtree of b reads (tri)
+def Mst.merge_ok.lt.read(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  -ha: Hashes.Hash,
+  +hb: Hashes.Hash,
+  +ub: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +lb: Nat,
+  +leftb: Maybe<&2, Hashes.Hash>,
+  +xb: List<&2, Item>,
+  +mc: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +enb: {Mst.node.in(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}) == Some{Node{lb, leftb, xb}}: Maybe<&2, Node>},
+  +hold: {Depots.Depot.holds(~S, ~fetch, s, Node.code(Node{lb, mc, xb}, []) <> ns) == True{}: Bool},
+  +u: Nat,
+  +lvb: {Mst.lvl(~S, ~fetch, s, Some{hb}, u) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  tri: Mst.MergeRead(~S, ~fetch, s, lb, lo, k, Items.head_key(xb, hi), Some{ha}, leftb, mc)
+) -> Mst.MergeRead(~S, ~fetch, s, u, lo, k, hi, Some{ha}, Some{hb}, Some{Hashes.Sha.hash(Node.code(Node{lb, mc, xb}, []))}):
+  (ilo, r3) = tri
+  (ihi, ik) = r3
+  +eB = Mst.in_node(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}, Node{lb, leftb, xb})(enb)
+  +oB = Mst.in_open(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}, Node{lb, leftb, xb})(enb)
+  +lt = Mst.lvl_lt(~S, ~fetch, s, hb, u, lb, leftb, xb, lvb, eB)
+  +fb = Mst.opens_fit(lb, leftb, xb, ub, Some{k}, hi, oB)
+  +nb = Mst.opens_full(lb, leftb, xb, ub, Some{k}, hi, oB)
+  +eN = Mst.node_code(~S, ~fetch, s, Node{lb, mc, xb}, Mst.holds_head(~S, ~fetch, s, Node.code(Node{lb, mc, xb}, []), ns, hold))
+  +oN = Mst.opens_move(lb, leftb, xb, ub, Some{k}, hi, u, lo, hi, lt, Mst.lo_le_key(lo, k)(a), Mst.hi_le_refl(hi), oB)
+  (
+    +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => +e => Mst.gap_k(
+      ~S,
+      ~fetch,
+      g2,
+      s,
+      Hashes.Sha.hash(Node.code(Node{lb, mc, xb}, [])),
+      u,
+      lo,
+      hi,
+      lb,
+      leftb,
+      [],
+      xb,
+      mc,
+      k2,
+      x,
+      eN,
+      oN,
+      fu,
+      {==},
+      Mst.stops_first_of_fit(xb, k, hi, k2)(fb)(nb)(Mst.le_of_lt(Key.cmp(k2, k))(c)),
+      +g4 => +fl => ilo(k2)(x)(u1)(g1)(g4)(c)(fl)(e)
+    ),
+    (
+      +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => +e => Mst.gap_kept(
+        ~S,
+        ~fetch,
+        ub,
+        g2,
+        s,
+        hb,
+        Hashes.Sha.hash(Node.code(Node{lb, mc, xb}, [])),
+        ub,
+        u,
+        Some{k},
+        lo,
+        hi,
+        hi,
+        lb,
+        leftb,
+        [],
+        xb,
+        mc,
+        k2,
+        x,
+        eB,
+        oB,
+        eN,
+        oN,
+        Mst.lo_le_key(lo, k)(a),
+        Mst.hi_le_refl(hi),
+        fu,
+        +g3 => +g4 => +fl => +e3 => ihi(k2)(x)(lb)(g3)(g4)(c)(fl)(e3)
+      )(
+        Mst.reroom(
+          ~S,
+          ~fetch,
+          g1,
+          ub,
+          s,
+          hb,
+          Room{u1, Some{k}, hi},
+          Room{ub, Some{k}, hi},
+          Node{lb, leftb, xb},
+          k2,
+          x,
+          enb,
+          Shared.Bool.and_both(Mst.lo_le(Some{k}, Some{k}), Mst.hi_le(hi, hi), Mst.lo_le_refl(Some{k}), Mst.hi_le_refl(hi)),
+          Shared.Nat.le_refl(ub)
+        )(e)
+      ),
+      +g2 => +fu => Mst.gap_k(
+        ~S,
+        ~fetch,
+        g2,
+        s,
+        Hashes.Sha.hash(Node.code(Node{lb, mc, xb}, [])),
+        u,
+        lo,
+        hi,
+        lb,
+        leftb,
+        [],
+        xb,
+        mc,
+        k,
+        None{},
+        eN,
+        oN,
+        fu,
+        {==},
+        Mst.stops_first_of_fit(xb, k, hi, k)(fb)(nb)(Mst.le_refl_key(k)),
+        +g4 => +fl => ik(g4)(fl)
+      )
+    )
+  )
+
+# the roots of a merge whose b is of a higher level, and what it reads, from
+# those of the merge of a with the left subtree of b (bi)
+def Mst.merge_ok.lt.body(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +ha: Hashes.Hash,
+  +hb: Hashes.Hash,
+  +ua: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +ub: Nat,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +la: Nat,
+  +lefta: Maybe<&2, Hashes.Hash>,
+  +xa: List<&2, Item>,
+  +lb: Nat,
+  +leftb: Maybe<&2, Hashes.Hash>,
+  +xb: List<&2, Item>,
+  +mc: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +ena: {Mst.node.in(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}) == Some{Node{la, lefta, xa}}: Maybe<&2, Node>},
+  +enb: {Mst.node.in(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}) == Some{Node{lb, leftb, xb}}: Maybe<&2, Node>},
+  +ec: {Nat.cmp(la, lb) == LT{}: Cmp},
+  +hold: {Depots.Depot.holds(~S, ~fetch, s, Node.code(Node{lb, mc, xb}, []) <> ns) == True{}: Bool},
+  bi: ({Mst.lvl(~S, ~fetch, s, Some{ha}, ua) == True{}: Bool} & {Mst.lvl(~S, ~fetch, s, leftb, lb) == True{}: Bool})
+    & Mst.MergeMain(~S, ~fetch, s, lo, k, Items.head_key(xb, hi), Some{ha}, leftb, mc)
+) -> ({Mst.lvl(~S, ~fetch, s, Some{ha}, ua) == True{}: Bool} & {Mst.lvl(~S, ~fetch, s, Some{hb}, ub) == True{}: Bool})
+  & Mst.MergeMain(~S, ~fetch, s, lo, k, hi, Some{ha}, Some{hb}, Some{Hashes.Sha.hash(Node.code(Node{lb, mc, xb}, []))}):
+  (lvs2, main2) = bi
+  (lva2, lvb2) = lvs2
+  +eA = Mst.in_node(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}, Node{la, lefta, xa})(ena)
+  +oA = Mst.in_open(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}, Node{la, lefta, xa})(ena)
+  +eB = Mst.in_node(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}, Node{lb, leftb, xb})(enb)
+  +oB = Mst.in_open(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}, Node{lb, leftb, xb})(enb)
+  (
+    (
+      Mst.lvl_of(~S, ~fetch, s, ha, ua, la, lefta, xa, eA, Mst.opens_lt(la, lefta, xa, Room{ua, lo, Some{k}})(oA)),
+      Mst.lvl_of(~S, ~fetch, s, hb, ub, lb, leftb, xb, eB, Mst.opens_lt(lb, leftb, xb, Room{ub, Some{k}, hi})(oB))
+    ),
+    +u => +lva => +lvb => +a => +bb => Mst.merge_ok.lt.read(
+      ~S,
+      ~fetch,
+      s,
+      ha,
+      hb,
+      ub,
+      lo,
+      k,
+      hi,
+      lb,
+      leftb,
+      xb,
+      mc,
+      ns,
+      enb,
+      hold,
+      u,
+      lvb,
+      a,
+      main2(lb)(Mst.lvl_of(~S, ~fetch, s, ha, lb, la, lefta, xa, eA, Mst.nat_lt_of(la, lb)(ec)))(lvb2)(a)(
+        Mst.before_head(xb, k, hi)(Mst.opens_fit(lb, leftb, xb, ub, Some{k}, hi, oB))(bb)
+      )
+    )
+  )
+
+# a merge whose b is of a higher level: b with its left subtree merged with a
+def Mst.merge_ok.lt(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  res: Maybe<&2, Edit>,
+  +s: S,
+  +ha: Hashes.Hash,
+  +hb: Hashes.Hash,
+  +ua: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +ub: Nat,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +la: Nat,
+  +lefta: Maybe<&2, Hashes.Hash>,
+  +xa: List<&2, Item>,
+  +lb: Nat,
+  +leftb: Maybe<&2, Hashes.Hash>,
+  +xb: List<&2, Item>,
+  +ena: {Mst.node.in(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}) == Some{Node{la, lefta, xa}}: Maybe<&2, Node>},
+  +enb: {Mst.node.in(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}) == Some{Node{lb, leftb, xb}}: Maybe<&2, Node>},
+  +ec: {Nat.cmp(la, lb) == LT{}: Cmp},
+  ih: Mst.MergeOk(~S, ~fetch, s, ua, lo, k, lb, Items.head_key(xb, hi), Some{ha}, leftb, res)
+) -> Mst.MergeOk(~S, ~fetch, s, ua, lo, k, ub, hi, Some{ha}, Some{hb}, Mst.with_first(lb, xb, res)):
+  match res:
+    case None{}:
+      Unit{}
+    case Some{Edit{+mc, +ns}}:
+      %Equal.sym(
+        Edit,
+        Mst.make(lb, mc, xb, ns),
+        Mst.store(Node{lb, mc, xb}, ns),
+        Mst.make_full(lb, mc, xb, ns)(
+          Mst.opens_full(lb, leftb, xb, ub, Some{k}, hi, Mst.in_open(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}, Node{lb, leftb, xb})(enb))
+        )
+      ): Mst.MergeOk(~S, ~fetch, s, ua, lo, k, ub, hi, Some{ha}, Some{hb}, Some{_})
+      +hold => Mst.merge_ok.lt.body(
+        ~S,
+        ~fetch,
+        s,
+        ha,
+        hb,
+        ua,
+        lo,
+        k,
+        ub,
+        hi,
+        la,
+        lefta,
+        xa,
+        lb,
+        leftb,
+        xb,
+        mc,
+        ns,
+        ena,
+        enb,
+        ec,
+        hold,
+        ih(Mst.holds_tail(~S, ~fetch, s, Node.code(Node{lb, mc, xb}, []), ns, hold))
+      )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
