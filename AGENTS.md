@@ -68,7 +68,7 @@ Follow the `bend2` and the `experimental-bend-spec` skills.
 
 **vend** is a version control system written in Bend. README.md states what it is.
 
-- Always use gen3 (`bun run gen3 prove <file.bend> <def>`) as the first step of every proof.
+- Always use bend-synth (`bun run synth prove <file.bend> <def>`) as the first step of every proof.
 - README.md is the canon. When in doubt, consult it. Stop immediately if any requirement, design,
   or change conflicts with it. Report the conflict. Internals go in code comments.
 - State the required behavior and guarantees before implementation. Then implement and prove
