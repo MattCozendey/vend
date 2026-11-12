@@ -31,6 +31,9 @@ Do not run `--verdict` unless the user asks.
 - Above each law, write a comment that says what it asks.
 - Challenge whether each concept is truly domain-specific. Extract general structure that makes
   both shared and domain code smaller.
+- Before designing a shared abstraction, check whether it is a known problem with established
+  solutions. Consult primary sources. Verify their assumptions, guarantees, and costs against
+  our requirements. Prefer the best applicable solution over a custom design.
 - Require types to add useful semantic properties. Reject aliases and tags that only simulate
   meaning.
 
