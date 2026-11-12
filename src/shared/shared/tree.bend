@@ -10043,6 +10043,405 @@ def Mst.split_ok(
         +ur2 => +lo2 => +hi2 => +m2 => Mst.split_ok(~S, ~fetch, p, m2, s, ur2, lo2, hi2, k)
       )
 
+# a pick of k among items that start with k hits its value
+def Mst.hit_first(
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +b: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
+  +a: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Mst.pick(Item{k, v, b} <> rest, a, l, lo, hi, k) == Pick.Hit{v}: Pick}:
+  %Equal.sym(Cmp, Key.cmp(k, k), EQ{}, Mst.key_refl(k)) :
+    {Shared.Bool.when(Pick, Cmp.is_lt(_), u => Pick.Down{a, Room.of(l, lo, Some{k})}, u => Shared.Bool.when(Pick, Cmp.is_eq(_), w => Pick.Hit{v}, w => Mst.pick(rest, b, l, Some{k}, hi, k))) == Pick.Hit{v} : Pick}
+  {==}
+
+# the level of k, checked against the level L of k
+def Mst.level_ok(+k: List<&2, U32>, +l: Nat, +el: {Key.level(k) == l: Nat}) -> {Nat.is_eq(Key.level(k), l) == True{}: Bool}:
+  %Equal.sym(Nat, Level.of(Hashes.Sha.go.of(List.length(&2, U32, k), Hashes.Hash{1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225}, k, 0, Hashes.Block.of(List.take(&2, U32, k, 16n)))), l, el) : {Cmp.is_eq(Nat.cmp(_, l)) == True{} : Bool}; Shared.Nat.is_eq_refl(l)
+
+# a read of a node whose pick hits the value v, of a key of the level of the
+# node, finds v
+def Mst.new_hit(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  g: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, xs}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, xs}, Room{u, lo, hi}) == True{}: Bool},
+  +fu: {Nat.is_le(u, g) == True{}: Bool},
+  +ep: {Mst.pick(xs, left, l, lo, hi, k) == Pick.Hit{v}: Pick},
+  +el: {Nat.is_eq(Key.level(k), l) == True{}: Bool}
+) -> {Look.known(Mst.look.go(~S, ~fetch, g, s, Room{u, lo, hi}, Some{h}, k)) == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match g:
+    case 0n:
+      Empty.absurd(
+        {Look.known(Look.Missing{h}) == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Mst.opens_fuel(l, left, xs, u, lo, hi, oN, fu)
+      )
+    case 1n+(+p):
+      %Equal.sym(
+        Look,
+        Mst.look.go(~S, ~fetch, 1n+p, s, Room{u, lo, hi}, Some{h}, k),
+        Mst.look.pick(Mst.pick(xs, left, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p, s, r2, m2, k)),
+        Mst.look_node(~S, ~fetch, p, s, h, u, lo, hi, l, left, xs, k, eN, oN)
+      ): {Look.known(_) == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+      %Equal.sym(Pick, Mst.pick(xs, left, l, lo, hi, k), Pick.Hit{v}, ep): {
+        Look.known(Mst.look.pick(_, h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p, s, r2, m2, k)))
+          == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      }
+      %Equal.sym(Bool, Nat.is_eq(Key.level(k), l), True{}, el): {
+        Look.known(Shared.Bool.when(Look, _, u2 => Look.Found{v}, u2 => Look.Missing{h}))
+          == Some{Some{v}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      }
+      {==}
+
+# items with their last subtree set to their own last subtree are the items
+def Mst.set_last_last(+xs: List<&2, Item>, +left: Maybe<&2, Hashes.Hash>) -> {Mst.set_last(xs, Mst.last(xs, left)) == xs: List<&2, Item>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      match head:
+        case Item{key, value, right}:
+          match tail:
+            case Nil{}:
+              {==}
+            case Con{head, tail1}:
+              %Equal.sym(List<&2, Item>, Mst.set_last(head <> tail1, Mst.last(head <> tail1, right)), head <> tail1, Mst.set_last_last(head <> tail1, right)) : {Item{key, value, right} <> _ == Item{key, value, right} <> head <> tail1 : List<&2, Item>}; {==}
+
+# a pick of another key than k reads no value of k
+def Mst.pick_val(
+  +pre: List<&2, Item>,
+  +k: List<&2, U32>,
+  +v1: List<&2, U32>,
+  +v2: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k2: List<&2, U32>,
+  +ne: {Cmp.is_eq(Key.cmp(k2, k)) == False{}: Bool}
+) -> {
+  Mst.pick(List.append(&2, Item, pre, Item{k, v1, r} <> rest), prev, l, lo, hi, k2)
+    == Mst.pick(List.append(&2, Item, pre, Item{k, v2, r} <> rest), prev, l, lo, hi, k2): Pick
+}:
+  match pre:
+    case Nil{}:
+      Mst.case_cmp(
+        c => {Cmp.is_eq(c) == False{}: Bool} -> {
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(c),
+            u => Pick.Down{prev, Room.of(l, lo, Some{k})},
+            u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{v1}, w => Mst.pick(rest, r, l, Some{k}, hi, k2))
+          )
+            == Shared.Bool.when(
+              Pick,
+              Cmp.is_lt(c),
+              u => Pick.Down{prev, Room.of(l, lo, Some{k})},
+              u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{v2}, w => Mst.pick(rest, r, l, Some{k}, hi, k2))
+            ): Pick
+        },
+        Key.cmp(k2, k),
+        +q => +e => {==},
+        +q => +e => Empty.absurd({Pick.Hit{v1} == Pick.Hit{v2}: Pick}, Shared.Bool.true_ne_false(e)),
+        +q => +e => {==}
+      )(ne)
+    case Con{Item{+ik, +iv, +ir}, +tl}:
+      Mst.case_cmp(
+        c => {
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(c),
+            u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+            u => Shared.Bool.when(
+              Pick,
+              Cmp.is_eq(c),
+              w => Pick.Hit{iv},
+              w => Mst.pick(List.append(&2, Item, tl, Item{k, v1, r} <> rest), ir, l, Some{ik}, hi, k2)
+            )
+          )
+            == Shared.Bool.when(
+              Pick,
+              Cmp.is_lt(c),
+              u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+              u => Shared.Bool.when(
+                Pick,
+                Cmp.is_eq(c),
+                w => Pick.Hit{iv},
+                w => Mst.pick(List.append(&2, Item, tl, Item{k, v2, r} <> rest), ir, l, Some{ik}, hi, k2)
+              )
+            ): Pick
+        },
+        Key.cmp(k2, ik),
+        +q => {==},
+        +q => {==},
+        +q => Mst.pick_val(tl, k, v1, v2, r, rest, ir, l, Some{ik}, hi, k2, ne)
+      )
+
+# items of other values fit as the items
+def Mst.fit_val(
+  +pre: List<&2, Item>,
+  +k: List<&2, U32>,
+  -v1: List<&2, U32>,
+  -v2: List<&2, U32>,
+  -r: Maybe<&2, Hashes.Hash>,
+  -rest: List<&2, Item>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {
+  Items.fit(List.append(&2, Item, pre, Item{k, v1, r} <> rest), lo, hi)
+    == Items.fit(List.append(&2, Item, pre, Item{k, v2, r} <> rest), lo, hi): Bool
+}:
+  match pre:
+    case Nil{}:
+      {==}
+    case Con{Item{+ik, +iv, +ir}, +tl}:
+      Equal.cong(
+        Bool,
+        Bool,
+        b => Bool.and(Bool.and(Bound.after(lo, ik), Bound.before(ik, hi)), b),
+        Items.fit(List.append(&2, Item, tl, Item{k, v1, r} <> rest), Some{ik}, hi),
+        Items.fit(List.append(&2, Item, tl, Item{k, v2, r} <> rest), Some{ik}, hi),
+        Mst.fit_val(tl, k, v1, v2, r, rest, Some{ik}, hi)
+      )
+
+# items, then one more and more, are not empty
+def Mst.empty_app_con(+pre: List<&2, Item>, -y: Item, -ys: List<&2, Item>) -> {
+  List.is_empty(&2, Item, List.append(&2, Item, pre, y <> ys)) == False{}: Bool
+}:
+  match pre:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      {==}
+
+# a node of items of other values opens where the node opens
+def Mst.opens_val(
+  +l: Nat,
+  -left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +k: List<&2, U32>,
+  +v1: List<&2, U32>,
+  +v2: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +o: {Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{k, v1, r} <> rest)}, Room{u, lo, hi}) == True{}: Bool}
+) -> {Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{k, v2, r} <> rest)}, Room{u, lo, hi}) == True{}: Bool}:
+  Mst.opens_of(l, left, List.append(&2, Item, pre, Item{k, v2, r} <> rest), u, lo, hi, Mst.opens_lt(l, left, List.append(&2, Item, pre, Item{k, v1, r} <> rest), Room{u, lo, hi})(o), Mst.empty_app_con(pre, Item{k, v2, r}, rest), (%Mst.opens_fit(l, left, List.append(&2, Item, pre, Item{k, v1, r} <> rest), u, lo, hi, o) : {Items.fit(List.append(&2, Item, pre, Item{k, v2, r} <> rest), lo, hi) == _ : Bool}; Mst.fit_val(pre, k, v2, v1, r, rest, lo, hi)))
+
+# two nodes in one room whose picks of k2 are the same read k2 the same
+def Mst.same_read(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  g1: Nat,
+  g2: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +h2: Hashes.Hash,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +l: Nat,
+  +left1: Maybe<&2, Hashes.Hash>,
+  +xs1: List<&2, Item>,
+  +left2: Maybe<&2, Hashes.Hash>,
+  +xs2: List<&2, Item>,
+  +k2: List<&2, U32>,
+  -x: Maybe<&2, List<&2, U32>>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left1, xs1}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left1, xs1}, Room{u, lo, hi}) == True{}: Bool},
+  +eN2: {Mst.node(~S, ~fetch, s, h2) == Some{Node{l, left2, xs2}}: Maybe<&2, Node>},
+  +oN2: {Mst.opens(Node{l, left2, xs2}, Room{u, lo, hi}) == True{}: Bool},
+  +fu: {Nat.is_le(u, g2) == True{}: Bool},
+  +ep: {Mst.pick(xs2, left2, l, lo, hi, k2) == Mst.pick(xs1, left1, l, lo, hi, k2): Pick}
+) -> {Look.known(Mst.look.go(~S, ~fetch, g1, s, Room{u, lo, hi}, Some{h}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>} -> {
+  Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, Some{h2}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  match g1 g2:
+    case 0n y:
+      +e => Empty.absurd(
+        {Look.known(Mst.look.go(~S, ~fetch, y, s, Room{u, lo, hi}, Some{h2}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, x, e)
+      )
+    case 1n+p1 0n:
+      +e => Empty.absurd(
+        {Look.known(Look.Missing{h2}) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Mst.opens_fuel(l, left2, xs2, u, lo, hi, oN2, fu)
+      )
+    case 1n+(+p1) 1n+(+p2):
+      %Equal.sym(
+        Look,
+        Mst.look.go(~S, ~fetch, 1n+p1, s, Room{u, lo, hi}, Some{h}, k2),
+        Mst.look.pick(Mst.pick(xs1, left1, l, lo, hi, k2), h, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)),
+        Mst.look_node(~S, ~fetch, p1, s, h, u, lo, hi, l, left1, xs1, k2, eN, oN)
+      ): (
+        {Look.known(_) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+          -> {Look.known(Mst.look.go(~S, ~fetch, 1n+p2, s, Room{u, lo, hi}, Some{h2}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+      )
+      %Equal.sym(
+        Look,
+        Mst.look.go(~S, ~fetch, 1n+p2, s, Room{u, lo, hi}, Some{h2}, k2),
+        Mst.look.pick(Mst.pick(xs2, left2, l, lo, hi, k2), h2, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p2, s, r2, m2, k2)),
+        Mst.look_node(~S, ~fetch, p2, s, h2, u, lo, hi, l, left2, xs2, k2, eN2, oN2)
+      ): (
+        {
+          Look.known(Mst.look.pick(Mst.pick(xs1, left1, l, lo, hi, k2), h, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
+            == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+        }
+          -> {Look.known(_) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+      )
+      %Equal.sym(Pick, Mst.pick(xs2, left2, l, lo, hi, k2), Mst.pick(xs1, left1, l, lo, hi, k2), ep): (
+        {
+          Look.known(Mst.look.pick(Mst.pick(xs1, left1, l, lo, hi, k2), h, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p1, s, r2, m2, k2)))
+            == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+        }
+          -> {
+            Look.known(Mst.look.pick(_, h2, l, k2, m2 => r2 => Mst.look.go(~S, ~fetch, p2, s, r2, m2, k2)))
+              == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+          }
+      )
+      Mst.look.same_pick(
+        ~S,
+        ~fetch,
+        p1,
+        p2,
+        s,
+        xs1,
+        left1,
+        l,
+        lo,
+        lo,
+        hi,
+        hi,
+        h,
+        h2,
+        k2,
+        x,
+        Mst.lo_le_refl(lo),
+        Mst.hi_le_refl(hi),
+        Mst.opens_fl(l, left2, xs2, u, lo, hi, p2, oN2, fu)
+      )
+
+# a read of a node of one item k, of a key below k, reads the subtree before it
+def Mst.single_lt(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +g2: Nat,
+  +s: S,
+  +ht: Hashes.Hash,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +l: Nat,
+  +a: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +b: Maybe<&2, Hashes.Hash>,
+  +k2: List<&2, U32>,
+  -x: Maybe<&2, List<&2, U32>>,
+  +eT: {Mst.node(~S, ~fetch, s, ht) == Some{Node{l, a, [Item{k, v, b}]}}: Maybe<&2, Node>},
+  +oT: {Mst.opens(Node{l, a, [Item{k, v, b}]}, Room{u, lo, hi}) == True{}: Bool},
+  +fu: {Nat.is_le(u, g2) == True{}: Bool},
+  +c: {Key.cmp(k2, k) == LT{}: Cmp},
+  ih: @g4: Nat -> {Nat.is_le(l, g4) == True{}: Bool} -> {
+    Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, lo, Some{k}}, a, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  }
+) -> {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, Some{ht}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  Mst.new_down(~S, ~fetch, g2, s, ht, u, lo, hi, l, a, [Item{k, v, b}], k2, x, a, lo, Some{k}, eT, oT, fu, (%Equal.sym(Cmp, Key.cmp(k2, k), LT{}, c) : {Shared.Bool.when(Pick, Cmp.is_lt(_), u => Pick.Down{a, Room.of(l, lo, Some{k})}, u => Shared.Bool.when(Pick, Cmp.is_eq(_), w => Pick.Hit{v}, w => Mst.pick([], b, l, Some{k}, hi, k2))) == Pick.Down{a, Room{l, lo, Some{k}}} : Pick}; {==}), ih)
+
+# a read of a node of one item k, of a key above k, reads the subtree after it
+def Mst.single_gt(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +g2: Nat,
+  +s: S,
+  +ht: Hashes.Hash,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +l: Nat,
+  +a: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +b: Maybe<&2, Hashes.Hash>,
+  +k2: List<&2, U32>,
+  -x: Maybe<&2, List<&2, U32>>,
+  +eT: {Mst.node(~S, ~fetch, s, ht) == Some{Node{l, a, [Item{k, v, b}]}}: Maybe<&2, Node>},
+  +oT: {Mst.opens(Node{l, a, [Item{k, v, b}]}, Room{u, lo, hi}) == True{}: Bool},
+  +fu: {Nat.is_le(u, g2) == True{}: Bool},
+  +c: {Key.cmp(k2, k) == GT{}: Cmp},
+  ih: @g4: Nat -> {Nat.is_le(l, g4) == True{}: Bool} -> {
+    Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, Some{k}, hi}, b, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  }
+) -> {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, Some{ht}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  Mst.new_down(~S, ~fetch, g2, s, ht, u, lo, hi, l, a, [Item{k, v, b}], k2, x, b, Some{k}, hi, eT, oT, fu, (%Equal.sym(Cmp, Key.cmp(k2, k), GT{}, c) : {Shared.Bool.when(Pick, Cmp.is_lt(_), u => Pick.Down{a, Room.of(l, lo, Some{k})}, u => Shared.Bool.when(Pick, Cmp.is_eq(_), w => Pick.Hit{v}, w => Mst.pick([], b, l, Some{k}, hi, k2))) == Pick.Down{b, Room{l, Some{k}, hi}} : Pick}; {==}), ih)
+
+# what a write of k as v reads: k, as v; any other key, as the tree m did
+def Mst.InsRead(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -s: S,
+  -ur: Nat,
+  -lo: Maybe<&2, List<&2, U32>>,
+  -hi: Maybe<&2, List<&2, U32>>,
+  -m: Maybe<&2, Hashes.Hash>,
+  -k: List<&2, U32>,
+  -v: Maybe<&2, List<&2, U32>>,
+  -nr: Maybe<&2, Hashes.Hash>
+) -> Type:
+  (
+    @g: Nat -> {Nat.is_le(ur, g) == True{}: Bool} -> {
+      Look.known(Mst.look.go(~S, ~fetch, g, s, Room{ur, lo, hi}, nr, k)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+    }
+  )
+    & (
+      @k2: List<&2, U32> -> @x: Maybe<&2, List<&2, U32>> -> @g1: Nat -> @g2: Nat -> {Cmp.is_eq(Key.cmp(k2, k)) == False{}: Bool} -> {
+        Nat.is_le(ur, g2) == True{}: Bool
+      } -> {
+        Look.known(Mst.look.go(~S, ~fetch, g1, s, Room{ur, lo, hi}, m, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      } -> {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, nr, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+    )
+
+# a write res of k as v (none: a delete) to the tree m in the room of the up
+# ur between lo and hi: once the depot holds its new nodes, it reads as
+# Mst.InsRead says
+def Mst.InsOk(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -s: S,
+  -ur: Nat,
+  -lo: Maybe<&2, List<&2, U32>>,
+  -hi: Maybe<&2, List<&2, U32>>,
+  -m: Maybe<&2, Hashes.Hash>,
+  -k: List<&2, U32>,
+  -v: Maybe<&2, List<&2, U32>>,
+  res: Maybe<&2, Edit>
+) -> Type:
+  match res:
+    case None{}:
+      Unit
+    case Some{Edit{nr, ns}}:
+      {Depots.Depot.holds(~S, ~fetch, s, ns) == True{}: Bool} -> Mst.InsRead(~S, ~fetch, s, ur, lo, hi, m, k, v, nr)
+
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
