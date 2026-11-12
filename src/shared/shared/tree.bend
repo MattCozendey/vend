@@ -8764,8 +8764,8 @@ def Mst.SplitOk(
         {Mst.lvl(~S, ~fetch, s, m, ur) == True{}: Bool} & Mst.SplitRead(~S, ~fetch, s, lo, hi, k, m, hl, hh)
       )
 
-# Mst.split_lo_full, by whether a pick passes the items before k (b)
-def Mst.split_lo_full.passes(
+# Mst.gap_lo, by whether a pick passes the items before the gap (b)
+def Mst.gap_lo.passes(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   b: Bool,
@@ -8781,17 +8781,20 @@ def Mst.split_lo_full.passes(
   +left: Maybe<&2, Hashes.Hash>,
   +pre: List<&2, Item>,
   +post: List<&2, Item>,
+  +post2: List<&2, Item>,
   +clo: Maybe<&2, Hashes.Hash>,
+  +hi2: Maybe<&2, List<&2, U32>>,
   +k2: List<&2, U32>,
   -x: Maybe<&2, List<&2, U32>>,
   +eb: {Mst.passes(pre, k2) == b: Bool},
   +sf: {Mst.stops_first(post, k2) == True{}: Bool},
+  +sf2: {Mst.stops_first(post2, k2) == True{}: Bool},
   +fl: {Nat.is_le(l, p2) == True{}: Bool},
   ih: @g3: Nat -> @g4: Nat -> {Nat.is_le(l, g4) == True{}: Bool} -> {
     Look.known(Mst.look.go(~S, ~fetch, g3, s, Room{l, Items.last_key(pre, lo), Items.head_key(post, hi)}, Mst.last(pre, left), k2))
       == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
   } -> {
-    Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, Items.last_key(pre, lo), Some{k}}, clo, k2))
+    Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, Items.last_key(pre, lo), Items.head_key(post2, hi2)}, clo, k2))
       == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
   }
 ) -> {
@@ -8802,7 +8805,7 @@ def Mst.split_lo_full.passes(
 } -> {
   Look.known(
     Mst.look.pick(
-      Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), []), Mst.end_left(pre, left, clo), l, lo, Some{k}, k2),
+      Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), post2), Mst.end_left(pre, left, clo), l, lo, hi2, k2),
       hn,
       l,
       k2,
@@ -8826,7 +8829,7 @@ def Mst.split_lo_full.passes(
           -> {
             Look.known(
               Mst.look.pick(
-                Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), []), Mst.end_left(pre, left, clo), l, lo, Some{k}, k2),
+                Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), post2), Mst.end_left(pre, left, clo), l, lo, hi2, k2),
                 hn,
                 l,
                 k2,
@@ -8849,7 +8852,7 @@ def Mst.split_lo_full.passes(
           -> {
             Look.known(
               Mst.look.pick(
-                Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), []), Mst.end_left(pre, left, clo), l, lo, Some{k}, k2),
+                Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), post2), Mst.end_left(pre, left, clo), l, lo, hi2, k2),
                 hn,
                 l,
                 k2,
@@ -8861,9 +8864,16 @@ def Mst.split_lo_full.passes(
       )
       %Equal.sym(
         Pick,
-        Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), []), Mst.end_left(pre, left, clo), l, lo, Some{k}, k2),
-        Mst.pick([], clo, l, Items.last_key(pre, lo), Some{k}, k2),
-        Mst.pick_set_passes(pre, clo, [], left, l, lo, Some{k}, k2, eb)
+        Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), post2), Mst.end_left(pre, left, clo), l, lo, hi2, k2),
+        Pick.Down{clo, Room.of(l, Items.last_key(pre, lo), Items.head_key(post2, hi2))},
+        Equal.trans(
+          Pick,
+          Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), post2), Mst.end_left(pre, left, clo), l, lo, hi2, k2),
+          Mst.pick(post2, clo, l, Items.last_key(pre, lo), hi2, k2),
+          Pick.Down{clo, Room.of(l, Items.last_key(pre, lo), Items.head_key(post2, hi2))},
+          Mst.pick_set_passes(pre, clo, post2, left, l, lo, hi2, k2, eb),
+          Mst.pick_first(post2, clo, l, Items.last_key(pre, lo), hi2, k2)(sf2)
+        )
       ): (
         {
           Look.known(
@@ -8900,7 +8910,7 @@ def Mst.split_lo_full.passes(
           -> {
             Look.known(
               Mst.look.pick(
-                Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), []), _, l, lo, Some{k}, k2),
+                Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), post2), _, l, lo, hi2, k2),
                 hn,
                 l,
                 k2,
@@ -8912,9 +8922,9 @@ def Mst.split_lo_full.passes(
       )
       %Equal.sym(
         Pick,
-        Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), []), left, l, lo, Some{k}, k2),
+        Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), post2), left, l, lo, hi2, k2),
         Mst.pick(List.append(&2, Item, pre, post), left, l, lo, hi, k2),
-        Mst.pick_stops_set(pre, clo, [], post, left, l, lo, Some{k}, hi, k2)(eb)
+        Mst.pick_stops_set(pre, clo, post2, post, left, l, lo, hi2, hi, k2)(eb)
       ): (
         {
           Look.known(
@@ -8955,9 +8965,10 @@ def Mst.split_lo_full.passes(
         fl
       )
 
-# the lower half of a split node, of the items before k, reads a key below k
-# as the node did
-def Mst.split_lo_full(
+# a node whose gap is replaced by the subtree clo, then the items post2,
+# reads a key that a pick of passes the items before the gap and stops at
+# the first item after it, as the node did, but in the gap, as ih says
+def Mst.gap_lo(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   g1: Nat,
@@ -8974,41 +8985,44 @@ def Mst.split_lo_full(
   +left: Maybe<&2, Hashes.Hash>,
   +pre: List<&2, Item>,
   +post: List<&2, Item>,
+  +post2: List<&2, Item>,
   +clo: Maybe<&2, Hashes.Hash>,
+  +hi2: Maybe<&2, List<&2, U32>>,
   +k2: List<&2, U32>,
   -x: Maybe<&2, List<&2, U32>>,
   +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, post)}}: Maybe<&2, Node>},
   +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, post)}, Room{ur, lo, hi}) == True{}: Bool},
   +eL: {
     Mst.node(~S, ~fetch, s, hn)
-      == Some{Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), [])}}: Maybe<&2, Node>
+      == Some{Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), post2)}}: Maybe<&2, Node>
   },
   +oL: {
-    Mst.opens(Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), [])}, Room{u2, lo, Some{k}})
+    Mst.opens(Node{l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), post2)}, Room{u2, lo, hi2})
       == True{}: Bool
   },
   +sf: {Mst.stops_first(post, k2) == True{}: Bool},
+  +sf2: {Mst.stops_first(post2, k2) == True{}: Bool},
   +fu: {Nat.is_le(u2, g2) == True{}: Bool},
   ih: @g3: Nat -> @g4: Nat -> {Nat.is_le(l, g4) == True{}: Bool} -> {
     Look.known(Mst.look.go(~S, ~fetch, g3, s, Room{l, Items.last_key(pre, lo), Items.head_key(post, hi)}, Mst.last(pre, left), k2))
       == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
   } -> {
-    Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, Items.last_key(pre, lo), Some{k}}, clo, k2))
+    Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, Items.last_key(pre, lo), Items.head_key(post2, hi2)}, clo, k2))
       == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
   }
 ) -> {Look.known(Mst.look.go(~S, ~fetch, g1, s, Room{ur, lo, hi}, Some{h}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>} -> {
-  Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{u2, lo, Some{k}}, Some{hn}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{u2, lo, hi2}, Some{hn}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   match g1 g2:
     case 0n y:
       +e => Empty.absurd(
-        {Look.known(Mst.look.go(~S, ~fetch, y, s, Room{u2, lo, Some{k}}, Some{hn}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        {Look.known(Mst.look.go(~S, ~fetch, y, s, Room{u2, lo, hi2}, Some{hn}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
         Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, x, e)
       )
     case 1n+p1 0n:
       +e => Empty.absurd(
         {Look.known(Look.Missing{hn}) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
-        Mst.opens_fuel(l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), []), u2, lo, Some{k}, oL, fu)
+        Mst.opens_fuel(l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), post2), u2, lo, hi2, oL, fu)
       )
     case 1n+(+p1) 1n+(+p2):
       %Equal.sym(
@@ -9024,13 +9038,13 @@ def Mst.split_lo_full(
         Mst.look_node(~S, ~fetch, p1, s, h, ur, lo, hi, l, left, List.append(&2, Item, pre, post), k2, eN, oN)
       ): (
         {Look.known(_) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
-          -> {Look.known(Mst.look.go(~S, ~fetch, 1n+p2, s, Room{u2, lo, Some{k}}, Some{hn}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+          -> {Look.known(Mst.look.go(~S, ~fetch, 1n+p2, s, Room{u2, lo, hi2}, Some{hn}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
       )
       %Equal.sym(
         Look,
-        Mst.look.go(~S, ~fetch, 1n+p2, s, Room{u2, lo, Some{k}}, Some{hn}, k2),
+        Mst.look.go(~S, ~fetch, 1n+p2, s, Room{u2, lo, hi2}, Some{hn}, k2),
         Mst.look.pick(
-          Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), []), Mst.end_left(pre, left, clo), l, lo, Some{k}, k2),
+          Mst.pick(List.append(&2, Item, Mst.set_last(pre, clo), post2), Mst.end_left(pre, left, clo), l, lo, hi2, k2),
           hn,
           l,
           k2,
@@ -9044,10 +9058,10 @@ def Mst.split_lo_full(
           hn,
           u2,
           lo,
-          Some{k},
+          hi2,
           l,
           Mst.end_left(pre, left, clo),
-          List.append(&2, Item, Mst.set_last(pre, clo), []),
+          List.append(&2, Item, Mst.set_last(pre, clo), post2),
           k2,
           eL,
           oL
@@ -9067,7 +9081,7 @@ def Mst.split_lo_full(
         }
           -> {Look.known(_) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
       )
-      Mst.split_lo_full.passes(
+      Mst.gap_lo.passes(
         ~S,
         ~fetch,
         Mst.passes(pre, k2),
@@ -9083,12 +9097,15 @@ def Mst.split_lo_full(
         left,
         pre,
         post,
+        post2,
         clo,
+        hi2,
         k2,
         x,
         {==},
         sf,
-        Mst.opens_fl(l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), []), u2, lo, Some{k}, p2, oL, fu),
+        sf2,
+        Mst.opens_fl(l, Mst.end_left(pre, left, clo), List.append(&2, Item, Mst.set_last(pre, clo), post2), u2, lo, hi2, p2, oL, fu),
         ih
       )
 
@@ -9405,7 +9422,7 @@ def Mst.split_ok.halves(
       +hold => (
         Mst.lvl_of(~S, ~fetch, s, h, ur, l, left, List.append(&2, Item, x0 <> r0, []), eN, Mst.opens_lt(l, left, List.append(&2, Item, x0 <> r0, []), Room{ur, lo, hi})(oN)),
         (
-          +u2 => +lvm => +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => +e => Mst.split_lo_full(
+          +u2 => +lvm => +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => +e => Mst.gap_lo(
             ~S,
             ~fetch,
             ur,
@@ -9422,7 +9439,9 @@ def Mst.split_ok.halves(
             left,
             x0 <> r0,
             [],
+            [],
             clo,
+            Some{k},
             k2,
             x,
             eN,
@@ -9441,6 +9460,7 @@ def Mst.split_ok.halves(
                 Mst.pre_fit(x0 <> r0, [], lo, hi, k)(Mst.opens_fit(l, left, List.append(&2, Item, x0 <> r0, []), ur, lo, hi, oN))(all)
               )
             ),
+            {==},
             {==},
             fu,
             +g3 => +g4 => +fl => +e3 => srlo(l)(lvg)(k2)(x)(l)(g3)(g4)(c)(fl)(e3)
@@ -9528,7 +9548,7 @@ def Mst.split_ok.halves(
       +hold => (
         Mst.lvl_of(~S, ~fetch, s, h, ur, l, left, List.append(&2, Item, x0 <> r0, y <> ys), eN, Mst.opens_lt(l, left, List.append(&2, Item, x0 <> r0, y <> ys), Room{ur, lo, hi})(oN)),
         (
-          +u2 => +lvm => +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => +e => Mst.split_lo_full(
+          +u2 => +lvm => +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => +e => Mst.gap_lo(
             ~S,
             ~fetch,
             ur,
@@ -9545,7 +9565,9 @@ def Mst.split_ok.halves(
             left,
             x0 <> r0,
             y <> ys,
+            [],
             clo,
+            Some{k},
             k2,
             x,
             eN,
@@ -9565,6 +9587,7 @@ def Mst.split_ok.halves(
               )
             ),
             Mst.stops_first_fit(y <> ys, k, hi, k2)(pk)(Mst.le_of_lt(Key.cmp(k2, k))(c)),
+            {==},
             fu,
             +g3 => +g4 => +fl => +e3 => srlo(l)(lvg)(k2)(x)(l)(g3)(g4)(c)(fl)(e3)
           )(
