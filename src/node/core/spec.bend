@@ -15488,51 +15488,47 @@ def Own.act_kept(
     ec
   )
 
-# a group act, once the tree with the new members is known (p), gives a kept tree
+# a group act, once the groups of the tree are known (gs), gives a kept tree
 def Group.act.of_kept(
   ~d: Led(),
   +lf: L(d),
-  +g: String,
   +h: Maybe<&2, Hashes.Hash>,
-  +k: List<&2, U32>,
-  +m: Maybe<&2, List<&2, U32>>,
-  p: Maybe<&2, Trees.Edit>,
+  +g: String,
+  +ms: List<&2, Requests.Member>,
+  gs: List<&2, Group>,
   +a: Replicas.Act,
   hk: {Tree.kept(~d, lf, h) == True{}: Bool},
-  ep: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, lf, h, k, m) == p: Maybe<&2, Trees.Edit>},
-  ec: {Group.act.of(~d, lf, g, p) == Some{a}: Maybe<&2, Replicas.Act>},
-  hh: {Replicas.Act.held(~Requests.Ask.machine(), ~d, lf, a) == True{}: Bool},
-  hm: @v: List<&2, U32> -> {m == Some{v}: Maybe<&2, List<&2, U32>>} -> {Res.held(~d, lf, Trees.Binding{k, v}) == True{}: Bool}
+  ec: {Group.act.of(~d, lf, h, g, ms, gs) == Some{a}: Maybe<&2, Replicas.Act>},
+  hh: {Replicas.Act.held(~Requests.Ask.machine(), ~d, lf, a) == True{}: Bool}
 ) -> Acts.Kept(~d, lf, a):
-  match p:
-    case None{}:
-      Empty.absurd(Acts.Kept(~d, lf, a), Shared.Maybe.none_ne_some(Replicas.Act, a, ec))
-    case Some{+x}:
-      Kept.bind(
-        ~d,
-        lf,
-        List<&2, Group>,
-        Groups.in(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(x), lf), Trees.Edit.root(x)),
-        gs => Shared.Bool.when(
-          Maybe<&2, Replicas.Act>,
-          Crits.Dict.has(Unit, Group.reach(gs, g), Group.key(g)),
-          u => Some{Replicas.Act.Stale{}},
-          u => Act.put(None{}, [], Some{x})
-        ),
-        a,
-        gs => e2 => Kept.when(
-          ~d,
-          lf,
-          Crits.Dict.has(Unit, Group.reach(gs, g), Group.key(g)),
-          u => Some{Replicas.Act.Stale{}},
-          u => Act.put(None{}, [], Some{x}),
-          a,
-          e3 => (%Shared.Maybe.some_inj(Replicas.Act, Replicas.Act.Stale{}, a, e3) : Acts.Kept(~d, lf, _); Unit{}),
-          e3 => Act.put_kept.at(~d, lf, h, k, m, None{}, [], a, hk, Some{x}, ep, e3, hh, hm),
-          e2
-        ),
-        ec
-      )
+  Kept.when(
+    ~d,
+    lf,
+    Crits.Dict.has(Unit, Group.reach(Groups.set(gs, g, ms), g), Group.key(g)),
+    u => Some{Replicas.Act.Stale{}},
+    u => Act.put(
+      None{},
+      [],
+      Replicas.Tree.put(~Requests.Ask.machine(), ~d, lf, h, Key.group(g), Some{Requests.Members.code(ms, [])})
+    ),
+    a,
+    e3 => (%Shared.Maybe.some_inj(Replicas.Act, Replicas.Act.Stale{}, a, e3) : Acts.Kept(~d, lf, _); Unit{}),
+    e3 => Act.put_kept(
+      ~d,
+      lf,
+      h,
+      Key.group(g),
+      Some{Requests.Members.code(ms, [])},
+      None{},
+      [],
+      a,
+      hk,
+      e3,
+      hh,
+      v => e => {==}
+    ),
+    ec
+  )
 
 # a group act gives a kept tree
 def Group.act_kept(
@@ -15550,42 +15546,24 @@ def Group.act_kept(
     ~d,
     lf,
     Tree.whole(~d, lf, Replicas.Tip.content(t)),
-    u => Group.act.of(
-      ~d,
-      lf,
-      g,
-      Replicas.Tree.put(
-        ~Requests.Ask.machine(),
-        ~d,
-        lf,
-        Replicas.Tip.content(t),
-        Key.group(g),
-        Some{Requests.Members.code(ms, [])}
-      )
+    u => Maybe.bind(
+      &2,
+      List<&2, Group>,
+      Replicas.Act,
+      Groups.in(~d, lf, Replicas.Tip.content(t)),
+      gs => Group.act.of(~d, lf, Replicas.Tip.content(t), g, ms, gs)
     ),
     u => None{},
     a,
-    e1 => Group.act.of_kept(
+    e1 => Kept.bind(
       ~d,
       lf,
-      g,
-      Replicas.Tip.content(t),
-      Key.group(g),
-      Some{Requests.Members.code(ms, [])},
-      Replicas.Tree.put(
-        ~Requests.Ask.machine(),
-        ~d,
-        lf,
-        Replicas.Tip.content(t),
-        Key.group(g),
-        Some{Requests.Members.code(ms, [])}
-      ),
+      List<&2, Group>,
+      Groups.in(~d, lf, Replicas.Tip.content(t)),
+      gs => Group.act.of(~d, lf, Replicas.Tip.content(t), g, ms, gs),
       a,
-      hk,
-      {==},
-      e1,
-      hh,
-      v => e => {==}
+      gs => e2 => Group.act.of_kept(~d, lf, Replicas.Tip.content(t), g, ms, gs, a, hk, e2, hh),
+      e1
     ),
     e1 => Empty.absurd(Acts.Kept(~d, lf, a), Shared.Maybe.none_ne_some(Replicas.Act, a, e1)),
     ec
