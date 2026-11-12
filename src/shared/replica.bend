@@ -4303,6 +4303,52 @@ def Hist.write(-mach: Machine(), d: Led(mach)) -> Trees.Laws.Write(
         t
       )
 
+# the law that a listing stays, of a tree t
+def Hist.range_final.of(
+  -S: Data,
+  -fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -grows: S -> S -> Bool,
+  t: Trees.Tree(S, fetch, grows)
+) -> Trees.Laws.RangeFinal(S, grows, Trees.Tree.ops(S, fetch, grows, t)):
+  match t:
+    case Tuple{o, Tuple{f, Tuple{pf, Tuple{w, Tuple{cn, Tuple{rg, Tuple{df, Tuple{wh, Tuple{kp, Tuple{rf, dff}}}}}}}}}}:
+      rf
+
+# the law that a listing stays, of the tree of the ledger d
+def Hist.range_final(-mach: Machine(), d: Led(mach)) -> Trees.Laws.RangeFinal(
+  Led.L(mach, d),
+  a => b => Ledgers.Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b),
+  Led.tree(mach, d)
+):
+  match d:
+    case Tuple{x, t}:
+      Hist.range_final.of(
+        Ledgers.Kind.L(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+        Ledgers.Kind.data(Machine.Q(mach), Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x)),
+        a => b => Ledgers.Kind.grows(
+          ~Machine.Q(mach),
+          ~Machine.code(mach),
+          ~Ledgers.Ledger.kind(Machine.Q(mach), Machine.code(mach), x),
+          a,
+          b
+        ),
+        t
+      )
+
+# a listing of a tree stays as the ledger grows
+def Hist.range(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  a: Led.L(mach, d),
+  b: Led.L(mach, d),
+  h: Maybe<&2, Hashes.Hash>,
+  p: List<&2, U32>,
+  bs: List<&2, Trees.Binding>,
+  g: Led.Grows(mach, d, a, b)
+) -> {Tree.range(~mach, ~d, a, h, p) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>}
+  -> {Tree.range(~mach, ~d, b, h, p) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>}:
+  e => Hist.range_final(mach, d)(a)(b)(h)(p)(bs)(e)(g)
+
 # what a read of a tree tells stays as the ledger grows
 def Hist.find(
   ~mach: Machine(),
