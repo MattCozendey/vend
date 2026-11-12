@@ -3948,6 +3948,196 @@ def Cov.go.of(
         Shared.List.contains_left(~Ledgers.Line, ~Ledgers.Line.is_eq, w1, post, c, Cov.one(~d, ~kern, l, c, m, w1, hd, e1))
       )
 
+# what Vend asks by itself is Own.due, by the rules
+def Rd.rule(-d: Led(), -kern: Kern(d), rules: Kernel.Rules(d, kern)) -> @l: L(d) -> @c: Ledgers.Line -> {
+  Replicas.Kernel.follow(Requests.Ask.machine(), d, kern)(l)(c)
+    == Own.due(~d, ~kern, l, c): Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>
+}:
+  match rules:
+    case Tuple{fst, snd}:
+      snd
+
+# two heads that Heads.same calls the same are the same
+def Rd.heq(m1: Maybe<&2, Replicas.Tip>, m2: Maybe<&2, Replicas.Tip>) -> {
+  Shared.Maybe.is_eq(~Replicas.Tip, ~(x => y => Codes.Code.is_eq(~Replicas.Tip, ~Replicas.Tip.code, x, y)), m1, m2) == True{}: Bool
+} -> {m1 == m2: Maybe<&2, Replicas.Tip>}:
+  Shared.Maybe.is_eq_sound(
+    ~Replicas.Tip,
+    ~(x => y => Codes.Code.is_eq(~Replicas.Tip, ~Replicas.Tip.code, x, y)),
+    x => y => Shared.Eq.sound(
+      ~Replicas.Tip,
+      ~(u => v => Codes.Code.is_eq(~Replicas.Tip, ~Replicas.Tip.code, u, v)),
+      Codes.Code.eq_laws(~Replicas.Tip, ~(Replicas.Tip.code, (Replicas.Tip.code.read, t => r => Replicas.Tip.code_read(t, r)))),
+      x,
+      y
+    ),
+    m1,
+    m2
+  )
+
+# a value that some data is stays, once the data is known (m)
+def Rd.whole(
+  ~A: Data,
+  ~enc: A -> List<&2, U32> -> List<&2, U32>,
+  ~dec: List<&2, U32> -> Maybe<&2, Codes.Read<A>>,
+  m: Maybe<&2, List<&2, U32>>,
+  -m2: Maybe<&2, List<&2, U32>>,
+  hm: @w: List<&2, U32> -> {m == Some{w}: Maybe<&2, List<&2, U32>>} -> {m2 == Some{w}: Maybe<&2, List<&2, U32>>},
+  -x: A
+) -> {Codes.Code.whole.of(~A, ~enc, ~dec, m) == Some{x}: Maybe<&2, A>}
+  -> {Codes.Code.whole.of(~A, ~enc, ~dec, m2) == Some{x}: Maybe<&2, A>}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Codes.Code.whole.of(~A, ~enc, ~dec, m2) == Some{x}: Maybe<&2, A>},
+        Shared.Maybe.none_ne_some(A, x, e)
+      )
+    case Some{y}:
+      e =>
+        %Equal.sym(Maybe<&2, List<&2, U32>>, m2, Some{y}, hm(y)({==})): {
+          Codes.Code.whole.of(~A, ~enc, ~dec, _) == Some{x}: Maybe<&2, A>
+        }
+        e
+
+# a known read stays, once the read is known (m)
+def Rd.known(
+  ~A: Data,
+  ~enc: A -> List<&2, U32> -> List<&2, U32>,
+  ~dec: List<&2, U32> -> Maybe<&2, Codes.Read<A>>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  -m2: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  hm: @w: Maybe<&2, List<&2, U32>> -> {m == Some{w}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+    -> {m2 == Some{w}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  -x: Maybe<&2, A>
+) -> {Replicas.Tip.known(~A, ~enc, ~dec, m) == Some{x}: Maybe<&2, Maybe<&2, A>>}
+  -> {Replicas.Tip.known(~A, ~enc, ~dec, m2) == Some{x}: Maybe<&2, Maybe<&2, A>>}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {Replicas.Tip.known(~A, ~enc, ~dec, m2) == Some{x}: Maybe<&2, Maybe<&2, A>>},
+        Shared.Maybe.none_ne_some(Maybe<&2, A>, x, e)
+      )
+    case Some{y}:
+      e =>
+        %Equal.sym(Maybe<&2, Maybe<&2, List<&2, U32>>>, m2, Some{y}, hm(y)({==})): {
+          Replicas.Tip.known(~A, ~enc, ~dec, _) == Some{x}: Maybe<&2, Maybe<&2, A>>
+        }
+        e
+
+# a map of a value that stays stays
+def Rd.map(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, A>,
+  -m2: Maybe<&2, A>,
+  hm: @y: A -> {m == Some{y}: Maybe<&2, A>} -> {m2 == Some{y}: Maybe<&2, A>},
+  -f: A -> B,
+  -x: B
+) -> {Maybe.map(&2, A, B, f, m) == Some{x}: Maybe<&2, B>} -> {Maybe.map(&2, A, B, f, m2) == Some{x}: Maybe<&2, B>}:
+  match m:
+    case None{}:
+      e => Empty.absurd({Maybe.map(&2, A, B, f, m2) == Some{x}: Maybe<&2, B>}, Shared.Maybe.none_ne_some(B, x, e))
+    case Some{y}:
+      e =>
+        %Equal.sym(Maybe<&2, A>, m2, Some{y}, hm(y)({==})): {Maybe.map(&2, A, B, f, _) == Some{x}: Maybe<&2, B>}
+        e
+
+# what Due.then gives stays, when each step stays
+def Rd.then(
+  -A: Data,
+  m: Maybe<&2, A>,
+  -k1: A -> Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>,
+  -k2: A -> Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>,
+  -x: Maybe<&2, Replicas.Request<Requests.Ask>>,
+  hk: @v: A -> {k1(v) == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>}
+    -> {k2(v) == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>}
+) -> {Due.then(~A, m, k1) == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>}
+  -> {Due.then(~A, m, k2) == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>}:
+  match m:
+    case None{}:
+      x1 => x1
+    case Some{value}:
+      x1 => hk(value)(x1)
+
+# the nodes of a group stay as the ledger grows
+def Rd.nodes(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +h: Maybe<&2, Hashes.Hash>,
+  +gn: String,
+  -ns: List<&2, String>
+) -> {Group.nodes(~d, a, h, gn) == Some{ns}: Maybe<&2, List<&2, String>>}
+  -> {Group.nodes(~d, b, h, gn) == Some{ns}: Maybe<&2, List<&2, String>>}:
+  ?TODO
+
+# a taken request stays as the ledger grows
+def Rd.taken(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +t: Replicas.Tip,
+  +n: U32,
+  -y: Replicas.Taken
+) -> {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, a, t, n) == Some{y}: Maybe<&2, Replicas.Taken>}
+  -> {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, b, t, n) == Some{y}: Maybe<&2, Replicas.Taken>}:
+  ?TODO
+
+# the newest version stays as the ledger grows, once whether there is none
+# is known (z)
+def Rd.newest.at(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +ts: Replicas.Tip,
+  z: Bool,
+  -y: Maybe<&2, Ledgers.Id>
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, Maybe<&2, Ledgers.Id>>,
+    z,
+    u => Some{None{}},
+    u => Maybe.bind(
+      &2,
+      Replicas.Taken,
+      Maybe<&2, Ledgers.Id>,
+      Replicas.Tip.taken(~Requests.Ask.machine(), ~d, a, ts, U32.sub(Replicas.Tip.count(ts), 1)),
+      x => Some{Some{Replicas.Taken.id(x)}}
+    )
+  )
+    == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Id>>
+} -> {
+  Shared.Bool.when(
+    Maybe<&2, Maybe<&2, Ledgers.Id>>,
+    z,
+    u => Some{None{}},
+    u => Maybe.bind(
+      &2,
+      Replicas.Taken,
+      Maybe<&2, Ledgers.Id>,
+      Replicas.Tip.taken(~Requests.Ask.machine(), ~d, b, ts, U32.sub(Replicas.Tip.count(ts), 1)),
+      x => Some{Some{Replicas.Taken.id(x)}}
+    )
+  )
+    == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Id>>
+}:
+  ?TODO
+
+# the newest version stays as the ledger grows
+def Rd.newest(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +ts: Replicas.Tip,
+  -y: Maybe<&2, Ledgers.Id>
+) -> {Replicas.Tip.newest(~Requests.Ask.machine(), ~d, a, ts) == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Id>>}
+  -> {Replicas.Tip.newest(~Requests.Ask.machine(), ~d, b, ts) == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Id>>}:
+  ?TODO
+
 # what Vend asks by itself for a line reads only the tips that Own.deps names
 law Own.reads:
   for ~d: Led()
