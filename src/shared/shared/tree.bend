@@ -7969,6 +7969,660 @@ def Mst.open_all_ok(
           )(hc)
         )
 
+# the items of a node
+def Node.items(n: Node) -> List<&2, Item>:
+  match n:
+    case Node{l, left, xs}:
+      xs
+
+# an empty list is the empty list
+def List.empty_nil(-A: Data, xs: List<&2, A>) -> {List.is_empty(&2, A, xs) == True{}: Bool} -> {xs == []: List<&2, A>}:
+  match xs:
+    case Nil{}:
+      x => {==}
+    case Con{head, tail}:
+      x => Empty.absurd({head <> tail == [] : List<&2, A>}, {(%x : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+
+# what the runs of the next round must be, q levels down: none when no level
+# is left, else ok
+def Runs.next(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, q: Nat, +s: S, ps: List<&2, Runs>) -> Bool:
+  match q:
+    case 0n:
+      List.is_empty(&2, Runs, ps)
+    case 1n+p:
+      Runs.ok(~S, ~fetch, p, s, ps)
+
+# no run is a next round
+def Runs.next_nil(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, q: Nat, +s: S) -> {
+  Runs.next(~S, ~fetch, q, s, []) == True{}: Bool
+}:
+  match q:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
+
+# two next rounds, one after the other, are a next round
+def Runs.next_append(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  q: Nat,
+  +s: S,
+  ps: List<&2, Runs>,
+  +acc: List<&2, Runs>
+) -> {Runs.next(~S, ~fetch, q, s, ps) == True{}: Bool} -> {Runs.next(~S, ~fetch, q, s, acc) == True{}: Bool} -> {
+  Runs.next(~S, ~fetch, q, s, List.append(&2, Runs, ps, acc)) == True{}: Bool
+}:
+  match q:
+    case 0n:
+      match ps:
+        case Nil{}:
+          h => g => g
+        case Con{x, r}:
+          h => g => Empty.absurd({List.is_empty(&2, Runs, x <> List.append(&2, Runs, r, acc)) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case 1n+(+p):
+      h => g => Runs.ok_append(~S, ~fetch, p, s, ps, acc)(h)(g)
+
+# a step that read and gave a next round
+def Step.good(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, q: Nat, +s: S, m: Maybe<&2, Round>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{r}:
+      Runs.next(~S, ~fetch, q, s, Round.pairs(r))
+
+# pieces ok with no level left hold no subtree: a node has an item, so its
+# listing needs a level
+def Mst.no_sub(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +s: S, ps: List<&2, Piece>) -> {
+  Pieces.ok(~S, ~fetch, 0n, s, ps) == True{}: Bool
+} -> {Pieces.has_sub(ps) == False{}: Bool}:
+  match ps:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{k, v}, rest}:
+      h => Mst.no_sub(~S, ~fetch, s, rest)(h)
+    case Con{Piece.Sub{+h, +u, +lo, +hi}, rest}:
+      hh => Empty.absurd(
+        {True{} == False{}: Bool},
+        Maybe.some_cases(
+          List<&2, Binding>,
+          Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks => Mst.range.go(~S, ~fetch, 0n, s, [], ks)),
+          Empty,
+          +x => ex => Maybe.bind_cases(
+            List<&2, Piece>,
+            List<&2, Binding>,
+            Mst.open(~S, ~fetch, s, h, u, lo, hi),
+            ks => Mst.range.go(~S, ~fetch, 0n, s, [], ks),
+            x,
+            Empty,
+            +ks => eo => ea => Mst.open_cases(
+              ~S,
+              ~fetch,
+              s,
+              h,
+              u,
+              lo,
+              hi,
+              ks,
+              Empty,
+              +l2 => +left2 => +xs2 => ef => eh => en => elt => ee => ep => Shared.Bool.true_ne_false(
+                Equal.trans(
+                  Bool,
+                  True{},
+                  List.is_empty(&2, Item, xs2),
+                  False{},
+                  Equal.cong(
+                    Node,
+                    Bool,
+                    n => List.is_empty(&2, Item, Node.items(n)),
+                    Node{l2, None{}, []},
+                    Node{l2, left2, xs2},
+                    Equal.sym(
+                      Node,
+                      Node{l2, left2, xs2},
+                      Node{l2, None{}, []},
+                      Mst.pieces_empty(
+                        xs2,
+                        l2,
+                        left2,
+                        lo,
+                        hi
+                      )(
+                        Equal.trans(
+                          Maybe<&2, List<&2, Piece>>,
+                          Mst.pieces(xs2, l2, left2, lo, hi),
+                          Some{ks},
+                          Some{[]},
+                          ep,
+                          Equal.cong(List<&2, Piece>, Maybe<&2, List<&2, Piece>>, y => Some{y}, ks, [], Mst.range_zero_nil(~S, ~fetch, s, [], ks, x)(ea))
+                        )
+                      )
+                    )
+                  ),
+                  ee
+                )
+              )
+            )(eo)
+          )(ex)
+        )(
+          Shared.Bool.and_true_right(
+            Bound.before([], hi),
+            Maybe.is_some(
+              &2,
+              List<&2, Binding>,
+              Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks => Mst.range.go(~S, ~fetch, 0n, s, [], ks))
+            )
+          )(
+            Shared.Bool.and_true_left(
+              Bool.and(
+                Bound.before([], hi),
+                Maybe.is_some(
+                  &2,
+                  List<&2, Binding>,
+                  Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks => Mst.range.go(~S, ~fetch, 0n, s, [], ks))
+                )
+              ),
+              Pieces.ok(~S, ~fetch, 0n, s, rest)
+            )(hh)
+          )
+        )
+      )
+
+# an or of two False sides is not True
+def Bool.or_false_both(a: Bool, -b: Bool) -> {a == False{}: Bool} -> {b == False{}: Bool} -> {Bool.or(a, b) == True{}: Bool} -> Empty:
+  match a:
+    case True{}:
+      ea => eb => e => Shared.Bool.true_ne_false(ea)
+    case False{}:
+      ea => eb => e => Shared.Bool.true_ne_false(Equal.trans(Bool, True{}, b, False{}, Equal.sym(Bool, b, True{}, e), eb))
+
+# a step of a run with ok sides reads and gives a next round
+def Mst.step_at_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  q: Nat,
+  +s: S,
+  p: Runs
+) -> {Runs.ok1(~S, ~fetch, q, s, p) == True{}: Bool} -> {Step.good(~S, ~fetch, q, s, Mst.step.at(~S, ~fetch, s, p)) == True{}: Bool}:
+  match q:
+    case 0n:
+      match p:
+        case Runs{+a, +b}:
+          +h => Shared.Bool.when_cases(
+            Maybe<&2, Round>,
+            x => {Step.good(~S, ~fetch, 0n, s, x) == True{}: Bool},
+            Bool.or(Pieces.has_sub(a), Pieces.has_sub(b)),
+            u => Maybe.bind(
+              &2,
+              List<&2, Piece>,
+              Round,
+              Mst.open.all(~S, ~fetch, s, a),
+              a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, s, b))
+            ),
+            u => Some{Round{Pieces.keys(a, Pieces.keys(b, [])), []}},
+            e => Empty.absurd(
+              {
+                Step.good(
+                  ~S,
+                  ~fetch,
+                  0n,
+                  s,
+                  Maybe.bind(
+                    &2,
+                    List<&2, Piece>,
+                    Round,
+                    Mst.open.all(~S, ~fetch, s, a),
+                    a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, s, b))
+                  )
+                )
+                  == True{}: Bool
+              },
+              Bool.or_false_both(
+                Pieces.has_sub(a),
+                Pieces.has_sub(b)
+              )(Mst.no_sub(~S, ~fetch, s, a)(Shared.Bool.and_true_left(Pieces.ok(~S, ~fetch, 0n, s, a), Pieces.ok(~S, ~fetch, 0n, s, b))(h)))(
+                Mst.no_sub(~S, ~fetch, s, b)(Shared.Bool.and_true_right(Pieces.ok(~S, ~fetch, 0n, s, a), Pieces.ok(~S, ~fetch, 0n, s, b))(h))
+              )(e)
+            ),
+            e => {==}
+          )
+    case 1n+(+q2):
+      match p:
+        case Runs{+a, +b}:
+          +h => Shared.Bool.when_cases(
+            Maybe<&2, Round>,
+            x => {Step.good(~S, ~fetch, 1n+q2, s, x) == True{}: Bool},
+            Bool.or(Pieces.has_sub(a), Pieces.has_sub(b)),
+            u => Maybe.bind(
+              &2,
+              List<&2, Piece>,
+              Round,
+              Mst.open.all(~S, ~fetch, s, a),
+              a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, s, b))
+            ),
+            u => Some{Round{Pieces.keys(a, Pieces.keys(b, [])), []}},
+            e => Mst.open_all_ok(
+              ~S,
+              ~fetch,
+              q2,
+              s,
+              a,
+              {
+                Step.good(
+                  ~S,
+                  ~fetch,
+                  1n+q2,
+                  s,
+                  Maybe.bind(
+                    &2,
+                    List<&2, Piece>,
+                    Round,
+                    Mst.open.all(~S, ~fetch, s, a),
+                    a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, s, b))
+                  )
+                )
+                  == True{}: Bool
+              },
+              +a2 => ea => ga => Mst.open_all_ok(
+                ~S,
+                ~fetch,
+                q2,
+                s,
+                b,
+                {
+                  Step.good(
+                    ~S,
+                    ~fetch,
+                    1n+q2,
+                    s,
+                    Maybe.bind(
+                      &2,
+                      List<&2, Piece>,
+                      Round,
+                      Mst.open.all(~S, ~fetch, s, a),
+                      a3 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a3, b2}]}, Mst.open.all(~S, ~fetch, s, b))
+                    )
+                  )
+                    == True{}: Bool
+                },
+                +b2 => eb => gb =>
+                  %Equal.sym(Maybe<&2, List<&2, Piece>>, Mst.open.all(~S, ~fetch, s, a), Some{a2}, ea): {
+                    Step.good(
+                      ~S,
+                      ~fetch,
+                      1n+q2,
+                      s,
+                      Maybe.bind(
+                        &2,
+                        List<&2, Piece>,
+                        Round,
+                        _,
+                        a3 => Maybe.map(&2, List<&2, Piece>, Round, b3 => Round{[], [Runs{a3, b3}]}, Mst.open.all(~S, ~fetch, s, b))
+                      )
+                    )
+                      == True{}: Bool
+                  }
+                  %Equal.sym(Maybe<&2, List<&2, Piece>>, Mst.open.all(~S, ~fetch, s, b), Some{b2}, eb): {
+                    Step.good(~S, ~fetch, 1n+q2, s, Maybe.map(&2, List<&2, Piece>, Round, b3 => Round{[], [Runs{a2, b3}]}, _)) == True{}: Bool
+                  }
+                  Shared.Bool.and_both(
+                    Bool.and(Pieces.ok(~S, ~fetch, q2, s, a2), Pieces.ok(~S, ~fetch, q2, s, b2)),
+                    True{}
+                  )(Shared.Bool.and_both(Pieces.ok(~S, ~fetch, q2, s, a2), Pieces.ok(~S, ~fetch, q2, s, b2))(ga)(gb))({==})
+              )(Shared.Bool.and_true_right(Pieces.ok(~S, ~fetch, 1n+q2, s, a), Pieces.ok(~S, ~fetch, 1n+q2, s, b))(h))
+            )(Shared.Bool.and_true_left(Pieces.ok(~S, ~fetch, 1n+q2, s, a), Pieces.ok(~S, ~fetch, 1n+q2, s, b))(h)),
+            e => {==}
+          )
+
+# two good steps, one after the other, are a good step
+def Step.good_bind(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  m1: Maybe<&2, Round>,
+  m2: Maybe<&2, Round>
+) -> {Step.good(~S, ~fetch, q, s, m1) == True{}: Bool} -> {Step.good(~S, ~fetch, q, s, m2) == True{}: Bool} -> {
+  Step.good(~S, ~fetch, q, s, Maybe.bind(&2, Round, Round, m1, a => Maybe.map(&2, Round, Round, b => Round.append(a, b), m2))) == True{}: Bool
+}:
+  match m1 m2:
+    case None{} y:
+      h => g => Empty.absurd(
+        {Step.good(~S, ~fetch, q, s, None{}) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{r1} None{}:
+      h => g => Empty.absurd(
+        {Step.good(~S, ~fetch, q, s, None{}) == True{}: Bool},
+        Shared.Bool.false_ne_true(g)
+      )
+    case Some{+r1} Some{+r2}:
+      h => g =>
+        %Equal.sym(
+          List<&2, Runs>,
+          Round.pairs(Round.append(r1, r2)),
+          List.append(&2, Runs, Round.pairs(r1), Round.pairs(r2)),
+          Round.pairs_append(r1, r2)
+        ): {Runs.next(~S, ~fetch, q, s, _) == True{}: Bool}
+        Runs.next_append(~S, ~fetch, q, s, Round.pairs(r1), Round.pairs(r2))(h)(g)
+
+# a step of ok runs reads and gives a next round
+def Mst.step_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  ps: List<&2, Runs>
+) -> {Runs.ok(~S, ~fetch, q, s, ps) == True{}: Bool} -> {Step.good(~S, ~fetch, q, s, Mst.step(~S, ~fetch, s, ps)) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      h => Runs.next_nil(~S, ~fetch, q, s)
+    case Con{Runs{+a, +b}, +rest}:
+      +h => Step.good_bind(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        Mst.step.at(~S, ~fetch, s, Runs.trim(Runs{a, b})),
+        Mst.step(~S, ~fetch, s, rest)
+      )(
+        Mst.step_at_ok(
+          ~S,
+          ~fetch,
+          q,
+          s,
+          Runs.trim(Runs{a, b})
+        )(
+          Runs.trim_ok(
+            ~S,
+            ~fetch,
+            q,
+            s,
+            Runs{a, b}
+          )(Shared.Bool.and_true_left(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h))
+        )
+      )(
+        Mst.step_ok(
+          ~S,
+          ~fetch,
+          q,
+          s,
+          rest
+        )(Shared.Bool.and_true_right(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h))
+      )
+
+# a bind of a good step whose next rounds read, reads
+def Step.bind_good(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  q: Nat,
+  +s: S,
+  m: Maybe<&2, Round>,
+  -f: Round -> Maybe<&2, List<&2, List<&2, U32>>>,
+  hg: {Step.good(~S, ~fetch, q, s, m) == True{}: Bool},
+  hf: @r: Round -> {Runs.next(~S, ~fetch, q, s, Round.pairs(r)) == True{}: Bool} -> {
+    Maybe.is_some(&2, List<&2, List<&2, U32>>, f(r)) == True{}: Bool
+  }
+) -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Maybe.bind(&2, Round, List<&2, List<&2, U32>>, m, f)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(hg))
+    case Some{+r}:
+      hf(r)(hg)
+
+# a bind of a value whose every next reads, reads
+def Maybe.bind_some(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, A>,
+  -f: A -> Maybe<&2, B>,
+  h1: {Maybe.is_some(&2, A, m) == True{}: Bool},
+  h2: @x: A -> {Maybe.is_some(&2, B, f(x)) == True{}: Bool}
+) -> {Maybe.is_some(&2, B, Maybe.bind(&2, A, B, m, f)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case Some{+x}:
+      h2(x)
+
+# a difference of ok runs reads, when its next round (ihn) and its other runs
+# (ihr) read
+def Mst.diff_some.con(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +a: List<&2, Piece>,
+  +b: List<&2, Piece>,
+  +rest: List<&2, Runs>,
+  +h: {Runs.ok(~S, ~fetch, q, s, Runs{a, b} <> rest) == True{}: Bool},
+  ihr: {Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, 1n+q, s, rest)) == True{}: Bool},
+  ihn: @ps: List<&2, Runs> -> {Runs.next(~S, ~fetch, q, s, ps) == True{}: Bool} -> {
+    Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, q, s, ps)) == True{}: Bool
+  }
+) -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest)) == True{}: Bool}:
+  Step.bind_good(
+    ~S,
+    ~fetch,
+    q,
+    s,
+    Mst.step(~S, ~fetch, s, Round.pairs(Mst.cut(a, b, [], []))),
+    +r => Maybe.bind(
+      &2,
+      List<&2, List<&2, U32>>,
+      List<&2, List<&2, U32>>,
+      Mst.diff.go(~S, ~fetch, q, s, Round.pairs(r)),
+      k3 => Maybe.map(
+        &2,
+        List<&2, List<&2, U32>>,
+        List<&2, List<&2, U32>>,
+        k4 => List.append(
+          &2,
+          List<&2, U32>,
+          Round.keys(Mst.cut(a, b, [], [])),
+          List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))
+        ),
+        Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+      )
+    ),
+    Mst.step_ok(
+      ~S,
+      ~fetch,
+      q,
+      s,
+      Round.pairs(Mst.cut(a, b, [], []))
+    )(
+      Mst.cut_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        a,
+        b,
+        [],
+        []
+      )(
+        Shared.Bool.and_true_left(
+          Pieces.ok(~S, ~fetch, q, s, a),
+          Pieces.ok(~S, ~fetch, q, s, b)
+        )(
+          Shared.Bool.and_true_left(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h)
+        )
+      )(
+        Shared.Bool.and_true_right(
+          Pieces.ok(~S, ~fetch, q, s, a),
+          Pieces.ok(~S, ~fetch, q, s, b)
+        )(
+          Shared.Bool.and_true_left(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h)
+        )
+      )({==})({==})
+    ),
+    +r => hn => Maybe.bind_some(
+      List<&2, List<&2, U32>>,
+      List<&2, List<&2, U32>>,
+      Mst.diff.go(~S, ~fetch, q, s, Round.pairs(r)),
+      k3 => Maybe.map(
+        &2,
+        List<&2, List<&2, U32>>,
+        List<&2, List<&2, U32>>,
+        k4 => List.append(
+          &2,
+          List<&2, U32>,
+          Round.keys(Mst.cut(a, b, [], [])),
+          List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))
+        ),
+        Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+      ),
+      ihn(Round.pairs(r))(hn),
+      x => Equal.trans(
+        Bool,
+        Maybe.is_some(
+          &2,
+          List<&2, List<&2, U32>>,
+          Maybe.map(
+            &2,
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            k4 => List.append(
+              &2,
+              List<&2, U32>,
+              Round.keys(Mst.cut(a, b, [], [])),
+              List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, x, k4))
+            ),
+            Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+          )
+        ),
+        Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, 1n+q, s, rest)),
+        True{},
+        Maybe.map_is_some(
+          List<&2, List<&2, U32>>,
+          List<&2, List<&2, U32>>,
+          k4 => List.append(
+            &2,
+            List<&2, U32>,
+            Round.keys(Mst.cut(a, b, [], [])),
+            List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, x, k4))
+          ),
+          Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+        ),
+        ihr
+      )
+    )
+  )
+
+# a difference of ok runs reads, while levels are left
+def Mst.diff_some(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, q: Nat, +s: S, runs: List<&2, Runs>) -> {
+  Runs.ok(~S, ~fetch, q, s, runs) == True{}: Bool
+} -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, 1n+q, s, runs)) == True{}: Bool}:
+  match q:
+    case 0n:
+      match runs:
+        case Nil{}:
+          h => {==}
+        case Con{Runs{+a, +b}, +rest}:
+          +h => Mst.diff_some.con(
+            ~S,
+            ~fetch,
+            0n,
+            s,
+            a,
+            b,
+            rest,
+            h,
+            Mst.diff_some(
+              ~S,
+              ~fetch,
+              0n,
+              s,
+              rest
+            )(Shared.Bool.and_true_right(Bool.and(Pieces.ok(~S, ~fetch, 0n, s, a), Pieces.ok(~S, ~fetch, 0n, s, b)), Runs.ok(~S, ~fetch, 0n, s, rest))(h)),
+            ps => hn =>
+              %Equal.sym(List<&2, Runs>, ps, [], List.empty_nil(Runs, ps)(hn)): {
+                Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, 0n, s, _)) == True{}: Bool
+              }
+              {==}
+          )
+    case 1n+(+q2):
+      match runs:
+        case Nil{}:
+          h => {==}
+        case Con{Runs{+a, +b}, +rest}:
+          +h => Mst.diff_some.con(
+            ~S,
+            ~fetch,
+            1n+q2,
+            s,
+            a,
+            b,
+            rest,
+            h,
+            Mst.diff_some(
+              ~S,
+              ~fetch,
+              1n+q2,
+              s,
+              rest
+            )(Shared.Bool.and_true_right(Bool.and(Pieces.ok(~S, ~fetch, 1n+q2, s, a), Pieces.ok(~S, ~fetch, 1n+q2, s, b)), Runs.ok(~S, ~fetch, 1n+q2, s, rest))(h)),
+            ps => hn => Mst.diff_some(~S, ~fetch, q2, s, ps)(hn)
+          )
+
+# the root of a tree that lists whole is ok
+def Mst.root_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +bs: List<&2, Binding>
+) -> {Mst.range(~S, ~fetch, s, h, []) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {Pieces.ok(~S, ~fetch, 63n, s, Mst.root(h)) == True{}: Bool}:
+  match h:
+    case None{}:
+      e => {==}
+    case Some{+h1}:
+      e => Mst.range_list(
+        ~S,
+        ~fetch,
+        Some{h1},
+        63n,
+        s,
+        [],
+        Mst.depth(),
+        None{},
+        None{},
+        [],
+        bs,
+        {Pieces.ok(~S, ~fetch, 63n, s, Mst.root(Some{h1})) == True{}: Bool},
+        +a1 => b => e4 => eb => esl => Pieces.ok_sub(~S, ~fetch, 63n, s, Some{h1}, Mst.depth(), None{}, None{}, [], a1)({==})(esl)({==})
+      )(e)
+
+# a difference of two trees that list whole reads
+def Mst.diff_whole(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +bs: List<&2, Binding>,
+  +bs2: List<&2, Binding>
+) -> {Mst.range(~S, ~fetch, s, h, []) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {
+  Mst.range(~S, ~fetch, s, h2, []) == Some{bs2}: Maybe<&2, List<&2, Binding>>
+} -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff(~S, ~fetch, s, h, h2)) == True{}: Bool}:
+  e1 => e2 => Mst.diff_some(
+    ~S,
+    ~fetch,
+    63n,
+    s,
+    [Runs{Mst.root(h), Mst.root(h2)}]
+  )(
+    Shared.Bool.and_both(
+      Bool.and(Pieces.ok(~S, ~fetch, 63n, s, Mst.root(h)), Pieces.ok(~S, ~fetch, 63n, s, Mst.root(h2))),
+      True{}
+    )(
+      Shared.Bool.and_both(Pieces.ok(~S, ~fetch, 63n, s, Mst.root(h)), Pieces.ok(~S, ~fetch, 63n, s, Mst.root(h2)))(Mst.root_ok(~S, ~fetch, s, h, bs)(e1))(
+        Mst.root_ok(~S, ~fetch, s, h2, bs2)(e2)
+      )
+    )({==})
+  )
+
 def Mst.canon(ty, fetch):
   +s => +h1 => +h2 => +bs => e1 => e2 => Mst.range_list(
     ~ty,
