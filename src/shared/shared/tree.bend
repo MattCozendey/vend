@@ -1491,14 +1491,14 @@ def Mst.range(
 # to the keys that differ.
 
 # the pieces a and b are the same: one binding, or one subtree in the same
-# bounds
+# room
 def Piece.same(a: Piece, b: Piece) -> Bool:
   match a b:
     case Piece.Bind{k1, v1} Piece.Bind{k2, v2}:
       Bool.and(Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2), Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2))
     case Piece.Sub{h1, u1, lo1, hi1} Piece.Sub{h2, u2, lo2, hi2}:
       Bool.and(
-        Hashes.Hash.is_eq(h1, h2),
+        Bool.and(Hashes.Hash.is_eq(h1, h2), Nat.is_eq(u1, u2)),
         Bool.and(
           Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), lo1, lo2),
           Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), hi1, hi2)
