@@ -12994,6 +12994,696 @@ def Mst.del_hi(
         ih
       )
 
+# a delete of the one item k of a node, whose merged subtrees rise in its
+# place, for a key other than k, by how it compares to k (c)
+def Mst.del_ok.rise.k2(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  c: Cmp,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +nc: Maybe<&2, Hashes.Hash>,
+  +k2: List<&2, U32>,
+  +x: Maybe<&2, List<&2, U32>>,
+  +g1: Nat,
+  +g2: Nat,
+  +ec: {Key.cmp(k2, k) == c: Cmp},
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, [Item{k, iv, r}]}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, [Item{k, iv, r}]}, Room{ur, lo, hi}) == True{}: Bool},
+  +fu: {Nat.is_le(ur, g2) == True{}: Bool},
+  +ne: {Cmp.is_eq(Key.cmp(k2, k)) == False{}: Bool},
+  +e: {Look.known(Mst.look.go(~S, ~fetch, g1, s, Room{ur, lo, hi}, Some{h}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  mlo: Mst.MergeLo(~S, ~fetch, s, ur, lo, k, hi, left, nc),
+  mhi: Mst.MergeHi(~S, ~fetch, s, ur, lo, k, hi, r, nc)
+) -> {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, nc, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match c:
+    case LT{}:
+      Mst.old_down(
+        ~S,
+        ~fetch,
+        {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, nc, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        g1,
+        s,
+        h,
+        ur,
+        lo,
+        hi,
+        l,
+        left,
+        [Item{k, iv, r}],
+        k2,
+        x,
+        left,
+        Room.of(l, lo, Some{k}),
+        eN,
+        oN,
+        Mst.pick_first([Item{k, iv, r}], left, l, lo, hi, k2)(Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(k2, k), LT{}, ec)),
+        +g3 => +e3 => mlo(k2)(x)(l)(g3)(g2)(ec)(fu)(e3)
+      )(e)
+    case GT{}:
+      Mst.old_down(
+        ~S,
+        ~fetch,
+        {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, nc, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        g1,
+        s,
+        h,
+        ur,
+        lo,
+        hi,
+        l,
+        left,
+        [Item{k, iv, r}],
+        k2,
+        x,
+        r,
+        Room.of(l, Some{k}, hi),
+        eN,
+        oN,
+        Mst.pick_all([Item{k, iv, r}], left, l, lo, hi, k2)(
+          Shared.Bool.and_both(Cmp.is_gt(Key.cmp(k2, k)), True{}, Equal.cong(Cmp, Bool, Cmp.is_gt, Key.cmp(k2, k), GT{}, ec), {==})
+        ),
+        +g3 => +e3 => mhi(k2)(x)(l)(g3)(g2)(ec)(fu)(e3)
+      )(e)
+    case EQ{}:
+      Empty.absurd(
+        {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, nc, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Mst.ne_eq(k2, k, ne, ec)
+      )
+
+# what a delete of the one item k of a node reads, from what the merge of the
+# subtrees beside k reads (tri)
+def Mst.del_ok.rise.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +nc: Maybe<&2, Hashes.Hash>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, [Item{k, iv, r}]}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, [Item{k, iv, r}]}, Room{ur, lo, hi}) == True{}: Bool},
+  tri: Mst.MergeRead(~S, ~fetch, s, ur, lo, k, hi, left, r, nc)
+) -> Mst.InsRead(~S, ~fetch, s, ur, lo, hi, Some{h}, k, None{}, nc):
+  (mlo, r3) = tri
+  (mhi, mk) = r3
+  (
+    +g => +fu => mk(g)(fu),
+    +k2 => +x => +g1 => +g2 => +ne => +fu => +e => Mst.del_ok.rise.k2(
+      ~S,
+      ~fetch,
+      Key.cmp(k2, k),
+      s,
+      h,
+      ur,
+      lo,
+      hi,
+      k,
+      iv,
+      r,
+      l,
+      left,
+      nc,
+      k2,
+      x,
+      g1,
+      g2,
+      {==},
+      eN,
+      oN,
+      fu,
+      ne,
+      e,
+      mlo,
+      mhi
+    )
+  )
+
+# what a delete of the one item k of a node reads, from what its merge reads
+# (bi)
+def Mst.del_ok.rise.read(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +nc: Maybe<&2, Hashes.Hash>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, [Item{k, iv, r}]}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, [Item{k, iv, r}]}, Room{ur, lo, hi}) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  bi: ({Mst.lvl(~S, ~fetch, s, left, l) == True{}: Bool} & {Mst.lvl(~S, ~fetch, s, r, l) == True{}: Bool})
+    & Mst.MergeMain(~S, ~fetch, s, lo, k, hi, left, r, nc)
+) -> Mst.InsRead(~S, ~fetch, s, ur, lo, hi, Some{h}, k, None{}, nc):
+  (lvs, main2) = bi
+  (lva, lvb) = lvs
+  +lt = Shared.Nat.lt_weak(l, ur)(Mst.opens_lt(l, left, [Item{k, iv, r}], Room{ur, lo, hi})(oN))
+  Mst.del_ok.rise.go(
+    ~S,
+    ~fetch,
+    s,
+    h,
+    ur,
+    lo,
+    hi,
+    k,
+    iv,
+    r,
+    l,
+    left,
+    nc,
+    eN,
+    oN,
+    main2(ur)(Mst.lvl_mono(~S, ~fetch, s, left, l, ur)(lva)(lt))(Mst.lvl_mono(~S, ~fetch, s, r, l, ur)(lvb)(lt))(a)(bb)
+  )
+
+# a delete of k from a node of its level that holds more items, for a key
+# other than k, by how it compares to k (c)
+def Mst.del_ok.store.k2(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  c: Cmp,
+  +s: S,
+  +h: Hashes.Hash,
+  +hn: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +rest: List<&2, Item>,
+  +nc: Maybe<&2, Hashes.Hash>,
+  +k2: List<&2, U32>,
+  +x: Maybe<&2, List<&2, U32>>,
+  +g1: Nat,
+  +g2: Nat,
+  +ec: {Key.cmp(k2, k) == c: Cmp},
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}, Room{ur, lo, hi}) == True{}: Bool},
+  +eD: {
+    Mst.node(~S, ~fetch, s, hn)
+      == Some{Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}}: Maybe<&2, Node>
+  },
+  +oD: {
+    Mst.opens(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}, Room{ur, lo, hi})
+      == True{}: Bool
+  },
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +fr: {Items.fit(rest, Some{k}, hi) == True{}: Bool},
+  +fu: {Nat.is_le(ur, g2) == True{}: Bool},
+  +ne: {Cmp.is_eq(Key.cmp(k2, k)) == False{}: Bool},
+  +e: {Look.known(Mst.look.go(~S, ~fetch, g1, s, Room{ur, lo, hi}, Some{h}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  mlo: Mst.MergeLo(~S, ~fetch, s, l, Items.last_key(pre, lo), k, Items.head_key(rest, hi), Mst.last(pre, left), nc),
+  mhi: Mst.MergeHi(~S, ~fetch, s, l, Items.last_key(pre, lo), k, Items.head_key(rest, hi), r, nc)
+) -> {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, Some{hn}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match c:
+    case LT{}:
+      Mst.gap_lo(
+        ~S,
+        ~fetch,
+        g1,
+        g2,
+        s,
+        h,
+        hn,
+        ur,
+        ur,
+        lo,
+        hi,
+        k,
+        l,
+        left,
+        pre,
+        Item{k, iv, r} <> rest,
+        rest,
+        nc,
+        hi,
+        k2,
+        x,
+        eN,
+        oN,
+        eD,
+        oD,
+        Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(k2, k), LT{}, ec),
+        Mst.stops_first_fit(rest, k, hi, k2)(fr)(Mst.le_of_lt(Key.cmp(k2, k))(ec)),
+        fu,
+        +g3 => +g4 => +fl => +e3 => mlo(k2)(x)(l)(g3)(g4)(ec)(fl)(e3)
+      )(e)
+    case GT{}:
+      Mst.del_hi(
+        ~S,
+        ~fetch,
+        g1,
+        g2,
+        s,
+        h,
+        hn,
+        ur,
+        lo,
+        hi,
+        k,
+        iv,
+        r,
+        l,
+        left,
+        pre,
+        rest,
+        nc,
+        k2,
+        x,
+        eN,
+        oN,
+        eD,
+        oD,
+        Mst.passes_of_lt(pre, k, k2)(all)(Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(k, k2), LT{}, Mst.key_gt_lt(k2, k)(ec))),
+        ec,
+        fu,
+        +g3 => +g4 => +fl => +e3 => mhi(k2)(x)(l)(g3)(g4)(ec)(fl)(e3)
+      )(e)
+    case EQ{}:
+      Empty.absurd(
+        {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, Some{hn}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Mst.ne_eq(k2, k, ne, ec)
+      )
+
+# what a delete of k from a node of its level that holds more items reads,
+# from what the merge of the subtrees beside k reads (tri)
+def Mst.del_ok.store.go(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +rest: List<&2, Item>,
+  +nc: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}, Room{ur, lo, hi}) == True{}: Bool},
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +ne: {List.is_empty(&2, Item, List.append(&2, Item, pre, rest)) == False{}: Bool},
+  +hold: {
+    Depots.Depot.holds(~S, ~fetch, s, Node.code(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}, []) <> ns)
+      == True{}: Bool
+  },
+  tri: Mst.MergeRead(~S, ~fetch, s, l, Items.last_key(pre, lo), k, Items.head_key(rest, hi), Mst.last(pre, left), r, nc)
+) -> Mst.InsRead(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  None{},
+  Some{Hashes.Sha.hash(Node.code(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}, []))}
+):
+  (mlo, r3) = tri
+  (mhi, mk) = r3
+  +fr = Mst.fit_rest(pre, k, iv, r, rest, lo, hi)(Mst.opens_fit(l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest), ur, lo, hi, oN))
+  +eD = Mst.node_code(
+    ~S,
+    ~fetch,
+    s,
+    Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)},
+    Mst.holds_head(~S, ~fetch, s, Node.code(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}, []), ns, hold)
+  )
+  +oD = Mst.opens_set_last(l, left, Mst.end_left(pre, left, nc), pre, nc, rest, Room{ur, lo, hi})(
+    Mst.opens_of(
+      l,
+      left,
+      List.append(&2, Item, pre, rest),
+      ur,
+      lo,
+      hi,
+      Mst.opens_lt(l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest), Room{ur, lo, hi})(oN),
+      ne,
+      Mst.fit_del(pre, k, iv, r, rest, lo, hi)(Mst.opens_fit(l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest), ur, lo, hi, oN))
+    )
+  )
+  (
+    +g => +fu => Mst.gap_k(
+      ~S,
+      ~fetch,
+      g,
+      s,
+      Hashes.Sha.hash(Node.code(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}, [])),
+      ur,
+      lo,
+      hi,
+      l,
+      left,
+      pre,
+      rest,
+      nc,
+      k,
+      None{},
+      eD,
+      oD,
+      fu,
+      Mst.passes_of_all_lt(pre, k)(all),
+      Mst.stops_first_fit(rest, k, hi, k)(fr)(Mst.le_refl_key(k)),
+      +g4 => +fl => mk(g4)(fl)
+    ),
+    +k2 => +x => +g1 => +g2 => +ne2 => +fu => +e => Mst.del_ok.store.k2(
+      ~S,
+      ~fetch,
+      Key.cmp(k2, k),
+      s,
+      h,
+      Hashes.Sha.hash(Node.code(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}, [])),
+      ur,
+      lo,
+      hi,
+      k,
+      iv,
+      r,
+      l,
+      left,
+      pre,
+      rest,
+      nc,
+      k2,
+      x,
+      g1,
+      g2,
+      {==},
+      eN,
+      oN,
+      eD,
+      oD,
+      all,
+      fr,
+      fu,
+      ne2,
+      e,
+      mlo,
+      mhi
+    )
+  )
+
+# what a delete of k from a node of its level that holds more items reads,
+# from what its merge reads (bi)
+def Mst.del_ok.store.read(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +rest: List<&2, Item>,
+  +nc: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}, Room{ur, lo, hi}) == True{}: Bool},
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +ne: {List.is_empty(&2, Item, List.append(&2, Item, pre, rest)) == False{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  +hold: {
+    Depots.Depot.holds(~S, ~fetch, s, Node.code(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}, []) <> ns)
+      == True{}: Bool
+  },
+  bi: ({Mst.lvl(~S, ~fetch, s, Mst.last(pre, left), l) == True{}: Bool} & {Mst.lvl(~S, ~fetch, s, r, l) == True{}: Bool})
+    & Mst.MergeMain(~S, ~fetch, s, Items.last_key(pre, lo), k, Items.head_key(rest, hi), Mst.last(pre, left), r, nc)
+) -> Mst.InsRead(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  None{},
+  Some{Hashes.Sha.hash(Node.code(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}, []))}
+):
+  (lvs, main2) = bi
+  (lva, lvb) = lvs
+  Mst.del_ok.store.go(
+    ~S,
+    ~fetch,
+    s,
+    h,
+    ur,
+    lo,
+    hi,
+    k,
+    iv,
+    r,
+    l,
+    left,
+    pre,
+    rest,
+    nc,
+    ns,
+    eN,
+    oN,
+    all,
+    ne,
+    hold,
+    main2(l)(lva)(lvb)(Mst.last_below(pre, lo, k)(all)(a))(
+      Mst.before_head(rest, k, hi)(
+        Mst.fit_rest(pre, k, iv, r, rest, lo, hi)(Mst.opens_fit(l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest), ur, lo, hi, oN))
+      )(bb)
+    )
+  )
+
+# a delete of k from a node of its level that holds more items, once the
+# subtrees beside k are merged into nc
+def Mst.del_ok.store(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +rest: List<&2, Item>,
+  +nc: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}, Room{ur, lo, hi}) == True{}: Bool},
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +ne: {List.is_empty(&2, Item, List.append(&2, Item, pre, rest)) == False{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  ihm: {Depots.Depot.holds(~S, ~fetch, s, ns) == True{}: Bool} -> (
+    ({Mst.lvl(~S, ~fetch, s, Mst.last(pre, left), l) == True{}: Bool} & {Mst.lvl(~S, ~fetch, s, r, l) == True{}: Bool})
+      & Mst.MergeMain(~S, ~fetch, s, Items.last_key(pre, lo), k, Items.head_key(rest, hi), Mst.last(pre, left), r, nc)
+  )
+) -> Mst.InsOk(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  None{},
+  Some{Mst.make(l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest), ns)}
+):
+  %Equal.sym(
+    Edit,
+    Mst.make(l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest), ns),
+    Mst.store(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}, ns),
+    Mst.make_full(l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest), ns)(
+      Equal.trans(
+        Bool,
+        List.is_empty(&2, Item, List.append(&2, Item, Mst.set_last(pre, nc), rest)),
+        List.is_empty(&2, Item, List.append(&2, Item, pre, rest)),
+        False{},
+        Mst.empty_set_last_append(pre, nc, rest),
+        ne
+      )
+    )
+  ): Mst.InsOk(~S, ~fetch, s, ur, lo, hi, Some{h}, k, None{}, Some{_})
+  +hold => Mst.del_ok.store.read(
+    ~S,
+    ~fetch,
+    s,
+    h,
+    ur,
+    lo,
+    hi,
+    k,
+    iv,
+    r,
+    l,
+    left,
+    pre,
+    rest,
+    nc,
+    ns,
+    eN,
+    oN,
+    all,
+    ne,
+    a,
+    bb,
+    hold,
+    ihm(Mst.holds_tail(~S, ~fetch, s, Node.code(Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest)}, []), ns, hold))
+  )
+
+# a delete of k from a node of its level, by the items around k
+def Mst.del_ok.hit.mk(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  pre: List<&2, Item>,
+  rest: List<&2, Item>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +nc: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}, Room{ur, lo, hi}) == True{}: Bool},
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  ihm: {Depots.Depot.holds(~S, ~fetch, s, ns) == True{}: Bool} -> (
+    ({Mst.lvl(~S, ~fetch, s, Mst.last(pre, left), l) == True{}: Bool} & {Mst.lvl(~S, ~fetch, s, r, l) == True{}: Bool})
+      & Mst.MergeMain(~S, ~fetch, s, Items.last_key(pre, lo), k, Items.head_key(rest, hi), Mst.last(pre, left), r, nc)
+  )
+) -> Mst.InsOk(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  None{},
+  Some{Mst.make(l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), rest), ns)}
+):
+  match pre rest:
+    case Nil{} Nil{}:
+      +hold => Mst.del_ok.rise.read(~S, ~fetch, s, h, ur, lo, hi, k, iv, r, l, left, nc, eN, oN, a, bb, ihm(hold))
+    case Nil{} Con{+y, +ys}:
+      Mst.del_ok.store(~S, ~fetch, s, h, ur, lo, hi, k, iv, r, l, left, [], y <> ys, nc, ns, eN, oN, all, {==}, a, bb, ihm)
+    case Con{+x0, +r0} q:
+      Mst.del_ok.store(~S, ~fetch, s, h, ur, lo, hi, k, iv, r, l, left, x0 <> r0, q, nc, ns, eN, oN, all, {==}, a, bb, ihm)
+
+# a delete of k from a node of its level that holds k, once the subtrees
+# beside k are merged (res)
+def Mst.del_ok.hit(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  res: Maybe<&2, Edit>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +rest: List<&2, Item>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}, Room{ur, lo, hi}) == True{}: Bool},
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  ihm: Mst.MergeOk(~S, ~fetch, s, l, Items.last_key(pre, lo), k, l, Items.head_key(rest, hi), Mst.last(pre, left), r, res)
+) -> Mst.InsOk(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  None{},
+  Mst.with_gap(l, left, Part{List.reverse.go(&2, Item, pre, []), Mst.last(pre, left), rest}, res)
+):
+  match res:
+    case None{}:
+      Unit{}
+    case Some{Edit{+nc, +ns}}:
+      %Equal.sym(
+        Maybe<&2, Hashes.Hash>,
+        Mst.left(List.reverse.go(&2, Item, pre, []), left, nc),
+        Mst.end_left(pre, left, nc),
+        Mst.left_rev(pre, left, nc)
+      ): Mst.InsOk(
+        ~S,
+        ~fetch,
+        s,
+        ur,
+        lo,
+        hi,
+        Some{h},
+        k,
+        None{},
+        Some{Mst.make(l, _, Mst.rejoin(List.reverse.go(&2, Item, pre, []), nc, rest), ns)}
+      )
+      %Equal.sym(
+        List<&2, Item>,
+        Mst.rejoin(List.reverse.go(&2, Item, pre, []), nc, rest),
+        List.append(&2, Item, Mst.set_last(pre, nc), rest),
+        Mst.rejoin_rev(pre, nc, rest)
+      ): Mst.InsOk(~S, ~fetch, s, ur, lo, hi, Some{h}, k, None{}, Some{Mst.make(l, Mst.end_left(pre, left, nc), _, ns)})
+      Mst.del_ok.hit.mk(~S, ~fetch, pre, rest, s, h, ur, lo, hi, k, iv, r, l, left, nc, ns, eN, oN, all, a, bb, ihm)
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
