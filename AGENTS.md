@@ -66,9 +66,3 @@ Follow the `bend2` and the `experimental-bend-spec` skills.
 - Always use gen3 (`bun run gen3 prove <file.bend> <def>`) as the first step of every proof.
 - README.md is the canon. Internals go in code comments.
 - `bend-lint.json` picks the rules `bun run lint` runs (bend-lint's own, from BendHub).
-
-```sh
-bun install
-bun run lint
-git diff --check
-```
