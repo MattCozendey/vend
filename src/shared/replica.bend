@@ -1383,18 +1383,20 @@ def Kernel.Reads(
   } -> {Kernel.follow(mach, d, kern)(b)(c) == Some{x}: Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>}
 
 # that watch names each line that reads a line that moved: when deps says
-# that the line c reads a line among moved, watch names c
+# that the line c reads a line among moved, and watch can tell (some ws), ws
+# names c. When it cannot tell, a replica asks again once the ledger holds
+# more
 def Kernel.Covers(
   -mach: Machine(),
   -d: Led(mach),
   -deps: Led.L(mach, d) -> Ledgers.Line -> List<&2, Ledgers.Line>,
-  -watch: Led.L(mach, d) -> List<&2, Ledgers.Line> -> List<&2, Ledgers.Line>
+  -watch: Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>
 ) -> Type:
-  @l: Led.L(mach, d) -> @moved: List<&2, Ledgers.Line> -> @c: Ledgers.Line -> @m: Ledgers.Line -> {
-    List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, moved, m) == True{}: Bool
-  } -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, deps(l)(c), m) == True{}: Bool} -> {
-    List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, watch(l)(moved), c) == True{}: Bool
-  }
+  @l: Led.L(mach, d) -> @moved: List<&2, Ledgers.Line> -> @ws: List<&2, Ledgers.Line> -> @c: Ledgers.Line -> @m: Ledgers.Line -> {
+    watch(l)(moved) == Some{ws}: Maybe<&2, List<&2, Ledgers.Line>>
+  } -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, moved, m) == True{}: Bool} -> {
+    List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, deps(l)(c), m) == True{}: Bool
+  } -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, ws, c) == True{}: Bool}
 
 # that the kernel kern asks again only where watch says, when the lines moved
 # move: Kernel.Reads and Kernel.Covers, for some deps
@@ -1402,7 +1404,7 @@ def Kernel.Watched(
   -mach: Machine(),
   -d: Led(mach),
   -kern: Kernel(mach, d),
-  -watch: Led.L(mach, d) -> List<&2, Ledgers.Line> -> List<&2, Ledgers.Line>
+  -watch: Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>
 ) -> Type:
   &deps: Led.L(mach, d) -> Ledgers.Line -> List<&2, Ledgers.Line> -> Kernel.Reads(mach, d, kern, deps) & Kernel.Covers(mach, d, deps, watch)
 
