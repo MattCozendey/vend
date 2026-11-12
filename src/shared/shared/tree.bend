@@ -6295,6 +6295,20 @@ def Mst.canon_node(
             )(e21)
           )(ep1)
 
+# a write to a tree that lists whole reads every node it needs
+def Mst.put_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +bs: List<&2, Binding>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>
+) -> {Mst.range(~S, ~fetch, s, h, []) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {
+  Maybe.is_some(&2, Edit, Mst.put(~S, ~fetch, s, h, k, m)) == True{}: Bool
+}:
+  ?TODO
+
 # a root is a function of its bindings, over any root
 law Mst.canon:
   for ~S: Data
@@ -8738,6 +8752,18 @@ law Mst.whole:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   Laws.Whole(S, Mst.ops(~S, ~fetch))
+
+def Mst.whole(ty, fetch):
+  (
+    s => p => {==},
+    +s => +h => +bs => +e => (
+      +k => +m => +p => (
+        Mst.final_root(~ty, ~fetch, s, h, k)(Mst.final_list(~ty, ~fetch, Mst.depth(), s, Mst.root(h), bs, k)(e)),
+        (Mst.put_some(~ty, ~fetch, s, h, bs, k, m)(e), Mst.range_some(~ty, ~fetch, Mst.depth(), s, p, Mst.root(h), bs)(e))
+      ),
+      +h2 => +bs2 => e2 => Mst.diff_whole(~ty, ~fetch, s, h, h2, bs, bs2)(e)(e2)
+    )
+  )
 
 # a write keeps a whole tree whole
 law Mst.keeps_whole:
