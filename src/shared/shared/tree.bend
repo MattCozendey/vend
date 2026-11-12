@@ -14682,6 +14682,464 @@ def Mst.writes.of(
     )(e)
   )
 
+# a read then k, where the read and each k keep what they give, keeps what
+# it gives
+def Mst.kept.bind(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, A>,
+  -m2: Maybe<&2, A>,
+  -k: A -> Maybe<&2, B>,
+  -k2: A -> Maybe<&2, B>,
+  hm: Mst.Kept(A, m, m2),
+  hk: @a: A -> Mst.Kept(B, k(a), k2(a))
+) -> Mst.Kept(B, Maybe.bind(&2, A, B, m, k), Maybe.bind(&2, A, B, m2, k2)):
+  match m:
+    case None{}:
+      +x => +e => Empty.absurd({Maybe.bind(&2, A, B, m2, k2) == Some{x}: Maybe<&2, B>}, Shared.Maybe.none_ne_some(B, x, e))
+    case Some{+y}:
+      %Equal.sym(Maybe<&2, A>, m2, Some{y}, hm(y)({==})): Mst.Kept(B, k(y), Maybe.bind(&2, A, B, _, k2))
+      hk(y)
+
+# the pieces of a node that a depot gives, a depot that grows from it gives
+# too
+def Mst.open_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  +sa: S,
+  +sb: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +gr: {grows(sa, sb) == True{}: Bool}
+) -> Mst.Kept(List<&2, Piece>, Mst.open(~S, ~fetch, sa, h, up, lo, hi), Mst.open(~S, ~fetch, sb, h, up, lo, hi)):
+  Mst.kept.bind(
+    List<&2, U32>,
+    List<&2, Piece>,
+    fetch(sa)(h),
+    fetch(sb)(h),
+    +ws => Shared.Maybe.when(
+      List<&2, Piece>,
+      Hashes.Hash.is_eq(Hashes.Sha.hash(ws), h),
+      u => Maybe.bind(
+        &2,
+        Node,
+        List<&2, Piece>,
+        Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+        n => Mst.open.node(n, up, lo, hi)
+      )
+    ),
+    +ws => Shared.Maybe.when(
+      List<&2, Piece>,
+      Hashes.Hash.is_eq(Hashes.Sha.hash(ws), h),
+      u => Maybe.bind(
+        &2,
+        Node,
+        List<&2, Piece>,
+        Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+        n => Mst.open.node(n, up, lo, hi)
+      )
+    ),
+    +w => +e => kept(sa)(sb)(h)(w)(gr)(e),
+    +w => +x => +e => e
+  )
+
+# a listing that a depot gives, a depot that grows from it gives too
+def Mst.range_go_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  f: Nat,
+  ps: List<&2, Piece>,
+  +sa: S,
+  +sb: S,
+  +p: List<&2, U32>,
+  +gr: {grows(sa, sb) == True{}: Bool}
+) -> Mst.Kept(List<&2, Binding>, Mst.range.go(~S, ~fetch, f, sa, p, ps), Mst.range.go(~S, ~fetch, f, sb, p, ps)):
+  match f ps:
+    case 0n Nil{}:
+      +x => +e => e
+    case 1n+q Nil{}:
+      +x => +e => e
+    case 0n Con{y, rest}:
+      +x => +e => e
+    case 1n+(+q) Con{Piece.Bind{+k, +v}, +rest}:
+      Mst.kept.app(
+        List<&2, Binding>,
+        List<&2, Binding>,
+        mm => Maybe.map(
+          &2,
+          List<&2, Binding>,
+          List<&2, Binding>,
+          +bs => Shared.Bool.when(List<&2, Binding>, Key.leads(p, k), u => Binding{k, v} <> bs, u => bs),
+          mm
+        ),
+        Mst.range.go(~S, ~fetch, 1n+q, sa, p, rest),
+        Mst.range.go(~S, ~fetch, 1n+q, sb, p, rest),
+        {==},
+        Mst.range_go_kept(~S, ~fetch, ~grows, ~kept, 1n+q, rest, sa, sb, p, gr)
+      )
+    case 1n+(+q) Con{Piece.Sub{+h, +up, +lo, +hi}, +rest}:
+      Mst.kept.when(
+        List<&2, Binding>,
+        Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)),
+        u => Maybe.bind(
+          &2,
+          List<&2, Piece>,
+          List<&2, Binding>,
+          Mst.open(~S, ~fetch, sa, h, up, lo, hi),
+          ks => Maybe.bind(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, q, sa, p, ks),
+            a => Maybe.map(
+              &2,
+              List<&2, Binding>,
+              List<&2, Binding>,
+              b => List.append(&2, Binding, a, b),
+              Mst.range.go(~S, ~fetch, 1n+q, sa, p, rest)
+            )
+          )
+        ),
+        u => Maybe.bind(
+          &2,
+          List<&2, Piece>,
+          List<&2, Binding>,
+          Mst.open(~S, ~fetch, sb, h, up, lo, hi),
+          ks => Maybe.bind(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, q, sb, p, ks),
+            a => Maybe.map(
+              &2,
+              List<&2, Binding>,
+              List<&2, Binding>,
+              b => List.append(&2, Binding, a, b),
+              Mst.range.go(~S, ~fetch, 1n+q, sb, p, rest)
+            )
+          )
+        ),
+        u => Mst.range.go(~S, ~fetch, 1n+q, sa, p, rest),
+        u => Mst.range.go(~S, ~fetch, 1n+q, sb, p, rest),
+        Mst.kept.bind(
+          List<&2, Piece>,
+          List<&2, Binding>,
+          Mst.open(~S, ~fetch, sa, h, up, lo, hi),
+          Mst.open(~S, ~fetch, sb, h, up, lo, hi),
+          ks => Maybe.bind(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, q, sa, p, ks),
+            a => Maybe.map(
+              &2,
+              List<&2, Binding>,
+              List<&2, Binding>,
+              b => List.append(&2, Binding, a, b),
+              Mst.range.go(~S, ~fetch, 1n+q, sa, p, rest)
+            )
+          ),
+          ks => Maybe.bind(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, q, sb, p, ks),
+            a => Maybe.map(
+              &2,
+              List<&2, Binding>,
+              List<&2, Binding>,
+              b => List.append(&2, Binding, a, b),
+              Mst.range.go(~S, ~fetch, 1n+q, sb, p, rest)
+            )
+          ),
+          Mst.open_kept(~S, ~fetch, ~grows, ~kept, sa, sb, h, up, lo, hi, gr),
+          +ks => Mst.kept.bind(
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, q, sa, p, ks),
+            Mst.range.go(~S, ~fetch, q, sb, p, ks),
+            a => Maybe.map(
+              &2,
+              List<&2, Binding>,
+              List<&2, Binding>,
+              b => List.append(&2, Binding, a, b),
+              Mst.range.go(~S, ~fetch, 1n+q, sa, p, rest)
+            ),
+            a => Maybe.map(
+              &2,
+              List<&2, Binding>,
+              List<&2, Binding>,
+              b => List.append(&2, Binding, a, b),
+              Mst.range.go(~S, ~fetch, 1n+q, sb, p, rest)
+            ),
+            Mst.range_go_kept(~S, ~fetch, ~grows, ~kept, q, ks, sa, sb, p, gr),
+            +a => Mst.kept.app(
+              List<&2, Binding>,
+              List<&2, Binding>,
+              mm => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b => List.append(&2, Binding, a, b), mm),
+              Mst.range.go(~S, ~fetch, 1n+q, sa, p, rest),
+              Mst.range.go(~S, ~fetch, 1n+q, sb, p, rest),
+              {==},
+              Mst.range_go_kept(~S, ~fetch, ~grows, ~kept, 1n+q, rest, sa, sb, p, gr)
+            )
+          )
+        ),
+        Mst.range_go_kept(~S, ~fetch, ~grows, ~kept, 1n+q, rest, sa, sb, p, gr)
+      )
+
+# the pieces of a run, each subtree opened, that a depot gives, a depot that
+# grows from it gives too
+def Mst.open_all_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  ps: List<&2, Piece>,
+  +sa: S,
+  +sb: S,
+  +gr: {grows(sa, sb) == True{}: Bool}
+) -> Mst.Kept(List<&2, Piece>, Mst.open.all(~S, ~fetch, sa, ps), Mst.open.all(~S, ~fetch, sb, ps)):
+  match ps:
+    case Nil{}:
+      +x => +e => e
+    case Con{Piece.Bind{+k, +v}, +rest}:
+      Mst.kept.app(
+        List<&2, Piece>,
+        List<&2, Piece>,
+        mm => Maybe.map(&2, List<&2, Piece>, List<&2, Piece>, r => Piece.Bind{k, v} <> r, mm),
+        Mst.open.all(~S, ~fetch, sa, rest),
+        Mst.open.all(~S, ~fetch, sb, rest),
+        {==},
+        Mst.open_all_kept(~S, ~fetch, ~grows, ~kept, rest, sa, sb, gr)
+      )
+    case Con{Piece.Sub{+h, +u, +lo, +hi}, +rest}:
+      Mst.kept.bind(
+        List<&2, Piece>,
+        List<&2, Piece>,
+        Mst.open(~S, ~fetch, sa, h, u, lo, hi),
+        Mst.open(~S, ~fetch, sb, h, u, lo, hi),
+        a => Maybe.map(&2, List<&2, Piece>, List<&2, Piece>, b => List.append(&2, Piece, a, b), Mst.open.all(~S, ~fetch, sa, rest)),
+        a => Maybe.map(&2, List<&2, Piece>, List<&2, Piece>, b => List.append(&2, Piece, a, b), Mst.open.all(~S, ~fetch, sb, rest)),
+        Mst.open_kept(~S, ~fetch, ~grows, ~kept, sa, sb, h, u, lo, hi, gr),
+        +a => Mst.kept.app(
+          List<&2, Piece>,
+          List<&2, Piece>,
+          mm => Maybe.map(&2, List<&2, Piece>, List<&2, Piece>, b => List.append(&2, Piece, a, b), mm),
+          Mst.open.all(~S, ~fetch, sa, rest),
+          Mst.open.all(~S, ~fetch, sb, rest),
+          {==},
+          Mst.open_all_kept(~S, ~fetch, ~grows, ~kept, rest, sa, sb, gr)
+        )
+      )
+
+# the round of a run that a depot gives, a depot that grows from it gives too
+def Mst.step_at_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  p: Runs,
+  +sa: S,
+  +sb: S,
+  +gr: {grows(sa, sb) == True{}: Bool}
+) -> Mst.Kept(Round, Mst.step.at(~S, ~fetch, sa, p), Mst.step.at(~S, ~fetch, sb, p)):
+  match p:
+    case Runs{+a, +b}:
+      Mst.kept.when(
+        Round,
+        Bool.or(Pieces.has_sub(a), Pieces.has_sub(b)),
+        u => Maybe.bind(
+          &2,
+          List<&2, Piece>,
+          Round,
+          Mst.open.all(~S, ~fetch, sa, a),
+          a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, sa, b))
+        ),
+        u => Maybe.bind(
+          &2,
+          List<&2, Piece>,
+          Round,
+          Mst.open.all(~S, ~fetch, sb, a),
+          a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, sb, b))
+        ),
+        u => Some{Round{Pieces.keys(a, Pieces.keys(b, [])), []}},
+        u => Some{Round{Pieces.keys(a, Pieces.keys(b, [])), []}},
+        Mst.kept.bind(
+          List<&2, Piece>,
+          Round,
+          Mst.open.all(~S, ~fetch, sa, a),
+          Mst.open.all(~S, ~fetch, sb, a),
+          a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, sa, b)),
+          a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, sb, b)),
+          Mst.open_all_kept(~S, ~fetch, ~grows, ~kept, a, sa, sb, gr),
+          +a2 => Mst.kept.app(
+            List<&2, Piece>,
+            Round,
+            mm => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, mm),
+            Mst.open.all(~S, ~fetch, sa, b),
+            Mst.open.all(~S, ~fetch, sb, b),
+            {==},
+            Mst.open_all_kept(~S, ~fetch, ~grows, ~kept, b, sa, sb, gr)
+          )
+        ),
+        +x => +e => e
+      )
+
+# the rounds of runs that a depot gives, a depot that grows from it gives too
+def Mst.step_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  ps: List<&2, Runs>,
+  +sa: S,
+  +sb: S,
+  +gr: {grows(sa, sb) == True{}: Bool}
+) -> Mst.Kept(Round, Mst.step(~S, ~fetch, sa, ps), Mst.step(~S, ~fetch, sb, ps)):
+  match ps:
+    case Nil{}:
+      +x => +e => e
+    case Con{+p, +rest}:
+      Mst.kept.bind(
+        Round,
+        Round,
+        Mst.step.at(~S, ~fetch, sa, Runs.trim(p)),
+        Mst.step.at(~S, ~fetch, sb, Runs.trim(p)),
+        a => Maybe.map(&2, Round, Round, b => Round.append(a, b), Mst.step(~S, ~fetch, sa, rest)),
+        a => Maybe.map(&2, Round, Round, b => Round.append(a, b), Mst.step(~S, ~fetch, sb, rest)),
+        Mst.step_at_kept(~S, ~fetch, ~grows, ~kept, Runs.trim(p), sa, sb, gr),
+        +a => Mst.kept.app(
+          Round,
+          Round,
+          mm => Maybe.map(&2, Round, Round, b => Round.append(a, b), mm),
+          Mst.step(~S, ~fetch, sa, rest),
+          Mst.step(~S, ~fetch, sb, rest),
+          {==},
+          Mst.step_kept(~S, ~fetch, ~grows, ~kept, rest, sa, sb, gr)
+        )
+      )
+
+# a difference that a depot gives, a depot that grows from it gives too
+def Mst.diff_go_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ~grows: S -> S -> Bool,
+  ~kept: Depots.Depot.Keeps(S, fetch, grows),
+  f: Nat,
+  ps: List<&2, Runs>,
+  +sa: S,
+  +sb: S,
+  +gr: {grows(sa, sb) == True{}: Bool}
+) -> Mst.Kept(List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, f, sa, ps), Mst.diff.go(~S, ~fetch, f, sb, ps)):
+  match f ps:
+    case 0n Nil{}:
+      +x => +e => e
+    case 1n+q Nil{}:
+      +x => +e => e
+    case 0n Con{y, rest}:
+      +x => +e => e
+    case 1n+(+q) Con{Runs{+a, +b}, +rest}:
+      Mst.kept.bind(
+        Round,
+        List<&2, List<&2, U32>>,
+        Mst.step(~S, ~fetch, sa, Round.pairs(Mst.cut(a, b, [], []))),
+        Mst.step(~S, ~fetch, sb, Round.pairs(Mst.cut(a, b, [], []))),
+        +r => Maybe.bind(
+          &2,
+          List<&2, List<&2, U32>>,
+          List<&2, List<&2, U32>>,
+          Mst.diff.go(~S, ~fetch, q, sa, Round.pairs(r)),
+          k3 => Maybe.map(
+            &2,
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            k4 => List.append(
+              &2,
+              List<&2, U32>,
+              Round.keys(Mst.cut(a, b, [], [])),
+              List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))
+            ),
+            Mst.diff.go(~S, ~fetch, 1n+q, sa, rest)
+          )
+        ),
+        +r => Maybe.bind(
+          &2,
+          List<&2, List<&2, U32>>,
+          List<&2, List<&2, U32>>,
+          Mst.diff.go(~S, ~fetch, q, sb, Round.pairs(r)),
+          k3 => Maybe.map(
+            &2,
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            k4 => List.append(
+              &2,
+              List<&2, U32>,
+              Round.keys(Mst.cut(a, b, [], [])),
+              List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))
+            ),
+            Mst.diff.go(~S, ~fetch, 1n+q, sb, rest)
+          )
+        ),
+        Mst.step_kept(~S, ~fetch, ~grows, ~kept, Round.pairs(Mst.cut(a, b, [], [])), sa, sb, gr),
+        +r => Mst.kept.bind(
+          List<&2, List<&2, U32>>,
+          List<&2, List<&2, U32>>,
+          Mst.diff.go(~S, ~fetch, q, sa, Round.pairs(r)),
+          Mst.diff.go(~S, ~fetch, q, sb, Round.pairs(r)),
+          k3 => Maybe.map(
+            &2,
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            k4 => List.append(
+              &2,
+              List<&2, U32>,
+              Round.keys(Mst.cut(a, b, [], [])),
+              List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))
+            ),
+            Mst.diff.go(~S, ~fetch, 1n+q, sa, rest)
+          ),
+          k3 => Maybe.map(
+            &2,
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            k4 => List.append(
+              &2,
+              List<&2, U32>,
+              Round.keys(Mst.cut(a, b, [], [])),
+              List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))
+            ),
+            Mst.diff.go(~S, ~fetch, 1n+q, sb, rest)
+          ),
+          Mst.diff_go_kept(~S, ~fetch, ~grows, ~kept, q, Round.pairs(r), sa, sb, gr),
+          +k3 => Mst.kept.app(
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            mm => Maybe.map(
+              &2,
+              List<&2, List<&2, U32>>,
+              List<&2, List<&2, U32>>,
+              k4 => List.append(
+                &2,
+                List<&2, U32>,
+                Round.keys(Mst.cut(a, b, [], [])),
+                List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))
+              ),
+              mm
+            ),
+            Mst.diff.go(~S, ~fetch, 1n+q, sa, rest),
+            Mst.diff.go(~S, ~fetch, 1n+q, sb, rest),
+            {==},
+            Mst.diff_go_kept(~S, ~fetch, ~grows, ~kept, 1n+q, rest, sa, sb, gr)
+          )
+        )
+      )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
@@ -21710,6 +22168,9 @@ law Mst.ranges_final:
   for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   Laws.RangeFinal(S, grows, Mst.ops(~S, ~fetch))
 
+def Mst.ranges_final(S, fetch, grows, kept):
+  +s => +s2 => +h => +p => +bs => e => gr => Mst.range_go_kept(~S, ~fetch, ~grows, ~kept, Mst.depth(), Mst.root(h), s, s2, p, gr)(bs)(e)
+
 # a difference stays, in a depot that keeps what it holds
 law Mst.diffs_final:
   for ~S: Data
@@ -21717,3 +22178,6 @@ law Mst.diffs_final:
   for ~grows: S -> S -> Bool
   for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   Laws.DiffFinal(S, grows, Mst.ops(~S, ~fetch))
+
+def Mst.diffs_final(S, fetch, grows, kept):
+  +s => +s2 => +a => +b => +ks => e => gr => Mst.diff_go_kept(~S, ~fetch, ~grows, ~kept, Mst.depth(), [Runs{Mst.root(a), Mst.root(b)}], s, s2, gr)(ks)(e)
