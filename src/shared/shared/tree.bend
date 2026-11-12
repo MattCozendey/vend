@@ -6309,26 +6309,6 @@ def Mst.canon_node(
             )(e21)
           )(ep1)
 
-# a write to a tree that lists whole reads every node it needs
-def Mst.put_some(
-  ~S: Data,
-  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  +s: S,
-  h: Maybe<&2, Hashes.Hash>,
-  +bs: List<&2, Binding>,
-  +k: List<&2, U32>,
-  +m: Maybe<&2, List<&2, U32>>
-) -> {Mst.range(~S, ~fetch, s, h, []) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {
-  Maybe.is_some(&2, Edit, Mst.put(~S, ~fetch, s, h, k, m)) == True{}: Bool
-}:
-  ?TODO
-
-# a root is a function of its bindings, over any root
-law Mst.canon:
-  for ~S: Data
-  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
-  Laws.Canon(S, Mst.ops(~S, ~fetch))
-
 # Whole trees
 # -----------
 
@@ -9407,6 +9387,214 @@ def Pieces.above_all(+k1: List<&2, U32>, +v1: List<&2, U32>, ys: List<&2, Piece>
           )
         )
       )
+
+# the lower bound lo is not after the lower bound lo2
+def Bound.lo_le(lo: Maybe<&2, List<&2, U32>>, lo2: Maybe<&2, List<&2, U32>>) -> Bool:
+  match lo lo2:
+    case None{} y:
+      True{}
+    case Some{a} None{}:
+      False{}
+    case Some{a} Some{c}:
+      Key.le(a, c)
+
+# the upper bound hi2 is not after the upper bound hi
+def Bound.hi_le(hi2: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> Bool:
+  match hi2 hi:
+    case x None{}:
+      True{}
+    case None{} Some{b}:
+      False{}
+    case Some{c} Some{b}:
+      Key.le(c, b)
+
+# the piece x lies between lo and hi
+def Piece.inside(x: Piece, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> Bool:
+  match x:
+    case Piece.Bind{+k, v}:
+      Bool.and(Bound.after(lo, k), Bound.before(k, hi))
+    case Piece.Sub{h, u, lo2, hi2}:
+      Bool.and(Bound.lo_le(lo, lo2), Bound.hi_le(hi2, hi))
+
+# the pieces ps lie between lo and hi
+def Pieces.inside(ps: List<&2, Piece>, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{x, rest}:
+      Bool.and(Piece.inside(x, lo, hi), Pieces.inside(rest, lo, hi))
+
+# a lower bound is not after itself
+def Bound.lo_le_refl(lo: Maybe<&2, List<&2, U32>>) -> {Bound.lo_le(lo, lo) == True{}: Bool}:
+  match lo:
+    case None{}:
+      {==}
+    case Some{+a}:
+      Key.le_refl(a)
+
+# Piece.refine_left for two bindings, by the upper bound hi
+def Piece.refine_left.bb(+kw: List<&2, U32>, +k: List<&2, U32>, +lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> {
+  Bool.and(Bound.after(lo, kw), Bound.before(kw, hi)) == True{}: Bool
+} -> {Bound.at_least(hi, k) == True{}: Bool} -> {Key.is_lt(kw, k) == True{}: Bool}:
+  match hi:
+    case None{}:
+      hin => hb => Empty.absurd({Key.is_lt(kw, k) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{+b}:
+      hin => hb => Key.lt_le(kw, b, k)(Shared.Bool.and_true_right(Bound.after(lo, kw), Key.is_lt(kw, b))(hin))(hb)
+
+# Piece.refine_left for a binding before a subtree, by the bounds
+def Piece.refine_left.bs(+kw: List<&2, U32>, +lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>, lo3: Maybe<&2, List<&2, U32>>) -> {
+  Bool.and(Bound.after(lo, kw), Bound.before(kw, hi)) == True{}: Bool
+} -> {Bound.ends_before(hi, lo3) == True{}: Bool} -> {Bound.at_most(kw, lo3) == True{}: Bool}:
+  match hi lo3:
+    case Some{+b} Some{+a}:
+      hin => hb => Key.lt_le_of(kw, a)(Key.lt_le(kw, b, a)(Shared.Bool.and_true_right(Bound.after(lo, kw), Key.is_lt(kw, b))(hin))(hb))
+    case None{} z:
+      hin => hb => Empty.absurd({Bound.at_most(kw, z) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{b} None{}:
+      hin => hb => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+
+# Piece.refine_left for a subtree before a binding, by the bounds
+def Piece.refine_left.sb(
+  +lo: Maybe<&2, List<&2, U32>>,
+  +lo2: Maybe<&2, List<&2, U32>>,
+  hi2: Maybe<&2, List<&2, U32>>,
+  hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>
+) -> {Bool.and(Bound.lo_le(lo, lo2), Bound.hi_le(hi2, hi)) == True{}: Bool} -> {Bound.at_least(hi, k) == True{}: Bool} -> {
+  Bound.at_least(hi2, k) == True{}: Bool
+}:
+  match hi2 hi:
+    case Some{+c} Some{+b}:
+      hin => hb => Key.le_trans(c, b, k)(Shared.Bool.and_true_right(Bound.lo_le(lo, lo2), Key.le(c, b))(hin))(hb)
+    case x None{}:
+      hin => hb => Empty.absurd({Bound.at_least(x, k) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case None{} Some{b}:
+      hin => hb => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(Shared.Bool.and_true_right(Bound.lo_le(lo, lo2), False{})(hin)))
+
+# Piece.refine_left for two subtrees, by the bounds
+def Piece.refine_left.ss(
+  +lo: Maybe<&2, List<&2, U32>>,
+  +lo2: Maybe<&2, List<&2, U32>>,
+  hi2: Maybe<&2, List<&2, U32>>,
+  hi: Maybe<&2, List<&2, U32>>,
+  lo3: Maybe<&2, List<&2, U32>>
+) -> {Bool.and(Bound.lo_le(lo, lo2), Bound.hi_le(hi2, hi)) == True{}: Bool} -> {Bound.ends_before(hi, lo3) == True{}: Bool} -> {
+  Bound.ends_before(hi2, lo3) == True{}: Bool
+}:
+  match hi2 hi lo3:
+    case Some{+c} Some{+b} Some{+a}:
+      hin => hb => Key.le_trans(c, b, a)(Shared.Bool.and_true_right(Bound.lo_le(lo, lo2), Key.le(c, b))(hin))(hb)
+    case x None{} z:
+      hin => hb => Empty.absurd({Bound.ends_before(x, z) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case x Some{b} None{}:
+      hin => hb => Empty.absurd({Bound.ends_before(x, None{}) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case None{} Some{b} Some{a}:
+      hin => hb => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(Shared.Bool.and_true_right(Bound.lo_le(lo, lo2), False{})(hin)))
+
+# a piece between lo and hi comes before what the subtree of lo and hi comes
+# before
+def Piece.refine_left(w: Piece, y: Piece, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>, -h: Hashes.Hash, -u: Nat) -> {
+  Piece.inside(w, lo, hi) == True{}: Bool
+} -> {Piece.before(Piece.Sub{h, u, lo, hi}, y) == True{}: Bool} -> {Piece.before(w, y) == True{}: Bool}:
+  match w y:
+    case Piece.Bind{+kw, vw} Piece.Bind{+k, v}:
+      Piece.refine_left.bb(kw, k, lo, hi)
+    case Piece.Bind{+kw, vw} Piece.Sub{h3, u3, lo3, hi3}:
+      Piece.refine_left.bs(kw, lo, hi, lo3)
+    case Piece.Sub{h2, u2, lo2, hi2} Piece.Bind{+k, v}:
+      Piece.refine_left.sb(lo, lo2, hi2, hi, k)
+    case Piece.Sub{h2, u2, lo2, hi2} Piece.Sub{h3, u3, lo3, hi3}:
+      Piece.refine_left.ss(lo, lo2, hi2, hi, lo3)
+
+# Piece.refine_right for a binding before a subtree, by the bounds
+def Piece.refine_right.bb(+kw: List<&2, U32>, lo: Maybe<&2, List<&2, U32>>, -hi: Maybe<&2, List<&2, U32>>, +k: List<&2, U32>) -> {
+  Bound.at_most(kw, lo) == True{}: Bool
+} -> {Bool.and(Bound.after(lo, k), Bound.before(k, hi)) == True{}: Bool} -> {Key.is_lt(kw, k) == True{}: Bool}:
+  match lo:
+    case None{}:
+      hb => hin => Empty.absurd({Key.is_lt(kw, k) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{+a}:
+      hb => hin => Key.le_lt(kw, a, k)(hb)(Shared.Bool.and_true_left(Key.is_lt(a, k), Bound.before(k, hi))(hin))
+
+# Piece.refine_right for a binding before a subtree, then a subtree in it
+def Piece.refine_right.bs(+kw: List<&2, U32>, lo: Maybe<&2, List<&2, U32>>, -hi: Maybe<&2, List<&2, U32>>, lo2: Maybe<&2, List<&2, U32>>, -hi2: Maybe<&2, List<&2, U32>>) -> {
+  Bound.at_most(kw, lo) == True{}: Bool
+} -> {Bool.and(Bound.lo_le(lo, lo2), Bound.hi_le(hi2, hi)) == True{}: Bool} -> {Bound.at_most(kw, lo2) == True{}: Bool}:
+  match lo lo2:
+    case Some{+a} Some{+c}:
+      hb => hin => Key.le_trans(kw, a, c)(hb)(Shared.Bool.and_true_left(Key.le(a, c), Bound.hi_le(hi2, hi))(hin))
+    case None{} z:
+      hb => hin => Empty.absurd({Bound.at_most(kw, z) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{a} None{}:
+      hb => hin => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(Shared.Bool.and_true_left(False{}, Bound.hi_le(hi2, hi))(hin)))
+
+# Piece.refine_right for a subtree before a subtree, then a binding in it
+def Piece.refine_right.sb(hi1: Maybe<&2, List<&2, U32>>, lo: Maybe<&2, List<&2, U32>>, -hi: Maybe<&2, List<&2, U32>>, +k: List<&2, U32>) -> {
+  Bound.ends_before(hi1, lo) == True{}: Bool
+} -> {Bool.and(Bound.after(lo, k), Bound.before(k, hi)) == True{}: Bool} -> {Bound.at_least(hi1, k) == True{}: Bool}:
+  match hi1 lo:
+    case Some{+b} Some{+a}:
+      hb => hin => Key.lt_le_of(b, k)(Key.le_lt(b, a, k)(hb)(Shared.Bool.and_true_left(Key.is_lt(a, k), Bound.before(k, hi))(hin)))
+    case None{} z:
+      hb => hin => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{b} None{}:
+      hb => hin => Empty.absurd({Key.le(b, k) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+
+# Piece.refine_right for a subtree before a subtree, then a subtree in it
+def Piece.refine_right.ss(
+  hi1: Maybe<&2, List<&2, U32>>,
+  lo: Maybe<&2, List<&2, U32>>,
+  -hi: Maybe<&2, List<&2, U32>>,
+  lo2: Maybe<&2, List<&2, U32>>,
+  -hi2: Maybe<&2, List<&2, U32>>
+) -> {Bound.ends_before(hi1, lo) == True{}: Bool} -> {Bool.and(Bound.lo_le(lo, lo2), Bound.hi_le(hi2, hi)) == True{}: Bool} -> {
+  Bound.ends_before(hi1, lo2) == True{}: Bool
+}:
+  match hi1 lo lo2:
+    case Some{+b} Some{+a} Some{+c}:
+      hb => hin => Key.le_trans(b, a, c)(hb)(Shared.Bool.and_true_left(Key.le(a, c), Bound.hi_le(hi2, hi))(hin))
+    case None{} y z:
+      hb => hin => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{b} None{} z:
+      hb => hin => Empty.absurd({Bound.ends_before(Some{b}, z) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{b} Some{a} None{}:
+      hb => hin => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(Shared.Bool.and_true_left(False{}, Bound.hi_le(hi2, hi))(hin)))
+
+# a piece before the subtree of lo and hi comes before each piece between lo
+# and hi
+def Piece.refine_right(w: Piece, z: Piece, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>, -h: Hashes.Hash, -u: Nat) -> {
+  Piece.before(w, Piece.Sub{h, u, lo, hi}) == True{}: Bool
+} -> {Piece.inside(z, lo, hi) == True{}: Bool} -> {Piece.before(w, z) == True{}: Bool}:
+  match w z:
+    case Piece.Bind{+kw, vw} Piece.Bind{+k, v}:
+      Piece.refine_right.bb(kw, lo, hi, k)
+    case Piece.Bind{+kw, vw} Piece.Sub{h2, u2, lo2, hi2}:
+      Piece.refine_right.bs(kw, lo, hi, lo2, hi2)
+    case Piece.Sub{h1, u1, lo1, hi1} Piece.Bind{+k, v}:
+      Piece.refine_right.sb(hi1, lo, hi, k)
+    case Piece.Sub{h1, u1, lo1, hi1} Piece.Sub{h2, u2, lo2, hi2}:
+      Piece.refine_right.ss(hi1, lo, hi, lo2, hi2)
+
+# a write to a tree that lists whole reads every node it needs
+def Mst.put_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +bs: List<&2, Binding>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>
+) -> {Mst.range(~S, ~fetch, s, h, []) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {
+  Maybe.is_some(&2, Edit, Mst.put(~S, ~fetch, s, h, k, m)) == True{}: Bool
+}:
+  ?TODO
+
+# a root is a function of its bindings, over any root
+law Mst.canon:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  Laws.Canon(S, Mst.ops(~S, ~fetch))
 
 def Mst.canon(ty, fetch):
   +s => +h1 => +h2 => +bs => e1 => e2 => Mst.range_list(
