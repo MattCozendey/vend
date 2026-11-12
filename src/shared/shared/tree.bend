@@ -8637,6 +8637,165 @@ def Mst.diff_whole(
     )({==})
   )
 
+# Differences
+# -----------
+
+# the key a is not after the key b
+def Key.le(a: List<&2, U32>, b: List<&2, U32>) -> Bool:
+  Bool.not(Key.is_lt(b, a))
+
+# Key.cmp, by its three cases
+def Key.cases.at(
+  c: Cmp,
+  -a: List<&2, U32>,
+  -b: List<&2, U32>,
+  -P: Type,
+  e: {Key.cmp(a, b) == c: Cmp},
+  kl: {Key.cmp(a, b) == LT{}: Cmp} -> P,
+  ke: {Key.cmp(a, b) == EQ{}: Cmp} -> P,
+  kg: {Key.cmp(a, b) == GT{}: Cmp} -> P
+) -> P:
+  match c:
+    case LT{}:
+      kl(e)
+    case EQ{}:
+      ke(e)
+    case GT{}:
+      kg(e)
+
+# a key is not before itself
+def Key.lt_irrefl(+a: List<&2, U32>) -> {Key.is_lt(a, a) == False{}: Bool}:
+  %Equal.sym(Bool, Key.is_lt(a, a), Cmp.is_lt(Key.cmp(a, a)), Key.is_lt_cmp(a, a)): {_ == False{}: Bool}
+  %Equal.sym(Cmp, Key.cmp(a, a), EQ{}, Key.cmp_refl(a)): {Cmp.is_lt(_) == False{}: Bool}
+  {==}
+
+# a key before b is not after it
+def Key.lt_asym(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.is_lt(a, b) == True{}: Bool} -> {Key.is_lt(b, a) == False{}: Bool}:
+  h =>
+    %Equal.sym(Bool, Key.is_lt(b, a), Cmp.is_lt(Key.cmp(b, a)), Key.is_lt_cmp(b, a)): {_ == False{}: Bool}
+    %Equal.sym(Cmp, Key.cmp(b, a), Cmp.flip(Key.cmp(a, b)), Key.cmp_flip(a, b)): {Cmp.is_lt(_) == False{}: Bool}
+    %Equal.sym(
+      Cmp,
+      Key.cmp(a, b),
+      LT{},
+      Cmp.lt_true(Key.cmp(a, b))(Equal.trans(Bool, Cmp.is_lt(Key.cmp(a, b)), Key.is_lt(a, b), True{}, Equal.sym(Bool, Key.is_lt(a, b), Cmp.is_lt(Key.cmp(a, b)), Key.is_lt_cmp(a, b)), h))
+    ): {Cmp.is_lt(Cmp.flip(_)) == False{}: Bool}
+    {==}
+
+# a key before b has other words than b
+def Key.lt_ne(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.is_lt(a, b) == True{}: Bool} -> {
+  Shared.List.is_eq(~U32, ~U32.is_eq, a, b) == False{}: Bool
+}:
+  h =>
+    %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, a, b), Cmp.is_eq(Key.cmp(a, b)), Key.is_eq_cmp(a, b)): {_ == False{}: Bool}
+    %Equal.sym(
+      Cmp,
+      Key.cmp(a, b),
+      LT{},
+      Cmp.lt_true(Key.cmp(a, b))(Equal.trans(Bool, Cmp.is_lt(Key.cmp(a, b)), Key.is_lt(a, b), True{}, Equal.sym(Bool, Key.is_lt(a, b), Cmp.is_lt(Key.cmp(a, b)), Key.is_lt_cmp(a, b)), h))
+    ): {Cmp.is_eq(_) == False{}: Bool}
+    {==}
+
+# a <= b and b < c give a < c
+def Key.le_lt(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>) -> {Key.le(a, b) == True{}: Bool} -> {Key.is_lt(b, c) == True{}: Bool} -> {
+  Key.is_lt(a, c) == True{}: Bool
+}:
+  +h => +g => Key.cases.at(
+    Key.cmp(a, b),
+    a,
+    b,
+    {Key.is_lt(a, c) == True{}: Bool},
+    {==},
+    el => Key.lt_trans(a, b, c)(Equal.trans(Bool, Key.is_lt(a, b), Cmp.is_lt(Key.cmp(a, b)), True{}, Key.is_lt_cmp(a, b), Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(a, b), LT{}, el)))(g),
+    ee =>
+      %Equal.sym(List<&2, U32>, a, b, Key.cmp_eq(a, b)(ee)): {Key.is_lt(_, c) == True{}: Bool}
+      g,
+    eg => Empty.absurd(
+      {Key.is_lt(a, c) == True{}: Bool},
+      Shared.Bool.true_ne_false(
+        Equal.trans(
+          Bool,
+          True{},
+          Bool.not(Key.is_lt(b, a)),
+          False{},
+          Equal.sym(Bool, Bool.not(Key.is_lt(b, a)), True{}, h),
+          Equal.cong(
+            Bool,
+            Bool,
+            Bool.not,
+            Key.is_lt(b, a),
+            True{},
+            Equal.trans(
+              Bool,
+              Key.is_lt(b, a),
+              Cmp.is_lt(Key.cmp(b, a)),
+              True{},
+              Key.is_lt_cmp(b, a),
+              Equal.trans(
+                Bool,
+                Cmp.is_lt(Key.cmp(b, a)),
+                Cmp.is_lt(Cmp.flip(Key.cmp(a, b))),
+                True{},
+                Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(b, a), Cmp.flip(Key.cmp(a, b)), Key.cmp_flip(a, b)),
+                Equal.cong(Cmp, Bool, x => Cmp.is_lt(Cmp.flip(x)), Key.cmp(a, b), GT{}, eg)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+
+# a < b and b <= c give a < c
+def Key.lt_le(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>) -> {Key.is_lt(a, b) == True{}: Bool} -> {Key.le(b, c) == True{}: Bool} -> {
+  Key.is_lt(a, c) == True{}: Bool
+}:
+  +h => +g => Key.cases.at(
+    Key.cmp(b, c),
+    b,
+    c,
+    {Key.is_lt(a, c) == True{}: Bool},
+    {==},
+    el => Key.lt_trans(a, b, c)(h)(Equal.trans(Bool, Key.is_lt(b, c), Cmp.is_lt(Key.cmp(b, c)), True{}, Key.is_lt_cmp(b, c), Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(b, c), LT{}, el))),
+    ee =>
+      %Key.cmp_eq(b, c)(ee): {Key.is_lt(a, _) == True{}: Bool}
+      h,
+    eg => Empty.absurd(
+      {Key.is_lt(a, c) == True{}: Bool},
+      Shared.Bool.true_ne_false(
+        Equal.trans(
+          Bool,
+          True{},
+          Bool.not(Key.is_lt(c, b)),
+          False{},
+          Equal.sym(Bool, Bool.not(Key.is_lt(c, b)), True{}, g),
+          Equal.cong(
+            Bool,
+            Bool,
+            Bool.not,
+            Key.is_lt(c, b),
+            True{},
+            Equal.trans(
+              Bool,
+              Key.is_lt(c, b),
+              Cmp.is_lt(Key.cmp(c, b)),
+              True{},
+              Key.is_lt_cmp(c, b),
+              Equal.trans(
+                Bool,
+                Cmp.is_lt(Key.cmp(c, b)),
+                Cmp.is_lt(Cmp.flip(Key.cmp(b, c))),
+                True{},
+                Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(c, b), Cmp.flip(Key.cmp(b, c)), Key.cmp_flip(b, c)),
+                Equal.cong(Cmp, Bool, x => Cmp.is_lt(Cmp.flip(x)), Key.cmp(b, c), GT{}, eg)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+
 def Mst.canon(ty, fetch):
   +s => +h1 => +h2 => +bs => e1 => e2 => Mst.range_list(
     ~ty,
