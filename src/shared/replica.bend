@@ -2928,12 +2928,6 @@ def Ballot.next(b: Ledgers.Ballot) -> Hashes.Hash:
     case Ledgers.Ballot{x, Ledgers.Link{p, k, z}}:
       k
 
-# the place of the ballot before b in its chain (none: b is the first)
-def Ballot.prev(b: Ledgers.Ballot) -> Maybe<&2, Ledgers.Place>:
-  match b:
-    case Ledgers.Ballot{x, Ledgers.Link{p, k, z}}:
-      p
-
 # that a key of the chain of its voter signs the ballot b, in l: the key that
 # the ballot before it names, when it names one that l holds; else a first key
 # that its root line gives its voter
@@ -2984,7 +2978,7 @@ def Led.Sound(-mach: Machine(), -d: Led(mach), -kern: Kernel(mach, d), -l: Led.L
   (
     @b: Ledgers.Ballot -> {
       Led.has(~mach, ~d, l, Ledgers.Entry.Ballot{b}) == True{}: Bool
-    } -> Ballot.Linked(mach, d, kern, l, b, Ballot.prev(b))
+    } -> Ballot.Linked(mach, d, kern, l, b, Ledgers.Ballot.prev(b))
   )
     & (
       @x: Ledgers.Lie -> {
@@ -3321,12 +3315,6 @@ def Key.secret(seed: Hashes.Hash, root: Hashes.Hash, n: U32) -> Hashes.Hash:
 def Key.public(seed: Hashes.Hash, root: Hashes.Hash, n: U32) -> Hashes.Hash:
   Seals.Seal.public(Key.secret(seed, root, n))
 
-# the root of the line c
-def Line.root(c: Ledgers.Line) -> Hashes.Hash:
-  match c:
-    case Ledgers.Line{r, b}:
-      r
-
 # that the replica s has a key under the root r: the root line gives its name
 # the key of its first ballot
 def Replica.Keyed(
@@ -3450,7 +3438,7 @@ def Replica.Follows(
     kern,
     k,
     s,
-    Line.root(c)
+    Ledgers.Line.root(c)
   ) -> {
     Voters.turn(
       Tip.voters(t),
@@ -3557,7 +3545,7 @@ def Replica.Leads(
     kern,
     k,
     s,
-    Line.root(c)
+    Ledgers.Line.root(c)
   ) -> {
     Voters.turn(
       Tip.voters(t),
@@ -3961,7 +3949,7 @@ def Laws.Passes(
     kern,
     k,
     s,
-    Line.root(c)
+    Ledgers.Line.root(c)
   ) -> {
     Nat.is_lt(
       Round.now(~mach, ~d, Kind.ledger(mach, d, k)(s), c, h, Kind.name(mach, d, k)(s)),
@@ -15999,7 +15987,7 @@ def Ballot.linked.at(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l
 
 # the ballot b is linked in l, by the place of the ballot before it
 def Ballot.linked(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +b: Ledgers.Ballot) -> Bool:
-  Ballot.linked.at(~mach, ~d, ~kern, l, b, Ballot.prev(b))
+  Ballot.linked.at(~mach, ~d, ~kern, l, b, Ledgers.Ballot.prev(b))
 
 # the lie x is a proof (Lie.Proves): its key seals its two ballots, which are
 # not the same
@@ -16959,7 +16947,7 @@ def Chk.new_case(
       == True{}: Bool
   },
   ht: {Ballot.linked(~mach, ~d, ~kern, l2, b) == True{}: Bool}
-) -> Ballot.Linked(mach, d, kern, l2, b2, Ballot.prev(b2)):
+) -> Ballot.Linked(mach, d, kern, l2, b2, Ledgers.Ballot.prev(b2)):
   match z:
     case True{}:
       %Equal.cong(
@@ -16969,10 +16957,10 @@ def Chk.new_case(
         Ledgers.Entry.Ballot{b},
         Ledgers.Entry.Ballot{b2},
         Ledgers.Entry.same_sound(~Machine.Q(mach), ~Machine.code(mach), Ledgers.Entry.Ballot{b}, Ledgers.Entry.Ballot{b2})(h)
-      ): Ballot.Linked(mach, d, kern, l2, _, Ballot.prev(_))
-      Chk.new_linked(~mach, ~d, ~kern, l2, b, Ballot.prev(b))(ht)
+      ): Ballot.Linked(mach, d, kern, l2, _, Ledgers.Ballot.prev(_))
+      Chk.new_linked(~mach, ~d, ~kern, l2, b, Ledgers.Ballot.prev(b))(ht)
     case False{}:
-      Empty.absurd(Ballot.Linked(mach, d, kern, l2, b2, Ballot.prev(b2)), Shared.Bool.false_ne_true(h))
+      Empty.absurd(Ballot.Linked(mach, d, kern, l2, b2, Ledgers.Ballot.prev(b2)), Shared.Bool.false_ne_true(h))
 
 # a ballot of l with b is linked: an old one stays linked, the new one passed
 # the test (m: what l holds under its name)
@@ -16984,7 +16972,7 @@ def Chk.old_or_new(
   +b: Ledgers.Ballot,
   +b2: Ledgers.Ballot,
   s1: @x: Ledgers.Ballot -> {Led.has(~mach, ~d, l, Ledgers.Entry.Ballot{x}) == True{}: Bool}
-    -> Ballot.Linked(mach, d, kern, l, x, Ballot.prev(x)),
+    -> Ballot.Linked(mach, d, kern, l, x, Ledgers.Ballot.prev(x)),
   +later: Led.Later(~mach, ~d, l, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b})),
   +ht: {Ballot.linked(~mach, ~d, ~kern, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}), b) == True{}: Bool},
   m: Maybe<&2, Entry(mach)>,
@@ -17006,7 +16994,7 @@ def Chk.old_or_new(
     Some{Ledgers.Entry.Ballot{b2}}
   )
     == True{}: Bool
-} -> Ballot.Linked(mach, d, kern, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}), b2, Ballot.prev(b2)):
+} -> Ballot.Linked(mach, d, kern, Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}), b2, Ledgers.Ballot.prev(b2)):
   match m:
     case Some{+y}:
       h => Chk.link_grows(
@@ -17017,7 +17005,7 @@ def Chk.old_or_new(
         Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}),
         later,
         b2,
-        Ballot.prev(b2),
+        Ledgers.Ballot.prev(b2),
         s1(
           b2
         )(
