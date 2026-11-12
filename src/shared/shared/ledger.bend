@@ -3937,3 +3937,66 @@ def Book.ok_drop(Q, c, b, n):
   +b = b
   +n = n
   h => Book.ok_drop.at(~Q, ~c, b, n, Book.get(Q, b, n))({==})(h)
+
+# The kind of books
+# -----------------
+
+# a book in its one shape, when c is the code of changes
+def Book.L(~Q: Data, ~c: Codes.Codec(Q)) -> Data:
+  Sigma<&2, &2, Book<Q>, b => {Book.ok(~Q, ~c, b) == True{}: Bool}>
+
+# the book of a book in its one shape
+def Book.L.book(~Q: Data, ~c: Codes.Codec(Q), x: Book.L(~Q, ~c)) -> Book<Q>:
+  match x:
+    case Tuple{b, w}:
+      b
+
+# x with the entry e
+def Book.L.add(~Q: Data, ~c: Codes.Codec(Q), x: Book.L(~Q, ~c), +e: Entry<Q>) -> Book.L(~Q, ~c):
+  match x:
+    case Tuple{+b, w}:
+      (Book.add(~Q, ~c, b, e), Book.ok_add(~Q, ~c, b, e)(w))
+
+# x without the entry of the name n
+def Book.L.drop(~Q: Data, ~c: Codes.Codec(Q), x: Book.L(~Q, ~c), +n: Name) -> Book.L(~Q, ~c):
+  match x:
+    case Tuple{+b, w}:
+      (Book.drop(~Q, b, n), Book.ok_drop(~Q, ~c, b, n)(w))
+
+# books as a way to keep the entries of a ledger, when c is the code of
+# changes
+def Book.kind(~Q: Data, ~c: Codes.Codec(Q)) -> Ledger.Kind(Q):
+  (
+    Book.L(~Q, ~c),
+    (
+      (Book.new(~Q), Book.ok_new(~Q, ~c)),
+      (
+        x => n => Book.get(Q, Book.L.book(~Q, ~c, x), n),
+        (
+          x => e => Book.L.add(~Q, ~c, x, e),
+          (
+            s => r => Book.missing(~Q, Book.L.book(~Q, ~c, s), Book.L.book(~Q, ~c, r)),
+            (
+              x => w => v => Book.ballots(Q, Book.L.book(~Q, ~c, x), w, v),
+              (
+                x => line => h => Book.rounds(Q, Book.L.book(~Q, ~c, x), line, h),
+                (
+                  x => r => Book.liars(Q, Book.L.book(~Q, ~c, x), r),
+                  (
+                    x => line => Book.heights(Q, Book.L.book(~Q, ~c, x), line),
+                    (
+                      x => a => Book.asks(Q, Book.L.book(~Q, ~c, x), a),
+                      (
+                        x => n => Book.L.drop(~Q, ~c, x, n),
+                        x => r => v => p => Book.after(Q, Book.L.book(~Q, ~c, x), r, v, p)
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
