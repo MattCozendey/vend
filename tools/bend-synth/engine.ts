@@ -2691,12 +2691,17 @@ type Session = {
   subs: number; started: number; spent: number; last?: Report; final?: Report; t0: number;
 };
 const sessions = new Map<string, Session>();
+// the session's own book is cleaned, and BK stays the book of the job that runs (an evicted session is
+// often another file's)
 const dropSession = (id: string) => {
   const s = sessions.get(id);
   if (!s) return;
   sessions.delete(id);
   const L = books.get(s.entry);
-  if (L) { BK = L; dropTemps(); BK.hidden.delete(s.k); }
+  if (!L) return;
+  const cur = BK;
+  BK = L;
+  try { dropTemps(); BK.hidden.delete(s.k); } finally { BK = cur; }
 };
 let send: (m: FromWorker) => void = () => {};
 const withHidden = <T>(s: Session, f: () => T): T => {
