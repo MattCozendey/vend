@@ -3041,7 +3041,37 @@ def Book.key_tail.after(-Q: Data, e: Entry<Q>, +n: Name, -p: Nat, -k: List<&2, U
   Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Maybe<&2, Place>, List<&2, U32>, Codes.Read.then(String, Maybe<&2, Place>, Codes.Read.then(Hashes.Hash, String, Hashes.Hash.code.read(k), p => r => Codes.Code.text.read(r)), t => r => Codes.Code.maybe.read(~Place, ~Place.code.read, r)), a => r => Some{Codes.Read{r, []}}), [])
     == Name.key(n): List<&2, U32>
 }:
-  ?TODO
+  match e:
+    case Entry.Ballot{b}:
+      match b:
+        case Ballot{Signed{Place{+line, +h, +r}, +voter, a}, Link{+pv, lk, z}}:
+          hk =>
+            %Shared.Maybe.some_inj(List<&2, U32>, Index.after.key(Line.root(line), voter, pv, Name.key(n)), k, hk): {Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Maybe<&2, Place>, List<&2, U32>, Codes.Read.then(String, Maybe<&2, Place>, Codes.Read.then(Hashes.Hash, String, Hashes.Hash.code.read(_), p => r => Codes.Code.text.read(r)), t => r => Codes.Code.maybe.read(~Place, ~Place.code.read, r)), a => r => Some{Codes.Read{r, []}}), []) == Name.key(n): List<&2, U32>}
+            %Equal.sym(
+              Maybe<&2, Codes.Read<Hashes.Hash>>,
+              Hashes.Hash.code.read(Hashes.Hash.code(Line.root(line), Codes.Code.text(voter, Codes.Code.maybe(~Place, ~Place.code, pv, Name.key(n))))),
+              Some{Codes.Read{Line.root(line), Codes.Code.text(voter, Codes.Code.maybe(~Place, ~Place.code, pv, Name.key(n)))}},
+              Hashes.Hash.code_read(Line.root(line), Codes.Code.text(voter, Codes.Code.maybe(~Place, ~Place.code, pv, Name.key(n))))
+            ): {Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Maybe<&2, Place>, List<&2, U32>, Codes.Read.then(String, Maybe<&2, Place>, Codes.Read.then(Hashes.Hash, String, _, p => r => Codes.Code.text.read(r)), t => r => Codes.Code.maybe.read(~Place, ~Place.code.read, r)), a => r => Some{Codes.Read{r, []}}), []) == Name.key(n): List<&2, U32>}
+            %Equal.sym(
+              Maybe<&2, Codes.Read<String>>,
+              Codes.Code.text.read(Codes.Code.text(voter, Codes.Code.maybe(~Place, ~Place.code, pv, Name.key(n)))),
+              Some{Codes.Read{voter, Codes.Code.maybe(~Place, ~Place.code, pv, Name.key(n))}},
+              Codes.Code.text_read(voter, Codes.Code.maybe(~Place, ~Place.code, pv, Name.key(n)))
+            ): {Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Maybe<&2, Place>, List<&2, U32>, Codes.Read.then(String, Maybe<&2, Place>, _, t => r => Codes.Code.maybe.read(~Place, ~Place.code.read, r)), a => r => Some{Codes.Read{r, []}}), []) == Name.key(n): List<&2, U32>}
+            %Equal.sym(
+              Maybe<&2, Codes.Read<Maybe<&2, Place>>>,
+              Codes.Code.maybe.read(~Place, ~Place.code.read, Codes.Code.maybe(~Place, ~Place.code, pv, Name.key(n))),
+              Some{Codes.Read{pv, Name.key(n)}},
+              Codes.Code.maybe_read(~Place, ~Place.code, ~Place.code.read, w => r => Place.code_read(w, r), pv, Name.key(n))
+            ): {Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Maybe<&2, Place>, List<&2, U32>, _, a => r => Some{Codes.Read{r, []}}), []) == Name.key(n): List<&2, U32>}
+            {==}
+    case Entry.Ask{Id{w, q}, t, a}:
+      h => Empty.absurd({Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Maybe<&2, Place>, List<&2, U32>, Codes.Read.then(String, Maybe<&2, Place>, Codes.Read.then(Hashes.Hash, String, Hashes.Hash.code.read(k), p => r => Codes.Code.text.read(r)), t => r => Codes.Code.maybe.read(~Place, ~Place.code.read, r)), a => r => Some{Codes.Read{r, []}}), []) == Name.key(n): List<&2, U32>}, Shared.Maybe.none_ne_some(List<&2, U32>, k, h))
+    case Entry.Data{ws}:
+      h => Empty.absurd({Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Maybe<&2, Place>, List<&2, U32>, Codes.Read.then(String, Maybe<&2, Place>, Codes.Read.then(Hashes.Hash, String, Hashes.Hash.code.read(k), p => r => Codes.Code.text.read(r)), t => r => Codes.Code.maybe.read(~Place, ~Place.code.read, r)), a => r => Some{Codes.Read{r, []}}), []) == Name.key(n): List<&2, U32>}, Shared.Maybe.none_ne_some(List<&2, U32>, k, h))
+    case Entry.Lie{x}:
+      h => Empty.absurd({Codes.Code.read_value(List<&2, U32>, Codes.Read.then(Maybe<&2, Place>, List<&2, U32>, Codes.Read.then(String, Maybe<&2, Place>, Codes.Read.then(Hashes.Hash, String, Hashes.Hash.code.read(k), p => r => Codes.Code.text.read(r)), t => r => Codes.Code.maybe.read(~Place, ~Place.code.read, r)), a => r => Some{Codes.Read{r, []}}), []) == Name.key(n): List<&2, U32>}, Shared.Maybe.none_ne_some(List<&2, U32>, k, h))
 
 def Book.keys_one(-Q: Data, +i: Nat, e1: Entry<Q>, +n1: Name, e2: Entry<Q>, +n2: Name, -k: List<&2, U32>) -> {
   Keys.at(Entry.keys(Q, e1, n1), i) == Some{k}: Maybe<&2, List<&2, U32>>
