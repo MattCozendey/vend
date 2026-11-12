@@ -594,7 +594,8 @@ const isLemmaType = (k: string): boolean => {
 
 // ---- books ----
 type Lemma = { k: string; order: number; n: number; np: number; guarded: boolean };
-type Src = { file: string; header: string; body: string; bodyLine: number };
+// stub: a law with no def yet, whose def goes at the end of the file
+type Src = { file: string; header: string; body: string; bodyLine: number; stub?: true };
 type Book = {
   entry: string; top: string; book: Term; raw: Record<string, Term>; n0: number; order: Map<string, number>; files: Map<string, Term>;
   texts: Map<string, string>; src: Map<string, Src | null>; seen: string[]; stamp: string; hashes: Record<string, string>;
@@ -706,8 +707,26 @@ const defSrc = (k: string): Src | null => {
     while (be > he + 1 && (lines[be - 1].trim() === "" || lines[be - 1].trim().startsWith("#"))) be--;
     res = { file, header: lines.slice(li, he + 1).join("\n"), body: lines.slice(he + 1, be).join("\n"), bodyLine: he + 1 };
   }
-  BK.src.set(k, res);
-  return res;
+  const out = res ?? lawStub(k, file);
+  BK.src.set(k, out);
+  return out;
+};
+// a law with no def yet: its fill as Bend reads one, `def NAME(clause names):` (bare names, one per `for`
+// clause), with the body ?TODO
+const lawStub = (k: string, file: string): Src | null => {
+  const t = BK.raw[k];
+  if (t?.$ !== "Def" || t.l !== true || t.v !== null) return null;
+  const names: string[] = [];
+  let T: Term = t.T;
+  for (let j = 0; j < t.n; j++) {
+    const s = B.term_strip(T);
+    if (s.$ !== "All") return null;
+    let x = /^[A-Za-z_]\w*$/.test(s.k) && !KEYWORD.test(s.k) ? s.k : "x" + j;
+    while (names.includes(x)) x += "_";
+    names.push(x);
+    T = s.B(B.Var(x, FRESH + j));
+  }
+  return { file, header: "def " + shortOf(k) + "(" + names.join(", ") + "):", body: "  ?TODO", bodyLine: -1, stub: true };
 };
 const openNames = new Map<string, Set<string>>();
 const isOpen = (k: string): boolean => {
@@ -2496,7 +2515,7 @@ function* synthesize(k: string, own: Owner, ds: Src, insts: Inst[], laws: string
         return { status: "partial", text: "# " + own.short + ": the evidence (" + lawsText + ") does not pin a body down: this passes it, and so do bodies that answer differently (" + open.map((o) => o.alt).join("; ") + "). Add an example or a law.\n" + body, body };
       }
       const tidy = yield* step(() => trimPlus((x) => checkErr(k, x) === null, body));
-      return { status: "synthesized", text: head + "\n" + tidy + (notes.length ? "\n" + notes.join("\n") : ""), body: tidy, edit: { file: ds.file, from: ds.header + "\n" + ds.body, to: ds.header + "\n" + tidy } };
+      return { status: "synthesized", text: head + "\n" + tidy + (notes.length ? "\n" + notes.join("\n") : ""), body: tidy, edit: editOf(ds, [], tidy) };
     }
   }
   uninstall(k);
@@ -2540,6 +2559,7 @@ const inputsOf = (k: string): Term[][] => {
 };
 
 // ---- answers ----
+// edit: what --write does, from replaced by to in file (from "": to appended, a new def)
 export type Report = {
   status: "proven" | "synthesized" | "partial" | "open" | "error" | "nothing" | "running"; text: string;
   body?: string; edit?: { file: string; from: string; to: string }; holes?: number; nodes?: number; ms?: number;
@@ -2578,7 +2598,7 @@ const printed = (hs: Extract<Pf, { t: "def" }>[]): Printed[] => hs.map((h) => ({
 const defsText = (hs: Printed[]) => hs.map((h) => h.head + "\n" + h.body + "\n").join("\n");
 const helperBlock = (hs: Printed[], k: string, proven: boolean): string =>
   hs.length ? "# helper defs (" + (proven ? "proven" : "some open") + "): paste them above `def " + shortOf(k) + "(`\n" + defsText(hs) + "# the body of " + shortOf(k) + ":\n" : "";
-const editOf = (ds: Src, hs: Printed[], body: string) => ({ file: ds.file, from: ds.header + "\n" + ds.body, to: (hs.length ? defsText(hs) + "\n" : "") + ds.header + "\n" + body });
+const editOf = (ds: Src, hs: Printed[], body: string) => ({ file: ds.file, from: ds.stub ? "" : ds.header + "\n" + ds.body, to: (hs.length ? defsText(hs) + "\n" : "") + ds.header + "\n" + body });
 const PLUS_LINE = /^[ \t]*\+([A-Za-z_]\w*) = \1[ \t]*\n/gm;
 const trimPlus = (checks: (body: string) => boolean, body: string): string => {
   const cuts = [...body.matchAll(PLUS_LINE)].map((m) => ({ at: m.index!, n: m[0].length })).sort((a, b) => b.at - a.at);
@@ -2691,12 +2711,17 @@ type Session = {
   subs: number; started: number; spent: number; last?: Report; final?: Report; t0: number;
 };
 const sessions = new Map<string, Session>();
+// the session's own book is cleaned, and BK stays the book of the job that runs (an evicted session is
+// often another file's)
 const dropSession = (id: string) => {
   const s = sessions.get(id);
   if (!s) return;
   sessions.delete(id);
   const L = books.get(s.entry);
-  if (L) { BK = L; dropTemps(); BK.hidden.delete(s.k); }
+  if (!L) return;
+  const cur = BK;
+  BK = L;
+  try { dropTemps(); BK.hidden.delete(s.k); } finally { BK = cur; }
 };
 let send: (m: FromWorker) => void = () => {};
 const withHidden = <T>(s: Session, f: () => T): T => {
@@ -2732,7 +2757,8 @@ const newSession = (t: Task, L: Book): Session | Report => {
   const whole = ds.body.trim() === "?TODO", holes = todoAt(ds.body).length > 0;
   const bench = t.kind === "bench";
   if (!whole && !holes && !bench) return { status: "nothing", text: "# " + shortOf(k) + ": no ?TODO in its body (nothing to search; `bend " + path.basename(L.entry) + " --check-only` checks it)" };
-  const own = owner(k);
+  // every def of the file is above a stub
+  const own = ds.stub ? { ...owner(k), order: BK.book.order.length } : owner(k);
   if (returnsSort(k)) return { status: "nothing", text: "# " + shortOf(k) + ": its result is a sort (a type definition): there is no program to search for it" };
   const kind = isLemmaType(k) ? "proof" : "synth";
   const s: Session = { id: t.id, entry: L.entry, stamp: L.stamp, k, own, ds: bench ? { ...ds, body: "  ?TODO" } : ds, kind, hide: bench, sketches: [], subs: 0, started: Date.now(), spent: 0, t0: performance.now() };
@@ -2836,16 +2862,31 @@ const reportOf = (s: Session, t: Task, final: boolean): Report => {
   }
   return { status: "running", text: "# starting" };
 };
-// one slice of a job: load (warm when unchanged), continue its session, report
+type Done = (report: Report, fin: boolean, s?: Session) => void;
+// one slice of a job: load (warm when unchanged), continue its session, report. The search stops itself
+// at the slice's end and at the memory share; outside it, the memory share ends the slice open, not done
 const runSlice = async (t: Task): Promise<void> => {
-  const t0 = performance.now(), until = t0 + Math.max(200, t.sliceMs);
+  const t0 = performance.now();
   jobDeadline = t0 + Math.max(t.sliceMs, t.budgetMs ?? 0);
-  const done = (report: Report, fin: boolean, s?: Session) => {
-    send({ t: "slice", id: t.id, report: { ...report, ms: Math.round(performance.now() - (s?.t0 ?? t0)) }, done: fin, spentMs: Math.round(performance.now() - t0), deps: BK?.hashes });
+  let deps: Record<string, string> | undefined;
+  const done: Done = (report, fin, s) => {
+    send({ t: "slice", id: t.id, report: { ...report, ms: Math.round(performance.now() - (s?.t0 ?? t0)) }, done: fin, spentMs: Math.round(performance.now() - t0), deps });
     if (fin) dropSession(t.id);
   };
-  const L = await loadBook(t.file);
-  if (typeof L === "string") return done({ status: "error", text: HONEST + "\n# " + L }, true);
+  try {
+    const L = await loadBook(t.file);
+    if (typeof L === "string") return done({ status: "error", text: HONEST + "\n# " + L }, true);
+    deps = L.hashes;
+    await sliceOn(t, L, t0 + Math.max(200, t.sliceMs), done);
+  } catch (e) {
+    if (e !== TIMEOUT) throw e;
+    deadline = Infinity;
+    const why = overMem ? "the worker's memory share (" + Math.round(memCap / 1048576) + " MiB; BEND_SYNTH_MEM_MB raises it), so the worker drops its books and sessions" : "time";
+    done({ status: "open", text: HONEST + "\n# " + t.target + ": OPEN: this slice was stopped by " + why + " after " + secs(performance.now() - t0)
+      + ", outside the search (loading the book, starting the search, or reporting); the job goes on in its next slice" }, false);
+  }
+};
+const sliceOn = async (t: Task, L: Book, until: number, done: Done): Promise<void> => {
   BK = L;
   let s = sessions.get(t.id);
   if (s && (s.stamp !== L.stamp || s.entry !== L.entry)) { dropSession(t.id); s = undefined; }
@@ -2861,7 +2902,8 @@ const runSlice = async (t: Task): Promise<void> => {
     send({ t: "progress", id: t.id, report: { status: "running", text: HONEST + "\n" + withHidden(s, () => firstHints(s!)) } });
   }
   const sess = s;
-  const notes = withHidden(sess, () => addSubmissions(sess, t));
+  const notes = [...(sess.ds.stub ? ["# " + sess.own.short + " is a law with no def: searched as `" + sess.ds.header + "` at the end of " + path.basename(sess.ds.file)] : []),
+    ...withHidden(sess, () => addSubmissions(sess, t))];
   if (t.kind === "goals") return done({ status: "open", text: HONEST + "\n" + withHidden(sess, () => goalsText(sess)) }, true, sess);
   if (sess.kind === "proof") {
     S = sess.search!;
@@ -2969,6 +3011,14 @@ const runBench = async (t: Task): Promise<void> => {
 
 // ---- the worker process ----
 let rootSend: (m: FromWorker) => void = () => {};
+// past the memory share: every book, session and memo goes, BK and S too (they keep the last book alive)
+const shed = () => {
+  books.clear(); sessions.clear(); smemo.clear(); lawTerms.clear(); openNames.clear();
+  examples = []; nfObj = new WeakMap(); patMemo = new WeakMap(); nfHeld = 0;
+  BK = undefined as unknown as Book; S = undefined as unknown as Search;
+  Bun.gc(true);
+  overMem = false;
+};
 export const workerMain = async (bendDir: string) => {
   rootSend = send = (m) => { process.send?.(m); };
   try { await loadBend(bendDir); } catch (e) { send({ t: "fatal", message: String((e as Error)?.message ?? e) }); setTimeout(() => process.exit(1), 50); return; }
@@ -2989,7 +3039,7 @@ export const workerMain = async (bendDir: string) => {
         finally {
           deadline = Infinity; BR.f = Infinity;
           for (const k of [...installed.keys()]) uninstall(k);
-          if (overMem) { books.clear(); sessions.clear(); smemo.clear(); Bun.gc(true); overMem = false; }
+          if (overMem) shed();
         }
       }
     } finally { busy = false; }
