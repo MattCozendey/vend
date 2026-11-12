@@ -26088,6 +26088,18 @@ def Bound.before_meets(+k: List<&2, U32>, hi: Maybe<&2, List<&2, U32>>) -> {Boun
 def Level.zeros_le(f: Nat, x: U32) -> {Nat.is_le(Level.zeros(f, x), f) == True{}: Bool}:
   Mst.zeros_le(f, x)
 
+# Key.level_lt helps: at most 6 is below 13
+def Nat.le6_lt13(n: Nat) -> {Nat.is_le(n, 6n) == True{}: Bool} -> {Nat.is_lt(n, 13n) == True{}: Bool}:
+  x => Shared.Nat.le_lt(n, 6n, 13n)(x)({==})
+
+# 6 and at most 6 more is below 13
+def Nat.add6_lt13(n: Nat) -> {Nat.is_le(n, 6n) == True{}: Bool} -> {Nat.is_lt(Nat.add(6n, n), 13n) == True{}: Bool}:
+  ?TODO
+
+# a level of a hash is below 13
+def Level.of_lt(h: Hashes.Hash) -> {Nat.is_lt(Level.of(h), 13n) == True{}: Bool}:
+  ?TODO
+
 # a key is of a level below 13
 def Key.level_lt(k: List<&2, U32>) -> {Nat.is_lt(Key.level(k), 13n) == True{}: Bool}:
   ?TODO
@@ -26222,7 +26234,7 @@ def Mst.hits_false(
 
 # a test of equality that holds is EQ
 def Cmp.eq_true(c: Cmp) -> {Cmp.is_eq(c) == True{}: Bool} -> {c == EQ{}: Cmp}:
-  ?TODO
+  x => Shared.Cmp.is_eq_sound(c)(x)
 
 # what a node that is whole in its room is
 def Mst.wf.node_cases(
@@ -26458,6 +26470,167 @@ def Mst.look_absent(
 ) -> {Mst.wf(~S, ~fetch, fw, s, u, r, m) == True{}: Bool} -> {Nat.is_le(u, g) == True{}: Bool} -> {Nat.is_le(u, Key.level(k)) == True{}: Bool} -> {
   Look.is_absent(Mst.look.go(~S, ~fetch, g, s, r, m, k)) == True{}: Bool
 }:
+  ?TODO
+
+# Writes to whole trees
+# Each write below reads only nodes of a whole tree, in their rooms, so it
+# gives an edit: no node holds the key at another level, a split meets only
+# levels below the key's, a delete that removes nothing reads the key absent,
+# and the fuel outlasts the levels (a merge needs both sides' levels).
+
+# a level below u, with fuel for u, leaves fuel for it one level down
+def Nat.fuel_down(l: Nat, u: Nat, p: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(u, 1n+p) == True{}: Bool} -> {
+  Nat.is_le(l, p) == True{}: Bool
+}:
+  ?TODO
+
+# the fuel of an insert, one level down
+def Nat.fuel_ins(l: Nat, u: Nat, p: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(1n+(1n+u), 1n+p) == True{}: Bool} -> {
+  Nat.is_le(1n+(1n+l), p) == True{}: Bool
+}:
+  ?TODO
+
+# the fuel of a delete, one level down
+def Nat.fuel_del(l: Nat, u: Nat, p: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(1n+Nat.add(u, u), 1n+p) == True{}: Bool} -> {
+  Nat.is_le(1n+Nat.add(l, l), p) == True{}: Bool
+}:
+  ?TODO
+
+# the fuel of a merge, one level down on the first side
+def Nat.fuel_mgt(la: Nat, ua: Nat, ub: Nat, p: Nat) -> {Nat.is_lt(la, ua) == True{}: Bool} -> {
+  Nat.is_le(1n+Nat.add(ua, ub), 1n+p) == True{}: Bool
+} -> {Nat.is_le(1n+Nat.add(la, ub), p) == True{}: Bool}:
+  ?TODO
+
+# the fuel of a merge, one level down on the second side
+def Nat.fuel_mlt(lb: Nat, ua: Nat, ub: Nat, p: Nat) -> {Nat.is_lt(lb, ub) == True{}: Bool} -> {
+  Nat.is_le(1n+Nat.add(ua, ub), 1n+p) == True{}: Bool
+} -> {Nat.is_le(1n+Nat.add(ua, lb), p) == True{}: Bool}:
+  ?TODO
+
+# the fuel of a merge, one level down on both sides
+def Nat.fuel_meq(la: Nat, lb: Nat, ua: Nat, ub: Nat, p: Nat) -> {Nat.is_lt(la, ua) == True{}: Bool} -> {Nat.is_lt(lb, ub) == True{}: Bool} -> {
+  Nat.is_le(1n+Nat.add(ua, ub), 1n+p) == True{}: Bool
+} -> {Nat.is_le(1n+Nat.add(la, lb), p) == True{}: Bool}:
+  ?TODO
+
+# below b, which is at most c, is at most c
+def Nat.lt_le_trans(a: Nat, b: Nat, c: Nat) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Nat.is_le(b, c) == True{}: Bool} -> {Nat.is_le(a, c) == True{}: Bool}:
+  ?TODO
+
+# at most b after one more is at most b
+def Nat.le_of_succ(a: Nat, b: Nat) -> {Nat.is_le(1n+a, b) == True{}: Bool} -> {Nat.is_le(a, b) == True{}: Bool}:
+  ?TODO
+
+# the fuel of a merge of two subtrees of the level l covers l
+def Nat.le_of_double(l: Nat, p: Nat) -> {Nat.is_le(1n+Nat.add(l, l), p) == True{}: Bool} -> {Nat.is_le(l, p) == True{}: Bool}:
+  ?TODO
+
+# a number below b is not b
+def Nat.lt_ne(a: Nat, b: Nat) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Nat.is_eq(b, a) == False{}: Bool}:
+  ?TODO
+
+# a number above b is not b
+def Nat.gt_ne(a: Nat, b: Nat) -> {Nat.cmp(a, b) == GT{}: Cmp} -> {Nat.is_eq(b, a) == False{}: Bool}:
+  ?TODO
+
+# a number that compares LT is below
+def Nat.cmp_lt(a: Nat, b: Nat) -> {Nat.cmp(a, b) == LT{}: Cmp} -> {Nat.is_lt(a, b) == True{}: Bool}:
+  ?TODO
+
+# a number that compares EQ is the same
+def Nat.cmp_eq(a: Nat, b: Nat) -> {Nat.cmp(a, b) == EQ{}: Cmp} -> {a == b: Nat}:
+  ?TODO
+
+# a part is its fields
+def Part.eta(p: Part) -> {p == Part{Part.before(p), Part.gap(p), Part.after(p)}: Part}:
+  ?TODO
+
+# the room of the gap of a part
+def Part.room_eq(p: Part, +l: Nat, lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> {
+  Part.room(p, l, lo, hi) == Room{l, Items.head_key(Part.before(p), lo), Items.head_key(Part.after(p), hi)}: Room
+}:
+  ?TODO
+
+# a part of whole items of another level than k's does not hold k
+def Mst.part_hits(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  -s: S,
+  p: Part,
+  +l: Nat,
+  -lo: Maybe<&2, List<&2, U32>>,
+  -hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>
+) -> {Mst.wf.items(~S, ~fetch, f, s, Part.after(p), l, Part.gap(p), lo, hi) == True{}: Bool} -> {Nat.is_eq(Key.level(k), l) == False{}: Bool} -> {
+  Part.hits(p, k) == False{}: Bool
+}:
+  ?TODO
+
+# the gap of the part of whole items at k is whole in its room
+def Mst.wf_gap(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  +xs: List<&2, Item>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>
+) -> {Mst.wf.items(~S, ~fetch, f, s, xs, l, left, lo, hi) == True{}: Bool} -> {
+  Mst.wf(~S, ~fetch, f, s, l, Part.room(Mst.part(xs, left, k, []), l, lo, hi), Part.gap(Mst.part(xs, left, k, [])) ) == True{}: Bool
+}:
+  ?TODO
+
+# a split done over a split gap is done
+def Mst.split.done_some(+l: Nat, +left: Maybe<&2, Hashes.Hash>, p: Part, m: Maybe<&2, Halves>) -> {
+  Maybe.is_some(&2, Halves, m) == True{}: Bool
+} -> {Maybe.is_some(&2, Halves, Mst.split.done(l, left, p, m)) == True{}: Bool}:
+  ?TODO
+
+# a node over an edited gap is an edit
+def Mst.with_gap_some(+l: Nat, +left: Maybe<&2, Hashes.Hash>, p: Part, e: Maybe<&2, Edit>) -> {Maybe.is_some(&2, Edit, e) == True{}: Bool} -> {
+  Maybe.is_some(&2, Edit, Mst.with_gap(l, left, p, e)) == True{}: Bool
+}:
+  ?TODO
+
+# a key put in a split gap is an edit
+def Mst.insert.gap_some(+l: Nat, +left: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>, +v: List<&2, U32>, p: Part, m: Maybe<&2, Halves>) -> {
+  Maybe.is_some(&2, Halves, m) == True{}: Bool
+} -> {Maybe.is_some(&2, Edit, Mst.insert.gap(l, left, k, v, p, m)) == True{}: Bool}:
+  ?TODO
+
+# a new top over split halves is an edit
+def Mst.insert.top_some(+L: Nat, +k: List<&2, U32>, +v: List<&2, U32>, m: Maybe<&2, Halves>) -> {Maybe.is_some(&2, Halves, m) == True{}: Bool} -> {
+  Maybe.is_some(&2, Edit, Mst.insert.top(L, k, v, m)) == True{}: Bool
+}:
+  ?TODO
+
+# a node over a merged last subtree is an edit
+def Mst.with_last_some(+l: Nat, +left: Maybe<&2, Hashes.Hash>, +xs: List<&2, Item>, e: Maybe<&2, Edit>) -> {
+  Maybe.is_some(&2, Edit, e) == True{}: Bool
+} -> {Maybe.is_some(&2, Edit, Mst.with_last(l, left, xs, e)) == True{}: Bool}:
+  ?TODO
+
+# a node over a merged first subtree is an edit
+def Mst.with_first_some(+l: Nat, xs: List<&2, Item>, e: Maybe<&2, Edit>) -> {Maybe.is_some(&2, Edit, e) == True{}: Bool} -> {
+  Maybe.is_some(&2, Edit, Mst.with_first(l, xs, e)) == True{}: Bool
+}:
+  ?TODO
+
+# two nodes over their merged middle subtrees are an edit
+def Mst.with_both_some(+l: Nat, +left: Maybe<&2, Hashes.Hash>, +xa: List<&2, Item>, xb: List<&2, Item>, e: Maybe<&2, Edit>) -> {
+  Maybe.is_some(&2, Edit, e) == True{}: Bool
+} -> {Maybe.is_some(&2, Edit, Mst.with_both(l, left, xa, xb, e)) == True{}: Bool}:
+  ?TODO
+
+# a node that stays, once a read finds k absent below it, is an edit
+def Mst.delete.none_some(+h: Hashes.Hash, r: Room, m: Maybe<&2, Hashes.Hash>, lk: Room -> Maybe<&2, Hashes.Hash> -> Look) -> {
+  Look.is_absent(lk(r)(m)) == True{}: Bool
+} -> {Maybe.is_some(&2, Edit, Mst.delete.none(h, r, m, lk)) == True{}: Bool}:
   ?TODO
 
 # a write to a tree that lists whole reads every node it needs
