@@ -26060,17 +26060,33 @@ def Mst.wf(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, f: Na
 def Mst.wf_nil(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, f: Nat, +s: S, +l: Nat, prev: Maybe<&2, Hashes.Hash>, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> {
   Mst.wf.items(~S, ~fetch, f, s, [], l, prev, lo, hi) == Mst.wf(~S, ~fetch, f, s, l, Room{l, lo, hi}, prev): Bool
 }:
-  ?TODO
+  match f:
+    case 0n:
+      match prev:
+        case None{}:
+          {==}
+        case Some{value}:
+          {==}
+    case 1n+fp:
+      match prev:
+        case None{}:
+          {==}
+        case Some{value}:
+          {==}
 
 # a bound after a key is not the empty key
 def Bound.before_meets(+k: List<&2, U32>, hi: Maybe<&2, List<&2, U32>>) -> {Bound.before(k, hi) == True{}: Bool} -> {
   Bound.meets_hi([], hi) == True{}: Bool
 }:
-  ?TODO
+  match hi:
+    case None{}:
+      x => {==}
+    case Some{value}:
+      x => (%Equal.sym(Bool, Key.is_lt([], value), True{}, Key.leads_before([], k, value)({==})(x)) : {_ == True{} : Bool}; {==})
 
 # a level of zero groups is at most the groups counted
 def Level.zeros_le(f: Nat, x: U32) -> {Nat.is_le(Level.zeros(f, x), f) == True{}: Bool}:
-  ?TODO
+  Mst.zeros_le(f, x)
 
 # a key is of a level below 13
 def Key.level_lt(k: List<&2, U32>) -> {Nat.is_lt(Key.level(k), 13n) == True{}: Bool}:
@@ -26201,6 +26217,246 @@ def Mst.hits_false(
   +k: List<&2, U32>
 ) -> {Mst.wf.items(~S, ~fetch, f, s, after, l, g, lo, hi) == True{}: Bool} -> {Nat.is_eq(Key.level(k), l) == False{}: Bool} -> {
   Part.hits(Part{b, g, after}, k) == False{}: Bool
+}:
+  ?TODO
+
+# a test of equality that holds is EQ
+def Cmp.eq_true(c: Cmp) -> {Cmp.is_eq(c) == True{}: Bool} -> {c == EQ{}: Cmp}:
+  ?TODO
+
+# what a node that is whole in its room is
+def Mst.wf.node_cases(
+  m: Maybe<&2, Node>,
+  -u: Nat,
+  r: Room,
+  -k: Nat -> Maybe<&2, Hashes.Hash> -> List<&2, Item> -> Maybe<&2, List<&2, U32>> -> Maybe<&2, List<&2, U32>> -> Bool,
+  -P: Type,
+  c: @l: Nat -> @left: Maybe<&2, Hashes.Hash> -> @xs: List<&2, Item> -> @up: Nat -> @lo: Maybe<&2, List<&2, U32>> -> @hi: Maybe<&2, List<&2, U32>> -> {
+    m == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  } -> {r == Room{up, lo, hi}: Room} -> {Nat.is_lt(l, u) == True{}: Bool} -> {k(l)(left)(xs)(lo)(hi) == True{}: Bool} -> P
+) -> {Mst.wf.node(m, u, r, k) == True{}: Bool} -> P:
+  ?TODO
+
+# items whose first is of their level, with no subtree before the empty key,
+# a whole subtree before it, and whole items after it, are whole
+def Mst.wf_cons(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +k: List<&2, U32>,
+  -v: List<&2, U32>,
+  -r: Maybe<&2, Hashes.Hash>,
+  -rest: List<&2, Item>,
+  +l: Nat,
+  prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  -hi: Maybe<&2, List<&2, U32>>
+) -> {Nat.is_eq(Key.level(k), l) == True{}: Bool} -> {
+  Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, k))) == True{}: Bool
+} -> {Mst.wf(~S, ~fetch, f, s, l, Room{l, lo, Some{k}}, prev) == True{}: Bool} -> {
+  Mst.wf.items(~S, ~fetch, f, s, rest, l, r, Some{k}, hi) == True{}: Bool
+} -> {Mst.wf.items(~S, ~fetch, f, s, Item{k, v, r} <> rest, l, prev, lo, hi) == True{}: Bool}:
+  ?TODO
+
+# the empty tree is whole
+def Mst.wf_none(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, f: Nat, -s: S, -u: Nat, -r: Room) -> {
+  Mst.wf(~S, ~fetch, f, s, u, r, None{}) == True{}: Bool
+}:
+  ?TODO
+
+# a key that is not empty is not the empty bound
+def Bound.meets_key(k: List<&2, U32>) -> {Bool.not(List.is_empty(&2, U32, k)) == True{}: Bool} -> {Bound.meets_hi([], Some{k}) == True{}: Bool}:
+  ?TODO
+
+# a listing under no prefix skips a subtree only before the empty key
+def Bound.skips(lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> {
+  Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)) == False{}: Bool
+} -> {Bound.meets_hi([], hi) == False{}: Bool}:
+  ?TODO
+
+# the subtrees of the pieces ps that a listing under no prefix reads are
+# whole, at most f levels down
+def Pieces.wf(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +f: Nat, +s: S, ps: List<&2, Piece>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{Piece.Bind{k, v}, rest}:
+      Pieces.wf(~S, ~fetch, f, s, rest)
+    case Con{Piece.Sub{h, +up, +lo, +hi}, rest}:
+      Bool.and(
+        Bool.or(Bool.not(Bound.meets_hi([], hi)), Mst.wf(~S, ~fetch, f, s, up, Room{up, lo, hi}, Some{h})),
+        Pieces.wf(~S, ~fetch, f, s, rest)
+      )
+
+# the items of a node whose pieces have whole subtrees are whole
+def Mst.wf_items(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  xs: List<&2, Item>,
+  +l: Nat,
+  prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ks: List<&2, Piece>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {Pieces.wf(~S, ~fetch, q, s, ks) == True{}: Bool} -> {
+  Bool.or(Bool.not(List.is_empty(&2, Item, xs)), Bound.meets_hi([], hi)) == True{}: Bool
+} -> {Mst.wf.items(~S, ~fetch, q, s, xs, l, prev, lo, hi) == True{}: Bool}:
+  ?TODO
+
+# an opened node whose pieces have whole subtrees is whole
+def Mst.wf_open(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ks: List<&2, Piece>
+) -> {Mst.open(~S, ~fetch, s, h, up, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {Pieces.wf(~S, ~fetch, q, s, ks) == True{}: Bool} -> {
+  Mst.wf(~S, ~fetch, 1n+q, s, up, Room{up, lo, hi}, Some{h}) == True{}: Bool
+}:
+  ?TODO
+
+# Mst.wf_list at a subtree, by whether the listing reads it (t)
+def Mst.wf_list.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  t: Bool,
+  +q: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  -a: List<&2, Binding>,
+  et: {Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)) == t: Bool},
+  ihr: @b: List<&2, Binding> -> {Mst.range.go(~S, ~fetch, 1n+q, s, [], rest) == Some{b}: Maybe<&2, List<&2, Binding>>} -> {
+    Pieces.wf(~S, ~fetch, 1n+q, s, rest) == True{}: Bool
+  },
+  ihs: @ks: List<&2, Piece> -> @b: List<&2, Binding> -> {Mst.range.go(~S, ~fetch, q, s, [], ks) == Some{b}: Maybe<&2, List<&2, Binding>>} -> {
+    Pieces.wf(~S, ~fetch, q, s, ks) == True{}: Bool
+  }
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, List<&2, Binding>>,
+    t,
+    u => Maybe.bind(
+      &2,
+      List<&2, Piece>,
+      List<&2, Binding>,
+      Mst.open(~S, ~fetch, s, h, up, lo, hi),
+      ks => Maybe.bind(
+        &2,
+        List<&2, Binding>,
+        List<&2, Binding>,
+        Mst.range.go(~S, ~fetch, q, s, [], ks),
+        a2 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b => List.append(&2, Binding, a2, b), Mst.range.go(~S, ~fetch, 1n+q, s, [], rest))
+      )
+    ),
+    u => Mst.range.go(~S, ~fetch, 1n+q, s, [], rest)
+  )
+    == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Pieces.wf(~S, ~fetch, 1n+q, s, Piece.Sub{h, up, lo, hi} <> rest) == True{}: Bool}:
+  ?TODO
+
+# the subtrees of pieces that a listing under no prefix reads are whole
+def Mst.wf_list(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  -a: List<&2, Binding>
+) -> {Mst.range.go(~S, ~fetch, f, s, [], ps) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Pieces.wf(~S, ~fetch, f, s, ps) == True{}: Bool}:
+  ?TODO
+
+# a node with whole items is of a level below 13
+def Mst.wf_lt13(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  -s: S,
+  xs: List<&2, Item>,
+  +l: Nat,
+  prev: Maybe<&2, Hashes.Hash>,
+  -lo: Maybe<&2, List<&2, U32>>,
+  -hi: Maybe<&2, List<&2, U32>>
+) -> {List.is_empty(&2, Item, xs) == False{}: Bool} -> {Mst.wf.items(~S, ~fetch, f, s, xs, l, prev, lo, hi) == True{}: Bool} -> {
+  Nat.is_lt(l, 13n) == True{}: Bool
+}:
+  ?TODO
+
+# a tree that lists whole is whole below the level 13
+def Mst.wf_root(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +s: S, h: Maybe<&2, Hashes.Hash>, -bs: List<&2, Binding>) -> {
+  Mst.range(~S, ~fetch, s, h, []) == Some{bs}: Maybe<&2, List<&2, Binding>>
+} -> {Mst.wf(~S, ~fetch, Mst.depth(), s, 13n, Room.top(), h) == True{}: Bool}:
+  ?TODO
+
+# a pick that goes down into a whole subtree in a room of the level l
+def Pick.ok(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, f: Nat, +s: S, +l: Nat, p: Pick) -> Bool:
+  match p:
+    case Pick.Hit{v}:
+      False{}
+    case Pick.Down{m, Room{+up, lo, hi}}:
+      Bool.and(Nat.is_eq(up, l), Mst.wf(~S, ~fetch, f, s, l, Room{up, lo, hi}, m))
+
+# a pick of k in whole items of another level goes down into a whole
+# subtree
+def Mst.wf_pick(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>
+) -> {Mst.wf.items(~S, ~fetch, f, s, xs, l, prev, lo, hi) == True{}: Bool} -> {Nat.is_eq(Key.level(k), l) == False{}: Bool} -> {
+  Pick.ok(~S, ~fetch, f, s, l, Mst.pick(xs, prev, l, lo, hi, k)) == True{}: Bool
+}:
+  ?TODO
+
+# a pick that goes down into a whole subtree reads k absent when the subtree
+# does (ih)
+def Mst.absent_pick(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -f: Nat,
+  +g: Nat,
+  +s: S,
+  p: Pick,
+  -h: Hashes.Hash,
+  +l: Nat,
+  +k: List<&2, U32>,
+  ih: @m: Maybe<&2, Hashes.Hash> -> @r: Room -> {Mst.wf(~S, ~fetch, f, s, l, r, m) == True{}: Bool} -> {
+    Look.is_absent(Mst.look.go(~S, ~fetch, g, s, r, m, k)) == True{}: Bool
+  }
+) -> {Pick.ok(~S, ~fetch, f, s, l, p) == True{}: Bool} -> {
+  Look.is_absent(Mst.look.pick(p, h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, g, s, r2, m2, k))) == True{}: Bool
+}:
+  ?TODO
+
+# a read of k in a whole tree of levels below k's finds k absent
+def Mst.look_absent(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  fw: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  g: Nat,
+  +s: S,
+  +u: Nat,
+  +r: Room,
+  +k: List<&2, U32>
+) -> {Mst.wf(~S, ~fetch, fw, s, u, r, m) == True{}: Bool} -> {Nat.is_le(u, g) == True{}: Bool} -> {Nat.is_le(u, Key.level(k)) == True{}: Bool} -> {
+  Look.is_absent(Mst.look.go(~S, ~fetch, g, s, r, m, k)) == True{}: Bool
 }:
   ?TODO
 
