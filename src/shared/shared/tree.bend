@@ -10336,6 +10336,166 @@ def Mst.value_pick.con(
       }
       ih(Shared.Bool.and_both(Key.is_lt(ik, k), Bound.before(k, hi))(l2)(Shared.Bool.and_true_right(Bound.after(lo, k), Bound.before(k, hi))(hin)))
 
+# the pieces of the items xs of the node of the hash h give, for a key in
+# their bounds, what a read of the key in the node finds
+def Mst.value_pick(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {Bool.and(Bound.after(lo, k), Bound.before(k, hi)) == True{}: Bool} -> {
+  Pieces.value(~S, ~fetch, f, s, ks, k)
+    == Look.value(Mst.look.pick(Mst.pick(xs, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k))): Maybe<&2, List<&2, U32>>
+}:
+  match xs:
+    case Nil{}:
+      ep => hin =>
+        %Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev, l, lo, hi, []), ks, ep): {
+          Pieces.value(~S, ~fetch, f, s, _, k) == Look.value(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, prev, k)): Maybe<&2, List<&2, U32>>
+        }
+        Mst.value_sub(~S, ~fetch, f, s, prev, l, lo, hi, [], k)(hin)({==})
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      ep => +hin => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(
+          Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+          Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+        ),
+        u => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          Mst.pieces(rest, l, r, Some{ik}, hi)
+        ),
+        ks,
+        {
+          Pieces.value(~S, ~fetch, f, s, ks, k)
+            == Look.value(
+              Mst.look.pick(Mst.pick(Item{ik, iv, r} <> rest, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k))
+            ): Maybe<&2, List<&2, U32>>
+        },
+        +c => e2 => Maybe.map_cases(
+          List<&2, Piece>,
+          List<&2, Piece>,
+          Mst.pieces(rest, l, r, Some{ik}, hi),
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          ks,
+          {
+            Pieces.value(~S, ~fetch, f, s, ks, k)
+              == Look.value(
+                Mst.look.pick(Mst.pick(Item{ik, iv, r} <> rest, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k))
+              ): Maybe<&2, List<&2, U32>>
+          },
+          +ks2 => +e3 => e4 =>
+            %e4: {
+              Pieces.value(~S, ~fetch, f, s, _, k)
+                == Look.value(
+                  Mst.look.pick(Mst.pick(Item{ik, iv, r} <> rest, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k))
+                ): Maybe<&2, List<&2, U32>>
+            }
+            Mst.value_pick.con(
+              ~S,
+              ~fetch,
+              Key.cmp(k, ik),
+              f,
+              s,
+              h,
+              ik,
+              iv,
+              r,
+              rest,
+              l,
+              prev,
+              lo,
+              hi,
+              ks2,
+              k,
+              {==},
+              hin,
+              Shared.Bool.and_true_left(
+                Nat.is_eq(Key.level(ik), l),
+                Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))
+              )(
+                Shared.Bool.and_true_left(
+                  Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+                  Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+                )(c)
+              ),
+              Shared.Bool.and_true_right(Pieces.sorted(ks2), Pieces.inside(ks2, Some{ik}, hi))(Mst.pieces_sorted(rest, l, r, Some{ik}, hi, ks2)(e3)),
+              hin2 => Mst.value_pick(~S, ~fetch, f, s, h, rest, l, r, Some{ik}, hi, ks2, k)(e3)(hin2)
+            )
+        )(e2)
+      )(ep)
+
+# the pieces of an opened node give, for a key in its bounds, what a read of
+# its subtree finds
+def Mst.value_open(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Mst.open(~S, ~fetch, s, h, up, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {Bool.and(Bound.after(lo, k), Bound.before(k, hi)) == True{}: Bool} -> {
+  Pieces.value(~S, ~fetch, q, s, ks, k) == Look.value(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k)): Maybe<&2, List<&2, U32>>
+}:
+  e => hin => Mst.open_cases(
+    ~S,
+    ~fetch,
+    s,
+    h,
+    up,
+    lo,
+    hi,
+    ks,
+    {Pieces.value(~S, ~fetch, q, s, ks, k) == Look.value(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k)): Maybe<&2, List<&2, U32>>},
+    +l => +left => +xs => ef => eh => en => elt => ee0 => ep =>
+      %Equal.sym(Maybe<&2, Node>, Mst.node.in(~S, ~fetch, s, h, Room{up, lo, hi}), Some{Node{l, left, xs}}, en): {
+        Pieces.value(~S, ~fetch, q, s, ks, k)
+          == Look.value(Mst.look.at(h, _, Room{up, lo, hi}, k, m2 => r2 => Mst.look.go(~S, ~fetch, q, s, r2, m2, k))): Maybe<&2, List<&2, U32>>
+      }
+      Mst.value_pick(~S, ~fetch, q, s, h, xs, l, left, lo, hi, ks, k)(ep)(hin)
+  )(e)
+
+# the pieces of an opened node are sorted and lie in its bounds
+def Mst.open_sorted(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>
+) -> {Mst.open(~S, ~fetch, s, h, up, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {
+  Bool.and(Pieces.sorted(ks), Pieces.inside(ks, lo, hi)) == True{}: Bool
+}:
+  e => Mst.open_cases(
+    ~S,
+    ~fetch,
+    s,
+    h,
+    up,
+    lo,
+    hi,
+    ks,
+    {Bool.and(Pieces.sorted(ks), Pieces.inside(ks, lo, hi)) == True{}: Bool},
+    +l => +left => +xs => ef => eh => en => elt => ee0 => ep => Mst.pieces_sorted(xs, l, left, lo, hi, ks)(ep)
+  )(e)
+
 # a write to a tree that lists whole reads every node it needs
 def Mst.put_some(
   ~S: Data,
