@@ -1344,70 +1344,6 @@ def Kernel.follow(-mach: Machine(), -d: Led(mach), k: Kernel(mach, d)) -> Kernel
     case Tuple{f, Tuple{s, w}}:
       w
 
-# the newest tips of the lines cs are the same in the ledgers a and b
-def Heads.same(
-  ~mach: Machine(),
-  ~d: Led(mach),
-  ~kern: Kernel(mach, d),
-  +a: Led.L(mach, d),
-  +b: Led.L(mach, d),
-  cs: List<&2, Ledgers.Line>
-) -> Bool:
-  match cs:
-    case Nil{}:
-      True{}
-    case Con{+c, rest}:
-      Bool.and(
-        Shared.Maybe.is_eq(
-          ~Tip,
-          ~(x => y => Codes.Code.is_eq(~Tip, ~Tip.code, x, y)),
-          Line.head(~mach, ~d, ~kern, a, c),
-          Line.head(~mach, ~d, ~kern, b, c)
-        ),
-        Heads.same(~mach, ~d, ~kern, a, b, rest)
-      )
-
-# that what the kernel kern asks by itself for a line reads only the newest
-# tips of the lines that deps names, and the data under them: in a later
-# ledger where those tips are the same, a request that it could tell stays
-def Kernel.Reads(
-  -mach: Machine(),
-  -d: Led(mach),
-  -kern: Kernel(mach, d),
-  -deps: Led.L(mach, d) -> Ledgers.Line -> List<&2, Ledgers.Line>
-) -> Type:
-  @a: Led.L(mach, d) -> @b: Led.L(mach, d) -> @c: Ledgers.Line -> @x: Maybe<&2, Request<Machine.Q(mach)>> -> {
-    Bool.and(Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b), Led.honest(~mach, ~d, b)) == True{}: Bool
-  } -> {Kernel.follow(mach, d, kern)(a)(c) == Some{x}: Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>} -> {
-    Heads.same(~mach, ~d, ~kern, a, b, deps(a)(c)) == True{}: Bool
-  } -> {Kernel.follow(mach, d, kern)(b)(c) == Some{x}: Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>}
-
-# that watch names each line that reads a line that moved: when deps says
-# that the line c reads a line among moved, and watch can tell (some ws), ws
-# names c. When it cannot tell, a replica asks again once the ledger holds
-# more
-def Kernel.Covers(
-  -mach: Machine(),
-  -d: Led(mach),
-  -deps: Led.L(mach, d) -> Ledgers.Line -> List<&2, Ledgers.Line>,
-  -watch: Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>
-) -> Type:
-  @l: Led.L(mach, d) -> @moved: List<&2, Ledgers.Line> -> @ws: List<&2, Ledgers.Line> -> @c: Ledgers.Line -> @m: Ledgers.Line -> {
-    watch(l)(moved) == Some{ws}: Maybe<&2, List<&2, Ledgers.Line>>
-  } -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, moved, m) == True{}: Bool} -> {
-    List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, deps(l)(c), m) == True{}: Bool
-  } -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, ws, c) == True{}: Bool}
-
-# that the kernel kern asks again only where watch says, when the lines moved
-# move: Kernel.Reads and Kernel.Covers, for some deps
-def Kernel.Watched(
-  -mach: Machine(),
-  -d: Led(mach),
-  -kern: Kernel(mach, d),
-  -watch: Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>
-) -> Type:
-  &deps: Led.L(mach, d) -> Ledgers.Line -> List<&2, Ledgers.Line> -> Kernel.Reads(mach, d, kern, deps) & Kernel.Covers(mach, d, deps, watch)
-
 # Steps
 # -----
 # A step runs its requests in order from a tip. Each request gets one
@@ -2866,6 +2802,77 @@ def Line.head(
   +c: Ledgers.Line
 ) -> Maybe<&2, Tip>:
   Line.head.of(~mach, ~d, ~kern, l, c, Line.start(~mach, ~d, ~kern, l, c))
+
+# the newest tips of the lines cs are the same in the ledgers a and b
+def Heads.same(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  cs: List<&2, Ledgers.Line>
+) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case Con{+c, rest}:
+      Bool.and(
+        Shared.Maybe.is_eq(
+          ~Tip,
+          ~(x => y => Codes.Code.is_eq(~Tip, ~Tip.code, x, y)),
+          Line.head(~mach, ~d, ~kern, a, c),
+          Line.head(~mach, ~d, ~kern, b, c)
+        ),
+        Heads.same(~mach, ~d, ~kern, a, b, rest)
+      )
+
+# the lines whose newest tips a kernel reads for each line
+def Kernel.Deps(-mach: Machine(), -d: Led(mach)) -> Type:
+  Led.L(mach, d) -> Ledgers.Line -> List<&2, Ledgers.Line>
+
+# that what the kernel kern asks by itself for a line reads only the newest
+# tips of the lines that deps names, and the data under them: in a later
+# ledger where those tips are the same, a request that it could tell stays
+def Kernel.Reads(
+  -mach: Machine(),
+  -d: Led(mach),
+  -kern: Kernel(mach, d),
+  -deps: Kernel.Deps(mach, d)
+) -> Type:
+  @a: Led.L(mach, d) -> @b: Led.L(mach, d) -> @c: Ledgers.Line -> @x: Maybe<&2, Request<Machine.Q(mach)>> -> Led.Later(
+    ~mach,
+    ~d,
+    a,
+    b
+  ) -> {Kernel.follow(mach, d, kern)(a)(c) == Some{x}: Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>} -> {
+    Heads.same(~mach, ~d, ~kern, a, b, deps(a)(c)) == True{}: Bool
+  } -> {Kernel.follow(mach, d, kern)(b)(c) == Some{x}: Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>}
+
+# that watch names each line that reads a line that moved: when deps says
+# that the line c reads a line among moved, and watch can tell (some ws), ws
+# names c. When it cannot tell, a replica asks again once the ledger holds
+# more
+def Kernel.Covers(
+  -mach: Machine(),
+  -d: Led(mach),
+  -deps: Kernel.Deps(mach, d),
+  -watch: Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>
+) -> Type:
+  @l: Led.L(mach, d) -> @moved: List<&2, Ledgers.Line> -> @ws: List<&2, Ledgers.Line> -> @c: Ledgers.Line -> @m: Ledgers.Line -> {
+    watch(l)(moved) == Some{ws}: Maybe<&2, List<&2, Ledgers.Line>>
+  } -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, moved, m) == True{}: Bool} -> {
+    List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, deps(l)(c), m) == True{}: Bool
+  } -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, ws, c) == True{}: Bool}
+
+# that the kernel kern asks again only where watch says, when the lines moved
+# move: Kernel.Reads and Kernel.Covers, for some deps
+def Kernel.Watched(
+  -mach: Machine(),
+  -d: Led(mach),
+  -kern: Kernel(mach, d),
+  -watch: Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>
+) -> Type:
+  &deps: Kernel.Deps(mach, d) -> Kernel.Reads(mach, d, kern, deps) & Kernel.Covers(mach, d, deps, watch)
 
 # the tip of the line c after k steps, in l (none: l holds fewer). A law's
 # measure: no replica runs it
