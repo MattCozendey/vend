@@ -25108,6 +25108,14 @@ def Pieces.apart_left(a: List<&2, Piece>, +b: List<&2, Piece>, +bs: List<&2, Pie
     case Con{Piece.Sub{h2, u, lo, hi}, +rest}:
       h => Pieces.apart_left(rest, b, bs)(h)
 
+# Pieces.apart_sub_left and right help: a not-or that holds holds for each side
+def Bool.not_or_l(a: Bool, -b: Bool) -> {Bool.not(Bool.or(a, b)) == True{}: Bool} -> {Bool.not(a) == True{}: Bool}:
+  ?TODO
+
+# the second side of a not-or that holds
+def Bool.not_or_r(a: Bool, -b: Bool) -> {Bool.not(Bool.or(a, b)) == True{}: Bool} -> {Bool.not(b) == True{}: Bool}:
+  ?TODO
+
 # pieces apart from others are apart from the front of them
 def Pieces.apart_sub_left(as: List<&2, Piece>, +a: List<&2, Piece>, +b: List<&2, Piece>) -> {
   Pieces.apart(as, List.append(&2, Piece, a, b)) == True{}: Bool
@@ -25138,7 +25146,19 @@ def Mst.value_key(
 def Mst.differ_some(x: Maybe<&2, List<&2, U32>>, y: Maybe<&2, List<&2, U32>>) -> {
   Bool.and(Maybe.is_some(&2, List<&2, U32>, x), Maybe.is_some(&2, List<&2, U32>, y)) == False{}: Bool
 } -> {Mst.differ(x, y) == Bool.or(Maybe.is_some(&2, List<&2, U32>, x), Maybe.is_some(&2, List<&2, U32>, y)): Bool}:
-  ?TODO
+  match x:
+    case None{}:
+      match y:
+        case None{}:
+          x => {==}
+        case Some{value}:
+          x => {==}
+    case Some{value}:
+      match y:
+        case None{}:
+          x => {==}
+        case Some{value1}:
+          x => Empty.absurd({Mst.differ(Some{value}, Some{value1}) == Bool.or(Maybe.is_some(&2, List<&2, U32>, Some{value}), Maybe.is_some(&2, List<&2, U32>, Some{value1})) : Bool}, {(%x : {\{False: Empty; \{True: Unit; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
 
 # the differences of the values of k over the runs ps, read f levels down
 def Runs.differ(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +f: Nat, +s: S, ps: List<&2, Runs>, +k: List<&2, U32>) -> Bool:
@@ -25766,7 +25786,21 @@ def Pieces.apart_push(as: List<&2, Piece>, +k: List<&2, U32>, +v: List<&2, U32>,
 def Pieces.has_key_rev(xs: List<&2, Piece>, +acc: List<&2, Piece>, +k: List<&2, U32>) -> {
   Pieces.has_key(List.reverse.go(&2, Piece, xs, acc), k) == Bool.or(Pieces.has_key(xs, k), Pieces.has_key(acc, k)): Bool
 }:
-  ?TODO
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      match head:
+        case Piece.Bind{key, value}:
+          +key = key
+          +tail = tail
+          %Equal.sym(Bool, Pieces.has_key(List.reverse.go(&2, Piece, tail, Piece.Bind{key, value} <> acc), k), Bool.or(Pieces.has_key(tail, k), Pieces.has_key(Piece.Bind{key, value} <> acc, k)), Pieces.has_key_rev(tail, Piece.Bind{key, value} <> acc, k)) :
+            {_ == Bool.or(Bool.or(Shared.List.is_eq(U32, U32.is_eq, key, k), Pieces.has_key(tail, k)), Pieces.has_key(acc, k)) : Bool}
+          Bool.or_swap3(Pieces.has_key(tail, k), Shared.List.is_eq(U32, U32.is_eq, key, k), Pieces.has_key(acc, k))
+        case Piece.Sub{hash, up, lo, hi}:
+          %Equal.sym(Bool, Pieces.has_key(List.reverse.go(&2, Piece, tail, Piece.Sub{hash, up, lo, hi} <> acc), k), Bool.or(Pieces.has_key(tail, k), Pieces.has_key(Piece.Sub{hash, up, lo, hi} <> acc, k)), Pieces.has_key_rev(tail, Piece.Sub{hash, up, lo, hi} <> acc, k)) :
+            {_ == Bool.or(Pieces.has_key(tail, k), Pieces.has_key(acc, k)) : Bool}
+          {==}
 
 # pieces apart from others, read back to front onto pieces apart from them,
 # are apart from them
@@ -25879,14 +25913,6 @@ def Mst.root_sorted(m: Maybe<&2, Hashes.Hash>) -> {Pieces.sorted(Mst.root(m)) ==
 def Mst.value_root(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +s: S, m: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>) -> {
   Pieces.value(~S, ~fetch, Mst.depth(), s, Mst.root(m), k) == Look.value(Mst.look(~S, ~fetch, s, m, k)): Maybe<&2, List<&2, U32>>
 }:
-  ?TODO
-
-# Pieces.apart_sub_left and right help: a not-or that holds holds for each side
-def Bool.not_or_l(a: Bool, -b: Bool) -> {Bool.not(Bool.or(a, b)) == True{}: Bool} -> {Bool.not(a) == True{}: Bool}:
-  ?TODO
-
-# the second side of a not-or that holds
-def Bool.not_or_r(a: Bool, -b: Bool) -> {Bool.not(Bool.or(a, b)) == True{}: Bool} -> {Bool.not(b) == True{}: Bool}:
   ?TODO
 
 # a trimmed run of sorted sides with no binding key on both has the same
@@ -26257,22 +26283,6 @@ def Mst.wf_first(
         )(e)
       )
 
-# the subtree after the items of a node is whole in its room
-def Mst.wf_last(
-  ~S: Data,
-  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
-  f: Nat,
-  +s: S,
-  xs: List<&2, Item>,
-  +l: Nat,
-  prev: Maybe<&2, Hashes.Hash>,
-  +lo: Maybe<&2, List<&2, U32>>,
-  +hi: Maybe<&2, List<&2, U32>>
-) -> {Mst.wf.items(~S, ~fetch, f, s, xs, l, prev, lo, hi) == True{}: Bool} -> {
-  Mst.wf(~S, ~fetch, f, s, l, Room{l, Items.last_key(xs, lo), hi}, Mst.last(xs, prev)) == True{}: Bool
-}:
-  ?TODO
-
 # the items of a node after its first one are whole
 def Mst.wf_rest(
   ~S: Data,
@@ -26307,6 +26317,26 @@ def Mst.wf_level(
   -lo: Maybe<&2, List<&2, U32>>,
   -hi: Maybe<&2, List<&2, U32>>
 ) -> {Mst.wf.items(~S, ~fetch, f, s, Item{k, v, r} <> rest, l, prev, lo, hi) == True{}: Bool} -> {Key.level(k) == l: Nat}:
+  ?TODO
+
+# a test of equality that holds is EQ
+def Cmp.eq_true(c: Cmp) -> {Cmp.is_eq(c) == True{}: Bool} -> {c == EQ{}: Cmp}:
+  x => Shared.Cmp.is_eq_sound(c)(x)
+
+# the subtree after the items of a node is whole in its room
+def Mst.wf_last(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  xs: List<&2, Item>,
+  +l: Nat,
+  prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Mst.wf.items(~S, ~fetch, f, s, xs, l, prev, lo, hi) == True{}: Bool} -> {
+  Mst.wf(~S, ~fetch, f, s, l, Room{l, Items.last_key(xs, lo), hi}, Mst.last(xs, prev)) == True{}: Bool
+}:
   ?TODO
 
 # the items of a part before its gap, last first
@@ -26368,10 +26398,6 @@ def Mst.hits_false(
   Part.hits(Part{b, g, after}, k) == False{}: Bool
 }:
   ?TODO
-
-# a test of equality that holds is EQ
-def Cmp.eq_true(c: Cmp) -> {Cmp.is_eq(c) == True{}: Bool} -> {c == EQ{}: Cmp}:
-  x => Shared.Cmp.is_eq_sound(c)(x)
 
 # what a node that is whole in its room is
 def Mst.wf.node_cases(
@@ -26763,7 +26789,8 @@ def Mst.edge_some(
 }:
   ?TODO
 
-# a split of whole items of a level below k's is done
+# a split of whole items of a level below k's is done, once its gap splits
+# (ih)
 def Mst.split_at_some(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -26777,9 +26804,11 @@ def Mst.split_at_some(
   +hi: Maybe<&2, List<&2, U32>>,
   +k: List<&2, U32>,
   +p: Nat
-) -> {Mst.wf.items(~S, ~fetch, fw, s, xs, l, left, lo, hi) == True{}: Bool} -> {Nat.is_le(l, p) == True{}: Bool} -> {
-  Nat.is_lt(l, Key.level(k)) == True{}: Bool
-} -> {
+) -> {Mst.wf.items(~S, ~fetch, fw, s, xs, l, left, lo, hi) == True{}: Bool} -> {Nat.is_lt(l, Key.level(k)) == True{}: Bool} -> (
+  {Mst.wf(~S, ~fetch, fw, s, l, Part.room(Mst.part(xs, left, k, []), l, lo, hi), Part.gap(Mst.part(xs, left, k, []))) == True{}: Bool} -> {
+    Maybe.is_some(&2, Halves, Mst.split(~S, ~fetch, p, s, Part.room(Mst.part(xs, left, k, []), l, lo, hi), Part.gap(Mst.part(xs, left, k, [])), k)) == True{}: Bool
+  }
+) -> {
   Maybe.is_some(&2, Halves, Mst.split.at(Some{Node{l, left, xs}}, Room{up, lo, hi}, k, r2 => c => Mst.split(~S, ~fetch, p, s, r2, c, k))) == True{}: Bool
 }:
   ?TODO
