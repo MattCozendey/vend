@@ -19820,6 +19820,497 @@ def Stable.resolve_work(
     +W1 => e1 => e2 => Stable.resolve_work.at(~d, a, b, h, n, new, k, cs, W, W1, e1, e2, hold, g)
   )(eM)
 
+# a choice by a test that holds, and holds after, gives y when its choice is
+# kept, given the test; its other choice gives no y
+def Stable.when_test2(
+  -R: Type,
+  c: Bool,
+  -c2: Bool,
+  -k: Unit -> R,
+  -e: Unit -> R,
+  -k2: Unit -> R,
+  -e2: Unit -> R,
+  -y: R,
+  hc: {c == True{}: Bool} -> {c2 == True{}: Bool},
+  hk: {c == True{}: Bool} -> {k(Unit{}) == y: R} -> {k2(Unit{}) == y: R},
+  he: {e(Unit{}) == y: R} -> Empty
+) -> {Shared.Bool.when(R, c, k, e) == y: R} -> {Shared.Bool.when(R, c2, k2, e2) == y: R}:
+  match c:
+    case True{}:
+      h =>
+        %Equal.sym(Bool, c2, True{}, hc({==})): {Shared.Bool.when(R, _, k2, e2) == y: R}
+        hk({==})(h)
+    case False{}:
+      h => Empty.absurd({Shared.Bool.when(R, c2, k2, e2) == y: R}, he(h))
+
+# a read that tells gives some value
+def Stable.some_of(-A: Data, m: Maybe<&2, A>, -R: Type, k: @v: A -> {m == Some{v}: Maybe<&2, A>} -> R) -> {
+  Maybe.is_some(&2, A, m) == True{}: Bool
+} -> R:
+  match m:
+    case None{}:
+      h => Empty.absurd(R, Shared.Bool.false_ne_true(h))
+    case Some{+v}:
+      h => k(v)({==})
+
+# Stable.diff_some once both listings are known
+def Stable.diff_some.at(
+  ~d: Led(),
+  +l: L(d),
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  -R: Type,
+  k: @ks: List<&2, List<&2, U32>> -> {Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, ho, ht) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>} -> R,
+  po: Sigma<&2, &2, List<&2, Trees.Binding>, bs => {Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, ho, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>}>,
+  pt: Sigma<&2, &2, List<&2, Trees.Binding>, bs => {Replicas.Tree.range(~Requests.Ask.machine(), ~d, l, ht, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>}>
+) -> R:
+  match po pt:
+    case Tuple{bs1, e1} Tuple{bs2, e2}:
+      Stable.some_of(List<&2, List<&2, U32>>, Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, ho, ht), R, k)(
+        Merge.whole_diff(L(d), Replicas.Led.tree(Requests.Ask.machine(), d), Merge.laws_whole(d), l, ho, ht, bs1, bs2, e1, e2)
+      )
+
+# two trees that a ledger holds whole have a difference
+def Stable.diff_some(
+  ~d: Led(),
+  +l: L(d),
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  -R: Type,
+  k: @ks: List<&2, List<&2, U32>> -> {Replicas.Tree.diff(~Requests.Ask.machine(), ~d, l, ho, ht) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>} -> R,
+  ko: {Tree.kept(~d, l, ho) == True{}: Bool},
+  kt: {Tree.kept(~d, l, ht) == True{}: Bool}
+) -> R:
+  Stable.diff_some.at(~d, l, ho, ht, R, k, Merge.kept_range(~d, l, ho, ko), Merge.kept_range(~d, l, ht, kt))
+
+# what a resolve does once its content is known stays as the ledger grows
+def Stable.resolve_of(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +new: Maybe<&2, Requests.Res>,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +hx: {Replicas.Act.held(~Requests.Ask.machine(), ~d, b, x) == True{}: Bool}
+) -> {Resolve.act.of(~d, a, t, k, n, new) == Some{x}: Maybe<&2, Replicas.Act>} -> {Resolve.act.of(~d, b, t, k, n, new) == Some{x}: Maybe<&2, Replicas.Act>}:
+  Shared.Maybe.bind_kept(
+    List<&2, Resources.Name>,
+    Replicas.Act,
+    Clash.names(~d, a, Replicas.Tip.content(t), k),
+    Clash.names(~d, b, Replicas.Tip.content(t), k),
+    +cs => Shared.Bool.when(
+      Maybe<&2, Replicas.Act>,
+      List.contains(~Resources.Name, ~Resources.Name.is_eq, cs, n),
+      u => Shared.Bool.when(
+        Maybe<&2, Replicas.Act>,
+        Res.kept(~d, a, new),
+        v => Work.act(
+          ~d,
+          None{},
+          Maybe.bind(
+            &2,
+            Work<L(d)>,
+            Work<L(d)>,
+            Work.set(~d, Work{a, Replicas.Tip.content(t), []}, Key.res(n), Res.value(new)),
+            w => Work.set(~d, w, Key.clashes(k), Clash.value(Shared.List.remove(~Resources.Name, ~Resources.Name.is_eq, cs, n)))
+          )
+        ),
+        v => None{}
+      ),
+      u => Some{Replicas.Act.Stale{}}
+    ),
+    +cs => Shared.Bool.when(
+      Maybe<&2, Replicas.Act>,
+      List.contains(~Resources.Name, ~Resources.Name.is_eq, cs, n),
+      u => Shared.Bool.when(
+        Maybe<&2, Replicas.Act>,
+        Res.kept(~d, b, new),
+        v => Work.act(
+          ~d,
+          None{},
+          Maybe.bind(
+            &2,
+            Work<L(d)>,
+            Work<L(d)>,
+            Work.set(~d, Work{b, Replicas.Tip.content(t), []}, Key.res(n), Res.value(new)),
+            w => Work.set(~d, w, Key.clashes(k), Clash.value(Shared.List.remove(~Resources.Name, ~Resources.Name.is_eq, cs, n)))
+          )
+        ),
+        v => None{}
+      ),
+      u => Some{Replicas.Act.Stale{}}
+    ),
+    x,
+    +cs => e => Stable.clash_names(~d, a, b, Replicas.Tip.content(t), k, cs, g)(e),
+    +cs => Stable.when_same(
+      Maybe<&2, Replicas.Act>,
+      List.contains(~Resources.Name, ~Resources.Name.is_eq, cs, n),
+      u => Shared.Bool.when(
+        Maybe<&2, Replicas.Act>,
+        Res.kept(~d, a, new),
+        v => Work.act(
+          ~d,
+          None{},
+          Maybe.bind(
+            &2,
+            Work<L(d)>,
+            Work<L(d)>,
+            Work.set(~d, Work{a, Replicas.Tip.content(t), []}, Key.res(n), Res.value(new)),
+            w => Work.set(~d, w, Key.clashes(k), Clash.value(Shared.List.remove(~Resources.Name, ~Resources.Name.is_eq, cs, n)))
+          )
+        ),
+        v => None{}
+      ),
+      u => Some{Replicas.Act.Stale{}},
+      u => Shared.Bool.when(
+        Maybe<&2, Replicas.Act>,
+        Res.kept(~d, b, new),
+        v => Work.act(
+          ~d,
+          None{},
+          Maybe.bind(
+            &2,
+            Work<L(d)>,
+            Work<L(d)>,
+            Work.set(~d, Work{b, Replicas.Tip.content(t), []}, Key.res(n), Res.value(new)),
+            w => Work.set(~d, w, Key.clashes(k), Clash.value(Shared.List.remove(~Resources.Name, ~Resources.Name.is_eq, cs, n)))
+          )
+        ),
+        v => None{}
+      ),
+      u => Some{Replicas.Act.Stale{}},
+      Some{x},
+      c => Stable.when_test(
+        Maybe<&2, Replicas.Act>,
+        Res.kept(~d, a, new),
+        Res.kept(~d, b, new),
+        v => Work.act(
+          ~d,
+          None{},
+          Maybe.bind(
+            &2,
+            Work<L(d)>,
+            Work<L(d)>,
+            Work.set(~d, Work{a, Replicas.Tip.content(t), []}, Key.res(n), Res.value(new)),
+            w => Work.set(~d, w, Key.clashes(k), Clash.value(Shared.List.remove(~Resources.Name, ~Resources.Name.is_eq, cs, n)))
+          )
+        ),
+        v => None{},
+        v => Work.act(
+          ~d,
+          None{},
+          Maybe.bind(
+            &2,
+            Work<L(d)>,
+            Work<L(d)>,
+            Work.set(~d, Work{b, Replicas.Tip.content(t), []}, Key.res(n), Res.value(new)),
+            w => Work.set(~d, w, Key.clashes(k), Clash.value(Shared.List.remove(~Resources.Name, ~Resources.Name.is_eq, cs, n)))
+          )
+        ),
+        v => None{},
+        Some{x},
+        hc => Stable.res_kept(~d, a, b, new, g)(hc),
+        Stable.work_kept(
+          ~d,
+          b,
+          None{},
+          Maybe.bind(
+            &2,
+            Work<L(d)>,
+            Work<L(d)>,
+            Work.set(~d, Work{a, Replicas.Tip.content(t), []}, Key.res(n), Res.value(new)),
+            w => Work.set(~d, w, Key.clashes(k), Clash.value(Shared.List.remove(~Resources.Name, ~Resources.Name.is_eq, cs, n)))
+          ),
+          Maybe.bind(
+            &2,
+            Work<L(d)>,
+            Work<L(d)>,
+            Work.set(~d, Work{b, Replicas.Tip.content(t), []}, Key.res(n), Res.value(new)),
+            w => Work.set(~d, w, Key.clashes(k), Clash.value(Shared.List.remove(~Resources.Name, ~Resources.Name.is_eq, cs, n)))
+          ),
+          x,
+          +W => eM => hw => Stable.resolve_work(~d, a, b, Replicas.Tip.content(t), n, new, k, cs, W, g)(eM)(hw),
+          hx
+        ),
+        e => Shared.Maybe.none_ne_some(Replicas.Act, x, e)
+      ),
+      c => e => e
+    )
+  )
+
+# what a resolve does stays as the ledger grows
+def Stable.resolve(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +k: Ledgers.Id,
+  +n: Resources.Name,
+  +c: Requests.Content,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +hx: {Replicas.Act.held(~Requests.Ask.machine(), ~d, b, x) == True{}: Bool}
+) -> {Resolve.act(~d, a, t, k, n, c) == Some{x}: Maybe<&2, Replicas.Act>} -> {Resolve.act(~d, b, t, k, n, c) == Some{x}: Maybe<&2, Replicas.Act>}:
+  Shared.Maybe.bind_kept(
+    Maybe<&2, Requests.Res>,
+    Replicas.Act,
+    Content.find(~d, a, t, n, c),
+    Content.find(~d, b, t, n, c),
+    new => Resolve.act.of(~d, a, t, k, n, new),
+    new => Resolve.act.of(~d, b, t, k, n, new),
+    x,
+    +new => e => Stable.content(~d, a, b, t, n, c, new, g)(e),
+    +new => e => Stable.resolve_of(~d, a, b, t, k, n, new, x, g, hx)(e)
+  )
+
+# Stable.merge once the difference ks of the trees is known
+def Stable.merge.go(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +hb: Maybe<&2, Hashes.Hash>,
+  +ho: Maybe<&2, Hashes.Hash>,
+  +ht: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +ks: List<&2, List<&2, U32>>,
+  +eks: {Replicas.Tree.diff(~Requests.Ask.machine(), ~d, a, ho, ht) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>},
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +hx: {Replicas.Act.held(~Requests.Ask.machine(), ~d, b, x) == True{}: Bool}
+) -> {
+  Work.act(
+    ~d,
+    None{},
+    Merge.all(
+      ~d,
+      a,
+      hb,
+      ho,
+      ht,
+      k,
+      Maybe.default(&2, List<&2, List<&2, U32>>, Replicas.Tree.diff(~Requests.Ask.machine(), ~d, a, ho, ht), []),
+      Some{Work{a, ho, []}}
+    )
+  )
+    == Some{x}: Maybe<&2, Replicas.Act>
+} -> {
+  Work.act(
+    ~d,
+    None{},
+    Merge.all(
+      ~d,
+      b,
+      hb,
+      ho,
+      ht,
+      k,
+      Maybe.default(&2, List<&2, List<&2, U32>>, Replicas.Tree.diff(~Requests.Ask.machine(), ~d, b, ho, ht), []),
+      Some{Work{b, ho, []}}
+    )
+  )
+    == Some{x}: Maybe<&2, Replicas.Act>
+}:
+  e => Affects.cast(
+    Maybe<&2, List<&2, List<&2, U32>>>,
+    z => {
+      Work.act(~d, None{}, Merge.all(~d, b, hb, ho, ht, k, Maybe.default(&2, List<&2, List<&2, U32>>, z, []), Some{Work{b, ho, []}}))
+        == Some{x}: Maybe<&2, Replicas.Act>
+    },
+    Some{ks},
+    Replicas.Tree.diff(~Requests.Ask.machine(), ~d, b, ho, ht),
+    Equal.sym(
+      Maybe<&2, List<&2, List<&2, U32>>>,
+      Replicas.Tree.diff(~Requests.Ask.machine(), ~d, b, ho, ht),
+      Some{ks},
+      Stable.diff_grows(~d, a, b, ho, ht, ks, g)(eks)
+    ),
+    Stable.work_kept(
+      ~d,
+      b,
+      None{},
+      Merge.all(~d, a, hb, ho, ht, k, ks, Some{Work{a, ho, []}}),
+      Merge.all(~d, b, hb, ho, ht, k, ks, Some{Work{b, ho, []}}),
+      x,
+      +W => eM => hw => Stable.all(~d, a, b, hb, ho, ht, k, ks, Work{a, ho, []}, W, {==}, hw, g)(eM),
+      hx
+    )(
+      Affects.cast(
+        Maybe<&2, List<&2, List<&2, U32>>>,
+        z => {
+          Work.act(~d, None{}, Merge.all(~d, a, hb, ho, ht, k, Maybe.default(&2, List<&2, List<&2, U32>>, z, []), Some{Work{a, ho, []}}))
+            == Some{x}: Maybe<&2, Replicas.Act>
+        },
+        Replicas.Tree.diff(~Requests.Ask.machine(), ~d, a, ho, ht),
+        Some{ks},
+        eks,
+        e
+      )
+    )
+  )
+
+# what a merge does stays as the ledger grows
+def Stable.merge(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +k: Ledgers.Id,
+  +from: Requests.Source,
+  +base: Maybe<&2, Requests.Source>,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +hx: {Replicas.Act.held(~Requests.Ask.machine(), ~d, b, x) == True{}: Bool}
+) -> {Merge.act(~d, a, t, k, from, base) == Some{x}: Maybe<&2, Replicas.Act>} -> {Merge.act(~d, b, t, k, from, base) == Some{x}: Maybe<&2, Replicas.Act>}:
+  +ho = Replicas.Tip.content(t)
+  +ht = Source.root(from)
+  +hb = Base.tree(base)
+  Stable.when_test2(
+    Maybe<&2, Replicas.Act>,
+    List.all.if(u => List.all.if(u2 => Tree.kept(~d, a, ho), Tree.kept(~d, a, hb)), Tree.kept(~d, a, ht)),
+    List.all.if(u => List.all.if(u2 => Tree.kept(~d, b, ho), Tree.kept(~d, b, hb)), Tree.kept(~d, b, ht)),
+    u => Work.act(
+      ~d,
+      None{},
+      Merge.all(~d, a, hb, ho, ht, k, Maybe.default(&2, List<&2, List<&2, U32>>, Replicas.Tree.diff(~Requests.Ask.machine(), ~d, a, ho, ht), []), Some{Work{a, ho, []}})
+    ),
+    u => None{},
+    u => Work.act(
+      ~d,
+      None{},
+      Merge.all(~d, b, hb, ho, ht, k, Maybe.default(&2, List<&2, List<&2, U32>>, Replicas.Tree.diff(~Requests.Ask.machine(), ~d, b, ho, ht), []), Some{Work{b, ho, []}})
+    ),
+    u => None{},
+    Some{x},
+    +c => Shared.List.all.if_both(
+      Tree.kept(~d, b, ht),
+      u => List.all.if(u2 => Tree.kept(~d, b, ho), Tree.kept(~d, b, hb))
+    )(
+      Stable.tree_kept(~d, a, b, ht, g)(
+        Shared.List.all.if_hit(Tree.kept(~d, a, ht), u => List.all.if(u2 => Tree.kept(~d, a, ho), Tree.kept(~d, a, hb)))(c)
+      )
+    )(
+      Shared.List.all.if_both(Tree.kept(~d, b, hb), u2 => Tree.kept(~d, b, ho))(
+        Stable.tree_kept(~d, a, b, hb, g)(
+          Shared.List.all.if_hit(Tree.kept(~d, a, hb), u2 => Tree.kept(~d, a, ho))(
+            Shared.List.all.if_rest(Tree.kept(~d, a, ht), u => List.all.if(u2 => Tree.kept(~d, a, ho), Tree.kept(~d, a, hb)))(c)
+          )
+        )
+      )(
+        Stable.tree_kept(~d, a, b, ho, g)(
+          Shared.List.all.if_rest(Tree.kept(~d, a, hb), u2 => Tree.kept(~d, a, ho))(
+            Shared.List.all.if_rest(Tree.kept(~d, a, ht), u => List.all.if(u2 => Tree.kept(~d, a, ho), Tree.kept(~d, a, hb)))(c)
+          )
+        )
+      )
+    ),
+    +c => e => Stable.diff_some(
+      ~d,
+      a,
+      ho,
+      ht,
+      {
+        Work.act(
+          ~d,
+          None{},
+          Merge.all(~d, b, hb, ho, ht, k, Maybe.default(&2, List<&2, List<&2, U32>>, Replicas.Tree.diff(~Requests.Ask.machine(), ~d, b, ho, ht), []), Some{Work{b, ho, []}})
+        )
+          == Some{x}: Maybe<&2, Replicas.Act>
+      },
+      +ks => eks => Stable.merge.go(~d, a, b, hb, ho, ht, k, ks, eks, x, g, hx)(e),
+      Shared.List.all.if_rest(Tree.kept(~d, a, hb), u2 => Tree.kept(~d, a, ho))(
+        Shared.List.all.if_rest(Tree.kept(~d, a, ht), u => List.all.if(u2 => Tree.kept(~d, a, ho), Tree.kept(~d, a, hb)))(c)
+      ),
+      Shared.List.all.if_hit(Tree.kept(~d, a, ht), u => List.all.if(u2 => Tree.kept(~d, a, ho), Tree.kept(~d, a, hb)))(c)
+    ),
+    e => Shared.Maybe.none_ne_some(Replicas.Act, x, e)
+  )
+
+# what a change does stays as the ledger grows
+def Stable.change(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  bo: Maybe<&2, String>,
+  +i: Ledgers.Id,
+  ch: Requests.Change,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +hx: {Replicas.Act.held(~Requests.Ask.machine(), ~d, b, x) == True{}: Bool}
+) -> {Change.act(~d, a, t, bo, i, ch) == Some{x}: Maybe<&2, Replicas.Act>} -> {Change.act(~d, b, t, bo, i, ch) == Some{x}: Maybe<&2, Replicas.Act>}:
+  match bo ch:
+    case Some{y} Requests.Change.Write{+n, +base, +c}:
+      Stable.write(~d, a, b, t, n, base, c, x, g)
+    case Some{y} Requests.Change.Resolve{+k, +n, +c}:
+      Stable.resolve(~d, a, b, t, k, n, c, x, g, hx)
+    case Some{y} Requests.Change.Merge{+from, +base}:
+      Stable.merge(~d, a, b, t, i, from, base, x, g, hx)
+    case Some{y} Requests.Change.Move{+to}:
+      Stable.move(~d, a, b, to, x, g)
+    case Some{y} Requests.Change.Mark{m, text}:
+      e => e
+    case Some{y} Requests.Change.Branch{n, at}:
+      e => e
+    case Some{y} Requests.Change.Group{gn, ms}:
+      e => e
+    case Some{y} Requests.Change.Key{n, k}:
+      e => e
+    case Some{y} Requests.Change.Own{+gn, +at, +os}:
+      Stable.own(~d, a, b, t, gn, at, os, x, g)
+    case None{} Requests.Change.Branch{+n, +at}:
+      Stable.branch(~d, a, b, t, n, at, x, g)
+    case None{} Requests.Change.Group{+gn, +ms}:
+      Stable.group(~d, a, b, t, gn, ms, x, g)
+    case None{} Requests.Change.Key{+n, +k}:
+      Stable.key(~d, a, b, t, n, k, x, g)
+    case None{} Requests.Change.Own{+gn, +at, +os}:
+      Stable.own(~d, a, b, t, gn, at, os, x, g)
+    case None{} Requests.Change.Write{n, base, c}:
+      e => e
+    case None{} Requests.Change.Resolve{k, n, c}:
+      e => e
+    case None{} Requests.Change.Merge{from, base}:
+      e => e
+    case None{} Requests.Change.Move{to}:
+      e => e
+    case None{} Requests.Change.Mark{m, text}:
+      e => e
+
+# what a request does stays as the ledger grows
+def Stable.ask(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  q: Requests.Ask,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +hx: {Replicas.Act.held(~Requests.Ask.machine(), ~d, b, x) == True{}: Bool}
+) -> {Ask.act(~d, a, t, c, i, q) == Some{x}: Maybe<&2, Replicas.Act>} -> {Ask.act(~d, b, t, c, i, q) == Some{x}: Maybe<&2, Replicas.Act>}:
+  match q:
+    case Requests.Ask.Start{vs}:
+      e => e
+    case Requests.Ask.On{+st, +bo, +ch}:
+      Stable.when_same(
+        Maybe<&2, Replicas.Act>,
+        Ledgers.Line.is_eq(Ledgers.Line{st, bo}, c),
+        u => Change.act(~d, a, t, bo, i, ch),
+        u => Some{Replicas.Act.Stale{}},
+        u => Change.act(~d, b, t, bo, i, ch),
+        u => Some{Replicas.Act.Stale{}},
+        Some{x},
+        cc => e => Stable.change(~d, a, b, t, bo, i, ch, x, g, hx)(e),
+        cc => e => e
+      )
+
+def Ask.act_stable(d):
+  +t => +c => +i => +q => +a => +b => +x => +g => e => +hx => Stable.ask(~d, a, b, t, c, i, q, x, g, hx)(e)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
