@@ -10292,6 +10292,123 @@ law Merge.act_clashes:
 def Merge.act_clashes(d, l, t, k, from, base, vs, h2, ns, n, b, o, th):
   e0 => hb0 => ho0 => ht0 => hpc => Merge.clashes_go(~d, l, t, k, from, base, vs, h2, ns, n, b, o, th, e0, hb0, ho0, ht0, hpc)
 
+# TMPK-BEGIN
+# Kept
+# ----
+# The tree of a ledger that holds the whole of a tree keeps it whole, and keeps
+# the format and the bytes of each resource of it, as it is written.
+
+# the law of a listing, of the tree of the ledger d
+def Kept.laws_range(d: Led()) -> Trees.Laws.Range(L(d), Replicas.Led.tree(Requests.Ask.machine(), d)):
+  match d:
+    case Tuple{x, Tuple{o, Tuple{fin, Tuple{pf, Tuple{wr, Tuple{cn, Tuple{rg, rest}}}}}}}:
+      rg
+
+# the law that a write keeps a tree whole, of the tree of the ledger d
+def Kept.laws_kept(d: Led()) -> Trees.Laws.Kept(
+  L(d),
+  l => h => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, l, h),
+  a => b => Ledgers.Kind.grows(
+    ~Replicas.Machine.Q(Requests.Ask.machine()),
+    ~Replicas.Machine.code(Requests.Ask.machine()),
+    ~Replicas.Led.kind(Requests.Ask.machine(), d),
+    a,
+    b
+  ),
+  Replicas.Led.tree(Requests.Ask.machine(), d)
+):
+  match d:
+    case Tuple{x, Tuple{o, Tuple{fin, Tuple{pf, Tuple{wr, Tuple{cn, Tuple{rg, Tuple{df, Tuple{wh, kp}}}}}}}}}:
+      kp
+
+# a binding is the same as itself
+def Bind.is_eq_refl(
+  +k: List<&2, U32>,
+  +v: List<&2, U32>
+) -> {Trees.Binding.is_eq(Trees.Binding{k, v}, Trees.Binding{k, v}) == True{}: Bool}:
+  %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, k, k), True{}, Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), k)): {
+    List.all.if(u => Shared.List.is_eq(~U32, ~U32.is_eq, v, v), _) == True{}: Bool
+  }
+  Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), v)
+
+# bindings that are the same are the same
+def Bind.is_eq_sound(
+  a: Trees.Binding,
+  b: Trees.Binding
+) -> {Trees.Binding.is_eq(a, b) == True{}: Bool} -> {a == b: Trees.Binding}:
+  match a b:
+    case Trees.Binding{+k1, +v1} Trees.Binding{+k2, +v2}:
+      +h =>
+        %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), k1, k2)(
+          Shared.List.all.if_hit(
+            Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2),
+            u => Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2)
+          )(h)
+        ): {Trees.Binding{k1, v1} == Trees.Binding{_, v2}: Trees.Binding}
+        %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), v1, v2)(
+          Shared.List.all.if_rest(
+            Shared.List.is_eq(~U32, ~U32.is_eq, k1, k2),
+            u => Shared.List.is_eq(~U32, ~U32.is_eq, v1, v2)
+          )(h)
+        ): {Trees.Binding{k1, v1} == Trees.Binding{k1, _}: Trees.Binding}
+        {==}
+
+# a binding is in a list that it starts
+def Bind.contains_head(
+  +x: Trees.Binding,
+  r: List<&2, Trees.Binding>
+) -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, x <> r, x) == True{}: Bool}:
+  match x:
+    case Trees.Binding{+k, +v}:
+      %Equal.sym(Bool, Trees.Binding.is_eq(Trees.Binding{k, v}, Trees.Binding{k, v}), True{}, Bind.is_eq_refl(k, v)): {
+        List.any.if(u => List.contains(~Trees.Binding, ~Trees.Binding.is_eq, r, Trees.Binding{k, v}), _) == True{}: Bool
+      }
+      {==}
+
+# the bindings ps, each in ks, are each in ks with one more binding
+def Bind.within_cons(
+  ps: List<&2, Trees.Binding>,
+  +x: Trees.Binding,
+  +ks: List<&2, Trees.Binding>
+) -> {Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, ps, ks) == True{}: Bool}
+  -> {Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, ps, x <> ks) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      h => {==}
+    case Con{+p, +r}:
+      +h => Shared.Bool.and_both(
+        List.contains(~Trees.Binding, ~Trees.Binding.is_eq, x <> ks, p),
+        Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, r, x <> ks)
+      )(
+        Shared.List.contains_cons(~Trees.Binding, ~Trees.Binding.is_eq, x, ks, p)(
+          Shared.Bool.and_true_left(
+            List.contains(~Trees.Binding, ~Trees.Binding.is_eq, ks, p),
+            Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, r, ks)
+          )(h)
+        )
+      )(
+        Bind.within_cons(r, x, ks)(
+          Shared.Bool.and_true_right(
+            List.contains(~Trees.Binding, ~Trees.Binding.is_eq, ks, p),
+            Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, r, ks)
+          )(h)
+        )
+      )
+
+# each binding of a list is in it
+def Bind.within_refl(ks: List<&2, Trees.Binding>) -> {
+  Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, ks, ks) == True{}: Bool
+}:
+  match ks:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Shared.Bool.and_both(
+        List.contains(~Trees.Binding, ~Trees.Binding.is_eq, x <> r, x),
+        Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, r, x <> r)
+      )(Bind.contains_head(x, r))(Bind.within_cons(r, x, r)(Bind.within_refl(r)))
+# TMPK-END
+
 # Touches, proven
 # -----------------
 # The helpers of Node.affects_holds and Node.affects_complete.
