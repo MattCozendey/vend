@@ -4158,6 +4158,314 @@ def Rd.newest(
   -> {Replicas.Tip.newest(~Requests.Ask.machine(), ~d, b, ts) == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Id>>}:
   x => (%Equal.sym(Cmp, U32.cmp(Replicas.Tip.count(ts), 0), Trees.Cmp.flip(U32.cmp(0, Replicas.Tip.count(ts))), Trees.U32.cmp_flip(0, Replicas.Tip.count(ts))) : {Shared.Bool.when(Maybe<&2, Maybe<&2, Ledgers.Id>>, Cmp.is_eq(_), u => Some{None{}}, u => Maybe.bind(&2, Replicas.Taken, Maybe<&2, Ledgers.Id>, Replicas.Tip.taken(Requests.Ask.machine(), d, b, ts, U32.sub(Replicas.Tip.count(ts), 1)), x => Some{Some{Replicas.Taken.id(x)}})) == Some{y} : Maybe<&2, Maybe<&2, Ledgers.Id>>}; Rd.newest.at(~d, a, b, g, ts, Cmp.is_eq(Trees.Cmp.flip(U32.cmp(0, Replicas.Tip.count(ts)))), y)((%Trees.U32.cmp_flip(0, Replicas.Tip.count(ts)) : {Shared.Bool.when(Maybe<&2, Maybe<&2, Ledgers.Id>>, Cmp.is_eq(_), u => Some{None{}}, u => Maybe.bind(&2, Replicas.Taken, Maybe<&2, Ledgers.Id>, Replicas.Tip.taken(Requests.Ask.machine(), d, a, ts, U32.sub(Replicas.Tip.count(ts), 1)), x => Some{Some{Replicas.Taken.id(x)}})) == Some{y} : Maybe<&2, Maybe<&2, Ledgers.Id>>}; x)))
 
+# the owner group of a line stays as the ledger grows
+def Rd.group(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +t: Replicas.Tip,
+  -y: Maybe<&2, String>
+) -> {Tip.group(~d, a, t) == Some{y}: Maybe<&2, Maybe<&2, String>>}
+  -> {Tip.group(~d, b, t) == Some{y}: Maybe<&2, Maybe<&2, String>>}:
+  Rd.known(
+    ~String,
+    ~Codes.Code.text,
+    ~Codes.Code.text.read,
+    Replicas.Tree.find(~Requests.Ask.machine(), ~d, a, Replicas.Tip.content(t), Key.owner()),
+    Replicas.Tree.find(~Requests.Ask.machine(), ~d, b, Replicas.Tip.content(t), Key.owner()),
+    w => ew => Replicas.Hist.find(~Requests.Ask.machine(), ~d, a, b, Replicas.Tip.content(t), Key.owner(), w, g)(ew),
+    y
+  )
+
+# Own.due.at once the owner group gn is known: it stays as the ledger grows
+def Rd.at.group(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +c: Ledgers.Line,
+  +t: Replicas.Tip,
+  +ts: Replicas.Tip,
+  +gn: String,
+  -x: Maybe<&2, Replicas.Request<Requests.Ask>>
+) -> {
+  Maybe.bind(
+    &2,
+    Maybe<&2, Ledgers.Id>,
+    Maybe<&2, Replicas.Request<Requests.Ask>>,
+    Replicas.Tip.newest(~Requests.Ask.machine(), ~d, a, ts),
+    mv => Due.then(
+      ~Ledgers.Id,
+      mv,
+      v => Maybe.map(
+        &2,
+        List<&2, String>,
+        Maybe<&2, Replicas.Request<Requests.Ask>>,
+        ns => Own.due.of(c, t, ts, gn, ns, v),
+        Group.nodes(~d, a, Replicas.Tip.content(ts), gn)
+      )
+    )
+  )
+    == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>
+} -> {
+  Maybe.bind(
+    &2,
+    Maybe<&2, Ledgers.Id>,
+    Maybe<&2, Replicas.Request<Requests.Ask>>,
+    Replicas.Tip.newest(~Requests.Ask.machine(), ~d, b, ts),
+    mv => Due.then(
+      ~Ledgers.Id,
+      mv,
+      v => Maybe.map(
+        &2,
+        List<&2, String>,
+        Maybe<&2, Replicas.Request<Requests.Ask>>,
+        ns => Own.due.of(c, t, ts, gn, ns, v),
+        Group.nodes(~d, b, Replicas.Tip.content(ts), gn)
+      )
+    )
+  )
+    == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>
+}:
+  Shared.Maybe.bind_kept(
+    Maybe<&2, Ledgers.Id>,
+    Maybe<&2, Replicas.Request<Requests.Ask>>,
+    Replicas.Tip.newest(~Requests.Ask.machine(), ~d, a, ts),
+    Replicas.Tip.newest(~Requests.Ask.machine(), ~d, b, ts),
+    mv => Due.then(
+      ~Ledgers.Id,
+      mv,
+      v => Maybe.map(
+        &2,
+        List<&2, String>,
+        Maybe<&2, Replicas.Request<Requests.Ask>>,
+        ns => Own.due.of(c, t, ts, gn, ns, v),
+        Group.nodes(~d, a, Replicas.Tip.content(ts), gn)
+      )
+    ),
+    mv => Due.then(
+      ~Ledgers.Id,
+      mv,
+      v => Maybe.map(
+        &2,
+        List<&2, String>,
+        Maybe<&2, Replicas.Request<Requests.Ask>>,
+        ns => Own.due.of(c, t, ts, gn, ns, v),
+        Group.nodes(~d, b, Replicas.Tip.content(ts), gn)
+      )
+    ),
+    x,
+    mv => ev => Rd.newest(~d, a, b, g, ts, mv)(ev),
+    mv => Rd.then(
+      Ledgers.Id,
+      mv,
+      v => Maybe.map(
+        &2,
+        List<&2, String>,
+        Maybe<&2, Replicas.Request<Requests.Ask>>,
+        ns => Own.due.of(c, t, ts, gn, ns, v),
+        Group.nodes(~d, a, Replicas.Tip.content(ts), gn)
+      ),
+      v => Maybe.map(
+        &2,
+        List<&2, String>,
+        Maybe<&2, Replicas.Request<Requests.Ask>>,
+        ns => Own.due.of(c, t, ts, gn, ns, v),
+        Group.nodes(~d, b, Replicas.Tip.content(ts), gn)
+      ),
+      x,
+      +v => Rd.map(
+        List<&2, String>,
+        Maybe<&2, Replicas.Request<Requests.Ask>>,
+        Group.nodes(~d, a, Replicas.Tip.content(ts), gn),
+        Group.nodes(~d, b, Replicas.Tip.content(ts), gn),
+        ns => en => Rd.nodes(~d, a, b, g, Replicas.Tip.content(ts), gn, ns)(en),
+        ns => Own.due.of(c, t, ts, gn, ns, v),
+        x
+      )
+    )
+  )
+
+# Own.due.at stays as the ledger grows
+def Rd.at(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +c: Ledgers.Line,
+  +t: Replicas.Tip,
+  +ts: Replicas.Tip,
+  -x: Maybe<&2, Replicas.Request<Requests.Ask>>
+) -> {Own.due.at(~d, a, c, t, ts) == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>}
+  -> {Own.due.at(~d, b, c, t, ts) == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>}:
+  x1 => (%Equal.sym(Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>, Maybe.bind(&2, Maybe<&2, String>, Maybe<&2, Replicas.Request<Requests.Ask>>, Replicas.Tip.known(String, Codes.Code.text, Codes.Code.text.read, Trees.Look.known(Trees.Ops.look(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), b, Replicas.Tip.content(t), [6]))), mg => Due.then(String, mg, +g => Maybe.bind(&2, Maybe<&2, Ledgers.Id>, Maybe<&2, Replicas.Request<Requests.Ask>>, Replicas.Tip.newest(Requests.Ask.machine(), d, b, ts), mv => Due.then(Ledgers.Id, mv, v => Maybe.map(&2, List<&2, String>, Maybe<&2, Replicas.Request<Requests.Ask>>, ns => Own.due.of(c, t, ts, g, ns, v), Group.nodes(d, b, Replicas.Tip.content(ts), g)))))), Some{x}, Shared.Maybe.bind_kept(Maybe<&2, String>, Maybe<&2, Replicas.Request<Requests.Ask>>, Replicas.Tip.known(String, Codes.Code.text, Codes.Code.text.read, Trees.Look.known(Trees.Ops.look(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), a, Replicas.Tip.content(t), [6]))), Replicas.Tip.known(String, Codes.Code.text, Codes.Code.text.read, Trees.Look.known(Trees.Ops.look(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), b, Replicas.Tip.content(t), [6]))), mg => Due.then(String, mg, +g => Maybe.bind(&2, Maybe<&2, Ledgers.Id>, Maybe<&2, Replicas.Request<Requests.Ask>>, Replicas.Tip.newest(Requests.Ask.machine(), d, a, ts), mv => Due.then(Ledgers.Id, mv, v => Maybe.map(&2, List<&2, String>, Maybe<&2, Replicas.Request<Requests.Ask>>, ns => Own.due.of(c, t, ts, g, ns, v), Group.nodes(d, a, Replicas.Tip.content(ts), g))))), mg => Due.then(String, mg, +g => Maybe.bind(&2, Maybe<&2, Ledgers.Id>, Maybe<&2, Replicas.Request<Requests.Ask>>, Replicas.Tip.newest(Requests.Ask.machine(), d, b, ts), mv => Due.then(Ledgers.Id, mv, v => Maybe.map(&2, List<&2, String>, Maybe<&2, Replicas.Request<Requests.Ask>>, ns => Own.due.of(c, t, ts, g, ns, v), Group.nodes(d, b, Replicas.Tip.content(ts), g))))), x, a1 => x2 => Rd.group(~d, a, b, g, t, a1)(x2), a1 => x2 => Rd.then(String, a1, +g => Maybe.bind(&2, Maybe<&2, Ledgers.Id>, Maybe<&2, Replicas.Request<Requests.Ask>>, Replicas.Tip.newest(Requests.Ask.machine(), d, a, ts), mv => Due.then(Ledgers.Id, mv, v => Maybe.map(&2, List<&2, String>, Maybe<&2, Replicas.Request<Requests.Ask>>, ns => Own.due.of(c, t, ts, g, ns, v), Group.nodes(d, a, Replicas.Tip.content(ts), g)))), +g => Maybe.bind(&2, Maybe<&2, Ledgers.Id>, Maybe<&2, Replicas.Request<Requests.Ask>>, Replicas.Tip.newest(Requests.Ask.machine(), d, b, ts), mv => Due.then(Ledgers.Id, mv, v => Maybe.map(&2, List<&2, String>, Maybe<&2, Replicas.Request<Requests.Ask>>, ns => Own.due.of(c, t, ts, g, ns, v), Group.nodes(d, b, Replicas.Tip.content(ts), g)))), x, v => x3 => Rd.at.group(~d, a, b, g, c, t, ts, v, x)(x3))(x2))(x1)) : {_ == Some{x} : Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>}; {==})
+
+# Own.due stays, once the newest tip of c is known (mt), when the heads that
+# it reads are the same
+def Rd.due.at(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +c: Ledgers.Line,
+  mt: Maybe<&2, Replicas.Tip>,
+  +emt: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c) == mt: Maybe<&2, Replicas.Tip>},
+  +hs: {
+    Replicas.Heads.same(
+      ~Requests.Ask.machine(),
+      ~d,
+      ~kern,
+      a,
+      b,
+      Shared.Bool.when(
+        List<&2, Ledgers.Line>,
+        Maybe.is_some(&2, Replicas.Tip, mt),
+        u => [c, Replicas.Root.line(Ledgers.Line.root(c))],
+        u => [c]
+      )
+    )
+      == True{}: Bool
+  },
+  -x: Maybe<&2, Replicas.Request<Requests.Ask>>
+) -> {
+  Due.then(
+    ~Replicas.Tip,
+    mt,
+    +t => Due.then(
+      ~Replicas.Tip,
+      Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, a, Ledgers.Line.root(c)),
+      ts => Own.due.at(~d, a, c, t, ts)
+    )
+  )
+    == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>
+} -> {Own.due(~d, ~kern, b, c) == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>}:
+  match mt:
+    case None{}:
+      e =>
+        %Equal.sym(
+          Maybe<&2, Replicas.Tip>,
+          Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c),
+          None{},
+          Equal.trans(
+            Maybe<&2, Replicas.Tip>,
+            Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c),
+            Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+            None{},
+            Equal.sym(
+              Maybe<&2, Replicas.Tip>,
+              Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+              Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c),
+              Rd.heq(
+                Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+                Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c)
+              )(
+                Shared.Bool.and_true_left(
+                  Shared.Maybe.is_eq(
+                    ~Replicas.Tip,
+                    ~(x => y => Codes.Code.is_eq(~Replicas.Tip, ~Replicas.Tip.code, x, y)),
+                    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+                    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c)
+                  ),
+                  Replicas.Heads.same(~Requests.Ask.machine(), ~d, ~kern, a, b, [])
+                )(hs)
+              )
+            ),
+            emt
+          )
+        ): {
+          Due.then(
+            ~Replicas.Tip,
+            _,
+            +t => Due.then(
+              ~Replicas.Tip,
+              Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, b, Ledgers.Line.root(c)),
+              ts => Own.due.at(~d, b, c, t, ts)
+            )
+          )
+            == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>
+        }
+        e
+    case Some{+t}:
+      +hs2 = Shared.Bool.and_true_right(
+        Shared.Maybe.is_eq(
+          ~Replicas.Tip,
+          ~(x => y => Codes.Code.is_eq(~Replicas.Tip, ~Replicas.Tip.code, x, y)),
+          Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+          Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c)
+        ),
+        Replicas.Heads.same(~Requests.Ask.machine(), ~d, ~kern, a, b, [Replicas.Root.line(Ledgers.Line.root(c))])
+      )(hs)
+      e =>
+        %Equal.sym(
+          Maybe<&2, Replicas.Tip>,
+          Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c),
+          Some{t},
+          Equal.trans(
+            Maybe<&2, Replicas.Tip>,
+            Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c),
+            Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+            Some{t},
+            Equal.sym(
+              Maybe<&2, Replicas.Tip>,
+              Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+              Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c),
+              Rd.heq(
+                Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+                Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c)
+              )(
+                Shared.Bool.and_true_left(
+                  Shared.Maybe.is_eq(
+                    ~Replicas.Tip,
+                    ~(x => y => Codes.Code.is_eq(~Replicas.Tip, ~Replicas.Tip.code, x, y)),
+                    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, c),
+                    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, c)
+                  ),
+                  Replicas.Heads.same(~Requests.Ask.machine(), ~d, ~kern, a, b, [Replicas.Root.line(Ledgers.Line.root(c))])
+                )(hs)
+              )
+            ),
+            emt
+          )
+        ): {
+          Due.then(
+            ~Replicas.Tip,
+            _,
+            +t => Due.then(
+              ~Replicas.Tip,
+              Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, b, Ledgers.Line.root(c)),
+              ts => Own.due.at(~d, b, c, t, ts)
+            )
+          )
+            == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>
+        }
+        %Rd.heq(
+          Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, Replicas.Root.line(Ledgers.Line.root(c))),
+          Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, Replicas.Root.line(Ledgers.Line.root(c)))
+        )(
+          Shared.Bool.and_true_left(
+            Shared.Maybe.is_eq(
+              ~Replicas.Tip,
+              ~(x => y => Codes.Code.is_eq(~Replicas.Tip, ~Replicas.Tip.code, x, y)),
+              Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, a, Replicas.Root.line(Ledgers.Line.root(c))),
+              Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, b, Replicas.Root.line(Ledgers.Line.root(c)))
+            ),
+            Replicas.Heads.same(~Requests.Ask.machine(), ~d, ~kern, a, b, [])
+          )(hs2)
+        ): {
+          Due.then(~Replicas.Tip, _, ts => Own.due.at(~d, b, c, t, ts))
+            == Some{x}: Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>
+        }
+        Rd.then(
+          Replicas.Tip,
+          Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, a, Ledgers.Line.root(c)),
+          ts => Own.due.at(~d, a, c, t, ts),
+          ts => Own.due.at(~d, b, c, t, ts),
+          x,
+          +ts => Rd.at(~d, a, b, g, c, t, ts, x)
+        )(e)
+
 # what Vend asks by itself for a line reads only the tips that Own.deps names
 law Own.reads:
   for ~d: Led()
