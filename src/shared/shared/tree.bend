@@ -6524,6 +6524,526 @@ def Mst.merge_ok.none(
     )
   )
 
+# a merge of an empty tree and the tree of hb, once its left edge opens (b)
+def Mst.merge_ok.lone_b(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  b: Bool,
+  +s: S,
+  -ua: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +ub: Nat,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +hb: Hashes.Hash,
+  +eb: {Mst.edge(~S, ~fetch, Mst.depth(), s, True{}, Room{ub, Some{k}, hi}, Some{hb}) == b: Bool}
+) -> Mst.MergeOk(~S, ~fetch, s, ua, lo, k, ub, hi, None{}, Some{hb}, Shared.Maybe.when(Edit, b, u => Some{Edit{Some{hb}, []}})):
+  match b:
+    case False{}:
+      Unit{}
+    case True{}:
+      +hold => (
+        ({==}, Mst.edge_lvl(~S, ~fetch, Mst.depth(), Some{hb}, s, True{}, Room{ub, Some{k}, hi})(eb)),
+        +u => +lva => +lvb => +a => +bb => (
+          +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => +e => Mst.absent_to(
+            ~S,
+            ~fetch,
+            g1,
+            s,
+            Room{u1, lo, Some{k}},
+            k2,
+            x,
+            Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, Some{hb}, k2),
+            Mst.edge_left(~S, ~fetch, Mst.depth(), Some{hb}, g2, s, ub, k, hi, u, lo, k2)(eb)(lvb)(a)(fu)(
+              Mst.le_of_lt(Key.cmp(k2, k))(c)
+            )
+          )(e),
+          (
+            +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => Mst.look.wide(
+              ~S,
+              ~fetch,
+              g2,
+              g1,
+              Some{hb},
+              s,
+              Room{u1, Some{k}, hi},
+              Room{u, lo, hi},
+              k2,
+              x,
+              Mst.hop_lvl(
+                ~S,
+                ~fetch,
+                s,
+                Some{hb},
+                Room{u1, Some{k}, hi},
+                Room{u, lo, hi},
+                lvb,
+                Shared.Bool.and_both(Mst.lo_le(lo, Some{k}), Mst.hi_le(hi, hi), Mst.lo_le_key(lo, k)(a), Mst.hi_le_refl(hi))
+              ),
+              Shared.Bool.and_both(Mst.lo_le(lo, Some{k}), Mst.hi_le(hi, hi), Mst.lo_le_key(lo, k)(a), Mst.hi_le_refl(hi)),
+              fu
+            ),
+            +g2 => +fu => Equal.cong(
+              Look,
+              Maybe<&2, Maybe<&2, List<&2, U32>>>,
+              Look.known,
+              Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, Some{hb}, k),
+              Look.Absent{},
+              Mst.edge_left(~S, ~fetch, Mst.depth(), Some{hb}, g2, s, ub, k, hi, u, lo, k)(eb)(lvb)(a)(fu)(Mst.le_refl_key(k))
+            )
+          )
+        )
+      )
+
+# a merge of the tree of ha and an empty tree, once its right edge opens (b)
+def Mst.merge_ok.lone_a(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  b: Bool,
+  +s: S,
+  +ua: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  -ub: Nat,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ha: Hashes.Hash,
+  +eb: {Mst.edge(~S, ~fetch, Mst.depth(), s, False{}, Room{ua, lo, Some{k}}, Some{ha}) == b: Bool}
+) -> Mst.MergeOk(~S, ~fetch, s, ua, lo, k, ub, hi, Some{ha}, None{}, Shared.Maybe.when(Edit, b, u => Some{Edit{Some{ha}, []}})):
+  match b:
+    case False{}:
+      Unit{}
+    case True{}:
+      +hold => (
+        (Mst.edge_lvl(~S, ~fetch, Mst.depth(), Some{ha}, s, False{}, Room{ua, lo, Some{k}})(eb), {==}),
+        +u => +lva => +lvb => +a => +bb => (
+          +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => Mst.look.wide(
+            ~S,
+            ~fetch,
+            g2,
+            g1,
+            Some{ha},
+            s,
+            Room{u1, lo, Some{k}},
+            Room{u, lo, hi},
+            k2,
+            x,
+            Mst.hop_lvl(
+              ~S,
+              ~fetch,
+              s,
+              Some{ha},
+              Room{u1, lo, Some{k}},
+              Room{u, lo, hi},
+              lva,
+              Shared.Bool.and_both(Mst.lo_le(lo, lo), Mst.hi_le(Some{k}, hi), Mst.lo_le_refl(lo), Mst.hi_le_key(k, hi)(bb))
+            ),
+            Shared.Bool.and_both(Mst.lo_le(lo, lo), Mst.hi_le(Some{k}, hi), Mst.lo_le_refl(lo), Mst.hi_le_key(k, hi)(bb)),
+            fu
+          ),
+          (
+            +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => +e => Mst.absent_to(
+              ~S,
+              ~fetch,
+              g1,
+              s,
+              Room{u1, Some{k}, hi},
+              k2,
+              x,
+              Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, Some{ha}, k2),
+              Mst.edge_right(~S, ~fetch, Mst.depth(), Some{ha}, g2, s, ua, lo, k, u, hi, k2)(eb)(lva)(bb)(fu)(
+                Mst.le_of_lt(Key.cmp(k, k2))(Mst.key_gt_lt(k2, k)(c))
+              )
+            )(e),
+            +g2 => +fu => Equal.cong(
+              Look,
+              Maybe<&2, Maybe<&2, List<&2, U32>>>,
+              Look.known,
+              Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, Some{ha}, k),
+              Look.Absent{},
+              Mst.edge_right(~S, ~fetch, Mst.depth(), Some{ha}, g2, s, ua, lo, k, u, hi, k)(eb)(lva)(bb)(fu)(Mst.le_refl_key(k))
+            )
+          )
+        )
+      )
+
+# a node of the items of a, the subtree between them merged, then the items
+# of b opens in a room of the up u around k
+def Mst.opens_both(
+  +la: Nat,
+  -el: Maybe<&2, Hashes.Hash>,
+  +xa: List<&2, Item>,
+  +mc: Maybe<&2, Hashes.Hash>,
+  +xb: List<&2, Item>,
+  +u: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +lt: {Nat.is_lt(la, u) == True{}: Bool},
+  +na: {List.is_empty(&2, Item, xa) == False{}: Bool},
+  +fa: {Items.fit(xa, lo, Some{k}) == True{}: Bool},
+  +fb: {Items.fit(xb, Some{k}, hi) == True{}: Bool},
+  +ak: {Bound.after(Items.last_key(xa, lo), k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool}
+) -> {Mst.opens(Node{la, el, List.append(&2, Item, Mst.set_last(xa, mc), xb)}, Room{u, lo, hi}) == True{}: Bool}:
+  Shared.Bool.and_both(
+    Bool.and(Nat.is_lt(la, u), Bool.not(List.is_empty(&2, Item, List.append(&2, Item, Mst.set_last(xa, mc), xb)))),
+    Items.fit(List.append(&2, Item, Mst.set_last(xa, mc), xb), lo, hi),
+    Shared.Bool.and_both(
+      Nat.is_lt(la, u),
+      Bool.not(List.is_empty(&2, Item, List.append(&2, Item, Mst.set_last(xa, mc), xb))),
+      lt,
+      Equal.cong(
+        Bool,
+        Bool,
+        Bool.not,
+        List.is_empty(&2, Item, List.append(&2, Item, Mst.set_last(xa, mc), xb)),
+        False{},
+        Equal.trans(
+          Bool,
+          List.is_empty(&2, Item, List.append(&2, Item, Mst.set_last(xa, mc), xb)),
+          List.is_empty(&2, Item, List.append(&2, Item, xa, xb)),
+          False{},
+          Mst.empty_set_last_append(xa, mc, xb),
+          Mst.empty_append(xa, xb)(na)
+        )
+      )
+    ),
+    Equal.trans(
+      Bool,
+      Items.fit(List.append(&2, Item, Mst.set_last(xa, mc), xb), lo, hi),
+      Items.fit(List.append(&2, Item, xa, xb), lo, hi),
+      True{},
+      Mst.fit_set_last_append(xa, mc, xb, lo, hi),
+      Equal.trans(
+        Bool,
+        Items.fit(List.append(&2, Item, xa, xb), lo, hi),
+        Bool.and(Items.fit(xa, lo, hi), Items.fit(xb, Items.last_key(xa, lo), hi)),
+        True{},
+        Mst.fit_append(xa, xb, lo, hi),
+        Shared.Bool.and_both(
+          Items.fit(xa, lo, hi),
+          Items.fit(xb, Items.last_key(xa, lo), hi),
+          Mst.fit_wide(xa, lo, lo, Some{k}, hi, Mst.lo_le_refl(lo), Mst.hi_le_key(k, hi)(bb))(fa),
+          Mst.fit_wide(xb, Some{k}, Items.last_key(xa, lo), hi, hi, Mst.lo_le_key(Items.last_key(xa, lo), k)(ak), Mst.hi_le_refl(hi))(fb)
+        )
+      )
+    )
+  )
+
+# what a merge whose a is of a higher level reads, from what the merge of the
+# last subtree of a with b reads (tri)
+def Mst.merge_ok.gt.read(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +ha: Hashes.Hash,
+  -hb: Hashes.Hash,
+  +ua: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +la: Nat,
+  +lefta: Maybe<&2, Hashes.Hash>,
+  +xa: List<&2, Item>,
+  +mc: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +ena: {Mst.node.in(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}) == Some{Node{la, lefta, xa}}: Maybe<&2, Node>},
+  +hold: {
+    Depots.Depot.holds(~S, ~fetch, s, Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, []) <> ns)
+      == True{}: Bool
+  },
+  +u: Nat,
+  +lva: {Mst.lvl(~S, ~fetch, s, Some{ha}, u) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  tri: Mst.MergeRead(~S, ~fetch, s, la, Items.last_key(xa, lo), k, hi, Mst.last(xa, lefta), Some{hb}, mc)
+) -> Mst.MergeRead(
+  ~S,
+  ~fetch,
+  s,
+  u,
+  lo,
+  k,
+  hi,
+  Some{ha},
+  Some{hb},
+  Some{Hashes.Sha.hash(Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, []))}
+):
+  (ilo, r3) = tri
+  (ihi, ik) = r3
+  +eA = Mst.in_node(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}, Node{la, lefta, xa})(ena)
+  +oA = Mst.in_open(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}, Node{la, lefta, xa})(ena)
+  +lt = Mst.lvl_lt(~S, ~fetch, s, ha, u, la, lefta, xa, lva, eA)
+  +all = Mst.fit_all_lt(xa, lo, k)(Mst.opens_fit(la, lefta, xa, ua, lo, Some{k}, oA))
+  +eN = Mst.node_code(
+    ~S,
+    ~fetch,
+    s,
+    Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)},
+    Mst.holds_head(~S, ~fetch, s, Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, []), ns, hold)
+  )
+  +oN = Mst.opens_set_last(la, lefta, Mst.end_left(xa, lefta, mc), xa, mc, [], Room{u, lo, hi})(
+    Mst.with_nil(
+      ys => {Mst.opens(Node{la, lefta, ys}, Room{u, lo, hi}) == True{}: Bool},
+      xa,
+      Mst.opens_move(la, lefta, xa, ua, lo, Some{k}, u, lo, hi, lt, Mst.lo_le_refl(lo), Mst.hi_le_key(k, hi)(bb), oA)
+    )
+  )
+  +eN2 = Mst.with_nil(
+    ys => {
+      Mst.node(~S, ~fetch, s, Hashes.Sha.hash(Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, [])))
+        == Some{Node{la, Mst.end_left(xa, lefta, mc), ys}}: Maybe<&2, Node>
+    },
+    Mst.set_last(xa, mc),
+    eN
+  )
+  (
+    +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => +e => Mst.gap_kept(
+      ~S,
+      ~fetch,
+      ua,
+      g2,
+      s,
+      ha,
+      Hashes.Sha.hash(Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, [])),
+      ua,
+      u,
+      lo,
+      lo,
+      Some{k},
+      hi,
+      la,
+      lefta,
+      xa,
+      [],
+      mc,
+      k2,
+      x,
+      Mst.with_nil(ys => {Mst.node(~S, ~fetch, s, ha) == Some{Node{la, lefta, ys}}: Maybe<&2, Node>}, xa, eA),
+      Mst.with_nil(ys => {Mst.opens(Node{la, lefta, ys}, Room{ua, lo, Some{k}}) == True{}: Bool}, xa, oA),
+      eN2,
+      oN,
+      Mst.lo_le_refl(lo),
+      Mst.hi_le_key(k, hi)(bb),
+      fu,
+      +g3 => +g4 => +fl => +e3 => ilo(k2)(x)(la)(g3)(g4)(c)(fl)(e3)
+    )(
+      Mst.reroom(
+        ~S,
+        ~fetch,
+        g1,
+        ua,
+        s,
+        ha,
+        Room{u1, lo, Some{k}},
+        Room{ua, lo, Some{k}},
+        Node{la, lefta, xa},
+        k2,
+        x,
+        ena,
+        Shared.Bool.and_both(Mst.lo_le(lo, lo), Mst.hi_le(Some{k}, Some{k}), Mst.lo_le_refl(lo), Mst.hi_le_refl(Some{k})),
+        Shared.Nat.le_refl(ua)
+      )(e)
+    ),
+    (
+      +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => +e => Mst.gap_k(
+        ~S,
+        ~fetch,
+        g2,
+        s,
+        Hashes.Sha.hash(Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, [])),
+        u,
+        lo,
+        hi,
+        la,
+        lefta,
+        xa,
+        [],
+        mc,
+        k2,
+        x,
+        eN2,
+        oN,
+        fu,
+        Mst.passes_of_le(xa, k, k2)(all)(Mst.le_of_lt(Key.cmp(k, k2))(Mst.key_gt_lt(k2, k)(c))),
+        {==},
+        +g4 => +fl => ihi(k2)(x)(u1)(g1)(g4)(c)(fl)(e)
+      ),
+      +g2 => +fu => Mst.gap_k(
+        ~S,
+        ~fetch,
+        g2,
+        s,
+        Hashes.Sha.hash(Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, [])),
+        u,
+        lo,
+        hi,
+        la,
+        lefta,
+        xa,
+        [],
+        mc,
+        k,
+        None{},
+        eN2,
+        oN,
+        fu,
+        Mst.passes_of_all_lt(xa, k)(all),
+        {==},
+        +g4 => +fl => ik(g4)(fl)
+      )
+    )
+  )
+
+# the roots of a merge whose a is of a higher level, and what it reads, from
+# those of the merge of the last subtree of a with b (bi)
+def Mst.merge_ok.gt.body(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +ha: Hashes.Hash,
+  +hb: Hashes.Hash,
+  +ua: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +ub: Nat,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +la: Nat,
+  +lefta: Maybe<&2, Hashes.Hash>,
+  +xa: List<&2, Item>,
+  +lb: Nat,
+  +leftb: Maybe<&2, Hashes.Hash>,
+  +xb: List<&2, Item>,
+  +mc: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +ena: {Mst.node.in(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}) == Some{Node{la, lefta, xa}}: Maybe<&2, Node>},
+  +enb: {Mst.node.in(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}) == Some{Node{lb, leftb, xb}}: Maybe<&2, Node>},
+  +ec: {Nat.cmp(la, lb) == GT{}: Cmp},
+  +hold: {
+    Depots.Depot.holds(~S, ~fetch, s, Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, []) <> ns)
+      == True{}: Bool
+  },
+  bi: ({Mst.lvl(~S, ~fetch, s, Mst.last(xa, lefta), la) == True{}: Bool} & {Mst.lvl(~S, ~fetch, s, Some{hb}, ub) == True{}: Bool})
+    & Mst.MergeMain(~S, ~fetch, s, Items.last_key(xa, lo), k, hi, Mst.last(xa, lefta), Some{hb}, mc)
+) -> ({Mst.lvl(~S, ~fetch, s, Some{ha}, ua) == True{}: Bool} & {Mst.lvl(~S, ~fetch, s, Some{hb}, ub) == True{}: Bool})
+  & Mst.MergeMain(
+    ~S,
+    ~fetch,
+    s,
+    lo,
+    k,
+    hi,
+    Some{ha},
+    Some{hb},
+    Some{Hashes.Sha.hash(Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, []))}
+  ):
+  (lvs2, main2) = bi
+  (lva2, lvb2) = lvs2
+  +eA = Mst.in_node(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}, Node{la, lefta, xa})(ena)
+  +oA = Mst.in_open(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}, Node{la, lefta, xa})(ena)
+  +eB = Mst.in_node(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}, Node{lb, leftb, xb})(enb)
+  +oB = Mst.in_open(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}, Node{lb, leftb, xb})(enb)
+  (
+    (
+      Mst.lvl_of(~S, ~fetch, s, ha, ua, la, lefta, xa, eA, Mst.opens_lt(la, lefta, xa, Room{ua, lo, Some{k}})(oA)),
+      Mst.lvl_of(~S, ~fetch, s, hb, ub, lb, leftb, xb, eB, Mst.opens_lt(lb, leftb, xb, Room{ub, Some{k}, hi})(oB))
+    ),
+    +u => +lva => +lvb => +a => +bb => Mst.merge_ok.gt.read(
+      ~S,
+      ~fetch,
+      s,
+      ha,
+      hb,
+      ua,
+      lo,
+      k,
+      hi,
+      la,
+      lefta,
+      xa,
+      mc,
+      ns,
+      ena,
+      hold,
+      u,
+      lva,
+      a,
+      bb,
+      main2(la)(lva2)(Mst.lvl_of(~S, ~fetch, s, hb, la, lb, leftb, xb, eB, Mst.nat_gt_lt(la, lb)(ec)))(
+        Mst.last_below(xa, lo, k)(Mst.fit_all_lt(xa, lo, k)(Mst.opens_fit(la, lefta, xa, ua, lo, Some{k}, oA)))(a)
+      )(bb)
+    )
+  )
+
+# a merge whose a is of a higher level: a with its last subtree merged with b
+def Mst.merge_ok.gt(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  res: Maybe<&2, Edit>,
+  +s: S,
+  +ha: Hashes.Hash,
+  +hb: Hashes.Hash,
+  +ua: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +ub: Nat,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +la: Nat,
+  +lefta: Maybe<&2, Hashes.Hash>,
+  +xa: List<&2, Item>,
+  +lb: Nat,
+  +leftb: Maybe<&2, Hashes.Hash>,
+  +xb: List<&2, Item>,
+  +ena: {Mst.node.in(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}) == Some{Node{la, lefta, xa}}: Maybe<&2, Node>},
+  +enb: {Mst.node.in(~S, ~fetch, s, hb, Room{ub, Some{k}, hi}) == Some{Node{lb, leftb, xb}}: Maybe<&2, Node>},
+  +ec: {Nat.cmp(la, lb) == GT{}: Cmp},
+  ih: Mst.MergeOk(~S, ~fetch, s, la, Items.last_key(xa, lo), k, ub, hi, Mst.last(xa, lefta), Some{hb}, res)
+) -> Mst.MergeOk(~S, ~fetch, s, ua, lo, k, ub, hi, Some{ha}, Some{hb}, Mst.with_last(la, lefta, xa, res)):
+  match res:
+    case None{}:
+      Unit{}
+    case Some{Edit{+mc, +ns}}:
+      %Equal.sym(
+        Edit,
+        Mst.make(la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc), ns),
+        Mst.store(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, ns),
+        Mst.make_full(la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc), ns)(
+          Equal.trans(
+            Bool,
+            List.is_empty(&2, Item, Mst.set_last(xa, mc)),
+            List.is_empty(&2, Item, xa),
+            False{},
+            Mst.empty_set_last(xa, mc),
+            Mst.opens_full(la, lefta, xa, ua, lo, Some{k}, Mst.in_open(~S, ~fetch, s, ha, Room{ua, lo, Some{k}}, Node{la, lefta, xa})(ena))
+          )
+        )
+      ): Mst.MergeOk(~S, ~fetch, s, ua, lo, k, ub, hi, Some{ha}, Some{hb}, Some{_})
+      +hold => Mst.merge_ok.gt.body(
+        ~S,
+        ~fetch,
+        s,
+        ha,
+        hb,
+        ua,
+        lo,
+        k,
+        ub,
+        hi,
+        la,
+        lefta,
+        xa,
+        lb,
+        leftb,
+        xb,
+        mc,
+        ns,
+        ena,
+        enb,
+        ec,
+        hold,
+        ih(Mst.holds_tail(~S, ~fetch, s, Node.code(Node{la, Mst.end_left(xa, lefta, mc), Mst.set_last(xa, mc)}, []), ns, hold))
+      )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
