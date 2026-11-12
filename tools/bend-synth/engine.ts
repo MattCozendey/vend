@@ -106,16 +106,29 @@ const attempt = <T>(n: number, f: () => T): T | undefined => {
   try { return withFuel(n, f); } catch (e) { if (e === TIMEOUT) throw e; lastErr = e; return undefined; }
 };
 const late = () => performance.now() > deadline || overMem;
-// the worker's own memory, between steps (Bend's fuel ticks see only Bend's work): the caches go first;
-// a slice still over its share stops with what it has, before the OS limit kills the worker
-const memoryGuard = (): boolean => {
+// the worker's own memory, between steps (Bend's fuel ticks see only Bend's work): the caches go first,
+// then other files' books and the cold sessions (the running job keeps its book and search); a slice
+// still over its share stops with what it has, before the OS limit kills the worker
+const memoryGuard = (keep: string): boolean => {
   if (!(memCap < Infinity) || memUsed() < memCap * 0.8) return false;
+  dropCaches();
+  if (underShare()) return false;
+  dropOthers(keep);
+  if (underShare()) return false;
+  overMem = true;
+  return true;
+};
+const underShare = () => memUsed() < memCap * 0.9;
+const dropCaches = () => {
   if (BK) BK.nfs.clear();
   if (S) S.facts.clear();
   nfObj = new WeakMap(); patMemo = new WeakMap(); smemo.clear(); nfHeld = 0; Bun.gc(true);
-  if (memUsed() < memCap * 0.9) return false;
-  overMem = true;
-  return true;
+};
+// a cold session goes without dropTemps: that would drop the running session's helpers of the same book
+const dropOthers = (keep: string) => {
+  for (const id of [...sessions.keys()]) if (id !== keep) sessions.delete(id);
+  for (const [e, L] of [...books]) if (L !== BK) books.delete(e);
+  Bun.gc(true);
 };
 
 // ---- terms (lowered: de Bruijn levels) ----
@@ -1487,7 +1500,7 @@ const step = () => {
   }
 };
 // the search until it proves the root, refutes it, or runs out; yields to the event loop every 100 ms
-const run = async (until: number, progress: () => void) => {
+const run = async (until: number, keep: string, progress: () => void) => {
   deadline = until;
   let yielded = performance.now(), reported = yielded;
   try {
@@ -1499,7 +1512,7 @@ const run = async (until: number, progress: () => void) => {
       S.runMs += performance.now() - t1;
       const now = performance.now();
       if (now - reported > 700) { reported = now; deadline = Infinity; try { progress(); } finally { deadline = until; } }
-      if (now - yielded > 100) { if (memoryGuard()) break; deadline = Infinity; await Bun.sleep(0); deadline = until; yielded = performance.now(); }
+      if (now - yielded > 100) { if (memoryGuard(keep)) break; deadline = Infinity; await Bun.sleep(0); deadline = until; yielded = performance.now(); }
     }
   } catch (e) {
     if (e !== TIMEOUT) throw e;
@@ -2883,7 +2896,7 @@ const runSlice = async (t: Task): Promise<void> => {
   } catch (e) {
     if (e !== TIMEOUT) throw e;
     deadline = Infinity;
-    const why = overMem ? "the worker's memory share (" + Math.round(memCap / 1048576) + " MiB; BEND_SYNTH_MEM_MB raises it), so the worker drops its books and sessions" : "time";
+    const why = overMem ? "the worker's memory share (" + Math.round(memCap / 1048576) + " MiB; BEND_SYNTH_MEM_MB raises it), so the worker drops other files' books and the cold sessions, or all it holds if that is not enough" : "time";
     done({ status: "open", text: HONEST + "\n# " + t.target + ": OPEN: this slice was stopped by " + why + " after " + secs(performance.now() - t0)
       + ", outside the search (loading the book, starting the search, or reporting); the job goes on in its next slice" }, false);
   }
@@ -2909,7 +2922,7 @@ const sliceOn = async (t: Task, L: Book, until: number, done: Done): Promise<voi
   if (t.kind === "goals") return done({ status: "open", text: HONEST + "\n" + withHidden(sess, () => goalsText(sess)) }, true, sess);
   if (sess.kind === "proof") {
     S = sess.search!;
-    await withHiddenAsync(sess, () => run(until, () => send({ t: "progress", id: t.id, report: reportOf(sess, t, false) })));
+    await withHiddenAsync(sess, () => run(until, t.id, () => send({ t: "progress", id: t.id, report: reportOf(sess, t, false) })));
     const root = S.root;
     const fin = !!root.pf || root.pn >= INF || S.nodes >= MAX_NODES;
     const rep = withHidden(sess, () => { deadline = Infinity; return reportOf(sess, t, true); });
@@ -2925,7 +2938,7 @@ const sliceOn = async (t: Task, L: Book, until: number, done: Done): Promise<voi
       const r = withHidden(sess, () => sess.gen!.next());
       if (r.done) { result = r.value; break; }
       if (r.value === "time") break;
-      if (performance.now() - yielded > 100) { if (memoryGuard()) break; deadline = Infinity; await Bun.sleep(0); deadline = until; yielded = performance.now(); }
+      if (performance.now() - yielded > 100) { if (memoryGuard(t.id)) break; deadline = Infinity; await Bun.sleep(0); deadline = until; yielded = performance.now(); }
     }
   } catch (e) {
     deadline = Infinity;
@@ -3013,13 +3026,11 @@ const runBench = async (t: Task): Promise<void> => {
 
 // ---- the worker process ----
 let rootSend: (m: FromWorker) => void = () => {};
-// past the memory share: every book, session and memo goes, BK and S too (they keep the last book alive)
+// still past the memory share: every book, session and memo goes, BK and S too (they keep the last book alive)
 const shed = () => {
-  books.clear(); sessions.clear(); smemo.clear(); lawTerms.clear(); openNames.clear();
-  examples = []; nfObj = new WeakMap(); patMemo = new WeakMap(); nfHeld = 0;
+  books.clear(); sessions.clear(); lawTerms.clear(); openNames.clear(); examples = [];
   BK = undefined as unknown as Book; S = undefined as unknown as Search;
-  Bun.gc(true);
-  overMem = false;
+  dropCaches();
 };
 export const workerMain = async (bendDir: string) => {
   rootSend = send = (m) => { process.send?.(m); };
@@ -3041,7 +3052,8 @@ export const workerMain = async (bendDir: string) => {
         finally {
           deadline = Infinity; BR.f = Infinity;
           for (const k of [...installed.keys()]) uninstall(k);
-          if (overMem) shed();
+          // past the share, the job keeps its book and search when dropping the rest is enough
+          if (overMem) { dropCaches(); dropOthers(t.id); if (!underShare()) shed(); overMem = false; }
         }
       }
     } finally { busy = false; }
