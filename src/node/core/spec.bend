@@ -2944,14 +2944,23 @@ def Mount.change(
 # Owners that follow their group
 # ------------------------------
 
-# the name of the owner group of the line whose tip is t, if it has one
-def Tip.group(~d: Led(), l: L(d), t: Replicas.Tip) -> Maybe<&2, String>:
-  Codes.Code.whole.of(
+# the name of the owner group of the line whose tip is t, or that it has none
+# (none: l lacks a node, so a read cannot tell)
+def Tip.group(~d: Led(), l: L(d), t: Replicas.Tip) -> Maybe<&2, Maybe<&2, String>>:
+  Replicas.Tip.known(
     ~String,
     ~Codes.Code.text,
     ~Codes.Code.text.read,
-    Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, Replicas.Tip.content(t), Key.owner())
+    Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, Replicas.Tip.content(t), Key.owner())
   )
+
+# what go gives of the value of m, or no request when m holds none
+def Due.then(~A: Data, m: Maybe<&2, A>, go: A -> Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>) -> Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>:
+  match m:
+    case None{}:
+      Some{None{}}
+    case Some{x}:
+      go(x)
 
 # the request that makes the nodes ns of the group g the owners of the line c,
 # by the tree of the tip ts of its store: its ID is the count of the store, so
@@ -2999,34 +3008,37 @@ def Own.due.of(
   )
 
 # Own.due once the newest tips t of the line and ts of its store are known
+# (none: l lacks a node, so it cannot tell)
 def Own.due.at(
   ~d: Led(),
   +l: L(d),
   c: Ledgers.Line,
   +t: Replicas.Tip,
   +ts: Replicas.Tip
-) -> Maybe<&2, Replicas.Request<Requests.Ask>>:
+) -> Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>:
   Maybe.bind(
     &2,
-    String,
-    Replicas.Request<Requests.Ask>,
+    Maybe<&2, String>,
+    Maybe<&2, Replicas.Request<Requests.Ask>>,
     Tip.group(~d, l, t),
-    +g => Maybe.bind(
-      &2,
-      Maybe<&2, Ledgers.Id>,
-      Replicas.Request<Requests.Ask>,
-      Replicas.Tip.newest(~Requests.Ask.machine(), ~d, l, ts),
-      mv => Maybe.bind(
+    mg => Due.then(
+      ~String,
+      mg,
+      +g => Maybe.bind(
         &2,
-        Ledgers.Id,
-        Replicas.Request<Requests.Ask>,
-        mv,
-        v => Maybe.bind(
-          &2,
-          List<&2, String>,
-          Replicas.Request<Requests.Ask>,
-          Group.nodes(~d, l, Replicas.Tip.content(ts), g),
-          ns => Own.due.of(c, t, ts, g, ns, v)
+        Maybe<&2, Ledgers.Id>,
+        Maybe<&2, Replicas.Request<Requests.Ask>>,
+        Replicas.Tip.newest(~Requests.Ask.machine(), ~d, l, ts),
+        mv => Due.then(
+          ~Ledgers.Id,
+          mv,
+          v => Maybe.map(
+            &2,
+            List<&2, String>,
+            Maybe<&2, Replicas.Request<Requests.Ask>>,
+            ns => Own.due.of(c, t, ts, g, ns, v),
+            Group.nodes(~d, l, Replicas.Tip.content(ts), g)
+          )
         )
       )
     )
@@ -3035,23 +3047,21 @@ def Own.due.at(
 # the request that a node asks by itself for the line c: when the nodes of
 # the owner group of c, in the newest tree of its store, are not the owners
 # of c, the request that makes them the owners. So a change of a group
-# changes the owners of each line that it owns, by the next decided step
+# changes the owners of each line that it owns, by the next decided step (some
+# none: no request, or the line or its store has no tip yet; none: l lacks a
+# node, so it cannot tell)
 def Own.due(
   ~d: Led(),
   ~kern: Kern(d),
   +l: L(d),
   +c: Ledgers.Line
-) -> Maybe<&2, Replicas.Request<Requests.Ask>>:
-  Maybe.bind(
-    &2,
-    Replicas.Tip,
-    Replicas.Request<Requests.Ask>,
+) -> Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>:
+  Due.then(
+    ~Replicas.Tip,
     Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c),
-    +t => Maybe.bind(
-      &2,
-      Replicas.Tip,
-      Replicas.Request<Requests.Ask>,
-      Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, Replicas.Line.root(c)),
+    +t => Due.then(
+      ~Replicas.Tip,
+      Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, Ledgers.Line.root(c)),
       ts => Own.due.at(~d, l, c, t, ts)
     )
   )
@@ -3075,7 +3085,7 @@ def Kernel.Rules(-d: Led(), -kern: Kern(d)) -> Type:
         d
       ) -> @c: Ledgers.Line -> {
         Replicas.Kernel.follow(Requests.Ask.machine(), d, kern)(l)(c)
-          == Own.due(~d, ~kern, l, c): Maybe<&2, Replicas.Request<Requests.Ask>>
+          == Own.due(~d, ~kern, l, c): Maybe<&2, Maybe<&2, Replicas.Request<Requests.Ask>>>
       }
     )
 

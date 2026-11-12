@@ -1321,9 +1321,11 @@ def Kernel.Stable(-mach: Machine(), -d: Led(mach), -f: Kernel.Change(mach, d)) -
 type Request<-Q: Data> is Data:
   Request{id: Ledgers.Id, time: String, ask: Q}
 
-# the request, if any, that a replica asks by itself after a line moves
+# the request, if any, that a replica asks by itself after a line moves (some
+# none: none; none: the ledger lacks what the kernel reads, so it cannot tell
+# yet)
 def Kernel.Follow(-mach: Machine(), -d: Led(mach)) -> Type:
-  Led.L(mach, d) -> Ledgers.Line -> Maybe<&2, Request<Machine.Q(mach)>>
+  Led.L(mach, d) -> Ledgers.Line -> Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>
 
 # the kernel of a machine: what a request does, the proof that its acts stay
 # as the ledger grows, and what a replica asks by itself
@@ -1341,6 +1343,68 @@ def Kernel.follow(-mach: Machine(), -d: Led(mach), k: Kernel(mach, d)) -> Kernel
   match k:
     case Tuple{f, Tuple{s, w}}:
       w
+
+# the newest tips of the lines cs are the same in the ledgers a and b
+def Heads.same(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +a: Led.L(mach, d),
+  +b: Led.L(mach, d),
+  cs: List<&2, Ledgers.Line>
+) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case Con{+c, rest}:
+      Bool.and(
+        Shared.Maybe.is_eq(
+          ~Tip,
+          ~(x => y => Codes.Code.is_eq(~Tip, ~Tip.code, x, y)),
+          Line.head(~mach, ~d, ~kern, a, c),
+          Line.head(~mach, ~d, ~kern, b, c)
+        ),
+        Heads.same(~mach, ~d, ~kern, a, b, rest)
+      )
+
+# that what the kernel kern asks by itself for a line reads only the newest
+# tips of the lines that deps names, and the data under them: in a later
+# ledger where those tips are the same, a request that it could tell stays
+def Kernel.Reads(
+  -mach: Machine(),
+  -d: Led(mach),
+  -kern: Kernel(mach, d),
+  -deps: Led.L(mach, d) -> Ledgers.Line -> List<&2, Ledgers.Line>
+) -> Type:
+  @a: Led.L(mach, d) -> @b: Led.L(mach, d) -> @c: Ledgers.Line -> @x: Maybe<&2, Request<Machine.Q(mach)>> -> {
+    Bool.and(Kind.grows(~Machine.Q(mach), ~Machine.code(mach), ~Led.kind(mach, d), a, b), Led.honest(~mach, ~d, b)) == True{}: Bool
+  } -> {Kernel.follow(mach, d, kern)(a)(c) == Some{x}: Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>} -> {
+    Heads.same(~mach, ~d, ~kern, a, b, deps(a)(c)) == True{}: Bool
+  } -> {Kernel.follow(mach, d, kern)(b)(c) == Some{x}: Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>}
+
+# that watch names each line that reads a line that moved: when deps says
+# that the line c reads a line among moved, watch names c
+def Kernel.Covers(
+  -mach: Machine(),
+  -d: Led(mach),
+  -deps: Led.L(mach, d) -> Ledgers.Line -> List<&2, Ledgers.Line>,
+  -watch: Led.L(mach, d) -> List<&2, Ledgers.Line> -> List<&2, Ledgers.Line>
+) -> Type:
+  @l: Led.L(mach, d) -> @moved: List<&2, Ledgers.Line> -> @c: Ledgers.Line -> @m: Ledgers.Line -> {
+    List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, moved, m) == True{}: Bool
+  } -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, deps(l)(c), m) == True{}: Bool} -> {
+    List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, watch(l)(moved), c) == True{}: Bool
+  }
+
+# that the kernel kern asks again only where watch says, when the lines moved
+# move: Kernel.Reads and Kernel.Covers, for some deps
+def Kernel.Watched(
+  -mach: Machine(),
+  -d: Led(mach),
+  -kern: Kernel(mach, d),
+  -watch: Led.L(mach, d) -> List<&2, Ledgers.Line> -> List<&2, Ledgers.Line>
+) -> Type:
+  &deps: Led.L(mach, d) -> Ledgers.Line -> List<&2, Ledgers.Line> -> Kernel.Reads(mach, d, kern, deps) & Kernel.Covers(mach, d, deps, watch)
 
 # Steps
 # -----
@@ -3285,8 +3349,9 @@ def Replica.Asks(
   @c: Ledgers.Line -> @i: Ledgers.Id -> @time: String -> @q: Machine.Q(
     mach
   ) -> {
+
     Kernel.follow(mach, d, kern)(Kind.ledger(mach, d, k)(s))(c)
-      == Some{Request{i, time, q}}: Maybe<&2, Request<Machine.Q(mach)>>
+      == Some{Some{Request{i, time, q}}}: Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>
   } -> {
     Maybe.is_some(
       &2,
