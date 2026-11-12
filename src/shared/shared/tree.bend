@@ -342,6 +342,20 @@ def Laws.Kept(
     Maybe.is_some(&2, List<&2, Binding>, Ops.range(S, o)(s2)(Edit.root(e))([])) == True{}: Bool
   }
 
+# a listing stays as the depot grows: it reads only nodes by hash
+def Laws.RangeFinal(-S: Data, -grows: S -> S -> Bool, -o: Tree.Ops(S)) -> Type:
+  @s: S -> @s2: S -> @h: Maybe<&2, Hashes.Hash> -> @p: List<&2, U32> -> @bs: List<&2, Binding> -> {
+    Ops.range(S, o)(s)(h)(p) == Some{bs}: Maybe<&2, List<&2, Binding>>
+  } -> {grows(s, s2) == True{}: Bool} -> {Ops.range(S, o)(s2)(h)(p) == Some{bs}: Maybe<&2, List<&2, Binding>>}
+
+# a difference stays as the depot grows: it reads only nodes by hash
+def Laws.DiffFinal(-S: Data, -grows: S -> S -> Bool, -o: Tree.Ops(S)) -> Type:
+  @s: S -> @s2: S -> @a: Maybe<&2, Hashes.Hash> -> @b: Maybe<&2, Hashes.Hash> -> @ks: List<
+    &2,
+    List<&2, U32>> -> {
+    Ops.diff(S, o)(s)(a)(b) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>
+  } -> {grows(s, s2) == True{}: Bool} -> {Ops.diff(S, o)(s2)(a)(b) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>}
+
 # the laws of a tree with the operations o
 def Tree.Laws(
   -S: Data,
@@ -355,7 +369,7 @@ def Tree.Laws(
     )
     & (
       Laws.Write(S, fetch, grows, o)
-        & (Laws.Canon(S, o) & (Laws.Range(S, o) & (Laws.Diff(S, o) & (Laws.Whole(S, o) & Laws.Kept(S, fetch, grows, o)))))
+        & (Laws.Canon(S, o) & (Laws.Range(S, o) & (Laws.Diff(S, o) & (Laws.Whole(S, o) & (Laws.Kept(S, fetch, grows, o) & (Laws.RangeFinal(S, grows, o) & Laws.DiffFinal(S, grows, o)))))))
     )
 
 # a tree in a depot kept as S, whose data is fetch and which grows as grows
@@ -9529,3 +9543,19 @@ law Mst.keeps_whole:
   for ~grows: S -> S -> Bool
   for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   Laws.Kept(S, fetch, grows, Mst.ops(~S, ~fetch))
+
+# a listing stays, in a depot that keeps what it holds
+law Mst.ranges_final:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for ~grows: S -> S -> Bool
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
+  Laws.RangeFinal(S, grows, Mst.ops(~S, ~fetch))
+
+# a difference stays, in a depot that keeps what it holds
+law Mst.diffs_final:
+  for ~S: Data
+  for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
+  for ~grows: S -> S -> Bool
+  for ~kept: Depots.Depot.Keeps(S, fetch, grows)
+  Laws.DiffFinal(S, grows, Mst.ops(~S, ~fetch))
