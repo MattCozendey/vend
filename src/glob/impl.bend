@@ -2,7 +2,6 @@ import Base
 import ../shared/shared/regex.bend as Regex
 import ../shared/shared/search.bend as Searches
 import ../shared/shared/shared/keyset.bend as KeySets
-import ../shared/shared/shared/reach.bend as Reaches
 import ../shared/shared/shared/shared/shared.bend as Shared
 import ../shared/shared/shared/shared/trie.bend as Tries
 import ../shared/shared/shared/spans.bend as Spans
@@ -1453,7 +1452,7 @@ def Atom.within(ss: List<&2, Spans.Span>, t: Spec.Atom) -> Bool:
     case Spec.AAny{}:
       True{}
     case Spec.AClass{neg, xs}:
-      Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, xs, ss)
+      Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, xs, ss)
 
 # every span that slots name is in ss
 def Slots.within(slots: List<&2, Slot>, +ss: List<&2, Spans.Span>) -> Bool:
@@ -1476,7 +1475,7 @@ def Chars.near(ss: List<&2, Spans.Span>, c: Char, d: Char) -> Bool:
   +ss = ss
   List.all.if(
     u => Spans.Spans.alike(ss, c, d),
-    Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss)
+    Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss)
   )
 
 # Char.is_eq gives the same either way round
@@ -1574,7 +1573,7 @@ def Role.alike(
   +c: Char,
   +d: Char,
   +hn: {Spans.Spans.alike(ss, c, d) == True{}: Bool},
-  +hr: {Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss) == True{}: Bool}
+  +hr: {Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss) == True{}: Bool}
 ) -> {Role.of(c) == Role.of(d): Role}:
   +w0 = Span.within(ss, Spans.Span{'/', '/'})
   +w1 = Span.within(ss, Spans.Span{'.', '.'})
@@ -1714,7 +1713,7 @@ def Inner.alike(
   +hn: {Chars.near(ss, c, d) == True{}: Bool}
 ) -> {Spec.is_inner(c) == Spec.is_inner(d): Bool}:
   hr = Shared.List.all.if_hit(
-    Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
+    Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
     u => Spans.Spans.alike(ss, c, d)
   )(hn)
   %Equal.sym(
@@ -1727,7 +1726,7 @@ def Inner.alike(
       d,
       '/',
       Shared.List.all.if_rest(
-        Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
+        Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
         u => Spans.Spans.alike(ss, c, d)
       )(hn),
       Shared.Bool.and_true_left(
@@ -1754,7 +1753,7 @@ def Class.alike(
   +d: Char,
   +hn: {Spans.Spans.alike(ss, c, d) == True{}: Bool}
 ) -> {
-  Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, xs, ss) == True{}: Bool
+  Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, xs, ss) == True{}: Bool
 } -> {Spans.Spans.has(xs, c) == Spans.Spans.has(xs, d): Bool}:
   match xs:
     case Nil{}:
@@ -1775,7 +1774,7 @@ def Class.alike(
           )(
             Shared.Bool.and_true_left(
               Span.within(ss, x),
-              Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, r, ss)
+              Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, r, ss)
             )(e)
           )
         ): {
@@ -1798,7 +1797,7 @@ def Class.alike(
           )(
             Shared.Bool.and_true_right(
               Span.within(ss, x),
-              Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, r, ss)
+              Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, r, ss)
             )(e)
           )
         ): {
@@ -1841,7 +1840,7 @@ def Atom.alike(
         d,
         x,
         Shared.List.all.if_rest(
-          Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
+          Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
           u => Spans.Spans.alike(ss, c, d)
         )(hn),
         hp
@@ -1859,7 +1858,7 @@ def Atom.alike(
           c,
           d,
           Shared.List.all.if_rest(
-            Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
+            Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss),
             u => Spans.Spans.alike(ss, c, d)
           )(hn)
         )(hp)
@@ -2026,7 +2025,7 @@ def Walk.covers(g: Abc, w: Walk) -> Bool:
     case Abc{+ss} At{p, St{both, a, b}}:
       List.all.if(
         u => List.all.if(u2 => Slots.within(b, ss), Slots.within(a, ss)),
-        Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss)
+        Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss)
       )
 
 # under a place that g covers, each character moves the machine as its mark
@@ -2050,7 +2049,7 @@ def Walk.rep(
       +h = h
       +ms = Spans.Spans.marks(ss)
       +d = Spans.Spans.rep(ms, c)
-      +roles = Reaches.Reach.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss)
+      +roles = Shared.List.within(~Spans.Span, ~Spans.Span.is_eq, Role.spans(), ss)
       +wa = Slots.within(a, ss)
       +wb = Slots.within(b, ss)
       +hr = Shared.List.all.if_hit(roles, u => List.all.if(u2 => wb, wa))(h)
@@ -6994,9 +6993,6 @@ def Spec.read_after_show(g):
   read = Equal.sym(Maybe<&2, Spec.Glob>, Some{h}, Spec.Glob.read(Spec.Glob.show(g)), Show.read(g))
   (h, (read, p => Show.same(g, p)))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-def Spec.read_rejects_root(s):
-  {==}
-
 # Escaped paths
 # -------------
 

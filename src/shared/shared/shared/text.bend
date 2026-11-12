@@ -4,8 +4,8 @@ import ./shared/shared.bend as Shared
 # Text and bytes
 # --------------
 
-# a resource's content: one byte per U32, as Base's File effects use; the
-# bytes of a text are its UTF-8 (Bytes.of_text_bytes)
+# bytes, one in each U32, as Base's effects give them; the bytes of a text
+# are its UTF-8 (Bytes.of_text_bytes)
 def Bytes() -> Data:
   List<&2, U32>
 

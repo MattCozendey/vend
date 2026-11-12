@@ -478,39 +478,6 @@ def Quorum.no_less(
       )
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# a majority stays a majority when every ballot is kept
-def Quorum.has_more(
-  ~Ty: Data,
-  ~same: Ty -> Ty -> Bool,
-  ~laws: Shared.Eq.Laws(Ty, same),
-  +bs: List<&2, Maybe<&2, Cells.Cell<Ty>>>,
-  +bs2: List<&2, Maybe<&2, Cells.Cell<Ty>>>,
-  +x: Ty
-) -> {
-  Shared.List.all2(
-    ~Maybe<&2, Cells.Cell<Ty>>,
-    ~Maybe<&2, Cells.Cell<Ty>>,
-    ~Cells.Cell.keeps(~Ty, ~same),
-    bs,
-    bs2
-  )
-    == True{}: Bool
-}
-  -> {Quorum.has(~Ty, ~same, bs, x) == True{}: Bool}
-  -> {Quorum.has(~Ty, ~same, bs2, x) == True{}: Bool}:
-  +k => h =>
-    Shared.Nat.lt_le(
-      Quorum.no(~Ty, ~same, bs2, x),
-      Quorum.yes(~Ty, ~same, bs, x),
-      Quorum.yes(~Ty, ~same, bs2, x)
-    )(
-      Shared.Nat.le_lt(
-        Quorum.no(~Ty, ~same, bs2, x),
-        Quorum.no(~Ty, ~same, bs, x),
-        Quorum.yes(~Ty, ~same, bs, x)
-      )(Quorum.no_less(~Ty, ~same, ~laws, bs, bs2, x)(k))(h)
-    )(Quorum.yes_more(~Ty, ~same, ~laws, bs, bs2, x)(k))
-
 # Quorum.has_winner when the vote b was picked or not (held)
 def Quorum.has_winner.if(
   ~B: Data,
@@ -1495,82 +1462,23 @@ def Quorum.major(
   Quorum.winner_fast(~B, ~same, bs)
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# what a majority cast has a majority
-def Quorum.major_has(
-  ~B: Data,
-  ~same: B -> B -> Bool,
-  ~laws: Shared.Eq.Laws(B, same),
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  x: B
-) -> {Quorum.major(~B, ~same, bs) == Some{x}: Maybe<&2, B>}
-  -> {Quorum.has(~B, ~same, bs, x) == True{}: Bool}:
-  h =>
-    Quorum.has_winner(
-      ~B,
-      ~same,
-      bs,
-      bs,
-      x
-    )(
-      Equal.trans(
-        Maybe<&2, B>,
-        Quorum.winner(~B, ~same, bs, bs),
-        Quorum.winner_fast(~B, ~same, bs),
-        Some{x},
-        Equal.sym(
-          Maybe<&2, B>,
-          Quorum.winner_fast(~B, ~same, bs),
-          Quorum.winner(~B, ~same, bs, bs),
-          Quorum.winner_fast_eq(~B, ~same, ~laws, bs)
-        ),
-        h
-      )
-    )
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
 # what a majority cast stays so when every ballot is kept
 law Quorum.major_kept:
   for ~B: Data
   for ~same: B -> B -> Bool
   for ~laws: Shared.Eq.Laws(B, same)
-  for +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
-  for +bs2: List<&2, Maybe<&2, Cells.Cell<B>>>
-  for +x: B
-  {
-    Shared.List.all2(
-      ~Maybe<&2, Cells.Cell<B>>,
-      ~Maybe<&2, Cells.Cell<B>>,
-      ~Cells.Cell.keeps(~B, ~same),
-      bs,
-      bs2
-    )
-      == True{}: Bool
-  }
-    -> {Quorum.major(~B, ~same, bs) == Some{x}: Maybe<&2, B>}
-    -> {Quorum.major(~B, ~same, bs2) == Some{x}: Maybe<&2, B>}
-
-def Quorum.major_kept(ty, same, laws, bs, bs2, x):
-  k => h =>
-    Equal.trans(
-      Maybe<&2, ty>,
-      Quorum.winner_fast(~ty, ~same, bs2),
-      Quorum.winner(~ty, ~same, bs2, bs2),
-      Some{x},
-      Quorum.winner_fast_eq(~ty, ~same, ~laws, bs2),
-      Quorum.winner_of(
-        ~ty,
-        ~same,
-        ~laws,
-        bs2,
-        x
-      )(
-        Quorum.has_more(
-          ~ty,
-          ~same,
-          ~laws,
-          bs,
-          bs2,
-          x
-        )(k)(Quorum.major_has(~ty, ~same, ~laws, bs, x)(h))
+  Shared.Read.Stable(
+    List<&2, Maybe<&2, Cells.Cell<B>>>,
+    bs => bs2 => {
+      Shared.List.all2(
+        ~Maybe<&2, Cells.Cell<B>>,
+        ~Maybe<&2, Cells.Cell<B>>,
+        ~Cells.Cell.keeps(~B, ~same),
+        bs,
+        bs2
       )
-    )
+        == True{}: Bool
+    },
+    B,
+    bs => Quorum.major(~B, ~same, bs)
+  )

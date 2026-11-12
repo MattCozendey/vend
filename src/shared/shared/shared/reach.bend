@@ -103,14 +103,6 @@ def Reach.distinct(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>) -> Bool:
     case Con{p, +r}:
       Bool.and(Bool.not(List.contains(~A, ~same, r, p)), Reach.distinct(~A, ~same, r))
 
-# every node of ps is in ks
-def Reach.within(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>, +ks: List<&2, A>) -> Bool:
-  match ps:
-    case Nil{}:
-      True{}
-    case Con{p, r}:
-      Bool.and(List.contains(~A, ~same, ks, p), Reach.within(~A, ~same, r, ks))
-
 # the nodes of ps after the first that is p
 def Reach.after(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>, +p: A) -> List<&2, A>:
   match ps:
@@ -791,7 +783,7 @@ def Reach.path_within(
   +m: A
 ) -> {
   Reach.path(~A, ~V, ~same, ~succ, ps, ys, g, m) == True{}: Bool
-} -> {Reach.within(~A, ~same, ps, nodes(g)) == True{}: Bool}:
+} -> {Shared.List.within(~A, ~same, ps, nodes(g)) == True{}: Bool}:
   match ps:
     case Nil{}:
       +h => {==}
@@ -814,7 +806,7 @@ def Reach.path_within(
           List.contains(~A, ~same, nodes(g), p),
           True{},
           live(g)(p)(Reach.first(A, r, m))(hf)
-        ): {Bool.and(_, Reach.within(~A, ~same, r, nodes(g))) == True{}: Bool}
+        ): {Bool.and(_, Shared.List.within(~A, ~same, r, nodes(g))) == True{}: Bool}
         Reach.path_within(
           ~A,
           ~V,
@@ -1480,10 +1472,10 @@ def Reach.within_drop(
   +ks: List<&2, A>,
   +p: A
 ) -> {
-  Reach.within(~A, ~same, ps, ks) == True{}: Bool
+  Shared.List.within(~A, ~same, ps, ks) == True{}: Bool
 } -> {
   List.contains(~A, ~same, ps, p) == False{}: Bool
-} -> {Reach.within(~A, ~same, ps, Shared.List.remove(~A, ~same, ks, p)) == True{}: Bool}:
+} -> {Shared.List.within(~A, ~same, ps, Shared.List.remove(~A, ~same, ks, p)) == True{}: Bool}:
   match ps:
     case Nil{}:
       +hw => +hn => {==}
@@ -1491,7 +1483,7 @@ def Reach.within_drop(
       +hw => +hn =>
         +remove1 = Shared.List.remove(~A, ~same, ks, p)
         +contains1 = List.contains(~A, ~same, ks, q)
-        +within1 = Reach.within(~A, ~same, r, ks)
+        +within1 = Shared.List.within(~A, ~same, r, ks)
         +contains2 = List.contains(~A, ~same, r, p)
         %Equal.sym(
           Bool,
@@ -1507,7 +1499,7 @@ def Reach.within_drop(
           )(
             Shared.Bool.and_true_left(contains1, within1)(hw)
           )(Shared.List.any.if_false_hit(same(q, p), u => contains2)(hn))
-        ): {Bool.and(_, Reach.within(~A, ~same, r, remove1)) == True{}: Bool}
+        ): {Bool.and(_, Shared.List.within(~A, ~same, r, remove1)) == True{}: Bool}
         Reach.within_drop(
           ~A,
           ~same,
@@ -1529,7 +1521,7 @@ def Reach.fits_nodes(
 ) -> {
   Reach.distinct(~A, ~same, ps) == True{}: Bool
 } -> {
-  Reach.within(~A, ~same, ps, ks) == True{}: Bool
+  Shared.List.within(~A, ~same, ps, ks) == True{}: Bool
 } -> {Reach.fits(A, ps, List.length(&2, A, ks)) == True{}: Bool}:
   match ps:
     case Nil{}:
@@ -1539,7 +1531,7 @@ def Reach.fits_nodes(
         +contains1 = List.contains(~A, ~same, r, p)
         +remove1 = Shared.List.remove(~A, ~same, ks, p)
         +contains2 = List.contains(~A, ~same, ks, p)
-        +within1 = Reach.within(~A, ~same, r, ks)
+        +within1 = Shared.List.within(~A, ~same, r, ks)
         +distinct1 = Reach.distinct(~A, ~same, r)
         Reach.fits_le(
           A,
@@ -1839,7 +1831,7 @@ def Reach.within_in(
   +ks: List<&2, A>,
   +p: A
 ) -> {
-  Reach.within(~A, ~same, ps, ks) == True{}: Bool
+  Shared.List.within(~A, ~same, ps, ks) == True{}: Bool
 } -> {
   List.contains(~A, ~same, ps, p) == True{}: Bool
 } -> {List.contains(~A, ~same, ks, p) == True{}: Bool}:
@@ -1861,7 +1853,7 @@ def Reach.within_in(
         p,
         Shared.Bool.and_true_left(
           List.contains(~A, ~same, ks, q),
-          Reach.within(~A, ~same, r, ks)
+          Shared.List.within(~A, ~same, r, ks)
         )(hw),
         Reach.within_in(
           ~A,
@@ -1873,7 +1865,7 @@ def Reach.within_in(
         )(
           Shared.Bool.and_true_right(
             List.contains(~A, ~same, ks, q),
-            Reach.within(~A, ~same, r, ks)
+            Shared.List.within(~A, ~same, r, ks)
           )(hw)
         )
       )({==})
@@ -1888,7 +1880,7 @@ def Reach.within_out.at(
   ks: List<&2, A>,
   p: A,
   b: Bool,
-  hw: {Reach.within(~A, ~same, ps, ks) == True{}: Bool},
+  hw: {Shared.List.within(~A, ~same, ps, ks) == True{}: Bool},
   hk: {List.contains(~A, ~same, ks, p) == False{}: Bool}
 ) -> {List.contains(~A, ~same, ps, p) == b: Bool} -> {b == False{}: Bool}:
   match b:
@@ -1918,7 +1910,7 @@ def Reach.within_out(
   +ps: List<&2, A>,
   ks: List<&2, A>,
   +p: A,
-  hw: {Reach.within(~A, ~same, ps, ks) == True{}: Bool},
+  hw: {Shared.List.within(~A, ~same, ps, ks) == True{}: Bool},
   hk: {List.contains(~A, ~same, ks, p) == False{}: Bool}
 ) -> {List.contains(~A, ~same, ps, p) == False{}: Bool}:
   Reach.within_out.at(~A, ~same, ~laws, ps, ks, p, List.contains(~A, ~same, ps, p), hw, hk)({==})
@@ -1932,20 +1924,20 @@ def Reach.within_trans(
   +ks: List<&2, A>,
   +js: List<&2, A>
 ) -> {
-  Reach.within(~A, ~same, ps, ks) == True{}: Bool
+  Shared.List.within(~A, ~same, ps, ks) == True{}: Bool
 } -> {
-  Reach.within(~A, ~same, ks, js) == True{}: Bool
-} -> {Reach.within(~A, ~same, ps, js) == True{}: Bool}:
+  Shared.List.within(~A, ~same, ks, js) == True{}: Bool
+} -> {Shared.List.within(~A, ~same, ps, js) == True{}: Bool}:
   match ps:
     case Nil{}:
       +h1 => +h2 => {==}
     case Con{+p, +r}:
       +h1 => +h2 =>
         +contains1 = List.contains(~A, ~same, ks, p)
-        +within1 = Reach.within(~A, ~same, r, ks)
+        +within1 = Shared.List.within(~A, ~same, r, ks)
         Shared.Bool.and_both(
           List.contains(~A, ~same, js, p),
-          Reach.within(~A, ~same, r, js)
+          Shared.List.within(~A, ~same, r, js)
         )(
           Reach.within_in(
             ~A,
@@ -1974,20 +1966,20 @@ def Reach.within_both(
   +qs: List<&2, A>,
   +ks: List<&2, A>
 ) -> {
-  Reach.within(~A, ~same, ps, ks) == True{}: Bool
+  Shared.List.within(~A, ~same, ps, ks) == True{}: Bool
 } -> {
-  Reach.within(~A, ~same, qs, ks) == True{}: Bool
-} -> {Reach.within(~A, ~same, List.append(&2, A, ps, qs), ks) == True{}: Bool}:
+  Shared.List.within(~A, ~same, qs, ks) == True{}: Bool
+} -> {Shared.List.within(~A, ~same, List.append(&2, A, ps, qs), ks) == True{}: Bool}:
   match ps:
     case Nil{}:
       +h1 => +h2 => h2
     case Con{p, +r}:
       +h1 => +h2 =>
         +contains1 = List.contains(~A, ~same, ks, p)
-        +within1 = Reach.within(~A, ~same, r, ks)
+        +within1 = Shared.List.within(~A, ~same, r, ks)
         Shared.Bool.and_both(
           contains1,
-          Reach.within(~A, ~same, List.append(&2, A, r, qs), ks)
+          Shared.List.within(~A, ~same, List.append(&2, A, r, qs), ks)
         )(
           Shared.Bool.and_true_left(contains1, within1)(h1)
         )(
@@ -2008,18 +2000,18 @@ def Reach.within_left(
   +ks: List<&2, A>,
   +js: List<&2, A>
 ) -> {
-  Reach.within(~A, ~same, ps, ks) == True{}: Bool
-} -> {Reach.within(~A, ~same, ps, List.append(&2, A, ks, js)) == True{}: Bool}:
+  Shared.List.within(~A, ~same, ps, ks) == True{}: Bool
+} -> {Shared.List.within(~A, ~same, ps, List.append(&2, A, ks, js)) == True{}: Bool}:
   match ps:
     case Nil{}:
       +h => {==}
     case Con{+p, +r}:
       +h =>
         +contains1 = List.contains(~A, ~same, ks, p)
-        +within1 = Reach.within(~A, ~same, r, ks)
+        +within1 = Shared.List.within(~A, ~same, r, ks)
         Shared.Bool.and_both(
           List.contains(~A, ~same, List.append(&2, A, ks, js), p),
-          Reach.within(~A, ~same, r, List.append(&2, A, ks, js))
+          Shared.List.within(~A, ~same, r, List.append(&2, A, ks, js))
         )(
           Shared.List.contains_left(
             ~A,
@@ -2041,18 +2033,18 @@ def Reach.within_right(
   +ks: List<&2, A>,
   +js: List<&2, A>
 ) -> {
-  Reach.within(~A, ~same, ps, js) == True{}: Bool
-} -> {Reach.within(~A, ~same, ps, List.append(&2, A, ks, js)) == True{}: Bool}:
+  Shared.List.within(~A, ~same, ps, js) == True{}: Bool
+} -> {Shared.List.within(~A, ~same, ps, List.append(&2, A, ks, js)) == True{}: Bool}:
   match ps:
     case Nil{}:
       +h => {==}
     case Con{+p, +r}:
       +h =>
         +contains1 = List.contains(~A, ~same, js, p)
-        +within1 = Reach.within(~A, ~same, r, js)
+        +within1 = Shared.List.within(~A, ~same, r, js)
         Shared.Bool.and_both(
           List.contains(~A, ~same, List.append(&2, A, ks, js), p),
-          Reach.within(~A, ~same, r, List.append(&2, A, ks, js))
+          Shared.List.within(~A, ~same, r, List.append(&2, A, ks, js))
         )(
           Shared.List.contains_right(
             ~A,
@@ -2078,7 +2070,7 @@ def Reach.within_self(
   ~same: A -> A -> Bool,
   ~laws: Shared.Eq.Laws(A, same),
   +ps: List<&2, A>
-) -> {Reach.within(~A, ~same, ps, ps) == True{}: Bool}:
+) -> {Shared.List.within(~A, ~same, ps, ps) == True{}: Bool}:
   match ps:
     case Nil{}:
       {==}
@@ -2091,7 +2083,7 @@ def Reach.within_self(
       ): {
         Bool.and(
           List.any.if(u => List.contains(~A, ~same, r, p), _),
-          Reach.within(~A, ~same, r, p <> r)
+          Shared.List.within(~A, ~same, r, p <> r)
         )
           == True{}: Bool
       }
@@ -2164,13 +2156,13 @@ def Reach.succ_within.at(
   +g: V,
   ih: {
     List.contains(~A, ~same, r, x) == True{}: Bool
-  } -> {Reach.within(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, r, g)) == True{}: Bool}
+  } -> {Shared.List.within(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, r, g)) == True{}: Bool}
 ) -> {
   same(z, x) == hit: Bool
 } -> {
   List.any.if(u => List.contains(~A, ~same, r, x), hit) == True{}: Bool
 } -> {
-  Reach.within(
+  Shared.List.within(
     ~A,
     ~same,
     succ(g)(x),
@@ -2187,7 +2179,7 @@ def Reach.succ_within.at(
           x,
           Shared.Eq.sound(~A, ~same, laws, z)(x)(he)
         ): {
-          Reach.within(
+          Shared.List.within(
             ~A,
             ~same,
             succ(g)(x),
@@ -2224,11 +2216,11 @@ def Reach.succ_within(
   +g: V
 ) -> {
   List.contains(~A, ~same, zs, x) == True{}: Bool
-} -> {Reach.within(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, zs, g)) == True{}: Bool}:
+} -> {Shared.List.within(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, zs, g)) == True{}: Bool}:
   match zs:
     case Nil{}:
       +h => Empty.absurd(
-        {Reach.within(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, [], g)) == True{}: Bool},
+        {Shared.List.within(~A, ~same, succ(g)(x), Reach.next(~A, ~V, ~succ, [], g)) == True{}: Bool},
         Shared.Bool.false_ne_true(h)
       )
     case Con{+z, +r}:
@@ -2258,9 +2250,9 @@ def Reach.next_within(
   +zs: List<&2, A>,
   +g: V
 ) -> {
-  Reach.within(~A, ~same, xs, zs) == True{}: Bool
+  Shared.List.within(~A, ~same, xs, zs) == True{}: Bool
 } -> {
-  Reach.within(
+  Shared.List.within(
     ~A,
     ~same,
     Reach.next(~A, ~V, ~succ, xs, g),
@@ -2274,7 +2266,7 @@ def Reach.next_within(
     case Con{+x, +r}:
       +h =>
         +contains1 = List.contains(~A, ~same, zs, x)
-        +within1 = Reach.within(~A, ~same, r, zs)
+        +within1 = Shared.List.within(~A, ~same, r, zs)
         Reach.within_both(
           ~A,
           ~same,
@@ -2340,9 +2332,9 @@ def Reach.or_within(
   +zs: List<&2, A>,
   +m: A
 ) -> {
-  Reach.within(~A, ~same, ys, zs) == True{}: Bool
+  Shared.List.within(~A, ~same, ys, zs) == True{}: Bool
 } -> {
-  Reach.within(~A, ~same, zs, List.append(&2, A, ks, ys)) == True{}: Bool
+  Shared.List.within(~A, ~same, zs, List.append(&2, A, ks, ys)) == True{}: Bool
 } -> {
   List.contains(
     ~A,
@@ -2397,7 +2389,7 @@ def Reach.next_grown(
   +ys: List<&2, A>,
   +g: V
 ) -> {
-  Reach.within(
+  Shared.List.within(
     ~A,
     ~same,
     Reach.next(~A, ~V, ~succ, ks, g),
@@ -2405,7 +2397,7 @@ def Reach.next_grown(
   )
     == True{}: Bool
 } -> {
-  Reach.within(
+  Shared.List.within(
     ~A,
     ~same,
     Reach.next(~A, ~V, ~succ, List.append(&2, A, ks, ys), g),
@@ -2422,7 +2414,7 @@ def Reach.next_grown(
       Reach.next(~A, ~V, ~succ, append1, g),
       List.append(&2, A, next1, next2),
       Reach.next_append(~A, ~V, ~succ, ks, ys, g)
-    ): {Reach.within(~A, ~same, _, List.append(&2, A, append1, next2)) == True{}: Bool}
+    ): {Shared.List.within(~A, ~same, _, List.append(&2, A, append1, next2)) == True{}: Bool}
     Reach.within_both(
       ~A,
       ~same,
@@ -2831,7 +2823,7 @@ def Reach.unique_within.at(
   +r: List<&2, List<&2, Bool>>,
   t: Tries.Trie<Unit>,
   ih1: {
-    Reach.within(
+    Shared.List.within(
       ~List<&2, Bool>,
       ~Tries.Trie.same_key,
       Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, t),
@@ -2840,7 +2832,7 @@ def Reach.unique_within.at(
       == True{}: Bool
   },
   ih2: {
-    Reach.within(
+    Shared.List.within(
       ~List<&2, Bool>,
       ~Tries.Trie.same_key,
       Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, r, Tries.Trie.set(Unit, t, x, Unit{})),
@@ -2849,7 +2841,7 @@ def Reach.unique_within.at(
       == True{}: Bool
   }
 ) -> {
-  Reach.within(
+  Shared.List.within(
     ~List<&2, Bool>,
     ~Tries.Trie.same_key,
     Shared.Bool.when(
@@ -2887,7 +2879,7 @@ def Reach.unique_within.at(
       ): {
         Bool.and(
           List.any.if(u => List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, r, x), _),
-          Reach.within(~List<&2, Bool>, ~Tries.Trie.same_key, unique1, x <> r)
+          Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, unique1, x <> r)
         )
           == True{}: Bool
       }
@@ -2899,7 +2891,7 @@ def Reach.unique_within(
   +ws: List<&2, List<&2, Bool>>,
   +t: Tries.Trie<Unit>
 ) -> {
-  Reach.within(
+  Shared.List.within(
     ~List<&2, Bool>,
     ~Tries.Trie.same_key,
     Tries.Trie.unique(~List<&2, Bool>, ~Reach.key, ws, t),
@@ -3005,9 +2997,9 @@ def Reach.unique_covers(
   +ws: List<&2, List<&2, Bool>>,
   +ks: List<&2, List<&2, Bool>>
 ) -> {
-  Reach.within(~List<&2, Bool>, ~Tries.Trie.same_key, us, ws) == True{}: Bool
+  Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, us, ws) == True{}: Bool
 } -> {
-  Reach.within(
+  Shared.List.within(
     ~List<&2, Bool>,
     ~Tries.Trie.same_key,
     us,
@@ -3031,7 +3023,7 @@ def Reach.unique_covers(
     case Con{+u, +r}:
       +h =>
         +contains1 = List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, ws, u)
-        +within1 = Reach.within(~List<&2, Bool>, ~Tries.Trie.same_key, r, ws)
+        +within1 = Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, r, ws)
         +append1 = List.append(
           &2,
           List<&2, Bool>,
@@ -3045,7 +3037,7 @@ def Reach.unique_covers(
         )
         Shared.Bool.and_both(
           List.contains(~List<&2, Bool>, ~Tries.Trie.same_key, append1, u),
-          Reach.within(~List<&2, Bool>, ~Tries.Trie.same_key, r, append1)
+          Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, r, append1)
         )(
           Reach.unique_has(ws, ks, u)(Shared.Bool.and_true_left(contains1, within1)(h))
         )(Reach.unique_covers(r, ws, ks)(Shared.Bool.and_true_right(contains1, within1)(h)))
@@ -3109,9 +3101,9 @@ def Reach.fill_go(
   +g: V,
   +m: List<&2, Bool>
 ) -> {
-  Reach.within(~List<&2, Bool>, ~Tries.Trie.same_key, ws, zs) == True{}: Bool
+  Shared.List.within(~List<&2, Bool>, ~Tries.Trie.same_key, ws, zs) == True{}: Bool
 } -> {
-  Reach.within(
+  Shared.List.within(
     ~List<&2, Bool>,
     ~Tries.Trie.same_key,
     zs,
@@ -3119,7 +3111,7 @@ def Reach.fill_go(
   )
     == True{}: Bool
 } -> {
-  Reach.within(
+  Shared.List.within(
     ~List<&2, Bool>,
     ~Tries.Trie.same_key,
     Reach.next(~List<&2, Bool>, ~V, ~succ, ks, g),

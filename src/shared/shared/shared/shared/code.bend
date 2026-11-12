@@ -48,6 +48,14 @@ def Read.then(
     case Some{Read{a, r}}:
       k(a)(r)
 
+# the value of a read that is the whole of some words: nothing follows it
+def Read.whole(-A: Data, m: Maybe<&2, Read<A>>) -> Maybe<&2, A>:
+  match m:
+    case Some{Read{x, Nil{}}}:
+      Some{x}
+    case _:
+      None{}
+
 # how a value written by enc is read, and that it reads back
 def Codec.Read(-A: Data, enc: A -> List<&2, U32> -> List<&2, U32>) -> Type:
   Sigma<&1, &1, List<&2, U32> -> Maybe<&2, Read<A>>, dec => Code.Laws(A, enc, dec)>
@@ -652,72 +660,6 @@ def Code.three_read(
     Codec.laws(A, ca)(a)(rb)
   ): {_ == Some{Read{mk(a)(b)(c), r}}: Maybe<&2, Read<T>>}
   Code.two_read(~B, ~C, ~T, ~cb, ~cc, mk(a), b, c, r)
-
-# reading four values that their codes wrote, one after the other, gives the
-# value that mk makes of them
-def Code.four_read(
-  ~A: Data,
-  ~B: Data,
-  ~C: Data,
-  ~D: Data,
-  ~T: Data,
-  ~ca: Codec(A),
-  ~cb: Codec(B),
-  ~cc: Codec(C),
-  ~cd: Codec(D),
-  mk: A -> B -> C -> D -> T,
-  +a: A,
-  +b: B,
-  +c: C,
-  +d: D,
-  +r: List<&2, U32>
-) -> {
-  Code.four.read(
-    ~A,
-    ~B,
-    ~C,
-    ~D,
-    ~T,
-    ~Codec.dec(A, ca),
-    ~Codec.dec(B, cb),
-    ~Codec.dec(C, cc),
-    ~Codec.dec(D, cd),
-    mk,
-    Codec.enc(A, ca)(a)(Codec.enc(B, cb)(b)(Codec.enc(C, cc)(c)(Codec.enc(D, cd)(d)(r))))
-  )
-    == Some{Read{mk(a)(b)(c)(d), r}}: Maybe<&2, Read<T>>
-}:
-  %Equal.sym(
-    Maybe<&2, Read<A>>,
-    Codec.dec(
-      A,
-      ca,
-      Codec.enc(A, ca, a, Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r))))
-    ),
-    Some{Read{a, Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r)))}},
-    Codec.laws(A, ca)(a)(Codec.enc(B, cb, b, Codec.enc(C, cc, c, Codec.enc(D, cd, d, r))))
-  ):
-    {
-      Read.then(
-        A,
-        T,
-        _,
-        a => r => Code.three.read(
-          B,
-          C,
-          D,
-          T,
-          Codec.dec(B, cb),
-          Codec.dec(C, cc),
-          Codec.dec(D, cd),
-          mk(a),
-          r
-        )
-      )
-        == Some{Read{mk(a, b, c, d), r}}: Maybe<&2, Read<T>>
-    }
-  Code.three_read(B, C, D, T, cb, cc, cd, mk(a), b, c, d, r)
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the code of tokens
 def Code.token.codec() -> Codec(U32):

@@ -559,17 +559,6 @@ def Bool.not_true(a: Bool) -> {Bool.not(a) == True{}: Bool} -> {a == False{}: Bo
     case True{}:
       h => Empty.absurd({True{} == False{}: Bool}, Bool.false_ne_true(h))
 
-# a is true when its "not" is false
-def Bool.not_false(a: Bool) -> {Bool.not(a) == False{}: Bool} -> {a == True{}: Bool}:
-  match a:
-    case True{}:
-      h => {==}
-    case False{}:
-      h => Empty.absurd(
-        {False{} == True{}: Bool},
-        Bool.false_ne_true(Equal.sym(Bool, True{}, False{}, h))
-      )
-
 # both sides are true, so their "and" is
 def Bool.and_both(
   a: Bool,
@@ -649,14 +638,6 @@ def Nat.lt_irrefl(a: Nat) -> {Nat.is_lt(a, a) == False{}: Bool}:
       {==}
     case 1n+p:
       Nat.lt_irrefl(p)
-
-# no number is below 0
-def Nat.lt_zero(a: Nat) -> {Nat.is_lt(a, 0n) == False{}: Bool}:
-  match a:
-    case 0n:
-      {==}
-    case 1n+p:
-      {==}
 
 # a number is below the number after it
 def Nat.lt_succ(a: Nat) -> {Nat.is_lt(a, 1n+a) == True{}: Bool}:
@@ -902,17 +883,6 @@ def Maybe.IsNone(-A: Data, m: Maybe<&2, A>) -> Type:
     case Some{x}:
       Empty
 
-# a Maybe that is_none calls empty is None
-def Maybe.is_none_sound(
-  -A: Data,
-  m: Maybe<&2, A>
-) -> {Maybe.is_none(&2, A, m) == True{}: Bool} -> {m == None{}: Maybe<&2, A>}:
-  match m:
-    case None{}:
-      e => {==}
-    case Some{x}:
-      e => Empty.absurd({Some{x} == None{}: Maybe<&2, A>}, Bool.false_ne_true(e))
-
 # no None equals a Some
 def Maybe.none_ne_some(-A: Data, -x: A, e: {None{} == Some{x}: Maybe<&2, A>}) -> Empty:
   %e: Maybe.IsNone(A, _)
@@ -1014,10 +984,6 @@ def Nat.is_eq_comm(a: Nat, b: Nat) -> {Nat.is_eq(a, b) == Nat.is_eq(b, a): Bool}
       %Equal.sym(Bool, Nat.is_eq(ap, bp), Nat.is_eq(bp, ap), Nat.is_eq_comm(ap, bp)):
         {_ == Nat.is_eq(bp, ap): Bool}
       {==}
-
-# the laws of Nat.is_eq
-def Nat.laws() -> Eq.Laws(Nat, Nat.is_eq):
-  (a => Nat.is_eq_refl(a), a => b => Nat.is_eq_sound(a, b))
 
 # a list with one more item at its end is one longer
 def List.length_snoc(
@@ -1360,19 +1326,6 @@ def Maybe.is_eq_sound(
         %eqs(x)(y)(h): {Some{x} == Some{_}: Maybe<&2, A>}
         {==}
 
-# Maybe.is_eq is True for a value and itself
-def Maybe.is_eq_refl(
-  ~A: Data,
-  ~eq: A -> A -> Bool,
-  ~laws: Eq.Laws(A, eq),
-  a: Maybe<&2, A>
-) -> {Maybe.is_eq(~A, ~eq, a, a) == True{}: Bool}:
-  match a:
-    case None{}:
-      {==}
-    case Some{x}:
-      Eq.refl(~A, ~eq, laws, x)
-
 # a read m then k that gives x still gives x when m and each k keep what they
 # give (m2 and k2): a kept read of a kept read is kept
 def Maybe.bind_kept(
@@ -1411,49 +1364,6 @@ def Maybe.when(-B: Data, b: Bool, k: Unit -> Maybe<&2, B>) -> Maybe<&2, B>:
       k(Unit{})
     case False{}:
       None{}
-
-# a "when" that gives a value holds
-def Maybe.when_hit(
-  -B: Data,
-  b: Bool,
-  -k: Unit -> Maybe<&2, B>,
-  -y: B
-) -> {Maybe.when(B, b, k) == Some{y}: Maybe<&2, B>} -> {b == True{}: Bool}:
-  match b:
-    case True{}:
-      e => {==}
-    case False{}:
-      e => Empty.absurd({False{} == True{}: Bool}, Maybe.none_ne_some(B, y, e))
-
-# a "when" that gives a value gives what its rest gives
-def Maybe.when_rest(
-  -B: Data,
-  b: Bool,
-  -k: Unit -> Maybe<&2, B>,
-  -y: B
-) -> {Maybe.when(B, b, k) == Some{y}: Maybe<&2, B>} -> {k(Unit{}) == Some{y}: Maybe<&2, B>}:
-  match b:
-    case True{}:
-      e => e
-    case False{}:
-      e => Empty.absurd({k(Unit{}) == Some{y}: Maybe<&2, B>}, Maybe.none_ne_some(B, y, e))
-
-# a read m then k that gives x: m gives a value, and k gives x of it
-def Maybe.bind_some(
-  -A: Data,
-  -B: Data,
-  -R: Type,
-  m: Maybe<&2, A>,
-  -k: A -> Maybe<&2, B>,
-  -x: B
-) -> {
-  Maybe.bind(&2, A, B, m, k) == Some{x}: Maybe<&2, B>
-} -> (@a: A -> {m == Some{a}: Maybe<&2, A>} -> {k(a) == Some{x}: Maybe<&2, B>} -> R) -> R:
-  match m:
-    case Some{a}:
-      e => f => f(a)({==})(e)
-    case None{}:
-      e => f => Empty.absurd(R, Maybe.none_ne_some(B, x, e))
 
 # List equality
 # -------------
@@ -1632,14 +1542,6 @@ def List.all2(~A: Data, ~B: Data, ~r: A -> B -> Bool, xs: List<&2, A>, ys: List<
     case _ _:
       False{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# a number at most zero is zero
-def Nat.le_zero_eq(a: Nat) -> {Nat.is_le(a, 0n) == True{}: Bool} -> {a == 0n: Nat}:
-  match a:
-    case 0n:
-      h => {==}
-    case 1n+p:
-      h => Empty.absurd({1n+p == 0n: Nat}, Bool.false_ne_true(h))
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a number at most 1 + p that is not 1 + p is at most p
@@ -1983,31 +1885,6 @@ def Nat.nle_trans(
   Nat.is_le(a, c) == False{}: Bool
 } -> {Nat.is_le(b, c) == True{}: Bool} -> {Nat.is_le(a, b) == False{}: Bool}:
   h => k => Nat.nle_trans.at(a, b, c, Nat.is_le(a, b))({==})(h)(k)
-
-# a number is zero
-def Nat.IsZero(n: Nat) -> Type:
-  match n:
-    case 0n:
-      Unit
-    case 1n+p:
-      Empty
-
-# zero is no successor
-def Nat.zero_ne_succ(-b: Nat, e: {0n == 1n+b: Nat}) -> Empty:
-  %e: Nat.IsZero(_)
-  Unit{}
-
-# the number before n, 0 before 0
-def Nat.before(n: Nat) -> Nat:
-  match n:
-    case 0n:
-      0n
-    case 1n+p:
-      p
-
-# successors are the same only of the same numbers
-def Nat.succ_inj(-a: Nat, -b: Nat, e: {1n+a == 1n+b: Nat}) -> {a == b: Nat}:
-  Equal.cong(Nat, Nat, Nat.before, 1n+a, 1n+b, e)
 
 # p holds of g and each element of xs
 def List.holds(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -> Bool:
@@ -2511,21 +2388,6 @@ def Nat.lt_succ_le(
       h => Nat.lt_succ_le(b, q)(h)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# a number below d is at most the number before d
-def Nat.lt_before(
-  a: Nat,
-  d: Nat
-) -> {Nat.is_lt(a, d) == True{}: Bool} -> {Nat.is_le(a, Nat.before(d)) == True{}: Bool}:
-  match a d:
-    case 0n 0n:
-      h => {==}
-    case 1n+b 0n:
-      h => h
-    case 0n 1n+p:
-      h => Nat.le_zero(p)
-    case 1n+b 1n+p:
-      h => Nat.lt_succ_le(1n+b, p)(h)
-
 # Codes of numbers
 # ----------------
 # U32.to_nat gives the code of a U32: its place in the order, as a Nat. These
@@ -2827,3 +2689,46 @@ def U32.inc_to_nat(
 
 # Two-way facts
 # -------------
+
+# x before rest, when m holds x; rest else
+def Maybe.cons(-A: Data, m: Maybe<&2, A>, rest: List<&2, A>) -> List<&2, A>:
+  match m:
+    case None{}:
+      rest
+    case Some{x}:
+      x <> rest
+
+# every element of ps is in ks, as same compares them
+def List.within(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>, +ks: List<&2, A>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{p, r}:
+      Bool.and(List.contains(~A, ~same, ks, p), List.within(~A, ~same, r, ks))
+
+# as and bs hold the same elements, as same compares them, whatever their order
+# and repeats
+def List.same_set(~A: Data, ~same: A -> A -> Bool, +as: List<&2, A>, +bs: List<&2, A>) -> Bool:
+  List.all.if(u => List.within(~A, ~same, bs, as), List.within(~A, ~same, as, bs))
+
+# Reads that move forward
+# -----------------------
+# A read of a state that grows moves forward: what it gives at a state, it
+# gives no less at a state that grows from it. A read that answers on what it
+# holds, and waits (none) for what it lacks, is such a read. Each law of the
+# kind "what a node knows stays" is one.
+
+# that the read f moves forward as the state grows (grows): what f gives at a
+# state, f gives after it (after) at each state that grows from it
+def Read.Forward(
+  -S: Data,
+  -grows: S -> S -> Type,
+  -A: Data,
+  -after: A -> Maybe<&2, A> -> Type,
+  -f: S -> Maybe<&2, A>
+) -> Type:
+  @a: S -> @b: S -> @x: A -> grows(a)(b) -> {f(a) == Some{x}: Maybe<&2, A>} -> after(x)(f(b))
+
+# that the read f stays as the state grows: what it gives, it gives for good
+def Read.Stable(-S: Data, -grows: S -> S -> Type, -A: Data, -f: S -> Maybe<&2, A>) -> Type:
+  Read.Forward(S, grows, A, x => m => {m == Some{x}: Maybe<&2, A>}, f)

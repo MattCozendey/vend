@@ -1,7 +1,7 @@
 import Base
-import ../../shared/replica.bend as Replicas
 import ../../shared/shared/formats.bend as Formats
 import ../../shared/shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/text.bend as Texts
 import ../core/spec.bend as Core
 import ../shared/requests.bend as Requests
@@ -10,17 +10,17 @@ import ../shared/shared/uris.bend as Uris
 
 # A Vend Node over IO (README): the core, carried to writers and to other
 # nodes. Every front offers exactly these operations. A change is a request,
-# sent again unchanged until it is answered: the core counts it once
-# (Core.Node.ask_once), so any front may retry it, to any node. A connection is
-# one writer's, so each read shows that writer's own pending changes
-# (Core.Node.read).
+# sent again unchanged until it is answered: a ledger holds an entry once
+# (Ledgers.Laws.AddTwice), so any front may retry it, to any node. A
+# connection is one writer's, so each read shows that writer's own pending
+# changes (Core.Node.read).
 
 # Values that callers make
 # ------------------------
 
-# where new content comes from: bytes, which the node keeps and names by
-# their root (Core.Node.keep, Core.Content.of); content that it holds; or a
-# resource that the node reads first
+# where new content comes from: bytes, which the node keeps as data and names
+# by the root of their rope; content that it holds; or a resource that the
+# node reads first
 type Source is Data:
   Source.Bytes{bytes: Texts.Bytes()}
   Source.Content{content: Requests.Content}
@@ -35,9 +35,13 @@ type Reply<a, -A: Kind(a)> is Kind(a):
   Reply.TimedOut{}
   Reply.Unreachable{}
 
+# how far a reader of notices is: a small token, not what the node holds
+law Cursor:
+  Data
+
 # the notices that a poll returns, and what to pass as since next time
 type Changes is Data:
-  Changes{notices: List<&2, Core.Notice>, since: Replicas.Node<Requests.Ask>}
+  Changes{notices: List<&2, Core.Notice>, since: Cursor}
 
 # what a running node reports
 law Status:
@@ -100,10 +104,10 @@ law Client:
 law Subscription:
   Type
 
-# runs the node named n on the store at store, until a stop. The node keeps
-# its secret seed there (Core.Node.empty). A node that starts a new store asks
-# for Core.Ask.Start with itself as the first owner, and the first key of its
-# chain in the store (Core.Owner)
+# runs the node named n on the data address at store, until a stop. The node
+# keeps its secret seed there. A node that starts a new Vend Store asks for
+# Requests.Ask.Start with itself as the first owner, and the first key of its
+# chain in the store
 law VendNode.try_start_or_resume:
   for n: String
   for store: Uris.Uri
@@ -146,7 +150,7 @@ law Client.try_get_content:
   IO(Client & Reply<&2, Maybe<&2, Texts.Bytes()>>)
 
 # what changed in the resource n from the point a to the point b, as the
-# writer reads them (Core.Node.diff)
+# writer reads them
 law Client.try_get_diff:
   for c: Client
   for n: Resources.Name
@@ -154,13 +158,13 @@ law Client.try_get_diff:
   for b: Core.Point
   IO(Client & Reply<&2, List<&2, Formats.Change>>)
 
-# the changes elsewhere that touch what the branch b uses (Core.Node.affects)
+# the changes elsewhere that touch what the branch b uses
 law Client.try_get_affects:
   for c: Client
   for b: Core.Branch
   IO(Client & Reply<&2, List<&2, Core.Touch>>)
 
-# what the changes up to the point p touch elsewhere (Core.Node.impact)
+# what the changes up to the point p touch elsewhere
 law Client.try_get_impact:
   for c: Client
   for p: Core.Point
@@ -176,7 +180,7 @@ law Client.try_get_conflict:
 law Client.try_get_changes:
   for c: Client
   for t: Core.Topic
-  for since: Maybe<&2, Replicas.Node<Requests.Ask>>
+  for since: Maybe<&2, Cursor>
   IO(Client & Reply<&2, Changes>)
 
 # the request r: writes the content x to the resource n on the branch b, based
@@ -190,9 +194,9 @@ law Client.try_write:
   for x: Source
   IO(Client & Reply<&2, Core.Answer>)
 
-# the request r: makes the branch b at the point p (Core.Change.Branch) or,
-# when b exists, records a new version of b that equals p, with its submodules
-# (Core.Change.Move)
+# the request r: makes the branch b at the point p (Requests.Change.Branch)
+# or, when b exists, records a new version of b that equals p, with its
+# submodules (Requests.Change.Move)
 law Client.try_set_branch:
   for c: Client
   for r: String
@@ -246,28 +250,28 @@ law Client.try_unmount:
   IO(Client & Reply<&2, Unmount>)
 
 # the request r: makes the group g of the store the owner group of its branch
-# l (none: of the store itself), with the nodes inside it now (Core.Node.own).
-# When g changes later, the node asks for its nodes again (Core.Node.adopt)
+# l (none: of the store itself), with the nodes inside it now. When g changes
+# later, the node asks for its nodes again
 law Client.try_set_owner:
   for c: Client
   for r: String
-  for store: Ledgers.Id
+  for store: Hashes.Hash
   for l: Maybe<&2, String>
   for g: String
   IO(Client & Reply<&2, Core.Answer>)
 
 # the request r: makes the group g of the store with the members ms or, when g
-# exists, replaces its members (Core.Change.Group)
+# exists, replaces its members (Requests.Change.Group)
 law Client.try_set_group:
   for c: Client
   for r: String
-  for store: Ledgers.Id
+  for store: Hashes.Hash
   for g: String
   for ms: List<&2, Requests.Member>
   IO(Client & Reply<&2, Core.Answer>)
 
 # swaps entries with the node at n: each sends what the other lacks
-# (Core.Node.missing) and keeps what it checks (Core.Node.take)
+# (Ledgers.Laws.Missing) and keeps what checks (Replicas.Laws.Takes)
 law Client.try_sync:
   for c: Client
   for n: Uris.Uri
@@ -284,7 +288,7 @@ law Client.try_stop:
 law Client.try_subscribe:
   for c: Client
   for t: Core.Topic
-  for since: Maybe<&2, Replicas.Node<Requests.Ask>>
+  for since: Maybe<&2, Cursor>
   IO(Client & Reply<&1, Subscription>)
 
 # the next notice of the stream x
