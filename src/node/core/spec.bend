@@ -3066,6 +3066,61 @@ def Own.due(
     )
   )
 
+# the lines whose newest tips Own.due reads for the line c: c, and the root
+# line of its store once c has a tip (Replicas.Kernel.Reads)
+def Own.deps(~d: Led(), ~kern: Kern(d), +l: L(d), +c: Ledgers.Line) -> List<&2, Ledgers.Line>:
+  Shared.Bool.when(
+    List<&2, Ledgers.Line>,
+    Maybe.is_some(&2, Replicas.Tip, Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c)),
+    u => [c, Replicas.Root.line(Ledgers.Line.root(c))],
+    u => [c]
+  )
+
+# the lines of the branches bs
+def Branches.lines(bs: List<&2, Branch>) -> List<&2, Ledgers.Line>:
+  match bs:
+    case Nil{}:
+      []
+    case Con{b, rest}:
+      Branch.line(b) <> Branches.lines(rest)
+
+# the lines that read the line m (Own.deps): m, and when it is the root line of
+# a store, the line of each branch of the store (none: l lacks a node of its
+# log)
+def Own.watch.one(~d: Led(), ~kern: Kern(d), +l: L(d), m: Ledgers.Line) -> Maybe<&2, List<&2, Ledgers.Line>>:
+  match m:
+    case Ledgers.Line{+st, None{}}:
+      Maybe.map(
+        &2,
+        List<&2, Branch>,
+        List<&2, Ledgers.Line>,
+        bs => Ledgers.Line{st, None{}} <> Branches.lines(bs),
+        Store.branches(~d, l, st, Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, st))
+      )
+    case Ledgers.Line{st, Some{b}}:
+      Some{[Ledgers.Line{st, Some{b}}]}
+
+# the lines that read a line among ms (Replicas.Kernel.Covers), each once or
+# more (none: l lacks a node of a log)
+def Own.watch(~d: Led(), ~kern: Kern(d), +l: L(d), ms: List<&2, Ledgers.Line>) -> Maybe<&2, List<&2, Ledgers.Line>>:
+  match ms:
+    case Nil{}:
+      Some{[]}
+    case Con{m, rest}:
+      Maybe.bind(
+        &2,
+        List<&2, Ledgers.Line>,
+        List<&2, Ledgers.Line>,
+        Own.watch.one(~d, ~kern, l, m),
+        a => Maybe.map(
+          &2,
+          List<&2, Ledgers.Line>,
+          List<&2, Ledgers.Line>,
+          r => List.append(&2, Ledgers.Line, a, r),
+          Own.watch(~d, ~kern, l, rest)
+        )
+      )
+
 # The kernel of Vend
 # ------------------
 
@@ -3092,6 +3147,24 @@ def Kernel.Rules(-d: Led(), -kern: Kern(d)) -> Type:
 # the kernel of Vend: a kernel, and the proof that it obeys the rules
 def Kernel(-d: Led()) -> Type:
   &kern: Kern(d) -> Kernel.Rules(d, kern)
+
+# what Vend asks by itself for a line reads only the tips that Own.deps names
+law Own.reads:
+  for ~d: Led()
+  for ~kern: Kern(d)
+  for ~rules: Kernel.Rules(d, kern)
+  Replicas.Kernel.Reads(Requests.Ask.machine(), d, kern, l => c => Own.deps(~d, ~kern, l, c))
+
+# Own.watch names each line that reads a line that moved
+law Own.covers:
+  for ~d: Led()
+  for ~kern: Kern(d)
+  Replicas.Kernel.Covers(
+    Requests.Ask.machine(),
+    d,
+    l => c => Own.deps(~d, ~kern, l, c),
+    l => ms => Own.watch(~d, ~kern, l, ms)
+  )
 
 # the acts of the rules of Vend stay as the ledger grows: each rule reads the
 # ledger and the tip of its line, and waits for what it lacks
