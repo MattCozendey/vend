@@ -25229,7 +25229,22 @@ def Pieces.keys_after_trans(+k1: List<&2, U32>, +k2: List<&2, U32>, ys: List<&2,
 def Pieces.after_keys(+k: List<&2, U32>, +v: List<&2, U32>, ys: List<&2, Piece>) -> {
   Pieces.after_all(Piece.Bind{k, v}, ys) == True{}: Bool
 } -> {Pieces.keys_after(k, ys) == True{}: Bool}:
-  ?TODO
+  match ys:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{+k2, +v2}, +rest}:
+      +h => Shared.Bool.and_both(
+        Key.is_lt(k, k2),
+        Pieces.keys_after(k, rest)
+      )(Shared.Bool.and_true_left(Key.is_lt(k, k2), Pieces.after_all(Piece.Bind{k, v}, rest))(h))(
+        Pieces.after_keys(k, v, rest)(Shared.Bool.and_true_right(Key.is_lt(k, k2), Pieces.after_all(Piece.Bind{k, v}, rest))(h))
+      )
+    case Con{Piece.Sub{+h2, +u, +lo, +hi}, +rest}:
+      h => Pieces.after_keys(
+        k,
+        v,
+        rest
+      )(Shared.Bool.and_true_right(Piece.before(Piece.Bind{k, v}, Piece.Sub{h2, u, lo, hi}), Pieces.after_all(Piece.Bind{k, v}, rest))(h))
 
 # binding keys below those of y then ys are below those of ys
 def Pieces.binds_below_tail(xs: List<&2, Piece>, +y: Piece, +ys: List<&2, Piece>) -> {Pieces.binds_below(xs, y <> ys) == True{}: Bool} -> {
@@ -25239,7 +25254,15 @@ def Pieces.binds_below_tail(xs: List<&2, Piece>, +y: Piece, +ys: List<&2, Piece>
 
 # binding keys are below those of no piece
 def Pieces.binds_below_nil(xs: List<&2, Piece>) -> {Pieces.binds_below(xs, []) == True{}: Bool}:
-  ?TODO
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      match head:
+        case Piece.Bind{key, value}:
+          Pieces.binds_below_nil(tail)
+        case Piece.Sub{hash, up, lo, hi}:
+          Pieces.binds_below_nil(tail)
 
 # pieces whose binding keys are below k bind no k
 def Pieces.below_not_key(xs: List<&2, Piece>, +k: List<&2, U32>, +v: List<&2, U32>, +ys: List<&2, Piece>) -> {
@@ -25326,10 +25349,16 @@ def Runs.sorted_all(ps: List<&2, Runs>) -> Bool:
       Bool.and(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Runs.sorted_all(rest))
 
 # a or b, then c or d, shuffled
-def Bool.or_shuffle(a: Bool, b: Bool, -c: Bool, -d: Bool) -> {
+def Bool.or_shuffle(a: Bool, b: Bool, c: Bool, -d: Bool) -> {
   Bool.or(Bool.or(a, b), Bool.or(c, d)) == Bool.or(Bool.or(a, c), Bool.or(b, d)): Bool
 }:
-  ?TODO
+  match a b:
+    case True{} y:
+      {==}
+    case False{} True{}:
+      Equal.sym(Bool, Bool.or(c, True{}), True{}, Shared.Bool.or_true_right(c))
+    case False{} False{}:
+      {==}
 
 # a or b or c or d, regrouped
 def Bool.or_assoc4(a: Bool, b: Bool, c: Bool, -d: Bool) -> {Bool.or(a, Bool.or(b, Bool.or(c, d))) == Bool.or(Bool.or(a, Bool.or(b, c)), d): Bool}:
@@ -25588,7 +25617,40 @@ law Mst.differs:
   Laws.Diff(S, Mst.ops(~S, ~fetch))
 
 def Mst.differs(ty, fetch):
-  ?TODO
+  +s => +a => +b => +ks => e => +k => Equal.trans(
+    Bool,
+    List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, k),
+    Bool.or(Mst.differ(Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(a), k), Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(b), k)), False{}),
+    Mst.differ(Look.value(Mst.look(~ty, ~fetch, s, a, k)), Look.value(Mst.look(~ty, ~fetch, s, b, k))),
+    Mst.diff_differ(
+      ~ty,
+      ~fetch,
+      Mst.depth(),
+      s,
+      [Runs{Mst.root(a), Mst.root(b)}],
+      ks,
+      k
+    )(e)(
+      Shared.Bool.and_both(Bool.and(Pieces.sorted(Mst.root(a)), Pieces.sorted(Mst.root(b))), True{})(
+        Shared.Bool.and_both(Pieces.sorted(Mst.root(a)), Pieces.sorted(Mst.root(b)))(Mst.root_sorted(a))(Mst.root_sorted(b))
+      )({==})
+    ),
+    Equal.trans(
+      Bool,
+      Bool.or(Mst.differ(Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(a), k), Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(b), k)), False{}),
+      Mst.differ(Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(a), k), Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(b), k)),
+      Mst.differ(Look.value(Mst.look(~ty, ~fetch, s, a, k)), Look.value(Mst.look(~ty, ~fetch, s, b, k))),
+      Equal.sym(Bool, Mst.differ(Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(a), k), Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(b), k)), Bool.or(Mst.differ(Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(a), k), Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(b), k)), False{}), Shared.Bool.or_false(Mst.differ(Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(a), k), Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(b), k)))),
+      Equal.trans(
+        Bool,
+        Mst.differ(Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(a), k), Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(b), k)),
+        Mst.differ(Look.value(Mst.look(~ty, ~fetch, s, a, k)), Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(b), k)),
+        Mst.differ(Look.value(Mst.look(~ty, ~fetch, s, a, k)), Look.value(Mst.look(~ty, ~fetch, s, b, k))),
+        Equal.cong(Maybe<&2, List<&2, U32>>, Bool, z => Mst.differ(z, Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(b), k)), Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(a), k), Look.value(Mst.look(~ty, ~fetch, s, a, k)), Mst.value_root(~ty, ~fetch, s, a, k)),
+        Equal.cong(Maybe<&2, List<&2, U32>>, Bool, z => Mst.differ(Look.value(Mst.look(~ty, ~fetch, s, a, k)), z), Pieces.value(~ty, ~fetch, Mst.depth(), s, Mst.root(b), k), Look.value(Mst.look(~ty, ~fetch, s, b, k)), Mst.value_root(~ty, ~fetch, s, b, k))
+      )
+    )
+  )
 
 # a whole tree answers every read, write, listing and difference
 law Mst.whole:
