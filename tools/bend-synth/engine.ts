@@ -2841,16 +2841,30 @@ const reportOf = (s: Session, t: Task, final: boolean): Report => {
   }
   return { status: "running", text: "# starting" };
 };
-// one slice of a job: load (warm when unchanged), continue its session, report
+type Done = (report: Report, fin: boolean, s?: Session) => void;
+// one slice of a job: load (warm when unchanged), continue its session, report. The search stops itself
+// at the slice's end and at the memory share; outside it (loading, starting, reporting) the memory share
+// stops the slice, which ends open and not done: the worker sheds its caches, and the job goes on
 const runSlice = async (t: Task): Promise<void> => {
-  const t0 = performance.now(), until = t0 + Math.max(200, t.sliceMs);
+  const t0 = performance.now();
   jobDeadline = t0 + Math.max(t.sliceMs, t.budgetMs ?? 0);
-  const done = (report: Report, fin: boolean, s?: Session) => {
-    send({ t: "slice", id: t.id, report: { ...report, ms: Math.round(performance.now() - (s?.t0 ?? t0)) }, done: fin, spentMs: Math.round(performance.now() - t0), deps: BK?.hashes });
+  let deps: Record<string, string> | undefined;
+  const done: Done = (report, fin, s) => {
+    send({ t: "slice", id: t.id, report: { ...report, ms: Math.round(performance.now() - (s?.t0 ?? t0)) }, done: fin, spentMs: Math.round(performance.now() - t0), deps });
     if (fin) dropSession(t.id);
   };
+  try { await slice(t, t0 + Math.max(200, t.sliceMs), done, (L) => { deps = L.hashes; }); } catch (e) {
+    if (e !== TIMEOUT) throw e;
+    deadline = Infinity;
+    const why = overMem ? "the worker's memory share (" + Math.round(memCap / 1048576) + " MiB; BEND_SYNTH_MEM_MB raises it)" : "time";
+    done({ status: "open", text: HONEST + "\n# " + t.target + ": OPEN: this slice was stopped by " + why + " after " + secs(performance.now() - t0)
+      + ", outside the search (loading the book, starting the search, or reporting). The worker drops its books and sessions; the job starts again in its next slice" }, false);
+  }
+};
+const slice = async (t: Task, until: number, done: Done, loaded: (L: Book) => void): Promise<void> => {
   const L = await loadBook(t.file);
   if (typeof L === "string") return done({ status: "error", text: HONEST + "\n# " + L }, true);
+  loaded(L);
   BK = L;
   let s = sessions.get(t.id);
   if (s && (s.stamp !== L.stamp || s.entry !== L.entry)) { dropSession(t.id); s = undefined; }
@@ -2974,6 +2988,15 @@ const runBench = async (t: Task): Promise<void> => {
 
 // ---- the worker process ----
 let rootSend: (m: FromWorker) => void = () => {};
+// past the memory share: every book, session and memo goes, the current ones too (BK and S held the last
+// job's book alive, so the next book loaded over the share again, and every job after it stopped)
+const shed = () => {
+  books.clear(); sessions.clear(); smemo.clear(); lawTerms.clear(); openNames.clear();
+  examples = []; nfObj = new WeakMap(); patMemo = new WeakMap(); nfHeld = 0;
+  BK = undefined as unknown as Book; S = undefined as unknown as Search;
+  Bun.gc(true);
+  overMem = false;
+};
 export const workerMain = async (bendDir: string) => {
   rootSend = send = (m) => { process.send?.(m); };
   try { await loadBend(bendDir); } catch (e) { send({ t: "fatal", message: String((e as Error)?.message ?? e) }); setTimeout(() => process.exit(1), 50); return; }
@@ -2994,7 +3017,7 @@ export const workerMain = async (bendDir: string) => {
         finally {
           deadline = Infinity; BR.f = Infinity;
           for (const k of [...installed.keys()]) uninstall(k);
-          if (overMem) { books.clear(); sessions.clear(); smemo.clear(); Bun.gc(true); overMem = false; }
+          if (overMem) shed();
         }
       }
     } finally { busy = false; }
