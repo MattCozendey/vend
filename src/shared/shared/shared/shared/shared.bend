@@ -496,6 +496,22 @@ def Bool.when(-A: Type, b: Bool, k: Unit -> A, e: Unit -> A) -> A:
     case True{}:
       k(Unit{})
 
+# what holds of each choice, given the test, holds of the choice that runs
+def Bool.when_cases(
+  -A: Type,
+  -P: A -> Type,
+  b: Bool,
+  -k: Unit -> A,
+  -e: Unit -> A,
+  pk: {b == True{}: Bool} -> P(k(Unit{})),
+  pe: {b == False{}: Bool} -> P(e(Unit{}))
+) -> P(Bool.when(A, b, k, e)):
+  match b:
+    case True{}:
+      pk({==})
+    case False{}:
+      pe({==})
+
 # both sides of a true "and" are true
 def Bool.and_true_left(
   a: Bool,
@@ -1794,6 +1810,14 @@ def Nat.le_nlt(
       h => Nat.le_nlt(p, q)(h)
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# a sum is at least its first term
+def Nat.le_add_first(a: Nat, b: Nat) -> {Nat.is_le(a, Nat.add(a, b)) == True{}: Bool}:
+  match a:
+    case 0n:
+      Nat.le_zero(b)
+    case 1n+p:
+      Nat.le_add_first(p, b)
+
 # a number is at most its sum with another
 def Nat.le_add(y: Nat, +m: Nat) -> {Nat.is_le(m, Nat.add(y, m)) == True{}: Bool}:
   match y:
@@ -1970,6 +1994,35 @@ def List.append_assoc(
         zs
       ): {x <> List.append(&2, A, List.append(&2, A, r, ys), zs) == x <> _: List<&2, A>}
       {==}
+
+# the lists of two lists of lists, one after the other, are the lists of each
+def List.concat_append(
+  -A: Data,
+  xss: List<&2, List<&2, A>>,
+  +yss: List<&2, List<&2, A>>
+) -> {
+  List.concat(&2, A, List.append(&2, List<&2, A>, xss, yss))
+    == List.append(&2, A, List.concat(&2, A, xss), List.concat(&2, A, yss)): List<&2, A>
+}:
+  match xss:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      %Equal.sym(
+        List<&2, A>,
+        List.concat(&2, A, List.append(&2, List<&2, A>, r, yss)),
+        List.append(&2, A, List.concat(&2, A, r), List.concat(&2, A, yss)),
+        List.concat_append(A, r, yss)
+      ): {
+        List.append(&2, A, x, _)
+          == List.append(&2, A, List.append(&2, A, x, List.concat(&2, A, r)), List.concat(&2, A, yss)): List<&2, A>
+      }
+      Equal.sym(
+        List<&2, A>,
+        List.append(&2, A, List.append(&2, A, x, List.concat(&2, A, r)), List.concat(&2, A, yss)),
+        List.append(&2, A, x, List.append(&2, A, List.concat(&2, A, r), List.concat(&2, A, yss))),
+        List.append_assoc(A, x, List.concat(&2, A, r), List.concat(&2, A, yss))
+      )
 
 # Bool algebra
 # ------------
@@ -2732,3 +2785,250 @@ def Read.Forward(
 # that the read f stays as the state grows: what it gives, it gives for good
 def Read.Stable(-S: Data, -grows: S -> S -> Type, -A: Data, -f: S -> Maybe<&2, A>) -> Type:
   Read.Forward(S, grows, A, x => m => {m == Some{x}: Maybe<&2, A>}, f)
+
+# Bytes
+# -----
+# A byte is a U32 with no bit above the eighth set.
+
+# no bit of w is set
+def Word.is_zero(n: Nat, w: Word(n)) -> Bool:
+  match n:
+    case 0n:
+      True{}
+    case 1n+p:
+      match w:
+        case WCon{b, t}:
+          List.all.if(u => Word.is_zero(p, t), Bool.not(b))
+
+# every code of b is a byte: no bit above the eighth is set
+def Bytes.is_bytes(b: List<&2, U32>) -> Bool:
+  match b:
+    case Nil{}:
+      True{}
+    case Con{U32{WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, h}}}}}}}}}, r}:
+      List.all.if(u => Bytes.is_bytes(r), Word.is_zero(24n, h))
+
+# the byte of the bits b0 (the lowest) to b7
+def Byte.of(b0: Bool, b1: Bool, b2: Bool, b3: Bool, b4: Bool, b5: Bool, b6: Bool, b7: Bool) -> U32:
+  U32{
+    WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, Word.zero(24n)}}}}}}}}
+  }
+
+# the byte of the low eight bits of x
+def Byte.low(x: U32) -> U32:
+  match x:
+    case U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, h}}}}}}}}}:
+      Byte.of(b0, b1, b2, b3, b4, b5, b6, b7)
+
+# a word with no bit set is the zero word
+def Word.is_zero_eq(n: Nat, w: Word(n)) -> {Word.is_zero(n, w) == True{}: Bool} -> {w == Word.zero(n): Word(n)}:
+  match n:
+    case 0n:
+      match w:
+        case WNil{}:
+          h => {==}
+    case 1n+p:
+      match w:
+        case WCon{False{}, t}:
+          h =>
+            %Equal.sym(Word(p), t, Word.zero(p), Word.is_zero_eq(p, t)(h)): {
+              WCon{False{}, _} == WCon{False{}, Word.zero(p)}: Word(1n+p)
+            }
+            {==}
+        case WCon{True{}, t}:
+          h => Empty.absurd({WCon{True{}, t} == Word.zero(1n+p): Word(1n+p)}, Bool.false_ne_true(h))
+
+# a byte keeps its low eight bits
+def Byte.low_eq(x: U32) -> {Bytes.is_bytes([x]) == True{}: Bool} -> {Byte.low(x) == x: U32}:
+  match x:
+    case U32{WCon{+b0, WCon{+b1, WCon{+b2, WCon{+b3, WCon{+b4, WCon{+b5, WCon{+b6, WCon{+b7, +h}}}}}}}}}:
+      e =>
+        %Equal.sym(
+          Word(24n),
+          h,
+          Word.zero(24n),
+          Word.is_zero_eq(24n, h)(List.all.if_hit(Word.is_zero(24n, h), u => True{})(e))
+        ): {
+          Byte.of(b0, b1, b2, b3, b4, b5, b6, b7)
+            == U32{WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, _}}}}}}}}}: U32
+        }
+        {==}
+
+# a sum of three is the same either way it is grouped
+def Nat.add_assoc(a: Nat, b: Nat, c: Nat) -> {Nat.add(Nat.add(a, b), c) == Nat.add(a, Nat.add(b, c)): Nat}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      %Equal.sym(Nat, Nat.add(Nat.add(p, b), c), Nat.add(p, Nat.add(b, c)), Nat.add_assoc(p, b, c)): {
+        1n+_ == 1n+Nat.add(p, Nat.add(b, c)): Nat
+      }
+      {==}
+
+# taking nothing away leaves a number as it is
+def Nat.sub_zero(a: Nat) -> {Nat.sub(a, 0n) == a: Nat}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
+
+# dropping one, then p, is dropping 1 + p
+def List.drop_one_drop(-A: Data, xs: List<&2, A>, p: Nat) -> {
+  List.drop(&2, A, List.drop(&2, A, xs, 1n), p) == List.drop(&2, A, xs, 1n+p): List<&2, A>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      %Equal.sym(List<&2, A>, List.drop(&2, A, t, 0n), t, List.drop_zero(&2, A, t)): {
+        List.drop(&2, A, _, p) == List.drop(&2, A, t, p): List<&2, A>
+      }
+      {==}
+
+# dropping at least all of a from a then b is dropping the rest from b
+def List.drop_append_le(
+  -A: Data,
+  a: List<&2, A>,
+  b: List<&2, A>,
+  n: Nat
+) -> {Nat.is_le(List.length(&2, A, a), n) == True{}: Bool} -> {
+  List.drop(&2, A, List.append(&2, A, a, b), n)
+    == List.drop(&2, A, b, Nat.sub(n, List.length(&2, A, a))): List<&2, A>
+}:
+  match a n:
+    case Nil{} m:
+      h =>
+        %Equal.sym(Nat, Nat.sub(m, 0n), m, Nat.sub_zero(m)): {
+          List.drop(&2, A, b, m) == List.drop(&2, A, b, _): List<&2, A>
+        }
+        {==}
+    case Con{x, r} 0n:
+      h => Empty.absurd(
+        {List.drop(&2, A, x <> List.append(&2, A, r, b), 0n) == List.drop(&2, A, b, 0n): List<&2, A>},
+        Bool.false_ne_true(h)
+      )
+    case Con{x, r} 1n+p:
+      h => List.drop_append_le(A, r, b, p)(h)
+
+# a choice of m, else nothing, is m
+def Maybe.or_none(-A: Data, m: Maybe<&2, A>) -> {Maybe.or(&2, A, m, None{}) == m: Maybe<&2, A>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{x}:
+      {==}
+
+# of two choices of which one at most is some, either may come first
+def Maybe.or_comm(-A: Data, a: Maybe<&2, A>, b: Maybe<&2, A>) -> {
+  Bool.or(Maybe.is_none(&2, A, a), Maybe.is_none(&2, A, b)) == True{}: Bool
+} -> {Maybe.or(&2, A, a, b) == Maybe.or(&2, A, b, a): Maybe<&2, A>}:
+  match a b:
+    case None{} y:
+      h => Equal.sym(Maybe<&2, A>, Maybe.or(&2, A, y, None{}), y, Maybe.or_none(A, y))
+    case Some{x} None{}:
+      h => {==}
+    case Some{x} Some{y}:
+      h => Empty.absurd({Some{x} == Some{y}: Maybe<&2, A>}, Bool.false_ne_true(h))
+
+# an "or" is the same either way round
+def Bool.or_comm(a: Bool, b: Bool) -> {Bool.or(a, b) == Bool.or(b, a): Bool}:
+  match a b:
+    case False{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case True{} True{}:
+      {==}
+
+# Cuts
+# ----
+
+# x in front of the pieces gs: a new piece if x ends one (e), else the head
+# of the first
+def List.cut.at(-A: Data, e: Bool, x: A, gs: List<&2, List<&2, A>>) -> List<&2, List<&2, A>>:
+  match e gs:
+    case True{} gs:
+      [x] <> gs
+    case False{} Nil{}:
+      [[x]]
+    case False{} Con{g, t}:
+      (x <> g) <> t
+
+# the pieces of x in front of gs, one after the other, are x in front of
+# those of gs
+def List.cut.at_flat(
+  -A: Data,
+  e: Bool,
+  x: A,
+  gs: List<&2, List<&2, A>>
+) -> {List.concat(&2, A, List.cut.at(A, e, x, gs)) == x <> List.concat(&2, A, gs): List<&2, A>}:
+  match e gs:
+    case True{} g:
+      {==}
+    case False{} Nil{}:
+      {==}
+    case False{} Con{g, t}:
+      {==}
+
+# xs cut after each element where edge holds of the state after it: the state
+# starts at s and each element moves it by step. A cut by content: where a
+# piece ends depends on the elements before the cut, not on where it sits, so
+# an edit moves only the cuts near it. A cut by elements alone has no state
+# (Unit)
+def List.cut.with(
+  ~A: Data,
+  ~S: Data,
+  ~step: S -> A -> S,
+  ~edge: S -> A -> Bool,
+  xs: List<&2, A>,
+  +s: S
+) -> List<&2, List<&2, A>>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{+x, rest}:
+      +s2 = step(s)(x)
+      List.cut.at(A, edge(s2)(x), x, List.cut.with(~A, ~S, ~step, ~edge, rest, s2))
+
+# the pieces of a cut by state, one after the other, are what was cut
+law List.cut_with_flat:
+  for ~A: Data
+  for ~S: Data
+  for ~step: S -> A -> S
+  for ~edge: S -> A -> Bool
+  for xs: List<&2, A>
+  for +s: S
+  {List.concat(&2, A, List.cut.with(~A, ~S, ~step, ~edge, xs, s)) == xs: List<&2, A>}
+
+def List.cut_with_flat(ty, sty, step, edge, xs, s):
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +rest}:
+      +s2 = step(s)(x)
+      %List.cut_with_flat(~ty, ~sty, ~step, ~edge, rest, s2): {
+        List.concat(&2, ty, List.cut.at(ty, edge(s2)(x), x, List.cut.with(~ty, ~sty, ~step, ~edge, rest, s2)))
+          == x <> _: List<&2, ty>
+      }
+      List.cut.at_flat(ty, edge(s2)(x), x, List.cut.with(~ty, ~sty, ~step, ~edge, rest, s2))
+
+# Edges by content
+# ----------------
+# A cut by content ends a piece after an element whose words say so. The
+# words mix into one, and about one element in 32 is an edge. A salt gives
+# each use its own edges: the levels of a tree cut apart.
+
+# the words ws, mixed into x
+def Words.mix(ws: List<&2, U32>, x: U32) -> U32:
+  match ws:
+    case Nil{}:
+      x
+    case Con{w, r}:
+      Words.mix(r, U32.mul(U32.xor(x, w), 2654435761))
+
+# the words ws end a piece, under the salt: the top 5 bits of their mix are 0
+def Words.edge(salt: U32, ws: List<&2, U32>) -> Bool:
+  U32.is_eq(U32.and(Words.mix(ws, salt), 4160749568), 0)

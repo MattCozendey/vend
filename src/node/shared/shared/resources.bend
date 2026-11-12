@@ -185,15 +185,6 @@ def Path.step(+p: String, +done: List<&2, String>) -> List<&2, String>:
     )
   )
 
-# the parts of a path after the parts ps, from the parts done (the last
-# first)
-def Path.walk(ps: List<&2, String>, done: List<&2, String>) -> List<&2, String>:
-  match ps:
-    case Nil{}:
-      List.reverse(&2, String, done)
-    case Con{p, r}:
-      Path.walk(r, Path.step(p, done))
-
 # the parts of the path t, after the parts fs of the place when t does not
 # start with '/'
 def Path.parts(fs: List<&2, String>, +t: String) -> List<&2, String>:
@@ -211,7 +202,7 @@ def Name.at(+n: Name, t: String) -> Name:
   Name{
     String.append(
       Name.space(n),
-      String.append(":", String.join(Path.walk(Path.parts(fs, t), []), "/"))
+      String.append(":", String.join(List.reverse(&2, String, List.foldl(~&2, ~String, ~List<&2, String>, ~(d => p => Path.step(p, d)), Path.parts(fs, t), [])), "/"))
     )
   }
 

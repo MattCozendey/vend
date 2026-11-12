@@ -2,6 +2,7 @@ import Base
 import ./shared/quorum.bend as Quorums
 import ./shared/shared/cell.bend as Cells
 import ./shared/shared/code.bend as Codes
+import ./shared/shared/crit.bend as Crits
 import ./shared/shared/hash.bend as Hashes
 import ./shared/shared/seal.bend as Seals
 import ./shared/shared/shared.bend as Shared
@@ -1162,6 +1163,21 @@ def Kind.Grows(-Q: Data, -k: Ledger.Kind(Q), -a: Kind.L(Q, k), -b: Kind.L(Q, k))
     Kind.get(Q, k)(a)(n) == Some{e}: Maybe<&2, Entry<Q>>
   } -> {Kind.get(Q, k)(b)(n) == Some{e}: Maybe<&2, Entry<Q>>}
 
+# the entries of the ledger a: those that a ledger that holds nothing lacks
+def Kind.entries(~Q: Data, ~k: Ledger.Kind(Q), a: Kind.L(Q, k)) -> List<&2, Entry<Q>>:
+  Kind.missing(Q, k)(a)(Kind.empty(Q, k))
+
+# the ledger b holds each entry that a holds: a check, so a law can use it as
+# often as it needs
+def Kind.grows(~Q: Data, ~c: Codes.Codec(Q), ~k: Ledger.Kind(Q), a: Kind.L(Q, k), +b: Kind.L(Q, k)) -> Bool:
+  Shared.List.holds(
+    ~Entry<Q>,
+    ~Kind.L(Q, k),
+    ~(l => e => Kind.has(~Q, ~c, ~k, l, e)),
+    Kind.entries(~Q, ~k, a),
+    b
+  )
+
 # The laws of a ledger
 # --------------------
 # Each is a proposition about a kind k, when c is the code of changes.
@@ -1481,3 +1497,1049 @@ def Kind.tally(
   voters: List<&2, String>
 ) -> Maybe<&2, Step>:
   Quorums.Quorum.major(~Step, ~Step.is_eq, Kind.cells(~Q, ~k, l, w, voters))
+
+# the law of a ledger that it gives nothing when it holds nothing
+def Laws.get_empty(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledger.Kind(Q),
+  laws: Ledger.Laws(Q, c, k)
+) -> Laws.GetEmpty(Q, k):
+  match laws:
+    case Tuple{ge, rest}:
+      ge
+
+# the law of a ledger that it holds an entry under its name only
+def Laws.get_named(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledger.Kind(Q),
+  laws: Ledger.Laws(Q, c, k)
+) -> Laws.GetNamed(Q, c, k):
+  match laws:
+    case Tuple{ge, Tuple{ga, Tuple{gn, rest}}}:
+      gn
+
+# the law of a ledger that a sync sends the entries that the other lacks
+def Laws.missing(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledger.Kind(Q),
+  laws: Ledger.Laws(Q, c, k)
+) -> Laws.Missing(Q, c, k):
+  match laws:
+    case Tuple{ge, Tuple{ga, Tuple{gn, Tuple{ac, Tuple{at, Tuple{ms, rest}}}}}}:
+      ms
+
+# the law of a ledger that it gives the ballots of a voter at a place
+def Laws.ballots(
+  -Q: Data,
+  -c: Codes.Codec(Q),
+  -k: Ledger.Kind(Q),
+  laws: Ledger.Laws(Q, c, k)
+) -> Laws.Ballots(Q, c, k):
+  match laws:
+    case Tuple{ge, Tuple{ga, Tuple{gn, Tuple{ac, Tuple{at, Tuple{ms, Tuple{bl, rest}}}}}}}:
+      bl
+
+# Entry.same is True for an entry and itself
+def Entry.same_refl(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  e: Entry<Q>
+) -> {Entry.same(~Q, ~c, e, e) == True{}: Bool}:
+  Entry.is_eq_refl(
+    ~Q,
+    ~Codes.Code.is_eq(~Q, ~Codes.Codec.enc(Q, c)),
+    ~Codes.Code.eq_laws(~Q, ~c),
+    e
+  )
+
+# Entry.same is True only for equal entries
+def Entry.same_sound(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  a: Entry<Q>,
+  b: Entry<Q>
+) -> {Entry.same(~Q, ~c, a, b) == True{}: Bool} -> {a == b: Entry<Q>}:
+  Entry.is_eq_sound(
+    ~Q,
+    ~Codes.Code.is_eq(~Q, ~Codes.Codec.enc(Q, c)),
+    ~Codes.Code.eq_laws(~Q, ~c),
+    a,
+    b
+  )
+
+# a ledger that gives an entry under a name holds it
+def Kind.has_of_get(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  gn: Laws.GetNamed(Q, c, k),
+  l: Kind.L(Q, k),
+  n: Name,
+  +e: Entry<Q>,
+  +g: {Kind.get(Q, k)(l)(n) == Some{e}: Maybe<&2, Entry<Q>>}
+) -> {Kind.has(~Q, ~c, ~k, l, e) == True{}: Bool}:
+  %Equal.sym(
+    Name,
+    Entry.name(~Q, ~c, e),
+    n,
+    gn(l)(n)(e)(g)
+  ): {Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.get(Q, k)(l)(_), Some{e}) == True{}: Bool}
+  %Equal.sym(
+    Maybe<&2, Entry<Q>>,
+    Kind.get(Q, k)(l)(n),
+    Some{e},
+    g
+  ): {Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), _, Some{e}) == True{}: Bool}
+  Entry.same_refl(~Q, ~c, e)
+
+# a ledger that holds an entry gives it under its name
+def Kind.get_of_has(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  l: Kind.L(Q, k),
+  n: Name,
+  +e: Entry<Q>,
+  ne: {Entry.name(~Q, ~c, e) == n: Name},
+  h: {Kind.has(~Q, ~c, ~k, l, e) == True{}: Bool}
+) -> {Kind.get(Q, k)(l)(n) == Some{e}: Maybe<&2, Entry<Q>>}:
+  %ne: {Kind.get(Q, k)(l)(_) == Some{e}: Maybe<&2, Entry<Q>>}
+  Shared.Maybe.is_eq_sound(
+    ~Entry<Q>,
+    ~Entry.same(~Q, ~c),
+    x => y => Entry.same_sound(~Q, ~c, x, y),
+    Kind.get(Q, k)(l)(Entry.name(~Q, ~c, e)),
+    Some{e}
+  )(h)
+
+# the entries of a ledger include each entry that it holds
+def Kind.entries_have(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ge: Laws.GetEmpty(Q, k),
+  ms: Laws.Missing(Q, c, k),
+  +l: Kind.L(Q, k),
+  +e: Entry<Q>,
+  h: {Kind.has(~Q, ~c, ~k, l, e) == True{}: Bool}
+) -> {List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, l), e) == True{}: Bool}:
+  Equal.trans(
+    Bool,
+    List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, l), e),
+    Bool.and(
+      Kind.has(~Q, ~c, ~k, l, e),
+      Maybe.is_none(&2, Entry<Q>, Kind.get(Q, k)(Kind.empty(Q, k))(Entry.name(~Q, ~c, e)))
+    ),
+    True{},
+    ms(l)(Kind.empty(Q, k))(e),
+    Shared.Bool.and_both(
+      Kind.has(~Q, ~c, ~k, l, e),
+      Maybe.is_none(&2, Entry<Q>, Kind.get(Q, k)(Kind.empty(Q, k))(Entry.name(~Q, ~c, e)))
+    )(h)(
+      Equal.cong(
+        Maybe<&2, Entry<Q>>,
+        Bool,
+        m => Maybe.is_none(&2, Entry<Q>, m),
+        Kind.get(Q, k)(Kind.empty(Q, k))(Entry.name(~Q, ~c, e)),
+        None{},
+        ge(Entry.name(~Q, ~c, e))
+      )
+    )
+  )
+
+# Kind.holds_member at the first entry x, by whether it is m (s)
+def Kind.holds_member.at(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  s: Bool,
+  +x: Entry<Q>,
+  r: List<&2, Entry<Q>>,
+  +b: Kind.L(Q, k),
+  +m: Entry<Q>,
+  es: {Entry.same(~Q, ~c, x, m) == s: Bool},
+  hx: {Kind.has(~Q, ~c, ~k, b, x) == True{}: Bool},
+  hr: {
+    Shared.List.holds(
+      ~Entry<Q>,
+      ~Kind.L(Q, k),
+      ~(l => e => Kind.has(~Q, ~c, ~k, l, e)),
+      r,
+      b
+    )
+      == True{}: Bool
+  },
+  kr: {
+    List.any.if(u => List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), r, m), s) == True{}: Bool
+  },
+  ih: {
+    Shared.List.holds(
+      ~Entry<Q>,
+      ~Kind.L(Q, k),
+      ~(l => e => Kind.has(~Q, ~c, ~k, l, e)),
+      r,
+      b
+    )
+      == True{}: Bool
+  } -> {
+    List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), r, m) == True{}: Bool
+  } -> {Kind.has(~Q, ~c, ~k, b, m) == True{}: Bool}
+) -> {Kind.has(~Q, ~c, ~k, b, m) == True{}: Bool}:
+  match s:
+    case True{}:
+      %Entry.same_sound(~Q, ~c, x, m)(es): {Kind.has(~Q, ~c, ~k, b, _) == True{}: Bool}
+      hx
+    case False{}:
+      ih(hr)(kr)
+
+# a ledger holds each entry that the check lists: it holds each member of a list that it holds
+def Kind.holds_member(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  xs: List<&2, Entry<Q>>,
+  +b: Kind.L(Q, k),
+  +m: Entry<Q>
+) -> {
+  Shared.List.holds(
+    ~Entry<Q>,
+    ~Kind.L(Q, k),
+    ~(l => e => Kind.has(~Q, ~c, ~k, l, e)),
+    xs,
+    b
+  )
+    == True{}: Bool
+} -> {
+  List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), xs, m) == True{}: Bool
+} -> {Kind.has(~Q, ~c, ~k, b, m) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      h => kc =>
+        Empty.absurd({Kind.has(~Q, ~c, ~k, b, m) == True{}: Bool}, Shared.Bool.false_ne_true(kc))
+    case Con{+x, +r}:
+      +h => kc =>
+        Kind.holds_member.at(
+          ~Q,
+          ~c,
+          ~k,
+          Entry.same(~Q, ~c, x, m),
+          x,
+          r,
+          b,
+          m,
+          {==},
+          Shared.List.all.if_hit(
+            Kind.has(~Q, ~c, ~k, b, x),
+            u => Shared.List.holds(
+              ~Entry<Q>,
+              ~Kind.L(Q, k),
+              ~(l => e => Kind.has(~Q, ~c, ~k, l, e)),
+              r,
+              b
+            )
+          )(h),
+          Shared.List.all.if_rest(
+            Kind.has(~Q, ~c, ~k, b, x),
+            u => Shared.List.holds(
+              ~Entry<Q>,
+              ~Kind.L(Q, k),
+              ~(l => e => Kind.has(~Q, ~c, ~k, l, e)),
+              r,
+              b
+            )
+          )(h),
+          kc,
+          Kind.holds_member(~Q, ~c, ~k, r, b, m)
+        )
+
+# a ledger that the check says grows from a holds an entry that a holds under
+# a name, under that name, by the laws of a
+def Kind.grows_get.go(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  +a: Kind.L(Q, k),
+  +b: Kind.L(Q, k),
+  h: {Kind.grows(~Q, ~c, ~k, a, b) == True{}: Bool},
+  +n: Name,
+  +e: Entry<Q>,
+  +g: {Kind.get(Q, k)(a)(n) == Some{e}: Maybe<&2, Entry<Q>>}
+) -> {Kind.get(Q, k)(b)(n) == Some{e}: Maybe<&2, Entry<Q>>}:
+  Kind.get_of_has(
+    ~Q,
+    ~c,
+    ~k,
+    b,
+    n,
+    e,
+    Laws.get_named(Q, c, k, laws)(a)(n)(e)(g),
+    Kind.holds_member(
+      ~Q,
+      ~c,
+      ~k,
+      Kind.entries(~Q, ~k, a),
+      b,
+      e
+    )(h)(
+      Kind.entries_have(
+        ~Q,
+        ~c,
+        ~k,
+        Laws.get_empty(Q, c, k, laws),
+        Laws.missing(Q, c, k, laws),
+        a,
+        e,
+        Kind.has_of_get(~Q, ~c, ~k, Laws.get_named(Q, c, k, laws), a, n, e, g)
+      )
+    )
+  )
+
+# a ledger that the check says grows from a holds each entry that a holds
+law Kind.grows_get:
+  for ~Q: Data
+  for ~c: Codes.Codec(Q)
+  for ~k: Ledger.Kind(Q)
+  for ~laws: Ledger.Laws(Q, c, k)
+  for a: Kind.L(Q, k)
+  for b: Kind.L(Q, k)
+  {Kind.grows(~Q, ~c, ~k, a, b) == True{}: Bool} -> Kind.Grows(Q, k, a, b)
+
+def Kind.grows_get(q, c, k, laws, a, b):
+  h => n => e => g => Kind.grows_get.go(~q, ~c, ~k, ~laws, a, b, h, n, e, g)
+
+# Growth as a check
+# -----------------
+# Kind.grows from what each entry gives (Kind.grows_core), and the checks it
+# keeps: from itself, through a ledger between, and by one more entry.
+
+# the law of a ledger with one more entry, of the laws
+def Laws.get_add(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q), laws: Ledger.Laws(Q, c, k)) -> Laws.GetAdd(Q, c, k):
+  match laws:
+    case Tuple{ge, Tuple{ga, rest}}:
+      ga
+
+# the entries ps, each in ks, are each in ks with one more entry
+def Kind.within_cons(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ps: List<&2, Entry<Q>>,
+  +x: Entry<Q>,
+  +ks: List<&2, Entry<Q>>
+) -> {Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), ps, ks) == True{}: Bool}
+  -> {Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), ps, x <> ks) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      h => {==}
+    case Con{+p, +r}:
+      +h => Shared.Bool.and_both(
+        List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), x <> ks, p),
+        Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, x <> ks)
+      )(
+        Shared.List.contains_cons(
+          ~Entry<Q>,
+          ~Entry.same(~Q, ~c),
+          x,
+          ks,
+          p
+        )(
+          Shared.Bool.and_true_left(
+            List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), ks, p),
+            Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, ks)
+          )(h)
+        )
+      )(
+        Kind.within_cons(
+          ~Q,
+          ~c,
+          r,
+          x,
+          ks
+        )(
+          Shared.Bool.and_true_right(
+            List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), ks, p),
+            Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, ks)
+          )(h)
+        )
+      )
+
+# an entry is in a list that it starts
+def Kind.contains_head(~Q: Data, ~c: Codes.Codec(Q), +x: Entry<Q>, r: List<&2, Entry<Q>>) -> {
+  List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), x <> r, x) == True{}: Bool
+}:
+  %Equal.sym(
+    Bool,
+    Entry.same(~Q, ~c, x, x),
+    True{},
+    Entry.is_eq_refl(~Q, ~Codes.Code.is_eq(~Q, ~Codes.Codec.enc(Q, c)), ~Codes.Code.eq_laws(~Q, ~c), x)
+  ): {List.any.if(u => List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), r, x), _) == True{}: Bool}
+  {==}
+
+# each entry of a list is in it
+def Kind.within_refl(~Q: Data, ~c: Codes.Codec(Q), ks: List<&2, Entry<Q>>) -> {
+  Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), ks, ks) == True{}: Bool
+}:
+  match ks:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Shared.Bool.and_both(
+        List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), x <> r, x),
+        Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, x <> r)
+      )(Kind.contains_head(~Q, ~c, x, r))(Kind.within_cons(~Q, ~c, r, x, r)(Kind.within_refl(~Q, ~c, r)))
+
+# a ledger holds each of its entries
+def Kind.has_of_entries(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ms: Laws.Missing(Q, c, k),
+  +l: Kind.L(Q, k),
+  +e: Entry<Q>
+) -> {List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, l), e) == True{}: Bool}
+  -> {Kind.has(~Q, ~c, ~k, l, e) == True{}: Bool}:
+  h => Shared.Bool.and_true_left(
+    Kind.has(~Q, ~c, ~k, l, e),
+    Maybe.is_none(&2, Entry<Q>, Kind.get(Q, k)(Kind.empty(Q, k))(Entry.name(~Q, ~c, e)))
+  )(
+    Equal.trans(
+      Bool,
+      Bool.and(
+        Kind.has(~Q, ~c, ~k, l, e),
+        Maybe.is_none(&2, Entry<Q>, Kind.get(Q, k)(Kind.empty(Q, k))(Entry.name(~Q, ~c, e)))
+      ),
+      List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, l), e),
+      True{},
+      Equal.sym(
+        Bool,
+        List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, l), e),
+        Bool.and(
+          Kind.has(~Q, ~c, ~k, l, e),
+          Maybe.is_none(&2, Entry<Q>, Kind.get(Q, k)(Kind.empty(Q, k))(Entry.name(~Q, ~c, e)))
+        ),
+        ms(l)(Kind.empty(Q, k))(e)
+      ),
+      h
+    )
+  )
+
+# Kind.grows_core over the entries xs of A(x)
+def Kind.grows_core.go(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  ~X: Data,
+  ~A: X -> Kind.L(Q, k),
+  ~B: X -> Kind.L(Q, k),
+  ~f: @x: X -> @e: Entry<Q> -> {Kind.has(~Q, ~c, ~k, A(x), e) == True{}: Bool}
+    -> {Kind.has(~Q, ~c, ~k, B(x), e) == True{}: Bool},
+  +x: X,
+  xs: List<&2, Entry<Q>>
+) -> {Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), xs, Kind.entries(~Q, ~k, A(x))) == True{}: Bool}
+  -> {
+    Shared.List.holds(~Entry<Q>, ~Kind.L(Q, k), ~(l => e => Kind.has(~Q, ~c, ~k, l, e)), xs, B(x)) == True{}: Bool
+  }:
+  match xs:
+    case Nil{}:
+      h => {==}
+    case Con{+y, +r}:
+      +h => Shared.List.all.if_both(
+        Kind.has(~Q, ~c, ~k, B(x), y),
+        u => Shared.List.holds(~Entry<Q>, ~Kind.L(Q, k), ~(l => e => Kind.has(~Q, ~c, ~k, l, e)), r, B(x))
+      )(
+        f(
+          x
+        )(
+          y
+        )(
+          Kind.has_of_entries(
+            ~Q,
+            ~c,
+            ~k,
+            Laws.missing(Q, c, k, laws),
+            A(x),
+            y
+          )(
+            Shared.Bool.and_true_left(
+              List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, A(x)), y),
+              Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, Kind.entries(~Q, ~k, A(x)))
+            )(h)
+          )
+        )
+      )(
+        Kind.grows_core.go(
+          ~Q,
+          ~c,
+          ~k,
+          ~laws,
+          ~X,
+          ~A,
+          ~B,
+          ~f,
+          x,
+          r
+        )(
+          Shared.Bool.and_true_right(
+            List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Kind.entries(~Q, ~k, A(x)), y),
+            Shared.List.within(~Entry<Q>, ~Entry.same(~Q, ~c), r, Kind.entries(~Q, ~k, A(x)))
+          )(h)
+        )
+      )
+
+# the check that B(x) grows from A(x), when B(x) holds each entry that A(x)
+# holds (f)
+def Kind.grows_core(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  ~X: Data,
+  ~A: X -> Kind.L(Q, k),
+  ~B: X -> Kind.L(Q, k),
+  ~f: @x: X -> @e: Entry<Q> -> {Kind.has(~Q, ~c, ~k, A(x), e) == True{}: Bool}
+    -> {Kind.has(~Q, ~c, ~k, B(x), e) == True{}: Bool},
+  +x: X
+) -> {Kind.grows(~Q, ~c, ~k, A(x), B(x)) == True{}: Bool}:
+  Kind.grows_core.go(
+    ~Q,
+    ~c,
+    ~k,
+    ~laws,
+    ~X,
+    ~A,
+    ~B,
+    ~f,
+    x,
+    Kind.entries(~Q, ~k, A(x))
+  )(Kind.within_refl(~Q, ~c, Kind.entries(~Q, ~k, A(x))))
+
+# a ledger grows from itself
+def Kind.grows_refl(~Q: Data, ~c: Codes.Codec(Q), ~k: Ledger.Kind(Q), ~laws: Ledger.Laws(Q, c, k), +a: Kind.L(Q, k)) -> {
+  Kind.grows(~Q, ~c, ~k, a, a) == True{}: Bool
+}:
+  Kind.grows_core(~Q, ~c, ~k, ~laws, ~Kind.L(Q, k), ~(l => l), ~(l => l), ~(l => e => h => h), a)
+
+# a ledger that grows from a holds each entry that a holds
+def Kind.grows_has(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  +a: Kind.L(Q, k),
+  +b: Kind.L(Q, k),
+  +g: {Kind.grows(~Q, ~c, ~k, a, b) == True{}: Bool},
+  +e: Entry<Q>
+) -> {Kind.has(~Q, ~c, ~k, a, e) == True{}: Bool} -> {Kind.has(~Q, ~c, ~k, b, e) == True{}: Bool}:
+  h => Kind.holds_member(
+    ~Q,
+    ~c,
+    ~k,
+    Kind.entries(~Q, ~k, a),
+    b,
+    e
+  )(g)(Kind.entries_have(~Q, ~c, ~k, Laws.get_empty(Q, c, k, laws), Laws.missing(Q, c, k, laws), a, e, h))
+
+# three ledgers, each grown from the one before
+def Kind.Chain(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q)) -> Data:
+  +Sigma<Kind.L(Q, k), a => +Sigma<Kind.L(Q, k), b => +Sigma<Kind.L(Q, k), c2 => +Sigma<
+    {Kind.grows(~Q, ~c, ~k, a, b) == True{}: Bool},
+    g1 => {Kind.grows(~Q, ~c, ~k, b, c2) == True{}: Bool}>>>>
+
+# the first ledger of a chain
+def Kind.Chain.first(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q), x: Kind.Chain(Q, c, k)) -> Kind.L(Q, k):
+  match x:
+    case Tuple{a, rest}:
+      a
+
+# the last ledger of a chain
+def Kind.Chain.last(-Q: Data, -c: Codes.Codec(Q), -k: Ledger.Kind(Q), x: Kind.Chain(Q, c, k)) -> Kind.L(Q, k):
+  match x:
+    case Tuple{a, Tuple{b, Tuple{c2, r}}}:
+      c2
+
+# the last ledger of a chain holds each entry that the first holds
+def Kind.Chain.has(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  x: Kind.Chain(Q, c, k),
+  +e: Entry<Q>
+) -> {Kind.has(~Q, ~c, ~k, Kind.Chain.first(Q, c, k, x), e) == True{}: Bool}
+  -> {Kind.has(~Q, ~c, ~k, Kind.Chain.last(Q, c, k, x), e) == True{}: Bool}:
+  match x:
+    case Tuple{+a, Tuple{+b, Tuple{+c2, Tuple{+g1, +g2}}}}:
+      h => Kind.grows_has(~Q, ~c, ~k, ~laws, b, c2, g2, e)(Kind.grows_has(~Q, ~c, ~k, ~laws, a, b, g1, e)(h))
+
+# growth is transitive
+def Kind.grows_trans(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  +a: Kind.L(Q, k),
+  +b: Kind.L(Q, k),
+  +c2: Kind.L(Q, k),
+  +g1: {Kind.grows(~Q, ~c, ~k, a, b) == True{}: Bool},
+  +g2: {Kind.grows(~Q, ~c, ~k, b, c2) == True{}: Bool}
+) -> {Kind.grows(~Q, ~c, ~k, a, c2) == True{}: Bool}:
+  Kind.grows_core(
+    ~Q,
+    ~c,
+    ~k,
+    ~laws,
+    ~Kind.Chain(Q, c, k),
+    ~(x => Kind.Chain.first(Q, c, k, x)),
+    ~(x => Kind.Chain.last(Q, c, k, x)),
+    ~(x => e => h => Kind.Chain.has(~Q, ~c, ~k, ~laws, x, e)(h)),
+    Tuple{a, Tuple{b, Tuple{c2, Tuple{g1, g2}}}}
+  )
+
+# what a ledger holds, it holds with one more entry, once the entry under the
+# name is known (m)
+def Kind.add_has.at(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  +e: Entry<Q>,
+  m: Maybe<&2, Entry<Q>>,
+  -w: Maybe<&2, Entry<Q>>
+) -> {Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), m, Some{e}) == True{}: Bool}
+  -> {Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), Maybe.or(&2, Entry<Q>, m, w), Some{e}) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => Empty.absurd(
+        {Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), Maybe.or(&2, Entry<Q>, None{}, w), Some{e}) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{y}:
+      h => h
+
+# the ledger p.l with the entry p.x
+def Kind.Plus(-Q: Data, -k: Ledger.Kind(Q)) -> Data:
+  +Sigma<Kind.L(Q, k), l => Entry<Q>>
+
+# the ledger of p
+def Kind.Plus.base(-Q: Data, -k: Ledger.Kind(Q), p: Kind.Plus(Q, k)) -> Kind.L(Q, k):
+  match p:
+    case Tuple{l, x}:
+      l
+
+# the ledger of p with its entry
+def Kind.Plus.added(-Q: Data, k: Ledger.Kind(Q), p: Kind.Plus(Q, k)) -> Kind.L(Q, k):
+  match p:
+    case Tuple{l, x}:
+      Kind.add(Q, k)(l)(x)
+
+# what a ledger holds, it holds with one more entry
+def Kind.add_has(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  p: Kind.Plus(Q, k),
+  +e: Entry<Q>
+) -> {Kind.has(~Q, ~c, ~k, Kind.Plus.base(Q, k, p), e) == True{}: Bool}
+  -> {Kind.has(~Q, ~c, ~k, Kind.Plus.added(Q, k, p), e) == True{}: Bool}:
+  match p:
+    case Tuple{+l, +x}:
+      h =>
+        %Equal.sym(
+          Maybe<&2, Entry<Q>>,
+          Kind.get(Q, k)(Kind.add(Q, k)(l)(x))(Entry.name(~Q, ~c, e)),
+          Maybe.or(
+            &2,
+            Entry<Q>,
+            Kind.get(Q, k)(l)(Entry.name(~Q, ~c, e)),
+            Shared.Maybe.when(Entry<Q>, Name.is_eq(Entry.name(~Q, ~c, x), Entry.name(~Q, ~c, e)), u => Some{x})
+          ),
+          Laws.get_add(Q, c, k, laws)(l)(x)(Entry.name(~Q, ~c, e))
+        ): {Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), _, Some{e}) == True{}: Bool}
+        Kind.add_has.at(
+          ~Q,
+          ~c,
+          e,
+          Kind.get(Q, k)(l)(Entry.name(~Q, ~c, e)),
+          Shared.Maybe.when(Entry<Q>, Name.is_eq(Entry.name(~Q, ~c, x), Entry.name(~Q, ~c, e)), u => Some{x})
+        )(h)
+
+# a ledger grows by one more entry
+def Kind.grows_add(
+  ~Q: Data,
+  ~c: Codes.Codec(Q),
+  ~k: Ledger.Kind(Q),
+  ~laws: Ledger.Laws(Q, c, k),
+  +l: Kind.L(Q, k),
+  +x: Entry<Q>
+) -> {Kind.grows(~Q, ~c, ~k, l, Kind.add(Q, k)(l)(x)) == True{}: Bool}:
+  Kind.grows_core(
+    ~Q,
+    ~c,
+    ~k,
+    ~laws,
+    ~Kind.Plus(Q, k),
+    ~(p => Kind.Plus.base(Q, k, p)),
+    ~(p => Kind.Plus.added(Q, k, p)),
+    ~(p => e => h => Kind.add_has(~Q, ~c, ~k, ~laws, p, e)(h)),
+    Tuple{l, x}
+  )
+
+# Books
+# =====
+# A way to keep entries (a Ledger.Kind): a dict of the entries by name, and,
+# for each question that a ledger answers often, a dict from a key that
+# starts with what the question names to the name of an entry. A number in a
+# key is a Crits.Key.ord, so the greatest round or height under a prefix is
+# the last key there (Crits.Crit.last). Each index holds exactly the keys of
+# the entries (Book.ok), so a drop takes an entry out of each, and a sync
+# sends the difference of two dicts of entries.
+
+# the code of the name n, then r
+def Name.code(n: Name, r: List<&2, U32>) -> List<&2, U32>:
+  match n:
+    case Name.Ask{h}:
+      0 <> Hashes.Hash.code(h, r)
+    case Name.Ballot{h}:
+      1 <> Hashes.Hash.code(h, r)
+    case Name.Data{h}:
+      2 <> Hashes.Hash.code(h, r)
+    case Name.Lie{h}:
+      3 <> Hashes.Hash.code(h, r)
+
+# the key of the name n among the entries of a book
+def Name.key(n: Name) -> List<&2, U32>:
+  Name.code(n, [])
+
+# a book: the entries by name, and the names of the entries by their keys
+# for the ballots of a voter at a place, the rounds of ballots at a height,
+# the heights of ballots on a line, the proofs of lies under a root, and the
+# requests of an author
+type Book<-Q: Data> is Data:
+  Book{
+    entries: Crits.Dict(Entry<Q>),
+    ballots: Crits.Dict(Name),
+    rounds: Crits.Dict(Name),
+    heights: Crits.Dict(Name),
+    liars: Crits.Dict(Name),
+    asks: Crits.Dict(Name)
+  }
+
+# the keys of an entry in each index of a book (none: it is not in that one)
+type Keys is Data:
+  Keys{
+    ballot: Maybe<&2, List<&2, U32>>,
+    round: Maybe<&2, List<&2, U32>>,
+    height: Maybe<&2, List<&2, U32>>,
+    liar: Maybe<&2, List<&2, U32>>,
+    ask: Maybe<&2, List<&2, U32>>
+  }
+
+# the keys of the ballot b, of the name n
+def Ballot.keys(b: Ballot, +n: Name) -> Keys:
+  match b:
+    case Ballot{Signed{Place{+line, +h, +r}, +voter, a}, l}:
+      Keys{
+        Some{Place.code(Place{line, h, r}, Codes.Code.text(voter, Name.key(n)))},
+        Some{Line.code(line, h <> Crits.Key.ord(r, Name.key(n)))},
+        Some{Line.code(line, Crits.Key.ord(U32.to_nat(h), Name.key(n)))},
+        None{},
+        None{}
+      }
+
+# the keys of the entry e, of the name n
+def Entry.keys(-Q: Data, e: Entry<Q>, +n: Name) -> Keys:
+  match e:
+    case Entry.Ballot{b}:
+      Ballot.keys(b, n)
+    case Entry.Lie{+x}:
+      Keys{
+        None{},
+        None{},
+        None{},
+        Some{Hashes.Hash.code(Ballot.root(Lie.first(x)), Codes.Code.text(Ballot.voter(Lie.first(x)), Name.key(n)))},
+        None{}
+      }
+    case Entry.Ask{Id{w, q}, t, a}:
+      Keys{None{}, None{}, None{}, None{}, Some{Codes.Code.text(w, Name.key(n))}}
+    case Entry.Data{ws}:
+      Keys{None{}, None{}, None{}, None{}, None{}}
+
+# the key of an index, of the keys ks: 0 ballots, 1 rounds, 2 heights, 3
+# liars, 4 asks
+def Keys.at(ks: Keys, i: Nat) -> Maybe<&2, List<&2, U32>>:
+  match ks i:
+    case Keys{b, r, h, l, a} 0n:
+      b
+    case Keys{b, r, h, l, a} 1n:
+      r
+    case Keys{b, r, h, l, a} 2n:
+      h
+    case Keys{b, r, h, l, a} 3n:
+      l
+    case Keys{b, r, h, l, a} x:
+      a
+
+# the index i of the book b (Keys.at)
+def Book.index(-Q: Data, b: Book<Q>, i: Nat) -> Crits.Dict(Name):
+  match b i:
+    case Book{es, bs, rs, hs, ls, as} 0n:
+      bs
+    case Book{es, bs, rs, hs, ls, as} 1n:
+      rs
+    case Book{es, bs, rs, hs, ls, as} 2n:
+      hs
+    case Book{es, bs, rs, hs, ls, as} 3n:
+      ls
+    case Book{es, bs, rs, hs, ls, as} x:
+      as
+
+# the entries of the book b
+def Book.entries(-Q: Data, b: Book<Q>) -> Crits.Dict(Entry<Q>):
+  match b:
+    case Book{es, bs, rs, hs, ls, as}:
+      es
+
+# a book with no entry
+def Book.new(~Q: Data) -> Book<Q>:
+  Book{
+    Crits.Dict.new(~Entry<Q>),
+    Crits.Dict.new(~Name),
+    Crits.Dict.new(~Name),
+    Crits.Dict.new(~Name),
+    Crits.Dict.new(~Name),
+    Crits.Dict.new(~Name)
+  }
+
+# the index d with the key m, if any, for the name n
+def Index.put(d: Crits.Dict(Name), m: Maybe<&2, List<&2, U32>>, +n: Name) -> Crits.Dict(Name):
+  match m:
+    case None{}:
+      d
+    case Some{k}:
+      Crits.Dict.set(~Name, d, k, n)
+
+# the index d without the key m, if any
+def Index.drop(d: Crits.Dict(Name), m: Maybe<&2, List<&2, U32>>) -> Crits.Dict(Name):
+  match m:
+    case None{}:
+      d
+    case Some{k}:
+      Crits.Dict.drop(~Name, d, k)
+
+# the book b with the entry e under the name n, and its keys ks in each index
+def Book.put(~Q: Data, b: Book<Q>, e: Entry<Q>, +n: Name, +ks: Keys) -> Book<Q>:
+  match b:
+    case Book{es, bs, rs, hs, ls, as}:
+      Book{
+        Crits.Dict.set(~Entry<Q>, es, Name.key(n), e),
+        Index.put(bs, Keys.at(ks, 0n), n),
+        Index.put(rs, Keys.at(ks, 1n), n),
+        Index.put(hs, Keys.at(ks, 2n), n),
+        Index.put(ls, Keys.at(ks, 3n), n),
+        Index.put(as, Keys.at(ks, 4n), n)
+      }
+
+# the book b without the entry of the name n and its keys ks in each index
+def Book.take(~Q: Data, b: Book<Q>, +n: Name, +ks: Keys) -> Book<Q>:
+  match b:
+    case Book{es, bs, rs, hs, ls, as}:
+      Book{
+        Crits.Dict.drop(~Entry<Q>, es, Name.key(n)),
+        Index.drop(bs, Keys.at(ks, 0n)),
+        Index.drop(rs, Keys.at(ks, 1n)),
+        Index.drop(hs, Keys.at(ks, 2n)),
+        Index.drop(ls, Keys.at(ks, 3n)),
+        Index.drop(as, Keys.at(ks, 4n))
+      }
+
+# the entry that the book b holds under the name n
+def Book.get(-Q: Data, b: Book<Q>, n: Name) -> Maybe<&2, Entry<Q>>:
+  Crits.Dict.get(Entry<Q>, Book.entries(Q, b), Name.key(n))
+
+# the book b with the entry e, when it holds nothing under its name; else b,
+# which keeps what it holds, when c is the code of changes
+def Book.add(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +e: Entry<Q>) -> Book<Q>:
+  +n = Entry.name(~Q, ~c, e)
+  Shared.Bool.when(
+    Book<Q>,
+    Maybe.is_some(&2, Entry<Q>, Book.get(Q, b, n)),
+    u => b,
+    u => Book.put(~Q, b, e, n, Entry.keys(Q, e, n))
+  )
+
+# Book.drop once the entry m of the name n is known
+def Book.drop.at(~Q: Data, b: Book<Q>, +n: Name, m: Maybe<&2, Entry<Q>>) -> Book<Q>:
+  match m:
+    case None{}:
+      b
+    case Some{e}:
+      Book.take(~Q, b, n, Entry.keys(Q, e, n))
+
+# the book b without the entry of the name n, in each of its dicts
+def Book.drop(~Q: Data, +b: Book<Q>, +n: Name) -> Book<Q>:
+  Book.drop.at(~Q, b, n, Book.get(Q, b, n))
+
+# the entries of s whose names r lacks
+def Book.missing(~Q: Data, s: Book<Q>, r: Book<Q>) -> List<&2, Entry<Q>>:
+  Crits.Dict.values(Entry<Q>, Crits.Dict.minus(~Entry<Q>, Book.entries(Q, s), Book.entries(Q, r)))
+
+# the names in the index d under the keys that start with the words p
+def Index.under(d: Crits.Dict(Name), +p: List<&2, U32>) -> List<&2, Name>:
+  Crits.Binds.values(Name, Crits.Crit.entries(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p)))
+
+# the entries of the book b of the names ns
+def Book.named(-Q: Data, +b: Book<Q>, ns: List<&2, Name>) -> List<&2, Entry<Q>>:
+  match ns:
+    case Nil{}:
+      []
+    case Con{n, rest}:
+      Shared.Maybe.cons(Entry<Q>, Book.get(Q, b, n), Book.named(Q, b, rest))
+
+# the ballots among the entries es
+def Entries.ballots(-Q: Data, es: List<&2, Entry<Q>>) -> List<&2, Ballot>:
+  match es:
+    case Nil{}:
+      []
+    case Con{Entry.Ballot{x}, rest}:
+      x <> Entries.ballots(Q, rest)
+    case Con{e, rest}:
+      Entries.ballots(Q, rest)
+
+# the voters of the first ballots of the lies among the entries es
+def Entries.liars(-Q: Data, es: List<&2, Entry<Q>>) -> List<&2, String>:
+  match es:
+    case Nil{}:
+      []
+    case Con{Entry.Lie{x}, rest}:
+      Ballot.voter(Lie.first(x)) <> Entries.liars(Q, rest)
+    case Con{e, rest}:
+      Entries.liars(Q, rest)
+
+# the ballots of the voter at the place w
+def Book.ballots(-Q: Data, +b: Book<Q>, +w: Place, +voter: String) -> List<&2, Ballot>:
+  Entries.ballots(Q, Book.named(Q, b, Index.under(Book.index(Q, b, 0n), Place.code(w, Codes.Code.text(voter, [])))))
+
+# the number at the front of the words of the last key m, after its first n
+# words (0: none)
+def Index.number(m: Maybe<&2, Crits.Bind<Name>>, +n: Nat) -> Nat:
+  match m:
+    case None{}:
+      0n
+    case Some{Crits.Bind{k, x}}:
+      Maybe.default(&2, Nat, Crits.Key.ord.value(List.drop(&2, U32, k, n)), 0n)
+
+# the greatest number in the keys of the index d under the prefix p, which
+# a Key.ord follows (0: none)
+def Index.last(d: Crits.Dict(Name), +p: List<&2, U32>) -> Nat:
+  Index.number(
+    Crits.Crit.last(Name, Crits.Crit.under(Name, Crits.Dict.crit(Name, d), p)),
+    List.length(&2, U32, p)
+  )
+
+# a round that no ballot at the height h of the line is above
+def Book.rounds(-Q: Data, b: Book<Q>, +line: Line, +h: U32) -> Nat:
+  Index.last(Book.index(Q, b, 1n), Line.code(line, [h]))
+
+# a height that no ballot of the line is above
+def Book.heights(-Q: Data, b: Book<Q>, +line: Line) -> Nat:
+  Index.last(Book.index(Q, b, 2n), Line.code(line, []))
+
+# the voters that the book b holds a proof of a lie against, under the root r
+def Book.liars(-Q: Data, +b: Book<Q>, +r: Hashes.Hash) -> List<&2, String>:
+  Entries.liars(Q, Book.named(Q, b, Index.under(Book.index(Q, b, 3n), Hashes.Hash.code(r, []))))
+
+# the requests of the author
+def Book.asks(-Q: Data, +b: Book<Q>, +author: String) -> List<&2, Entry<Q>>:
+  Book.named(Q, b, Index.under(Book.index(Q, b, 4n), Codes.Code.text(author, [])))
+
+# The one shape of a book
+
+# the index d holds the name n under the key m, if any
+def Index.holds(d: Crits.Dict(Name), m: Maybe<&2, List<&2, U32>>, +n: Name) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{k}:
+      Shared.Maybe.is_eq(~Name, ~Name.is_eq, Crits.Dict.get(Name, d, k), Some{n})
+
+# each index of the book b holds the name n under the keys ks
+def Book.indexed(-Q: Data, +b: Book<Q>, +ks: Keys, +n: Name) -> Bool:
+  Bool.and(
+    Bool.and(Index.holds(Book.index(Q, b, 0n), Keys.at(ks, 0n), n), Index.holds(Book.index(Q, b, 1n), Keys.at(ks, 1n), n)),
+    Bool.and(
+      Bool.and(Index.holds(Book.index(Q, b, 2n), Keys.at(ks, 2n), n), Index.holds(Book.index(Q, b, 3n), Keys.at(ks, 3n), n)),
+      Index.holds(Book.index(Q, b, 4n), Keys.at(ks, 4n), n)
+    )
+  )
+
+# each of the entries es of the book b is under the key of its name, and
+# each index holds its keys
+def Book.ok.entries(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, es: List<&2, Crits.Bind<Entry<Q>>>) -> Bool:
+  match es:
+    case Nil{}:
+      True{}
+    case Con{Crits.Bind{k, +e}, rest}:
+      +n = Entry.name(~Q, ~c, e)
+      Bool.and(
+        Bool.and(Crits.Key.is_eq(Name.key(n), k), Book.indexed(Q, b, Entry.keys(Q, e, n), n)),
+        Book.ok.entries(~Q, ~c, b, rest)
+      )
+
+# the key k of the index i of the book b is a key of the entry of the name n
+def Book.ok.key(-Q: Data, m: Maybe<&2, Entry<Q>>, +i: Nat, +k: List<&2, U32>, +n: Name) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{e}:
+      Shared.Maybe.is_eq(~List<&2, U32>, ~Crits.Key.is_eq, Keys.at(Entry.keys(Q, e, n), i), Some{k})
+
+# each key ks of the index i of the book b is a key of the entry it names
+def Book.ok.index(-Q: Data, +b: Book<Q>, +i: Nat, ks: List<&2, Crits.Bind<Name>>) -> Bool:
+  match ks:
+    case Nil{}:
+      True{}
+    case Con{Crits.Bind{+k, +n}, rest}:
+      Bool.and(Book.ok.key(Q, Book.get(Q, b, n), i, k, n), Book.ok.index(Q, b, i, rest))
+
+# the index i of the book b holds only keys of its entries
+def Book.ok.at(-Q: Data, +b: Book<Q>, +i: Nat) -> Bool:
+  Book.ok.index(Q, b, i, Crits.Dict.entries(Name, Book.index(Q, b, i)))
+
+# the book b is in its one shape, when c is the code of changes: each entry is
+# under the key of its name, each index holds the keys of each entry, and no
+# other key
+def Book.ok(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>) -> Bool:
+  Bool.and(
+    Book.ok.entries(~Q, ~c, b, Crits.Dict.entries(Entry<Q>, Book.entries(Q, b))),
+    Bool.and(
+      Bool.and(Book.ok.at(Q, b, 0n), Book.ok.at(Q, b, 1n)),
+      Bool.and(Bool.and(Book.ok.at(Q, b, 2n), Book.ok.at(Q, b, 3n)), Book.ok.at(Q, b, 4n))
+    )
+  )
+
+# Laws of books
+
+# a new book is in its one shape
+law Book.ok_new:
+  for ~Q: Data
+  for ~c: Codes.Codec(Q)
+  {Book.ok(~Q, ~c, Book.new(~Q)) == True{}: Bool}
+
+# an add keeps a book in its one shape
+law Book.ok_add:
+  for ~Q: Data
+  for ~c: Codes.Codec(Q)
+  for b: Book<Q>
+  for e: Entry<Q>
+  {Book.ok(~Q, ~c, b) == True{}: Bool} -> {Book.ok(~Q, ~c, Book.add(~Q, ~c, b, e)) == True{}: Bool}
+
+# a drop keeps a book in its one shape
+law Book.ok_drop:
+  for ~Q: Data
+  for ~c: Codes.Codec(Q)
+  for b: Book<Q>
+  for n: Name
+  {Book.ok(~Q, ~c, b) == True{}: Bool} -> {Book.ok(~Q, ~c, Book.drop(~Q, b, n)) == True{}: Bool}

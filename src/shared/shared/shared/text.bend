@@ -9,30 +9,6 @@ import ./shared/shared.bend as Shared
 def Bytes() -> Data:
   List<&2, U32>
 
-# no bit of w is set
-def Word.is_zero(n: Nat, w: Word(n)) -> Bool:
-  match n:
-    case 0n:
-      True{}
-    case 1n+p:
-      match w:
-        case WCon{b, t}:
-          List.all.if(u => Word.is_zero(p, t), Bool.not(b))
-
-# every code of b is a byte: no bit above the eighth is set
-def Bytes.is_bytes(b: List<&2, U32>) -> Bool:
-  match b:
-    case Nil{}:
-      True{}
-    case Con{U32{WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, WCon{_, h}}}}}}}}}, r}:
-      List.all.if(u => Bytes.is_bytes(r), Word.is_zero(24n, h))
-
-# the byte of the bits b0 (the lowest) to b7
-def Byte.of(b0: Bool, b1: Bool, b2: Bool, b3: Bool, b4: Bool, b5: Bool, b6: Bool, b7: Bool) -> U32:
-  U32{
-    WCon{b0, WCon{b1, WCon{b2, WCon{b3, WCon{b4, WCon{b5, WCon{b6, WCon{b7, Word.zero(24n)}}}}}}}}
-  }
-
 # UTF-8
 # -----
 # A character of up to 7 bits is one byte; of up to 11, 16 or 21 bits, two,
@@ -188,11 +164,11 @@ def Utf8.two(
   match long:
     case True{}:
       [
-        Byte.of(b6, b7, b8, b9, b10, False{}, True{}, True{}),
-        Byte.of(b0, b1, b2, b3, b4, b5, False{}, True{})
+        Shared.Byte.of(b6, b7, b8, b9, b10, False{}, True{}, True{}),
+        Shared.Byte.of(b0, b1, b2, b3, b4, b5, False{}, True{})
       ]
     case False{}:
-      [Byte.of(b0, b1, b2, b3, b4, b5, b6, False{})]
+      [Shared.Byte.of(b0, b1, b2, b3, b4, b5, b6, False{})]
 
 # the bytes of a character of 12 to 16 bits, or of fewer (long)
 def Utf8.three(
@@ -217,9 +193,9 @@ def Utf8.three(
   match long:
     case True{}:
       [
-        Byte.of(b12, b13, b14, b15, False{}, True{}, True{}, True{}),
-        Byte.of(b6, b7, b8, b9, b10, b11, False{}, True{}),
-        Byte.of(b0, b1, b2, b3, b4, b5, False{}, True{})
+        Shared.Byte.of(b12, b13, b14, b15, False{}, True{}, True{}, True{}),
+        Shared.Byte.of(b6, b7, b8, b9, b10, b11, False{}, True{}),
+        Shared.Byte.of(b0, b1, b2, b3, b4, b5, False{}, True{})
       ]
     case False{}:
       Utf8.two(
@@ -265,10 +241,10 @@ def Utf8.four(
   match long:
     case True{}:
       [
-        Byte.of(b18, b19, b20, False{}, True{}, True{}, True{}, True{}),
-        Byte.of(b12, b13, b14, b15, b16, b17, False{}, True{}),
-        Byte.of(b6, b7, b8, b9, b10, b11, False{}, True{}),
-        Byte.of(b0, b1, b2, b3, b4, b5, False{}, True{})
+        Shared.Byte.of(b18, b19, b20, False{}, True{}, True{}, True{}, True{}),
+        Shared.Byte.of(b12, b13, b14, b15, b16, b17, False{}, True{}),
+        Shared.Byte.of(b6, b7, b8, b9, b10, b11, False{}, True{}),
+        Shared.Byte.of(b0, b1, b2, b3, b4, b5, False{}, True{})
       ]
     case False{}:
       Utf8.three(
@@ -320,9 +296,9 @@ def Utf8.fit(
   match over:
     case True{}:
       [
-        Byte.of(True{}, True{}, True{}, True{}, False{}, True{}, True{}, True{}),
-        Byte.of(True{}, True{}, True{}, True{}, True{}, True{}, False{}, True{}),
-        Byte.of(True{}, False{}, True{}, True{}, True{}, True{}, False{}, True{})
+        Shared.Byte.of(True{}, True{}, True{}, True{}, False{}, True{}, True{}, True{}),
+        Shared.Byte.of(True{}, True{}, True{}, True{}, True{}, True{}, False{}, True{}),
+        Shared.Byte.of(True{}, False{}, True{}, True{}, True{}, True{}, False{}, True{})
       ]
     case False{}:
       Utf8.four(
@@ -960,7 +936,7 @@ def Utf8.Char.Laws(c: Char, b: List<&2, U32>) -> Type:
   {
     Bytes.to_text(append1) == Utf8.back(Char.fits_utf8(c), c, b): String
   }
-    & {Bytes.is_bytes(append1) == Bytes.is_bytes(b): Bool}
+    & {Shared.Bytes.is_bytes(append1) == Shared.Bytes.is_bytes(b): Bool}
 
 # Utf8.char_laws, with the bits of the character from the highest
 def Utf8.char_laws.bits(
@@ -1487,7 +1463,7 @@ def Utf8.char_back(
   append1 = List.append(&2, U32, Utf8.char(c), b)
   Pair.fst(
     {Bytes.to_text(append1) == Utf8.back(Char.fits_utf8(c), c, b): String},
-    {Bytes.is_bytes(append1) == Bytes.is_bytes(b): Bool},
+    {Shared.Bytes.is_bytes(append1) == Shared.Bytes.is_bytes(b): Bool},
     Utf8.char_laws(c, b)
   )
 
@@ -1528,18 +1504,18 @@ def Bytes.text_back(s):
 def Utf8.char_bytes(
   +c: Char,
   +b: List<&2, U32>
-) -> {Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Bytes.is_bytes(b): Bool}:
+) -> {Shared.Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), b)) == Shared.Bytes.is_bytes(b): Bool}:
   append1 = List.append(&2, U32, Utf8.char(c), b)
   Pair.snd(
     {Bytes.to_text(append1) == Utf8.back(Char.fits_utf8(c), c, b): String},
-    {Bytes.is_bytes(append1) == Bytes.is_bytes(b): Bool},
+    {Shared.Bytes.is_bytes(append1) == Shared.Bytes.is_bytes(b): Bool},
     Utf8.char_laws(c, b)
   )
 
 # every code of the bytes of a text is a byte
 law Bytes.of_text_bytes:
   for s: String
-  {Bytes.is_bytes(Bytes.of_text(s)) == True{}: Bool}
+  {Shared.Bytes.is_bytes(Bytes.of_text(s)) == True{}: Bool}
 
 def Bytes.of_text_bytes(s):
   match s:
@@ -1548,8 +1524,8 @@ def Bytes.of_text_bytes(s):
     case SCon{c, +r}:
       %Equal.sym(
         Bool,
-        Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), Bytes.of_text(r))),
-        Bytes.is_bytes(Bytes.of_text(r)),
+        Shared.Bytes.is_bytes(List.append(&2, U32, Utf8.char(c), Bytes.of_text(r))),
+        Shared.Bytes.is_bytes(Bytes.of_text(r)),
         Utf8.char_bytes(c, Bytes.of_text(r))
       ): {_ == True{}: Bool}
       Bytes.of_text_bytes(r)

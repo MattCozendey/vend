@@ -1,7 +1,7 @@
 import Base
 import ./shared/shared/code.bend as Codes
-import ./shared/shared/side.bend as Sides
 import ./shared/shared/shared.bend as Shared
+import ./shared/shared/side.bend as Sides
 import ./shared/text.bend as Texts
 
 # Forks
@@ -666,15 +666,274 @@ def Lines.bytes_list(b: Texts.Bytes()) -> {Lines.bytes(Lines.list(b)) == b: Text
     Lines.read_back(b)
   )
 
+# Hunks
+# -----
+# A patch of lines is hunks, each after the last: keep some lines, drop some,
+# put some in their place. A diff finds the fewest lines to drop and put
+# (Myers): it walks the two lists of lines on each diagonal at once, so each
+# step reads the next line of each, and its cost is the lines times the size
+# of the change. Its hunks are checked against the new lines; a diff that
+# does not check is the one cut of Lines.cut.
+
+# a hunk: keep the next keep lines, drop the next drop, put the lines put
+type Hunk is Data:
+  Hunk{keep: Nat, drop: Nat, put: List<&2, Texts.Bytes()>}
+
+# the lines a after the hunks hs, each after the last
+def Lines.apply.all(hs: List<&2, Hunk>, +a: List<&2, Texts.Bytes()>) -> List<&2, Texts.Bytes()>:
+  match hs:
+    case Nil{}:
+      a
+    case Con{Hunk{+k, +d, put}, rest}:
+      List.append(
+        &2,
+        Texts.Bytes(),
+        List.take(&2, Texts.Bytes(), a, k),
+        List.append(&2, Texts.Bytes(), put, Lines.apply.all(rest, List.drop(&2, Texts.Bytes(), a, Nat.add(k, d))))
+      )
+
+# the one hunk Hunk{k, d, put} is Lines.apply(k, a, d, put)
+def Lines.apply.all_one(
+  k: Nat,
+  a: List<&2, Texts.Bytes()>,
+  d: Nat,
+  put: List<&2, Texts.Bytes()>
+) -> {Lines.apply.all([Hunk{k, d, put}], a) == Lines.apply(k, a, d, put): List<&2, Texts.Bytes()>}:
+  match k a:
+    case 0n Nil{}:
+      {==}
+    case 0n Con{l, r}:
+      {==}
+    case 1n+p Nil{}:
+      Shared.List.append_nil(Texts.Bytes(), put)
+    case 1n+p Con{l, r}:
+      %Lines.apply.all_one(p, r, d, put):
+        {l <> Lines.apply.all([Hunk{p, d, put}], r) == l <> _: List<&2, Texts.Bytes()>}
+      {==}
+
+# a step of an edit: keep a line of both, drop a line of the old, or put a
+# line of the new
+type Op is Data:
+  Op.Keep{}
+  Op.Drop{}
+  Op.Put{line: Texts.Bytes()}
+
+# a walk of a diff: how many old lines it read (x), the old lines a and the
+# new lines b left, and its steps, last first
+type Walk is Data:
+  Walk{x: Nat, a: List<&2, Texts.Bytes()>, b: List<&2, Texts.Bytes()>, ops: List<&2, Op>}
+
+# the walk of x lines, on, while the next lines of a and b are the same
+def Walk.snake(a: List<&2, Texts.Bytes()>, b: List<&2, Texts.Bytes()>, +x: Nat, +ops: List<&2, Op>) -> Walk:
+  match a b:
+    case Con{+la, +ra} Con{+lb, +rb}:
+      Shared.Bool.when(
+        Walk,
+        Shared.List.is_eq(~U32, ~U32.is_eq, la, lb),
+        u => Walk.snake(ra, rb, 1n+x, Op.Keep{} <> ops),
+        u => Walk{x, la <> ra, lb <> rb, ops}
+      )
+    case xs ys:
+      Walk{x, xs, ys, ops}
+
+# the walk m with one old line dropped, then on as far as the lines agree
+def Walk.drop(m: Maybe<&2, Walk>) -> Maybe<&2, Walk>:
+  match m:
+    case Some{Walk{x, Con{l, ra}, b, ops}}:
+      Some{Walk.snake(ra, b, 1n+x, Op.Drop{} <> ops)}
+    case _:
+      None{}
+
+# the walk m with one new line put, then on as far as the lines agree
+def Walk.put(m: Maybe<&2, Walk>) -> Maybe<&2, Walk>:
+  match m:
+    case Some{Walk{x, a, Con{l, rb}, ops}}:
+      Some{Walk.snake(a, rb, x, Op.Put{l} <> ops)}
+    case _:
+      None{}
+
+# the walk of the two that read more old lines (a drop when they tie)
+def Walk.best(d: Maybe<&2, Walk>, p: Maybe<&2, Walk>) -> Maybe<&2, Walk>:
+  match d p:
+    case Some{Walk{+x1, a1, b1, o1}} Some{Walk{+x2, a2, b2, o2}}:
+      Shared.Bool.when(
+        Maybe<&2, Walk>,
+        Nat.is_lt(x1, x2),
+        u => Some{Walk{x2, a2, b2, o2}},
+        u => Some{Walk{x1, a1, b1, o1}}
+      )
+    case None{} q:
+      q
+    case q None{}:
+      q
+
+# the walks one step further, on each diagonal, from the walks ws of the
+# diagonals below and the walk prev of the one before
+def Walks.next(ws: List<&2, Maybe<&2, Walk>>, +prev: Maybe<&2, Walk>) -> List<&2, Maybe<&2, Walk>>:
+  match ws:
+    case Nil{}:
+      [Walk.drop(prev)]
+    case Con{+w, rest}:
+      Walk.best(Walk.drop(prev), Walk.put(w)) <> Walks.next(rest, w)
+
+# the steps of a walk among ws that read all of both lists
+def Walks.done(ws: List<&2, Maybe<&2, Walk>>) -> Maybe<&2, List<&2, Op>>:
+  match ws:
+    case Nil{}:
+      None{}
+    case Con{Some{Walk{x, Nil{}, Nil{}, ops}}, rest}:
+      Some{List.reverse(&2, Op, ops)}
+    case Con{w, rest}:
+      Walks.done(rest)
+
+# Walks.go once it is known whether a walk is done (m)
+def Walks.go.at(m: Maybe<&2, List<&2, Op>>, go: Unit -> Maybe<&2, List<&2, Op>>) -> Maybe<&2, List<&2, Op>>:
+  match m:
+    case Some{ops}:
+      Some{ops}
+    case None{}:
+      go(Unit{})
+
+# the steps of the first walks among ws, one step further at a time, that read
+# all of both lists, at most f steps further
+def Walks.go(f: Nat, +ws: List<&2, Maybe<&2, Walk>>) -> Maybe<&2, List<&2, Op>>:
+  match f:
+    case 0n:
+      None{}
+    case 1n+p:
+      Walks.go.at(Walks.done(ws), u => Walks.go(p, Walks.next(ws, None{})))
+
+# the fewest steps from the lines a to the lines b
+def Lines.ops(+a: List<&2, Texts.Bytes()>, +b: List<&2, Texts.Bytes()>) -> Maybe<&2, List<&2, Op>>:
+  Walks.go(
+    1n+Nat.add(List.length(&2, Texts.Bytes(), a), List.length(&2, Texts.Bytes(), b)),
+    [Some{Walk.snake(a, b, 0n, [])}]
+  )
+
+# the hunks of the steps ops, after k kept lines, d dropped lines and the put
+# lines ps, last first
+def Ops.hunks(ops: List<&2, Op>, +k: Nat, +d: Nat, +ps: List<&2, Texts.Bytes()>) -> List<&2, Hunk>:
+  match ops:
+    case Nil{}:
+      Shared.Bool.when(
+        List<&2, Hunk>,
+        Bool.and(Nat.is_eq(d, 0n), List.is_empty(&2, Texts.Bytes(), ps)),
+        u => [],
+        u => [Hunk{k, d, List.reverse(&2, Texts.Bytes(), ps)}]
+      )
+    case Con{Op.Keep{}, +rest}:
+      Shared.Bool.when(
+        List<&2, Hunk>,
+        Bool.and(Nat.is_eq(d, 0n), List.is_empty(&2, Texts.Bytes(), ps)),
+        u => Ops.hunks(rest, 1n+k, 0n, []),
+        u => Hunk{k, d, List.reverse(&2, Texts.Bytes(), ps)} <> Ops.hunks(rest, 1n, 0n, [])
+      )
+    case Con{Op.Drop{}, rest}:
+      Ops.hunks(rest, k, 1n+d, ps)
+    case Con{Op.Put{l}, rest}:
+      Ops.hunks(rest, k, d, l <> ps)
+
+# the hunks of a cut
+def Cut.hunks(c: Cut) -> List<&2, Hunk>:
+  match c:
+    case Cut{s, o, n, e}:
+      [Hunk{List.length(&2, Texts.Bytes(), s), List.length(&2, Texts.Bytes(), o), n}]
+
+# the hunks of a cut c of a and b, applied to a, give b
+def Lines.apply_cut_hunks(
+  c: Cut,
+  a: List<&2, Texts.Bytes()>,
+  b: List<&2, Texts.Bytes()>,
+  hl: {Cut.left(c) == a: List<&2, Texts.Bytes()>},
+  hr: {Cut.right(c) == b: List<&2, Texts.Bytes()>}
+) -> {Lines.apply.all(Cut.hunks(c), a) == b: List<&2, Texts.Bytes()>}:
+  match c:
+    case Cut{+s, +o, +n, +e}:
+      length1 = List.length(&2, Texts.Bytes(), s)
+      length2 = List.length(&2, Texts.Bytes(), o)
+      %hl: {Lines.apply.all([Hunk{length1, length2, n}], _) == b: List<&2, Texts.Bytes()>}
+      %hr:
+        {
+          Lines.apply.all([Hunk{length1, length2, n}], Cut.left(Cut{s, o, n, e}))
+            == _: List<&2, Texts.Bytes()>
+        }
+      Equal.trans(
+        List<&2, Texts.Bytes()>,
+        Lines.apply.all([Hunk{length1, length2, n}], Cut.left(Cut{s, o, n, e})),
+        Lines.apply(length1, Cut.left(Cut{s, o, n, e}), length2, n),
+        Cut.right(Cut{s, o, n, e}),
+        Lines.apply.all_one(length1, Cut.left(Cut{s, o, n, e}), length2, n),
+        Lines.apply_cut(s, o, n, e)
+      )
+
+# the hunks m, when they make b of a; else the one cut of a and b
+def Lines.diff.check(m: Maybe<&2, List<&2, Hunk>>, +a: List<&2, Texts.Bytes()>, +b: List<&2, Texts.Bytes()>) -> List<&2, Hunk>:
+  match m:
+    case Some{+hs}:
+      Shared.Bool.when(
+        List<&2, Hunk>,
+        Shared.List.is_eq(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), Lines.apply.all(hs, a), b),
+        u => hs,
+        u => Cut.hunks(Lines.cut(a, b))
+      )
+    case None{}:
+      Cut.hunks(Lines.cut(a, b))
+
+# the checked hunks, applied to a, give b
+def Lines.diff.check_apply(
+  m: Maybe<&2, List<&2, Hunk>>,
+  +a: List<&2, Texts.Bytes()>,
+  +b: List<&2, Texts.Bytes()>
+) -> {Lines.apply.all(Lines.diff.check(m, a, b), a) == b: List<&2, Texts.Bytes()>}:
+  match m:
+    case Some{+hs}:
+      Shared.Bool.when_cases(
+        List<&2, Hunk>,
+        r => {Lines.apply.all(r, a) == b: List<&2, Texts.Bytes()>},
+        Shared.List.is_eq(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), Lines.apply.all(hs, a), b),
+        u => hs,
+        u => Cut.hunks(Lines.cut(a, b)),
+        e =>
+          Shared.List.is_eq_sound(
+            ~Texts.Bytes(),
+            ~Shared.List.is_eq(~U32, ~U32.is_eq),
+            ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+            Lines.apply.all(hs, a),
+            b
+          )(e),
+        e => Lines.apply_cut_hunks(Lines.cut(a, b), a, b, Lines.cut_left(a, b), Lines.cut_right(a, b))
+      )
+    case None{}:
+      Lines.apply_cut_hunks(Lines.cut(a, b), a, b, Lines.cut_left(a, b), Lines.cut_right(a, b))
+
+# the hunks from the lines a to the lines b, with the fewest lines dropped and
+# put
+def Lines.diff(+a: List<&2, Texts.Bytes()>, +b: List<&2, Texts.Bytes()>) -> List<&2, Hunk>:
+  Lines.diff.check(
+    Maybe.map(&2, List<&2, Op>, List<&2, Hunk>, ops => Ops.hunks(ops, 0n, 0n, []), Lines.ops(a, b)),
+    a,
+    b
+  )
+
+# the hunks of a diff of a and b, applied to a, give b
+def Lines.apply_diff(
+  +a: List<&2, Texts.Bytes()>,
+  +b: List<&2, Texts.Bytes()>
+) -> {Lines.apply.all(Lines.diff(a, b), a) == b: List<&2, Texts.Bytes()>}:
+  Lines.diff.check_apply(
+    Maybe.map(&2, List<&2, Op>, List<&2, Hunk>, ops => Ops.hunks(ops, 0n, 0n, []), Lines.ops(a, b)),
+    a,
+    b
+  )
+
 # Formats
 # -------
 
-# a change between two versions: Lines keeps the first keep lines, drops the
-# next drop lines and puts the lines put in their place; Whole is the new
+# a change between two versions: Lines is hunks of lines; Whole is the new
 # content; Pieces is the new shape of an embedding, with a patch for each of
 # its texts and each of its regions
 type Patch is Data:
-  Patch.Lines{keep: Nat, drop: Nat, put: List<&2, Texts.Bytes()>}
+  Patch.Lines{hunks: List<&2, Hunk>}
   Patch.Whole{bytes: Texts.Bytes()}
   Patch.Pieces{shape: List<&2, Shape>, texts: List<&2, Patch>, regions: List<&2, Patch>}
 
@@ -686,17 +945,11 @@ def Plain.not_nul(x: U32) -> Bool:
 def Plain.is_text(b: Texts.Bytes()) -> Bool:
   List.all(~&2, ~U32, ~Plain.not_nul, b)
 
-# the patch of the lines of a cut
-def Lines.patch(c: Cut) -> Patch:
-  match c:
-    case Cut{s, o, n, e}:
-      Patch.Lines{List.length(&2, Texts.Bytes(), s), List.length(&2, Texts.Bytes(), o), n}
-
 # the patch from a to b, as lines when both are text (text)
 def Plain.diff.by(text: Bool, a: Texts.Bytes(), b: Texts.Bytes()) -> Patch:
   match text:
     case True{}:
-      Lines.patch(Lines.cut(Lines.list(a), Lines.list(b)))
+      Patch.Lines{Lines.diff(Lines.list(a), Lines.list(b))}
     case False{}:
       Patch.Whole{b}
 
@@ -707,35 +960,12 @@ def Plain.diff(+a: Texts.Bytes(), +b: Texts.Bytes()) -> Patch:
 # a after the patch p; a patch of an embedding leaves a as it is
 def Plain.apply(a: Texts.Bytes(), p: Patch) -> Texts.Bytes():
   match p:
-    case Patch.Lines{k, d, put}:
-      Lines.bytes(Lines.apply(k, Lines.list(a), d, put))
+    case Patch.Lines{hs}:
+      Lines.bytes(Lines.apply.all(hs, Lines.list(a)))
     case Patch.Whole{x}:
       x
     case Patch.Pieces{sh, ts, rs}:
       a
-
-# the patch of a cut c of the lines of a, applied to a, gives the bytes of the
-# new lines lb of c
-def Plain.apply_patch(
-  c: Cut,
-  a: Texts.Bytes(),
-  lb: List<&2, Texts.Bytes()>,
-  hl: {Cut.left(c) == Lines.list(a): List<&2, Texts.Bytes()>},
-  hr: {Cut.right(c) == lb: List<&2, Texts.Bytes()>}
-) -> {Plain.apply(a, Lines.patch(c)) == Lines.bytes(lb): Texts.Bytes()}:
-  match c:
-    case Cut{+s, +o, n, e}:
-      length1 = List.length(&2, Texts.Bytes(), s)
-      length2 = List.length(&2, Texts.Bytes(), o)
-      Equal.cong(
-        List<&2, Texts.Bytes()>,
-        Texts.Bytes(),
-        z => Lines.bytes(z),
-        Lines.apply(length1, Lines.list(a), length2, n),
-        lb,
-        %hl: {Lines.apply(length1, _, length2, n) == lb: List<&2, Texts.Bytes()>}
-        %hr: {Lines.apply(length1, Cut.left(Cut{s, o, n, e}), length2, n) == _: List<&2, Texts.Bytes()>}
-        Lines.apply_cut(s, o, n, e))
 
 # Plain.apply_diff, by whether both are text (text)
 def Plain.apply_diff.by(
@@ -749,15 +979,16 @@ def Plain.apply_diff.by(
       +lb = Lines.list(b)
       Equal.trans(
         Texts.Bytes(),
-        Plain.apply(a, Lines.patch(Lines.cut(la, lb))),
+        Lines.bytes(Lines.apply.all(Lines.diff(la, lb), la)),
         Lines.bytes(lb),
         b,
-        Plain.apply_patch(
-          Lines.cut(la, lb),
-          a,
+        Equal.cong(
+          List<&2, Texts.Bytes()>,
+          Texts.Bytes(),
+          z => Lines.bytes(z),
+          Lines.apply.all(Lines.diff(la, lb), la),
           lb,
-          Lines.cut_left(la, lb),
-          Lines.cut_right(la, lb)
+          Lines.apply_diff(la, lb)
         ),
         Lines.bytes_list(b)
       )
@@ -777,58 +1008,95 @@ def Plain.apply_diff(
 # takes the one change when only one side changed, or when both made the same
 # change; so these merges hold for every format (Format.merge_*). A format
 # merges only what both sides changed, differently. Plain text merges by
-# lines: two hunks merge when one ends before the other starts.
+# lines (diff3): a hunk of either side that ends before the other side's next
+# hunk starts is taken.
 
 # a merge: its bytes, or a clash
 type Merged is Data:
   Merged.Clean{bytes: Texts.Bytes()}
   Merged.Clash{}
 
-# the lines lb after two patches, x's first when it ends before y's starts
-# (x_first), y's first when it ends before x's starts (y_first)
-def Plain.merge.order(
-  x_first: Bool,
-  y_first: Bool,
-  lb: List<&2, Texts.Bytes()>,
-  kx: Nat,
-  dx: Nat,
-  nx: List<&2, Texts.Bytes()>,
-  ky: Nat,
-  dy: Nat,
-  ny: List<&2, Texts.Bytes()>
-) -> Merged:
-  match x_first y_first:
-    case True{} w:
-      Merged.Clean{Lines.bytes(Lines.apply(kx, Lines.apply(ky, lb, dy, ny), dx, nx))}
-    case False{} True{}:
-      Merged.Clean{Lines.bytes(Lines.apply(ky, Lines.apply(kx, lb, dx, nx), dy, ny))}
-    case False{} False{}:
-      Merged.Clash{}
+# a hunk where it is in its base: the lines from from to to are replaced by
+# put
+type Range is Data:
+  Range{from: Nat, to: Nat, put: List<&2, Texts.Bytes()>}
 
-# the merge of the cuts cx and cy of the lines lb
-def Plain.merge.cuts(lb: List<&2, Texts.Bytes()>, cx: Cut, cy: Cut) -> Merged:
-  match cx cy:
-    case Cut{sx, ox, nx, ex} Cut{sy, oy, ny, ey}:
-      +kx = List.length(&2, Texts.Bytes(), sx)
-      +dx = List.length(&2, Texts.Bytes(), ox)
-      +ky = List.length(&2, Texts.Bytes(), sy)
-      +dy = List.length(&2, Texts.Bytes(), oy)
-      Plain.merge.order(
-        Nat.is_lt(Nat.add(kx, dx), ky),
-        Nat.is_lt(Nat.add(ky, dy), kx),
-        lb,
-        kx,
-        dx,
-        nx,
-        ky,
-        dy,
-        ny
+# the ranges of the hunks hs, after the line at
+def Hunks.ranges(hs: List<&2, Hunk>, +at: Nat) -> List<&2, Range>:
+  match hs:
+    case Nil{}:
+      []
+    case Con{Hunk{k, d, put}, rest}:
+      +f = Nat.add(at, k)
+      +t = Nat.add(f, d)
+      Range{f, t, put} <> Hunks.ranges(rest, t)
+
+# the hunks of the ranges rs, after the line at
+def Ranges.hunks(rs: List<&2, Range>, +at: Nat) -> List<&2, Hunk>:
+  match rs:
+    case Nil{}:
+      []
+    case Con{Range{+f, +t, put}, rest}:
+      Hunk{Nat.sub(f, at), Nat.sub(t, f), put} <> Ranges.hunks(rest, t)
+
+# a and b are the same range
+def Range.is_eq(a: Range, b: Range) -> Bool:
+  match a b:
+    case Range{f1, t1, p1} Range{f2, t2, p2}:
+      Bool.and(
+        Bool.and(Nat.is_eq(f1, f2), Nat.is_eq(t1, t2)),
+        Shared.List.is_eq(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), p1, p2)
       )
 
-# the merge of two text changes, by their lines
+# the end of the range a comes before the start of b, with a line between
+def Range.before(a: Range, b: Range) -> Bool:
+  match a b:
+    case Range{f1, t1, p1} Range{f2, t2, p2}:
+      Nat.is_lt(t1, f2)
+
+# the ranges of two changes of one base, in order: each where it is when it
+# stands apart from the other side's, one when both made the same; none: two
+# ranges meet and differ, a clash
+def Ranges.merge(xs: List<&2, Range>, ys: List<&2, Range>) -> Maybe<&2, List<&2, Range>>:
+  match xs ys:
+    case Nil{} b:
+      Some{b}
+    case a Nil{}:
+      Some{a}
+    case Con{+x, +rx} Con{+y, +ry}:
+      Shared.Bool.when(
+        Maybe<&2, List<&2, Range>>,
+        Range.before(x, y),
+        u => Maybe.map(&2, List<&2, Range>, List<&2, Range>, m => x <> m, Ranges.merge(rx, Con{y, ry})),
+        u => Shared.Bool.when(
+          Maybe<&2, List<&2, Range>>,
+          Range.before(y, x),
+          w => Maybe.map(&2, List<&2, Range>, List<&2, Range>, m => y <> m, Ranges.merge(Con{x, rx}, ry)),
+          w => Shared.Bool.when(
+            Maybe<&2, List<&2, Range>>,
+            Range.is_eq(x, y),
+            v => Maybe.map(&2, List<&2, Range>, List<&2, Range>, m => x <> m, Ranges.merge(rx, ry)),
+            v => None{}
+          )
+        )
+      )
+
+# the lines lb after the merged ranges m (none: a clash)
+def Ranges.apply(m: Maybe<&2, List<&2, Range>>, lb: List<&2, Texts.Bytes()>) -> Merged:
+  match m:
+    case None{}:
+      Merged.Clash{}
+    case Some{rs}:
+      Merged.Clean{Lines.bytes(Lines.apply.all(Ranges.hunks(rs, 0n), lb))}
+
+# the merge of two text changes, by their lines: each hunk of either side
+# that stands apart from the other side's hunks is taken (diff3)
 def Plain.merge.lines(b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.Bytes()) -> Merged:
   +lb = Lines.list(b)
-  Plain.merge.cuts(lb, Lines.cut(lb, Lines.list(x)), Lines.cut(lb, Lines.list(y)))
+  Ranges.apply(
+    Ranges.merge(Hunks.ranges(Lines.diff(lb, Lines.list(x)), 0n), Hunks.ranges(Lines.diff(lb, Lines.list(y)), 0n)),
+    lb
+  )
 
 # the merge of two different changes, as lines when all three are text (text)
 def Plain.merge.text(text: Bool, b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.Bytes()) -> Merged:
@@ -845,7 +1113,7 @@ type Decision is Data:
   Decision.Pieces{}
 
 # what a merge of x and y, two changes of b, takes before any format looks
-def Merge.decide(+b: Texts.Bytes(), +x: Texts.Bytes(), +y: Texts.Bytes()) -> Decision:
+def Merge.decide(b: Texts.Bytes(), x: Texts.Bytes(), y: Texts.Bytes()) -> Decision:
   Decision.Side{Sides.Side.of(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), b, x, y)}
 
 # the change that the decision d takes of x and y, none for both
@@ -856,9 +1124,6 @@ def Decision.take(d: Decision, x: Texts.Bytes(), y: Texts.Bytes()) -> Maybe<&2, 
     case Decision.Pieces{}:
       None{}
 
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # Embedding
 # ---------
 # An embedding holds regions of another format between an opening and a
@@ -1430,20 +1695,31 @@ def Plain.changes.whole(held: Bool, a: Texts.Bytes(), b: Texts.Bytes()) -> List<
     case False{}:
       [Change.Removed{Item{"content", [], 0n, a, []}}, Change.Added{Item{"content", [], 0n, b, []}}]
 
-# the changes of the patch p of a
-def Plain.changes.of(+a: Texts.Bytes(), p: Patch) -> List<&2, Change>:
-  match p:
-    case Patch.Lines{+k, d, put}:
+# the changes of the hunks hs of the old lines ls, the first of which is the
+# line at
+def Hunks.changes(hs: List<&2, Hunk>, +ls: List<&2, Texts.Bytes()>, +at: Nat) -> List<&2, Change>:
+  match hs:
+    case Nil{}:
+      []
+    case Con{Hunk{+k, +d, put}, rest}:
+      +p = Nat.add(at, k)
       List.append(
         &2,
         Change,
-        Lines.changes(
-          ~(i => Change.Removed{i}),
-          List.take(&2, Texts.Bytes(), List.drop(&2, Texts.Bytes(), Lines.list(a), k), d),
-          1n+k
-        ),
-        Lines.changes(~(i => Change.Added{i}), put, 1n+k)
+        Lines.changes(~(i => Change.Removed{i}), List.take(&2, Texts.Bytes(), List.drop(&2, Texts.Bytes(), ls, k), d), 1n+p),
+        List.append(
+          &2,
+          Change,
+          Lines.changes(~(i => Change.Added{i}), put, 1n+p),
+          Hunks.changes(rest, List.drop(&2, Texts.Bytes(), ls, Nat.add(k, d)), Nat.add(p, d))
+        )
       )
+
+# the changes of the patch p of a
+def Plain.changes.of(+a: Texts.Bytes(), p: Patch) -> List<&2, Change>:
+  match p:
+    case Patch.Lines{hs}:
+      Hunks.changes(hs, Lines.list(a), 0n)
     case Patch.Whole{+x}:
       Plain.changes.whole(Shared.List.is_eq(~U32, ~U32.is_eq, a, x), a, x)
     case Patch.Pieces{sh, ts, rs}:
@@ -1519,7 +1795,12 @@ def View.get(vs: List<&2, Cond>, +x: Texts.Bytes()) -> Maybe<&2, Bool>:
 def Cond.holds(vs: List<&2, Cond>, c: Cond) -> Bool:
   match c:
     case Cond{x, h}:
-      Maybe.default(&2, Bool, Maybe.bind(&2, Bool, Bool, View.get(vs, x), v => Some{Shared.Bool.is_eq(v, h)}), True{})
+      Maybe.default(
+        &2,
+        Bool,
+        Maybe.bind(&2, Bool, Bool, View.get(vs, x), v => Some{Shared.Bool.is_eq(v, h)}),
+        True{}
+      )
 
 # each of the conditions cs holds under the view vs
 def Conds.hold(+vs: List<&2, Cond>, cs: List<&2, Cond>) -> Bool:
@@ -2392,7 +2673,7 @@ def Format.items(f: Format, b: Texts.Bytes()) -> List<&2, Item>:
   [Item{"content", [], 0n, b, []}]
 
 # the item x is one of those that the names ns ask for
-def Item.asked(+ns: List<&2, Texts.Bytes()>, x: Item) -> Bool:
+def Item.asked(ns: List<&2, Texts.Bytes()>, x: Item) -> Bool:
   match x:
     case Item{k, n, at, b, us}:
       List.contains(~Texts.Bytes(), ~Shared.List.is_eq(~U32, ~U32.is_eq), ns, n)
@@ -2420,33 +2701,11 @@ def Import.pool(x: Import, xs: List<&2, Item>) -> List<&2, Item>:
 # A format is data: a resource keeps its own, by hash, so every node reads a
 # resource in the same format, whatever its name.
 
-# the value x read, with the words r after it
-def Read.give(-A: Data, x: A, r: List<&2, U32>) -> Maybe<&2, Codes.Read<A>>:
-  Some{Codes.Read{x, r}}
-
-# the bit b, then r
-def Bit.code(b: Bool, r: List<&2, U32>) -> List<&2, U32>:
-  match b:
-    case False{}:
-      0 <> r
-    case True{}:
-      1 <> r
-
-# a bit
-def Bit.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Bool>>:
-  match ts:
-    case Con{0, r}:
-      Some{Codes.Read{False{}, r}}
-    case Con{1, r}:
-      Some{Codes.Read{True{}, r}}
-    case _:
-      None{}
-
 # the condition c, then r
 def Cond.code(c: Cond, r: List<&2, U32>) -> List<&2, U32>:
   match c:
     case Cond{x, h}:
-      Codes.Code.words(x, Bit.code(h, r))
+      Codes.Code.words(x, Codes.Code.bool(h, r))
 
 # a condition
 def Cond.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Cond>>:
@@ -2455,10 +2714,33 @@ def Cond.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Cond>>:
     ~Bool,
     ~Cond,
     ~Codes.Code.words.read,
-    ~Bit.code.read,
+    ~Codes.Code.bool.read,
     x => h => Cond{x, h},
     ts
   )
+
+# a condition reads back
+def Cond.code_read(
+  c: Cond,
+  r: List<&2, U32>
+) -> {Cond.code.read(Cond.code(c, r)) == Some{Codes.Read{c, r}}: Maybe<&2, Codes.Read<Cond>>}:
+  match c:
+    case Cond{x, h}:
+      Codes.Code.two_read(
+        ~Texts.Bytes(),
+        ~Bool,
+        ~Cond,
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.bool.codec(),
+        a => b => Cond{a, b},
+        x,
+        h,
+        r
+      )
+
+# the code of conditions
+def Cond.codec() -> Codes.Codec(Cond):
+  (Cond.code, (Cond.code.read, c => r => Cond.code_read(c, r)))
 
 # the edge e, then r
 def Edge.code(e: Edge, r: List<&2, U32>) -> List<&2, U32>:
@@ -2493,6 +2775,35 @@ def Edge.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Edge>>:
     ts
   )
 
+# an edge reads back
+def Edge.code_read(
+  e: Edge,
+  r: List<&2, U32>
+) -> {Edge.code.read(Edge.code(e, r)) == Some{Codes.Read{e, r}}: Maybe<&2, Codes.Read<Edge>>}:
+  match e:
+    case Edge{t, a, ns, cs}:
+      Codes.Code.four_read(
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~List<&2, Texts.Bytes()>,
+        ~List<&2, Cond>,
+        ~Edge,
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.list.codec(~Texts.Bytes(), ~Codes.Code.words.codec()),
+        ~Codes.Code.list.codec(~Cond, ~Cond.codec()),
+        w => x => y => z => Edge{w, x, y, z},
+        t,
+        a,
+        ns,
+        cs,
+        r
+      )
+
+# the code of edges
+def Edge.codec() -> Codes.Codec(Edge):
+  (Edge.code, (Edge.code.read, e => r => Edge.code_read(e, r)))
+
 # what an import brings, then r
 def Brings.code(b: Brings, r: List<&2, U32>) -> List<&2, U32>:
   match b:
@@ -2515,17 +2826,22 @@ def Brings.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Brings>>:
     case _:
       None{}
 
-# the character c, then r
-def Char.code(c: Char, r: List<&2, U32>) -> List<&2, U32>:
-  Char.to_u32(c) <> r
+# what an import brings reads back
+def Brings.code_read(
+  b: Brings,
+  r: List<&2, U32>
+) -> {Brings.code.read(Brings.code(b, r)) == Some{Codes.Read{b, r}}: Maybe<&2, Codes.Read<Brings>>}:
+  match b:
+    case Brings.Named{}:
+      {==}
+    case Brings.Whole{}:
+      {==}
+    case Brings.Through{}:
+      {==}
 
-# a character
-def Char.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Char>>:
-  match ts:
-    case Con{x, r}:
-      Some{Codes.Read{Chr{x}, r}}
-    case Nil{}:
-      None{}
+# the code of what imports bring
+def Brings.codec() -> Codes.Codec(Brings):
+  (Brings.code, (Brings.code.read, b => r => Brings.code_read(b, r)))
 
 # how a target is found, then r
 def Find.code(f: Find, r: List<&2, U32>) -> List<&2, U32>:
@@ -2533,11 +2849,16 @@ def Find.code(f: Find, r: List<&2, U32>) -> List<&2, U32>:
     case Find{s, l, rs, ss}:
       Codes.Code.maybe(
         ~Char,
-        ~Char.code,
+        ~Codes.Code.char,
         s,
-        Bit.code(
+        Codes.Code.bool(
           l,
-          Codes.Code.list(~String, ~Codes.Code.text, rs, Codes.Code.list(~String, ~Codes.Code.text, ss, r))
+          Codes.Code.list(
+            ~String,
+            ~Codes.Code.text,
+            rs,
+            Codes.Code.list(~String, ~Codes.Code.text, ss, r)
+          )
         )
       )
 
@@ -2549,13 +2870,42 @@ def Find.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Find>>:
     ~List<&2, String>,
     ~List<&2, String>,
     ~Find,
-    ~(m => Codes.Code.maybe.read(~Char, ~Char.code.read, m)),
-    ~Bit.code.read,
+    ~(m => Codes.Code.maybe.read(~Char, ~Codes.Code.char.read, m)),
+    ~Codes.Code.bool.read,
     ~(m => Codes.Code.list.read(~String, ~Codes.Code.text.read, m)),
     ~(m => Codes.Code.list.read(~String, ~Codes.Code.text.read, m)),
     s => l => rs => ss => Find{s, l, rs, ss},
     ts
   )
+
+# how a target is found reads back
+def Find.code_read(
+  f: Find,
+  r: List<&2, U32>
+) -> {Find.code.read(Find.code(f, r)) == Some{Codes.Read{f, r}}: Maybe<&2, Codes.Read<Find>>}:
+  match f:
+    case Find{s, l, rs, ss}:
+      Codes.Code.four_read(
+        ~Maybe<&2, Char>,
+        ~Bool,
+        ~List<&2, String>,
+        ~List<&2, String>,
+        ~Find,
+        ~Codes.Code.maybe.codec(~Char, ~Codes.Code.char.codec()),
+        ~Codes.Code.bool.codec(),
+        ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
+        ~Codes.Code.list.codec(~String, ~Codes.Code.text.codec()),
+        w => x => y => z => Find{w, x, y, z},
+        s,
+        l,
+        rs,
+        ss,
+        r
+      )
+
+# the code of how targets are found
+def Find.codec() -> Codes.Codec(Find):
+  (Find.code, (Find.code.read, f => r => Find.code_read(f, r)))
 
 # the import x, then r
 def Import.code(x: Import, r: List<&2, U32>) -> List<&2, U32>:
@@ -2577,26 +2927,31 @@ def Import.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Import>>:
     ts
   )
 
-# the rule x, then r
-def Rule.code(x: Rule, r: List<&2, U32>) -> List<&2, U32>:
+# an import reads back
+def Import.code_read(
+  x: Import,
+  r: List<&2, U32>
+) -> {Import.code.read(Import.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Import>>}:
   match x:
-    case Rule{st, op, cl, al, wh, ot, en, br, fi}:
-      Codes.Code.words(
-        st,
-        Codes.Code.words(
-          op,
-          Codes.Code.words(
-            cl,
-            Codes.Code.words(
-              al,
-              Codes.Code.words(
-                wh,
-                Codes.Code.words(ot, Codes.Code.words(en, Brings.code(br, Find.code(fi, r))))
-              )
-            )
-          )
-        )
+    case Import{e, b, f}:
+      Codes.Code.three_read(
+        ~Edge,
+        ~Brings,
+        ~Find,
+        ~Import,
+        ~Edge.codec(),
+        ~Brings.codec(),
+        ~Find.codec(),
+        u => v => w => Import{u, v, w},
+        e,
+        b,
+        f,
+        r
       )
+
+# the code of imports
+def Import.codec() -> Codes.Codec(Import):
+  (Import.code, (Import.code.read, x => r => Import.code_read(x, r)))
 
 # the markers of a rule
 type Marks is Data:
@@ -2604,13 +2959,19 @@ type Marks is Data:
 
 # the markers of conditions, what a rule brings, and how it finds targets
 type Tail is Data:
-  Tail{when: Texts.Bytes(), otherwise: Texts.Bytes(), end: Texts.Bytes(), brings: Brings, find: Find}
+  Tail{
+    when: Texts.Bytes(),
+    otherwise: Texts.Bytes(),
+    end: Texts.Bytes(),
+    brings: Brings,
+    find: Find
+  }
 
-# the rule of the markers m and the tail x
-def Rule.of(m: Marks, x: Tail) -> Rule:
-  match m x:
-    case Marks{st, op, cl, al} Tail{wh, ot, en, br, fi}:
-      Rule{st, op, cl, al, wh, ot, en, br, fi}
+# the markers m, then r
+def Marks.code(m: Marks, r: List<&2, U32>) -> List<&2, U32>:
+  match m:
+    case Marks{st, op, cl, al}:
+      Codes.Code.words(st, Codes.Code.words(op, Codes.Code.words(cl, Codes.Code.words(al, r))))
 
 # the markers of a rule
 def Marks.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Marks>>:
@@ -2628,26 +2989,105 @@ def Marks.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Marks>>:
     ts
   )
 
+# the markers of a rule read back
+def Marks.code_read(
+  m: Marks,
+  r: List<&2, U32>
+) -> {Marks.code.read(Marks.code(m, r)) == Some{Codes.Read{m, r}}: Maybe<&2, Codes.Read<Marks>>}:
+  match m:
+    case Marks{st, op, cl, al}:
+      Codes.Code.four_read(
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~Marks,
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        w => x => y => z => Marks{w, x, y, z},
+        st,
+        op,
+        cl,
+        al,
+        r
+      )
+
+# the code of markers
+def Marks.codec() -> Codes.Codec(Marks):
+  (Marks.code, (Marks.code.read, m => r => Marks.code_read(m, r)))
+
+# the tail x, then r
+def Tail.code(x: Tail, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Tail{wh, ot, en, br, fi}:
+      Codes.Code.words(
+        wh,
+        Codes.Code.words(ot, Codes.Code.words(en, Brings.code(br, Find.code(fi, r))))
+      )
+
 # the end of a rule
 def Tail.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Tail>>:
-  Codes.Read.then(
-    Texts.Bytes(),
-    Tail,
-    Codes.Code.words.read(ts),
-    wh => r => Codes.Code.four.read(
-      ~Texts.Bytes(),
-      ~Texts.Bytes(),
-      ~Brings,
-      ~Find,
-      ~Tail,
-      ~Codes.Code.words.read,
-      ~Codes.Code.words.read,
-      ~Brings.code.read,
-      ~Find.code.read,
-      ot => en => br => fi => Tail{wh, ot, en, br, fi},
-      r
-    )
+  Codes.Code.five.read(
+    ~Texts.Bytes(),
+    ~Texts.Bytes(),
+    ~Texts.Bytes(),
+    ~Brings,
+    ~Find,
+    ~Tail,
+    ~Codes.Code.words.read,
+    ~Codes.Code.words.read,
+    ~Codes.Code.words.read,
+    ~Brings.code.read,
+    ~Find.code.read,
+    wh => ot => en => br => fi => Tail{wh, ot, en, br, fi},
+    ts
   )
+
+# the end of a rule reads back
+def Tail.code_read(
+  x: Tail,
+  r: List<&2, U32>
+) -> {Tail.code.read(Tail.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Tail>>}:
+  match x:
+    case Tail{wh, ot, en, br, fi}:
+      Codes.Code.five_read(
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~Texts.Bytes(),
+        ~Brings,
+        ~Find,
+        ~Tail,
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Codes.Code.words.codec(),
+        ~Brings.codec(),
+        ~Find.codec(),
+        v => w => y => z => q => Tail{v, w, y, z, q},
+        wh,
+        ot,
+        en,
+        br,
+        fi,
+        r
+      )
+
+# the code of ends of rules
+def Tail.codec() -> Codes.Codec(Tail):
+  (Tail.code, (Tail.code.read, x => r => Tail.code_read(x, r)))
+
+# the rule of the markers m and the tail x
+def Rule.of(m: Marks, x: Tail) -> Rule:
+  match m x:
+    case Marks{st, op, cl, al} Tail{wh, ot, en, br, fi}:
+      Rule{st, op, cl, al, wh, ot, en, br, fi}
+
+# the rule x, then r: its markers, then its tail
+def Rule.code(x: Rule, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Rule{st, op, cl, al, wh, ot, en, br, fi}:
+      Marks.code(Marks{st, op, cl, al}, Tail.code(Tail{wh, ot, en, br, fi}, r))
 
 # a rule
 def Rule.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Rule>>:
@@ -2660,6 +3100,29 @@ def Rule.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Rule>>:
     m => x => Rule.of(m, x),
     ts
   )
+
+# a rule reads back
+def Rule.code_read(
+  x: Rule,
+  r: List<&2, U32>
+) -> {Rule.code.read(Rule.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Rule>>}:
+  match x:
+    case Rule{st, op, cl, al, wh, ot, en, br, fi}:
+      Codes.Code.two_read(
+        ~Marks,
+        ~Tail,
+        ~Rule,
+        ~Marks.codec(),
+        ~Tail.codec(),
+        m => t => Rule.of(m, t),
+        Marks{st, op, cl, al},
+        Tail{wh, ot, en, br, fi},
+        r
+      )
+
+# the code of rules
+def Rule.codec() -> Codes.Codec(Rule):
+  (Rule.code, (Rule.code.read, x => r => Rule.code_read(x, r)))
 
 # the leaf k, then r
 def Leaf.code(k: Leaf, r: List<&2, U32>) -> List<&2, U32>:
@@ -2683,18 +3146,51 @@ def Leaf.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Leaf>>:
     case _:
       None{}
 
-# the format f, then r
-def Format.code(f: Format, r: List<&2, U32>) -> List<&2, U32>:
+# a leaf reads back
+def Leaf.code_read(
+  k: Leaf,
+  r: List<&2, U32>
+) -> {Leaf.code.read(Leaf.code(k, r)) == Some{Codes.Read{k, r}}: Maybe<&2, Codes.Read<Leaf>>}:
+  match k:
+    case Leaf.Lines{}:
+      {==}
+    case Leaf.Whole{}:
+      {==}
+    case Leaf.Module{}:
+      {==}
+
+# the code of leaves
+def Leaf.codec() -> Codes.Codec(Leaf):
+  (Leaf.code, (Leaf.code.read, k => r => Leaf.code_read(k, r)))
+
+# the count of the formats in f: itself and each that it holds
+def Format.size(f: Format) -> Nat:
+  match f:
+    case Format.Leaf{k}:
+      1n
+    case Format.Embed{o, op, cl, i}:
+      so si = Format.size(o) Format.size(i)
+      1n+Nat.add(so, si)
+    case Format.Code{b, x, im}:
+      1n+Format.size(b)
+
+# the parts of the format f, then r: its tag, then what its kind holds
+def Format.body(f: Format, r: List<&2, U32>) -> List<&2, U32>:
   match f:
     case Format.Leaf{k}:
       0 <> Leaf.code(k, r)
     case Format.Embed{o, op, cl, i}:
-      1 <> Format.code(o, Codes.Code.words(op, Codes.Code.words(cl, Format.code(i, r))))
+      1 <> Format.body(o, Codes.Code.words(op, Codes.Code.words(cl, Format.body(i, r))))
     case Format.Code{b, x, im}:
-      2 <> Format.code(b, Rule.code(x, Codes.Code.list(~Import, ~Import.code, im, r)))
+      2 <> Format.body(b, Rule.code(x, Codes.Code.list(~Import, ~Import.code, im, r)))
 
-# a format, in at most f steps: each step reads one tag, then the parts of
-# its kind
+# the format f, then r: its size, then its parts, so that a read of it ends
+def Format.code(f: Format, r: List<&2, U32>) -> List<&2, U32>:
+  +f = f
+  Codes.Code.count(Format.size(f), Format.body(f, r))
+
+# the parts of a format of at most f formats: each step reads one tag, then
+# the parts of its kind
 def Format.code.read.go(f: Nat, ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Format>>:
   match f ts:
     case 0n x:
@@ -2725,7 +3221,7 @@ def Format.code.read.go(f: Nat, ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Forma
                   Format,
                   Format,
                   Format.code.read.go(p, r3),
-                  i => r4 => Read.give(Format, Format.Embed{o, op, cl, i}, r4)
+                  i => r4 => Some{Codes.Read{Format.Embed{o, op, cl, i}, r4}}
                 )
               )
             )
@@ -2752,16 +3248,196 @@ def Format.code.read.go(f: Nat, ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Forma
         )
       )
 
-# a format: a code has no more tags than words
+# a format: its size, then its parts
 def Format.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Format>>:
-  +xs = ts
-  Format.code.read.go(List.length(&2, U32, xs), xs)
+  Codes.Read.then(Nat, Format, Codes.Code.count.read(ts), n => r => Format.code.read.go(n, r))
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+# the parts of a format read back, in as many steps as it has formats, or more
+def Format.body_read(
+  f: Format,
+  +r: List<&2, U32>,
+  p: Nat,
+  +h: {Nat.is_le(Format.size(f), p) == True{}: Bool}
+) -> {
+  Format.code.read.go(p, Format.body(f, r)) == Some{Codes.Read{f, r}}: Maybe<&2, Codes.Read<Format>>
+}:
+  match f p:
+    case Format.Leaf{k} 0n:
+      Empty.absurd(
+        {
+          Format.code.read.go(
+            0n,
+            Format.body(Format.Leaf{k}, r)
+          )
+            == Some{Codes.Read{Format.Leaf{k}, r}}: Maybe<&2, Codes.Read<Format>>
+        },
+        Shared.Bool.false_ne_true(h)
+      )
+    case Format.Leaf{k} 1n+q:
+      Codes.Code.one_read(~Leaf, ~Format, ~Leaf.codec(), x => Format.Leaf{x}, k, r)
+    case Format.Embed{o, op, cl, i} 0n:
+      Empty.absurd(
+        {
+          Format.code.read.go(
+            0n,
+            Format.body(Format.Embed{o, op, cl, i}, r)
+          )
+            == Some{Codes.Read{Format.Embed{o, op, cl, i}, r}}: Maybe<&2, Codes.Read<Format>>
+        },
+        Shared.Bool.false_ne_true(h)
+      )
+    case Format.Embed{+o, +op, +cl, +i} 1n+(+q):
+      +so = Format.size(o)
+      +si = Format.size(i)
+      +ri = Format.body(i, r)
+      +rc = Codes.Code.words(cl, ri)
+      w = Codes.Code.words(op, rc)
+      e = {Some{Codes.Read{Format.Embed{o, op, cl, i}, r}}: Maybe<&2, Codes.Read<Format>>}
+      %Codes.Read.then_some(
+        Format,
+        Format,
+        Format.code.read.go(q, Format.body(o, w)),
+        o2 => r1 => Codes.Read.then(
+          Texts.Bytes(),
+          Format,
+          Codes.Code.words.read(r1),
+          op2 => r2 => Codes.Read.then(
+            Texts.Bytes(),
+            Format,
+            Codes.Code.words.read(r2),
+            cl2 => r3 => Codes.Read.then(
+              Format,
+              Format,
+              Format.code.read.go(q, r3),
+              i2 => r4 => Some{Codes.Read{Format.Embed{o2, op2, cl2, i2}, r4}}
+            )
+          )
+        ),
+        o,
+        w,
+        Format.body_read(
+          o,
+          w,
+          q,
+          Shared.Nat.le_trans(so, Nat.add(so, si), q)(Shared.Nat.le_add_first(so, si))(h)
+        )
+      ): {_ == e: Maybe<&2, Codes.Read<Format>>}
+      %Codes.Read.then_some(
+        Texts.Bytes(),
+        Format,
+        Codes.Code.words.read(w),
+        op2 => r2 => Codes.Read.then(
+          Texts.Bytes(),
+          Format,
+          Codes.Code.words.read(r2),
+          cl2 => r3 => Codes.Read.then(
+            Format,
+            Format,
+            Format.code.read.go(q, r3),
+            i2 => r4 => Some{Codes.Read{Format.Embed{o, op2, cl2, i2}, r4}}
+          )
+        ),
+        op,
+        rc,
+        Codes.Codec.laws(List<&2, U32>, Codes.Code.words.codec())(op)(rc)
+      ): {_ == e: Maybe<&2, Codes.Read<Format>>}
+      %Codes.Read.then_some(
+        Texts.Bytes(),
+        Format,
+        Codes.Code.words.read(rc),
+        cl2 => r3 => Codes.Read.then(
+          Format,
+          Format,
+          Format.code.read.go(q, r3),
+          i2 => r4 => Some{Codes.Read{Format.Embed{o, op, cl2, i2}, r4}}
+        ),
+        cl,
+        ri,
+        Codes.Codec.laws(List<&2, U32>, Codes.Code.words.codec())(cl)(ri)
+      ): {_ == e: Maybe<&2, Codes.Read<Format>>}
+      %Codes.Read.then_some(
+        Format,
+        Format,
+        Format.code.read.go(q, ri),
+        i2 => r4 => Some{Codes.Read{Format.Embed{o, op, cl, i2}, r4}},
+        i,
+        r,
+        Format.body_read(
+          i,
+          r,
+          q,
+          Shared.Nat.le_trans(si, Nat.add(so, si), q)(Shared.Nat.le_add(so, si))(h)
+        )
+      ): {_ == e: Maybe<&2, Codes.Read<Format>>}
+      {==}
+    case Format.Code{b, x, im} 0n:
+      Empty.absurd(
+        {
+          Format.code.read.go(
+            0n,
+            Format.body(Format.Code{b, x, im}, r)
+          )
+            == Some{Codes.Read{Format.Code{b, x, im}, r}}: Maybe<&2, Codes.Read<Format>>
+        },
+        Shared.Bool.false_ne_true(h)
+      )
+    case Format.Code{+b, +x, +im} 1n+q:
+      rb = Rule.code(x, Codes.Code.list(~Import, ~Import.code, im, r))
+      %Codes.Read.then_some(
+        Format,
+        Format,
+        Format.code.read.go(q, Format.body(b, rb)),
+        b2 => r1 => Codes.Code.two.read(
+          ~Rule,
+          ~List<&2, Import>,
+          ~Format,
+          ~Rule.code.read,
+          ~(m => Codes.Code.list.read(~Import, ~Import.code.read, m)),
+          x2 => im2 => Format.Code{b2, x2, im2},
+          r1
+        ),
+        b,
+        rb,
+        Format.body_read(b, rb, q, h)
+      ): {_ == Some{Codes.Read{Format.Code{b, x, im}, r}}: Maybe<&2, Codes.Read<Format>>}
+      Codes.Code.two_read(
+        ~Rule,
+        ~List<&2, Import>,
+        ~Format,
+        ~Rule.codec(),
+        ~Codes.Code.list.codec(~Import, ~Import.codec()),
+        x2 => im2 => Format.Code{b, x2, im2},
+        x,
+        im,
+        r
+      )
+
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # a format reads back from its code
 law Format.code_read:
-  for f: Format
-  for r: List<&2, U32>
+  for +f: Format
+  for +r: List<&2, U32>
   {Format.code.read(Format.code(f, r)) == Some{Codes.Read{f, r}}: Maybe<&2, Codes.Read<Format>>}
+
+def Format.code_read(f, r):
+  %Codes.Read.then_some(
+    Nat,
+    Format,
+    Codes.Code.count.read(Codes.Code.count(Format.size(f), Format.body(f, r))),
+    n => r1 => Format.code.read.go(n, r1),
+    Format.size(f),
+    Format.body(f, r),
+    Codes.Code.count_read(Format.size(f), Format.body(f, r))
+  ): {_ == Some{Codes.Read{f, r}}: Maybe<&2, Codes.Read<Format>>}
+  Format.body_read(f, r, Format.size(f), Shared.Nat.le_refl(Format.size(f)))
+
+# the code of formats
+def Format.codec() -> Codes.Codec(Format):
+  (Format.code, (Format.code.read, f => r => Format.code_read(f, r)))
 
 # Known formats
 # -------------
