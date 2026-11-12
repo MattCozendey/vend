@@ -1792,17 +1792,6954 @@ law Mst.writes:
   for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   Laws.Write(S, fetch, grows, Mst.ops(~S, ~fetch))
 
+# The order of keys
+# -----------------
+
+# the comparison c, seen from the other side
+def Cmp.flip(c: Cmp) -> Cmp:
+  match c:
+    case LT{}:
+      GT{}
+    case EQ{}:
+      EQ{}
+    case GT{}:
+      LT{}
+
+# no LT is an EQ
+def Cmp.lt_ne_eq(e: {LT{} == EQ{}: Cmp}) -> Empty:
+  Shared.Bool.false_ne_true(Equal.cong(Cmp, Bool, Cmp.is_eq, LT{}, EQ{}, e))
+
+# no GT is an EQ
+def Cmp.gt_ne_eq(e: {GT{} == EQ{}: Cmp}) -> Empty:
+  Shared.Bool.false_ne_true(Equal.cong(Cmp, Bool, Cmp.is_eq, GT{}, EQ{}, e))
+
+# no GT is an LT
+def Cmp.gt_ne_lt(e: {GT{} == LT{}: Cmp}) -> Empty:
+  Shared.Bool.false_ne_true(Equal.cong(Cmp, Bool, Cmp.is_lt, GT{}, LT{}, e))
+
+# no EQ is an LT
+def Cmp.eq_ne_lt(e: {EQ{} == LT{}: Cmp}) -> Empty:
+  Shared.Bool.false_ne_true(Equal.cong(Cmp, Bool, Cmp.is_lt, EQ{}, LT{}, e))
+
+# two numbers compare the other way round from the other side
+def Nat.cmp_flip(a: Nat, b: Nat) -> {Nat.cmp(b, a) == Cmp.flip(Nat.cmp(a, b)): Cmp}:
+  match a b:
+    case 0n 0n:
+      {==}
+    case 0n 1n+q:
+      {==}
+    case 1n+p 0n:
+      {==}
+    case 1n+p 1n+q:
+      Nat.cmp_flip(p, q)
+
+# a < b and b < c give a < c
+def Nat.cmp_trans(a: Nat, b: Nat, c: Nat) -> {Nat.cmp(a, b) == LT{}: Cmp} -> {Nat.cmp(b, c) == LT{}: Cmp} -> {
+  Nat.cmp(a, c) == LT{}: Cmp
+}:
+  match a b c:
+    case 0n 0n z:
+      h => k => Empty.absurd({Nat.cmp(0n, z) == LT{}: Cmp}, Cmp.eq_ne_lt(h))
+    case 1n+p 0n z:
+      h => k => Empty.absurd({Nat.cmp(1n+p, z) == LT{}: Cmp}, Cmp.gt_ne_lt(h))
+    case 0n 1n+q 0n:
+      h => k => Empty.absurd({Nat.cmp(0n, 0n) == LT{}: Cmp}, Cmp.gt_ne_lt(k))
+    case 0n 1n+q 1n+w:
+      h => k => {==}
+    case 1n+p 1n+q 0n:
+      h => k => Empty.absurd({Nat.cmp(1n+p, 0n) == LT{}: Cmp}, Cmp.gt_ne_lt(k))
+    case 1n+p 1n+q 1n+w:
+      Nat.cmp_trans(p, q, w)
+
+# two words compare the other way round from the other side
+def U32.cmp_flip(+x: U32, +y: U32) -> {U32.cmp(y, x) == Cmp.flip(U32.cmp(x, y)): Cmp}:
+  %Equal.sym(Cmp, U32.cmp(y, x), Nat.cmp(U32.to_nat(y), U32.to_nat(x)), Shared.U32.cmp_to_nat(y, x)): {
+    _ == Cmp.flip(U32.cmp(x, y)): Cmp
+  }
+  %Equal.sym(Cmp, U32.cmp(x, y), Nat.cmp(U32.to_nat(x), U32.to_nat(y)), Shared.U32.cmp_to_nat(x, y)): {
+    Nat.cmp(U32.to_nat(y), U32.to_nat(x)) == Cmp.flip(_): Cmp
+  }
+  Nat.cmp_flip(U32.to_nat(x), U32.to_nat(y))
+
+# x < y and y < z give x < z
+def U32.cmp_trans(+x: U32, +y: U32, +z: U32) -> {U32.cmp(x, y) == LT{}: Cmp} -> {U32.cmp(y, z) == LT{}: Cmp} -> {
+  U32.cmp(x, z) == LT{}: Cmp
+}:
+  h => k =>
+    %Equal.sym(Cmp, U32.cmp(x, z), Nat.cmp(U32.to_nat(x), U32.to_nat(z)), Shared.U32.cmp_to_nat(x, z)): {
+      _ == LT{}: Cmp
+    }
+    Nat.cmp_trans(
+      U32.to_nat(x),
+      U32.to_nat(y),
+      U32.to_nat(z)
+    )(
+      Equal.trans(
+        Cmp,
+        Nat.cmp(U32.to_nat(x), U32.to_nat(y)),
+        U32.cmp(x, y),
+        LT{},
+        Equal.sym(Cmp, U32.cmp(x, y), Nat.cmp(U32.to_nat(x), U32.to_nat(y)), Shared.U32.cmp_to_nat(x, y)),
+        h
+      )
+    )(
+      Equal.trans(
+        Cmp,
+        Nat.cmp(U32.to_nat(y), U32.to_nat(z)),
+        U32.cmp(y, z),
+        LT{},
+        Equal.sym(Cmp, U32.cmp(y, z), Nat.cmp(U32.to_nat(y), U32.to_nat(z)), Shared.U32.cmp_to_nat(y, z)),
+        k
+      )
+    )
+
+# words that compare EQ are equal
+def U32.cmp_eq(+x: U32, +y: U32) -> {U32.cmp(x, y) == EQ{}: Cmp} -> {x == y: U32}:
+  h => Shared.U32.is_eq_sound(x, y)(Shared.Cmp.is_eq_of(U32.cmp(x, y), Equal.sym(Cmp, U32.cmp(x, y), EQ{}, h)))
+
+# a key compares EQ to itself
+def Key.cmp_refl(a: List<&2, U32>) -> {Key.cmp(a, a) == EQ{}: Cmp}:
+  match a:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      %Equal.sym(Cmp, U32.cmp(x, x), EQ{}, Shared.U32.cmp_refl(x)): {
+        Shared.Bool.when(Cmp, Cmp.is_eq(_), u => Key.cmp(r, r), u => _) == EQ{}: Cmp
+      }
+      Key.cmp_refl(r)
+
+# Key.cmp_eq for two keys of heads x and y, whose comparison is c
+def Key.cmp_eq.con(
+  c: Cmp,
+  +x: U32,
+  +y: U32,
+  +ra: List<&2, U32>,
+  +rb: List<&2, U32>,
+  ec: {U32.cmp(x, y) == c: Cmp},
+  ih: {Key.cmp(ra, rb) == EQ{}: Cmp} -> {ra == rb: List<&2, U32>}
+) -> {Shared.Bool.when(Cmp, Cmp.is_eq(c), u => Key.cmp(ra, rb), u => c) == EQ{}: Cmp} -> {
+  x <> ra == y <> rb: List<&2, U32>
+}:
+  match c:
+    case EQ{}:
+      h =>
+        %U32.cmp_eq(x, y)(ec): {x <> ra == _ <> rb: List<&2, U32>}
+        %ih(h): {x <> ra == x <> _: List<&2, U32>}
+        {==}
+    case LT{}:
+      h => Empty.absurd({x <> ra == y <> rb: List<&2, U32>}, Cmp.lt_ne_eq(h))
+    case GT{}:
+      h => Empty.absurd({x <> ra == y <> rb: List<&2, U32>}, Cmp.gt_ne_eq(h))
+
+# keys that compare EQ are equal
+def Key.cmp_eq(a: List<&2, U32>, b: List<&2, U32>) -> {Key.cmp(a, b) == EQ{}: Cmp} -> {a == b: List<&2, U32>}:
+  match a b:
+    case Nil{} Nil{}:
+      h => {==}
+    case Nil{} Con{y, rb}:
+      h => Empty.absurd({[] == y <> rb: List<&2, U32>}, Cmp.lt_ne_eq(h))
+    case Con{x, ra} Nil{}:
+      h => Empty.absurd({x <> ra == []: List<&2, U32>}, Cmp.gt_ne_eq(h))
+    case Con{+x, +ra} Con{+y, +rb}:
+      Key.cmp_eq.con(U32.cmp(x, y), x, y, ra, rb, {==}, Key.cmp_eq(ra, rb))
+
+# Key.cmp_flip for two keys of heads that compare as c, and rests that compare
+# as r
+def Key.cmp_flip.con(c: Cmp, r: Cmp) -> {
+  Shared.Bool.when(Cmp, Cmp.is_eq(Cmp.flip(c)), u => Cmp.flip(r), u => Cmp.flip(c))
+    == Cmp.flip(Shared.Bool.when(Cmp, Cmp.is_eq(c), u => r, u => c)): Cmp
+}:
+  match c:
+    case LT{}:
+      {==}
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+# two keys compare the other way round from the other side
+def Key.cmp_flip(a: List<&2, U32>, b: List<&2, U32>) -> {Key.cmp(b, a) == Cmp.flip(Key.cmp(a, b)): Cmp}:
+  match a b:
+    case Nil{} Nil{}:
+      {==}
+    case Nil{} Con{y, rb}:
+      {==}
+    case Con{x, ra} Nil{}:
+      {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      %Equal.sym(Cmp, U32.cmp(y, x), Cmp.flip(U32.cmp(x, y)), U32.cmp_flip(x, y)): {
+        Shared.Bool.when(Cmp, Cmp.is_eq(_), u => Key.cmp(rb, ra), u => _)
+          == Cmp.flip(Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(x, y)), u => Key.cmp(ra, rb), u => U32.cmp(x, y))): Cmp
+      }
+      %Equal.sym(Cmp, Key.cmp(rb, ra), Cmp.flip(Key.cmp(ra, rb)), Key.cmp_flip(ra, rb)): {
+        Shared.Bool.when(Cmp, Cmp.is_eq(Cmp.flip(U32.cmp(x, y))), u => _, u => Cmp.flip(U32.cmp(x, y)))
+          == Cmp.flip(Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(x, y)), u => Key.cmp(ra, rb), u => U32.cmp(x, y))): Cmp
+      }
+      Key.cmp_flip.con(U32.cmp(x, y), Key.cmp(ra, rb))
+
+# Key.cmp_trans for three keys of heads x, y and z, where x and y compare as
+# c1, and y and z as c2
+def Key.cmp_trans.con(
+  c1: Cmp,
+  c2: Cmp,
+  +x: U32,
+  +y: U32,
+  +z: U32,
+  +ra: List<&2, U32>,
+  +rb: List<&2, U32>,
+  +rc: List<&2, U32>,
+  e1: {U32.cmp(x, y) == c1: Cmp},
+  e2: {U32.cmp(y, z) == c2: Cmp},
+  ih: {Key.cmp(ra, rb) == LT{}: Cmp} -> {Key.cmp(rb, rc) == LT{}: Cmp} -> {Key.cmp(ra, rc) == LT{}: Cmp}
+) -> {Shared.Bool.when(Cmp, Cmp.is_eq(c1), u => Key.cmp(ra, rb), u => c1) == LT{}: Cmp} -> {
+  Shared.Bool.when(Cmp, Cmp.is_eq(c2), u => Key.cmp(rb, rc), u => c2) == LT{}: Cmp
+} -> {Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(x, z)), u => Key.cmp(ra, rc), u => U32.cmp(x, z)) == LT{}: Cmp}:
+  match c1 c2:
+    case LT{} LT{}:
+      h => k =>
+        %Equal.sym(Cmp, U32.cmp(x, z), LT{}, U32.cmp_trans(x, y, z)(e1)(e2)): {
+          Shared.Bool.when(Cmp, Cmp.is_eq(_), u => Key.cmp(ra, rc), u => _) == LT{}: Cmp
+        }
+        {==}
+    case LT{} EQ{}:
+      h => k =>
+        %U32.cmp_eq(y, z)(e2): {
+          Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(x, _)), u => Key.cmp(ra, rc), u => U32.cmp(x, _)) == LT{}: Cmp
+        }
+        %Equal.sym(Cmp, U32.cmp(x, y), LT{}, e1): {
+          Shared.Bool.when(Cmp, Cmp.is_eq(_), u => Key.cmp(ra, rc), u => _) == LT{}: Cmp
+        }
+        {==}
+    case EQ{} LT{}:
+      h => k =>
+        %Equal.sym(U32, x, y, U32.cmp_eq(x, y)(e1)): {
+          Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(_, z)), u => Key.cmp(ra, rc), u => U32.cmp(_, z)) == LT{}: Cmp
+        }
+        %Equal.sym(Cmp, U32.cmp(y, z), LT{}, e2): {
+          Shared.Bool.when(Cmp, Cmp.is_eq(_), u => Key.cmp(ra, rc), u => _) == LT{}: Cmp
+        }
+        {==}
+    case EQ{} EQ{}:
+      h => k =>
+        %Equal.sym(U32, x, y, U32.cmp_eq(x, y)(e1)): {
+          Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(_, z)), u => Key.cmp(ra, rc), u => U32.cmp(_, z)) == LT{}: Cmp
+        }
+        %U32.cmp_eq(y, z)(e2): {
+          Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(y, _)), u => Key.cmp(ra, rc), u => U32.cmp(y, _)) == LT{}: Cmp
+        }
+        %Equal.sym(Cmp, U32.cmp(y, y), EQ{}, Shared.U32.cmp_refl(y)): {
+          Shared.Bool.when(Cmp, Cmp.is_eq(_), u => Key.cmp(ra, rc), u => _) == LT{}: Cmp
+        }
+        ih(h)(k)
+    case GT{} w:
+      h => k => Empty.absurd(
+        {Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(x, z)), u => Key.cmp(ra, rc), u => U32.cmp(x, z)) == LT{}: Cmp},
+        Cmp.gt_ne_lt(h)
+      )
+    case w GT{}:
+      h => k => Empty.absurd(
+        {Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(x, z)), u => Key.cmp(ra, rc), u => U32.cmp(x, z)) == LT{}: Cmp},
+        Cmp.gt_ne_lt(k)
+      )
+
+# a < b and b < c give a < c
+def Key.cmp_trans(a: List<&2, U32>, b: List<&2, U32>, c: List<&2, U32>) -> {Key.cmp(a, b) == LT{}: Cmp} -> {
+  Key.cmp(b, c) == LT{}: Cmp
+} -> {Key.cmp(a, c) == LT{}: Cmp}:
+  match a b c:
+    case Nil{} Nil{} z:
+      h => k => Empty.absurd({Key.cmp([], z) == LT{}: Cmp}, Cmp.eq_ne_lt(h))
+    case Con{x, ra} Nil{} z:
+      h => k => Empty.absurd({Key.cmp(x <> ra, z) == LT{}: Cmp}, Cmp.gt_ne_lt(h))
+    case Nil{} Con{y, rb} Nil{}:
+      h => k => Empty.absurd({Key.cmp([], []) == LT{}: Cmp}, Cmp.gt_ne_lt(k))
+    case Nil{} Con{y, rb} Con{z, rc}:
+      h => k => {==}
+    case Con{x, ra} Con{y, rb} Nil{}:
+      h => k => Empty.absurd({Key.cmp(x <> ra, []) == LT{}: Cmp}, Cmp.gt_ne_lt(k))
+    case Con{+x, +ra} Con{+y, +rb} Con{+z, +rc}:
+      Key.cmp_trans.con(U32.cmp(x, y), U32.cmp(y, z), x, y, z, ra, rb, rc, {==}, {==}, Key.cmp_trans(ra, rb, rc))
+
+# Key.is_lt_cmp for two keys of heads that compare as c, and rests that
+# compare as r
+def Key.is_lt_cmp.con(c: Cmp, r: Cmp) -> {
+  Bool.or(Cmp.is_lt(c), Bool.and(Cmp.is_eq(c), Cmp.is_lt(r))) == Cmp.is_lt(Shared.Bool.when(Cmp, Cmp.is_eq(c), u => r, u => c)): Bool
+}:
+  match c:
+    case LT{}:
+      {==}
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+# Key.is_lt is the LT of Key.cmp
+def Key.is_lt_cmp(a: List<&2, U32>, b: List<&2, U32>) -> {Key.is_lt(a, b) == Cmp.is_lt(Key.cmp(a, b)): Bool}:
+  match a b:
+    case Nil{} Nil{}:
+      {==}
+    case Con{x, ra} Nil{}:
+      {==}
+    case Nil{} Con{y, rb}:
+      {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      %Equal.sym(Bool, Key.is_lt(ra, rb), Cmp.is_lt(Key.cmp(ra, rb)), Key.is_lt_cmp(ra, rb)): {
+        Bool.or(U32.is_lt(x, y), Bool.and(U32.is_eq(x, y), _))
+          == Cmp.is_lt(Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(x, y)), u => Key.cmp(ra, rb), u => U32.cmp(x, y))): Bool
+      }
+      Key.is_lt_cmp.con(U32.cmp(x, y), Key.cmp(ra, rb))
+
+# Key.is_eq_cmp for two keys of heads that compare as c, and rests that
+# compare as r
+def Key.is_eq_cmp.con(c: Cmp, r: Cmp) -> {
+  List.all.if(u => Cmp.is_eq(r), Cmp.is_eq(c)) == Cmp.is_eq(Shared.Bool.when(Cmp, Cmp.is_eq(c), u => r, u => c)): Bool
+}:
+  match c:
+    case LT{}:
+      {==}
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+# the equality of words of keys is the EQ of Key.cmp
+def Key.is_eq_cmp(a: List<&2, U32>, b: List<&2, U32>) -> {
+  Shared.List.is_eq(~U32, ~U32.is_eq, a, b) == Cmp.is_eq(Key.cmp(a, b)): Bool
+}:
+  match a b:
+    case Nil{} Nil{}:
+      {==}
+    case Con{x, ra} Nil{}:
+      {==}
+    case Nil{} Con{y, rb}:
+      {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      %Equal.sym(
+        Bool,
+        Shared.List.is_eq(~U32, ~U32.is_eq, ra, rb),
+        Cmp.is_eq(Key.cmp(ra, rb)),
+        Key.is_eq_cmp(ra, rb)
+      ): {
+        List.all.if(u => _, U32.is_eq(x, y))
+          == Cmp.is_eq(Shared.Bool.when(Cmp, Cmp.is_eq(U32.cmp(x, y)), u => Key.cmp(ra, rb), u => U32.cmp(x, y))): Bool
+      }
+      Key.is_eq_cmp.con(U32.cmp(x, y), Key.cmp(ra, rb))
+
+# Opened nodes
+# ------------
+
+# an is_lt that is True is of LT
+def Cmp.lt_true(c: Cmp) -> {Cmp.is_lt(c) == True{}: Bool} -> {c == LT{}: Cmp}:
+  match c:
+    case LT{}:
+      h => {==}
+    case EQ{}:
+      h => Empty.absurd({EQ{} == LT{}: Cmp}, Shared.Bool.false_ne_true(h))
+    case GT{}:
+      h => Empty.absurd({GT{} == LT{}: Cmp}, Shared.Bool.false_ne_true(h))
+
+# a key before b compares as c, then Key.is_lt asks for LT
+def Key.lt_of(+a: List<&2, U32>, +b: List<&2, U32>, -c: Cmp) -> {Key.cmp(a, b) == c: Cmp} -> {
+  Key.is_lt(a, b) == Cmp.is_lt(c): Bool
+}:
+  e =>
+    %Equal.sym(Bool, Key.is_lt(a, b), Cmp.is_lt(Key.cmp(a, b)), Key.is_lt_cmp(a, b)): {_ == Cmp.is_lt(c): Bool}
+    Equal.cong(Cmp, Bool, Cmp.is_lt, Key.cmp(a, b), c, e)
+
+# a key a that compares to b as c is after b as the flip of c is LT
+def Key.gt_of(+a: List<&2, U32>, +b: List<&2, U32>, -c: Cmp) -> {Key.cmp(a, b) == c: Cmp} -> {
+  Key.is_lt(b, a) == Cmp.is_lt(Cmp.flip(c)): Bool
+}:
+  e =>
+    %Equal.sym(Bool, Key.is_lt(b, a), Cmp.is_lt(Key.cmp(b, a)), Key.is_lt_cmp(b, a)): {_ == Cmp.is_lt(Cmp.flip(c)): Bool}
+    %Equal.sym(Cmp, Key.cmp(b, a), Cmp.flip(Key.cmp(a, b)), Key.cmp_flip(a, b)): {Cmp.is_lt(_) == Cmp.is_lt(Cmp.flip(c)): Bool}
+    Equal.cong(Cmp, Bool, x => Cmp.is_lt(Cmp.flip(x)), Key.cmp(a, b), c, e)
+
+# a key a that compares to b as c has the words of b as the flip of c is EQ
+def Key.eq_of(+a: List<&2, U32>, +b: List<&2, U32>, -c: Cmp) -> {Key.cmp(a, b) == c: Cmp} -> {
+  Shared.List.is_eq(~U32, ~U32.is_eq, b, a) == Cmp.is_eq(Cmp.flip(c)): Bool
+}:
+  e =>
+    %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, b, a), Cmp.is_eq(Key.cmp(b, a)), Key.is_eq_cmp(b, a)): {
+      _ == Cmp.is_eq(Cmp.flip(c)): Bool
+    }
+    %Equal.sym(Cmp, Key.cmp(b, a), Cmp.flip(Key.cmp(a, b)), Key.cmp_flip(a, b)): {Cmp.is_eq(_) == Cmp.is_eq(Cmp.flip(c)): Bool}
+    Equal.cong(Cmp, Bool, x => Cmp.is_eq(Cmp.flip(x)), Key.cmp(a, b), c, e)
+
+# a < b and b < c give a < c
+def Key.lt_trans(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>) -> {Key.is_lt(a, b) == True{}: Bool} -> {
+  Key.is_lt(b, c) == True{}: Bool
+} -> {Key.is_lt(a, c) == True{}: Bool}:
+  h => k =>
+    %Equal.sym(Bool, Key.is_lt(a, c), Cmp.is_lt(Key.cmp(a, c)), Key.is_lt_cmp(a, c)): {_ == True{}: Bool}
+    %Equal.sym(
+      Cmp,
+      Key.cmp(a, c),
+      LT{},
+      Key.cmp_trans(
+        a,
+        b,
+        c
+      )(
+        Cmp.lt_true(Key.cmp(a, b))(Equal.trans(Bool, Cmp.is_lt(Key.cmp(a, b)), Key.is_lt(a, b), True{}, Equal.sym(Bool, Key.is_lt(a, b), Cmp.is_lt(Key.cmp(a, b)), Key.is_lt_cmp(a, b)), h))
+      )(
+        Cmp.lt_true(Key.cmp(b, c))(Equal.trans(Bool, Cmp.is_lt(Key.cmp(b, c)), Key.is_lt(b, c), True{}, Equal.sym(Bool, Key.is_lt(b, c), Cmp.is_lt(Key.cmp(b, c)), Key.is_lt_cmp(b, c)), k))
+      )
+    ): {Cmp.is_lt(_) == True{}: Bool}
+    {==}
+
+# no key is before the empty key
+def Key.lt_nil(k: List<&2, U32>) -> {Key.is_lt(k, []) == False{}: Bool}:
+  match k:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# a key after the bound lo is after it once it grows: lo < a < k
+def Bound.after_trans(+lo: Maybe<&2, List<&2, U32>>, +a: List<&2, U32>, +k: List<&2, U32>) -> {
+  Bound.after(lo, a) == True{}: Bool
+} -> {Key.is_lt(a, k) == True{}: Bool} -> {Bound.after(lo, k) == True{}: Bool}:
+  match lo:
+    case None{}:
+      h => g => {==}
+    case Some{+b}:
+      h => g => Key.lt_trans(b, a, k)(h)(g)
+
+# a key before the bound hi is before it: k < a < hi
+def Bound.before_trans(+k: List<&2, U32>, +a: List<&2, U32>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Key.is_lt(k, a) == True{}: Bool
+} -> {Bound.before(a, hi) == True{}: Bool} -> {Bound.before(k, hi) == True{}: Bool}:
+  match hi:
+    case None{}:
+      g => h => {==}
+    case Some{+b}:
+      g => h => Key.lt_trans(k, a, b)(g)(h)
+
+# Key.leads_before for heads that compare as c, and rests r1 and r2
+def Key.leads_before.con(c: Cmp, r1: Bool, r2: Bool, ih: {r1 == True{}: Bool} -> {r2 == True{}: Bool}) -> {
+  Bool.or(Cmp.is_lt(c), Bool.and(Cmp.is_eq(c), r1)) == True{}: Bool
+} -> {Bool.or(Cmp.is_lt(c), Bool.and(Cmp.is_eq(c), r2)) == True{}: Bool}:
+  match c:
+    case LT{}:
+      h => {==}
+    case EQ{}:
+      h => ih(h)
+    case GT{}:
+      h => h
+
+# a key that starts with p and is before b has p before b
+def Key.leads_before(p: List<&2, U32>, +k: List<&2, U32>, +b: List<&2, U32>) -> {Key.leads(p, k) == True{}: Bool} -> {
+  Key.is_lt(k, b) == True{}: Bool
+} -> {Key.is_lt(p, b) == True{}: Bool}:
+  match p k b:
+    case Nil{} k2 Nil{}:
+      h1 => h2 => Empty.absurd(
+        {Key.is_lt([], []) == True{}: Bool},
+        Shared.Bool.false_ne_true(Equal.trans(Bool, False{}, Key.is_lt(k2, []), True{}, Equal.sym(Bool, Key.is_lt(k2, []), False{}, Key.lt_nil(k2)), h2))
+      )
+    case Nil{} k2 Con{z, rb}:
+      h1 => h2 => {==}
+    case Con{x, rp} Nil{} b2:
+      h1 => h2 => Empty.absurd({Key.is_lt(x <> rp, b2) == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case Con{x, rp} Con{y, rk} Nil{}:
+      h1 => h2 => Empty.absurd({Key.is_lt(x <> rp, []) == True{}: Bool}, Shared.Bool.false_ne_true(h2))
+    case Con{+x, +rp} Con{+y, +rk} Con{+z, +rb}:
+      +h1 => h2 =>
+        %Equal.sym(U32, x, y, Shared.U32.is_eq_sound(x, y)(Shared.List.all.if_hit(U32.is_eq(x, y), u => Key.leads(rp, rk))(h1))): {
+          Bool.or(U32.is_lt(_, z), Bool.and(U32.is_eq(_, z), Key.is_lt(rp, rb))) == True{}: Bool
+        }
+        Key.leads_before.con(
+          U32.cmp(y, z),
+          Key.is_lt(rk, rb),
+          Key.is_lt(rp, rb),
+          Key.leads_before(rp, rk, rb)(Shared.List.all.if_rest(U32.is_eq(x, y), u => Key.leads(rp, rk))(h1))
+        )(h2)
+
+# Key.leads_after for heads that compare as c
+def Key.leads_after.con(
+  c: Cmp,
+  r1: Bool,
+  a1: Bool,
+  b1: Bool,
+  ih: {r1 == True{}: Bool} -> {Bool.or(a1, b1) == True{}: Bool}
+) -> {Bool.or(Cmp.is_lt(c), Bool.and(Cmp.is_eq(c), r1)) == True{}: Bool} -> {
+  Bool.or(Bool.or(Cmp.is_lt(c), Bool.and(Cmp.is_eq(c), a1)), List.all.if(u => b1, Cmp.is_eq(Cmp.flip(c)))) == True{}: Bool
+}:
+  match c:
+    case LT{}:
+      h => {==}
+    case EQ{}:
+      h => ih(h)
+    case GT{}:
+      h => h
+
+# a key that starts with p and is after a has a before p, or starts with p
+def Key.leads_after(p: List<&2, U32>, +k: List<&2, U32>, +a: List<&2, U32>) -> {Key.leads(p, k) == True{}: Bool} -> {
+  Key.is_lt(a, k) == True{}: Bool
+} -> {Bool.or(Key.is_lt(a, p), Key.leads(p, a)) == True{}: Bool}:
+  match p k a:
+    case Nil{} k2 a2:
+      h1 => h2 =>
+        %Equal.sym(Bool, Key.is_lt(a2, []), False{}, Key.lt_nil(a2)): {Bool.or(_, Key.leads([], a2)) == True{}: Bool}
+        {==}
+    case Con{x, rp} Nil{} a2:
+      h1 => h2 => Empty.absurd(
+        {Bool.or(Key.is_lt(a2, x <> rp), Key.leads(x <> rp, a2)) == True{}: Bool},
+        Shared.Bool.false_ne_true(h1)
+      )
+    case Con{x, rp} Con{y, rk} Nil{}:
+      h1 => h2 => {==}
+    case Con{+x, +rp} Con{+y, +rk} Con{+z, +ra}:
+      +h1 => h2 =>
+        %Equal.sym(U32, x, y, Shared.U32.is_eq_sound(x, y)(Shared.List.all.if_hit(U32.is_eq(x, y), u => Key.leads(rp, rk))(h1))): {
+          Bool.or(Bool.or(U32.is_lt(z, _), Bool.and(U32.is_eq(z, _), Key.is_lt(ra, rp))), List.all.if(u => Key.leads(rp, ra), U32.is_eq(_, z)))
+            == True{}: Bool
+        }
+        %Equal.sym(Cmp, U32.cmp(y, z), Cmp.flip(U32.cmp(z, y)), U32.cmp_flip(z, y)): {
+          Bool.or(Bool.or(U32.is_lt(z, y), Bool.and(U32.is_eq(z, y), Key.is_lt(ra, rp))), List.all.if(u => Key.leads(rp, ra), Cmp.is_eq(_)))
+            == True{}: Bool
+        }
+        Key.leads_after.con(
+          U32.cmp(z, y),
+          Key.is_lt(ra, rk),
+          Key.is_lt(ra, rp),
+          Key.leads(rp, ra),
+          Key.leads_after(rp, rk, ra)(Shared.List.all.if_rest(U32.is_eq(x, y), u => Key.leads(rp, rk))(h1))
+        )(h2)
+
+# a key that starts with p, between lo and hi, makes p meet both bounds
+def Bound.meets(+p: List<&2, U32>, +k: List<&2, U32>, lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> {
+  Key.leads(p, k) == True{}: Bool
+} -> {Bool.and(Bound.after(lo, k), Bound.before(k, hi)) == True{}: Bool} -> {
+  Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)) == True{}: Bool
+}:
+  match lo hi:
+    case None{} None{}:
+      h1 => h2 => {==}
+    case None{} Some{+b}:
+      h1 => h2 => Key.leads_before(p, k, b)(h1)(h2)
+    case Some{+a} None{}:
+      +h1 => h2 => Shared.Bool.and_both(
+        Bool.or(Key.is_lt(a, p), Key.leads(p, a)),
+        True{}
+      )(Key.leads_after(p, k, a)(h1)(Shared.Bool.and_true_left(Key.is_lt(a, k), True{})(h2)))({==})
+    case Some{+a} Some{+b}:
+      +h1 => +h2 => Shared.Bool.and_both(
+        Bool.or(Key.is_lt(a, p), Key.leads(p, a)),
+        Key.is_lt(p, b)
+      )(Key.leads_after(p, k, a)(h1)(Shared.Bool.and_true_left(Key.is_lt(a, k), Key.is_lt(k, b))(h2)))(
+        Key.leads_before(p, k, b)(h1)(Shared.Bool.and_true_right(Key.is_lt(a, k), Key.is_lt(k, b))(h2))
+      )
+
+# a bind that gives x: m holds a value a, and f gives x of a
+def Maybe.bind_cases(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, A>,
+  -f: A -> Maybe<&2, B>,
+  -x: B,
+  -P: Type,
+  k: @a: A -> {m == Some{a}: Maybe<&2, A>} -> {f(a) == Some{x}: Maybe<&2, B>} -> P
+) -> {Maybe.bind(&2, A, B, m, f) == Some{x}: Maybe<&2, B>} -> P:
+  match m:
+    case None{}:
+      e => Empty.absurd(P, Shared.Maybe.none_ne_some(B, x, e))
+    case Some{+a}:
+      e => k(a)({==})(e)
+
+# a map that gives x: m holds a value a, and f gives x of a
+def Maybe.map_cases(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, A>,
+  -f: A -> B,
+  -x: B,
+  -P: Type,
+  k: @a: A -> {m == Some{a}: Maybe<&2, A>} -> {f(a) == x: B} -> P
+) -> {Maybe.map(&2, A, B, f, m) == Some{x}: Maybe<&2, B>} -> P:
+  match m:
+    case None{}:
+      e => Empty.absurd(P, Shared.Maybe.none_ne_some(B, x, e))
+    case Some{+a}:
+      e => k(a)({==})(Shared.Maybe.some_inj(B, f(a), x, e))
+
+# a Shared.Maybe.when that gives x: its test holds, and its body gives x
+def Maybe.when_cases(
+  -B: Data,
+  b: Bool,
+  -g: Unit -> Maybe<&2, B>,
+  -x: B,
+  -P: Type,
+  k: {b == True{}: Bool} -> {g(Unit{}) == Some{x}: Maybe<&2, B>} -> P
+) -> {Shared.Maybe.when(B, b, g) == Some{x}: Maybe<&2, B>} -> P:
+  match b:
+    case True{}:
+      e => k({==})(e)
+    case False{}:
+      e => Empty.absurd(P, Shared.Maybe.none_ne_some(B, x, e))
+
+# the pieces of an opened node: of a node below up with an item, by its items
+def Mst.open.node_cases(
+  n: Node,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ps: List<&2, Piece>,
+  -P: Type,
+  k: @l: Nat -> @left: Maybe<&2, Hashes.Hash> -> @xs: List<&2, Item> -> {n == Node{l, left, xs}: Node} -> {
+    Nat.is_lt(l, up) == True{}: Bool
+  } -> {List.is_empty(&2, Item, xs) == False{}: Bool} -> {
+    Mst.pieces(xs, l, left, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>
+  } -> P
+) -> {Mst.open.node(n, up, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>} -> P:
+  match n:
+    case Node{+l, +left, +xs}:
+      e => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(Nat.is_lt(l, up), Bool.not(List.is_empty(&2, Item, xs))),
+        u => Mst.pieces(xs, l, left, lo, hi),
+        ps,
+        P,
+        +c => ep => k(l)(left)(xs)({==})(
+          Shared.Bool.and_true_left(Nat.is_lt(l, up), Bool.not(List.is_empty(&2, Item, xs)))(c)
+        )(
+          Shared.Bool.not_true(
+            List.is_empty(&2, Item, xs)
+          )(Shared.Bool.and_true_right(Nat.is_lt(l, up), Bool.not(List.is_empty(&2, Item, xs)))(c))
+        )(ep)
+      )(e)
+
+# the keys of the items of a node that gives pieces fit its bounds
+def Mst.pieces_fit(
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ps: List<&2, Piece>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>} -> {Items.fit(xs, lo, hi) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      e => {==}
+    case Con{Item{+k, +v, +r}, +rest}:
+      e => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(
+          Bool.and(Nat.is_eq(Key.level(k), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, k)))),
+          Bool.and(Bound.after(lo, k), Bound.before(k, hi))
+        ),
+        u => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          ps2 => Piece.sub(prev, l, lo, Some{k}, Piece.Bind{k, v} <> ps2),
+          Mst.pieces(rest, l, r, Some{k}, hi)
+        ),
+        ps,
+        {Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Items.fit(rest, Some{k}, hi)) == True{}: Bool},
+        c => e2 => Maybe.map_cases(
+          List<&2, Piece>,
+          List<&2, Piece>,
+          Mst.pieces(rest, l, r, Some{k}, hi),
+          ps2 => Piece.sub(prev, l, lo, Some{k}, Piece.Bind{k, v} <> ps2),
+          ps,
+          {Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Items.fit(rest, Some{k}, hi)) == True{}: Bool},
+          ps2 => e3 => e4 => Shared.Bool.and_both(
+            Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+            Items.fit(rest, Some{k}, hi)
+          )(
+            Shared.Bool.and_true_right(
+              Bool.and(Nat.is_eq(Key.level(k), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, k)))),
+              Bool.and(Bound.after(lo, k), Bound.before(k, hi))
+            )(c)
+          )(Mst.pieces_fit(rest, l, r, Some{k}, hi, ps2)(e3))
+        )(e2)
+      )(e)
+
+# the node that a depot holds, once its words read whole as a node that may
+# sit in the room of up, lo and hi
+def Mst.node.in_of(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ws: List<&2, U32>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  ew: {fetch(s)(h) == Some{ws}: Maybe<&2, List<&2, U32>>},
+  er: {Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws) == Some{Node{l, left, xs}}: Maybe<&2, Node>},
+  elt: {Nat.is_lt(l, up) == True{}: Bool},
+  ee: {List.is_empty(&2, Item, xs) == False{}: Bool},
+  ef: {Items.fit(xs, lo, hi) == True{}: Bool}
+) -> {Mst.node.in(~S, ~fetch, s, h, Room{up, lo, hi}) == Some{Node{l, left, xs}}: Maybe<&2, Node>}:
+  %Equal.sym(Maybe<&2, List<&2, U32>>, fetch(s)(h), Some{ws}, ew): {
+    Maybe.bind(&2, Node, Node, Codes.Code.whole.of(~Node, ~Node.code, ~Node.code.read, _), n => Node.in(n, Room{up, lo, hi}))
+      == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  }
+  %Equal.sym(Maybe<&2, Node>, Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws), Some{Node{l, left, xs}}, er): {
+    Maybe.bind(&2, Node, Node, _, n => Node.in(n, Room{up, lo, hi})) == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  }
+  %Equal.sym(Bool, Nat.is_lt(l, up), True{}, elt): {
+    Shared.Maybe.when(
+      Node,
+      Bool.and(Bool.and(_, Bool.not(List.is_empty(&2, Item, xs))), Items.fit(xs, lo, hi)),
+      u => Some{Node{l, left, xs}}
+    ) == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  }
+  %Equal.sym(Bool, List.is_empty(&2, Item, xs), False{}, ee): {
+    Shared.Maybe.when(Node, Bool.and(Bool.and(True{}, Bool.not(_)), Items.fit(xs, lo, hi)), u => Some{Node{l, left, xs}})
+      == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  }
+  %Equal.sym(Bool, Items.fit(xs, lo, hi), True{}, ef): {
+    Shared.Maybe.when(Node, Bool.and(Bool.and(True{}, Bool.not(False{})), _), u => Some{Node{l, left, xs}})
+      == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  }
+  {==}
+
+# what an opened node is: the depot holds its code under its hash, a read
+# finds it in its room, and its items give the pieces
+def Mst.open_cases(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ps: List<&2, Piece>,
+  -P: Type,
+  k: @l: Nat -> @left: Maybe<&2, Hashes.Hash> -> @xs: List<&2, Item> -> {
+    fetch(s)(h) == Some{Node.code(Node{l, left, xs}, [])}: Maybe<&2, List<&2, U32>>
+  } -> {Hashes.Sha.hash(Node.code(Node{l, left, xs}, [])) == h: Hashes.Hash} -> {
+    Mst.node.in(~S, ~fetch, s, h, Room{up, lo, hi}) == Some{Node{l, left, xs}}: Maybe<&2, Node>
+  } -> {Nat.is_lt(l, up) == True{}: Bool} -> {List.is_empty(&2, Item, xs) == False{}: Bool} -> {
+    Mst.pieces(xs, l, left, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>
+  } -> P
+) -> {Mst.open(~S, ~fetch, s, h, up, lo, hi) == Some{ps}: Maybe<&2, List<&2, Piece>>} -> P:
+  e => Maybe.bind_cases(
+    List<&2, U32>,
+    List<&2, Piece>,
+    fetch(s)(h),
+    +ws => Shared.Maybe.when(
+      List<&2, Piece>,
+      Hashes.Hash.is_eq(Hashes.Sha.hash(ws), h),
+      u => Maybe.bind(
+        &2,
+        Node,
+        List<&2, Piece>,
+        Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+        n => Mst.open.node(n, up, lo, hi)
+      )
+    ),
+    ps,
+    P,
+    +ws => +ew => e1 => Maybe.when_cases(
+      List<&2, Piece>,
+      Hashes.Hash.is_eq(Hashes.Sha.hash(ws), h),
+      u => Maybe.bind(
+        &2,
+        Node,
+        List<&2, Piece>,
+        Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+        n => Mst.open.node(n, up, lo, hi)
+      ),
+      ps,
+      P,
+      +eh => e2 => Maybe.bind_cases(
+        Node,
+        List<&2, Piece>,
+        Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+        n => Mst.open.node(n, up, lo, hi),
+        ps,
+        P,
+        +n => +er => e3 => Mst.open.node_cases(
+          n,
+          up,
+          lo,
+          hi,
+          ps,
+          P,
+          +l => +left => +xs => +en => +elt => +ee => +ep =>
+            +er2 = Equal.trans(
+              Maybe<&2, Node>,
+              Codes.Code.whole.read(~Node, ~Node.code, ~Node.code.read, ws),
+              Some{n},
+              Some{Node{l, left, xs}},
+              er,
+              Equal.cong(Node, Maybe<&2, Node>, x => Some{x}, n, Node{l, left, xs}, en)
+            )
+            +w = Equal.sym(
+              List<&2, U32>,
+              Node.code(Node{l, left, xs}, []),
+              ws,
+              Codes.Code.whole_back(~Node, ~Node.code, ~Node.code.read, ws, Node{l, left, xs})(er2)
+            )
+            k(l)(left)(xs)(
+              Equal.trans(
+                Maybe<&2, List<&2, U32>>,
+                fetch(s)(h),
+                Some{ws},
+                Some{Node.code(Node{l, left, xs}, [])},
+                ew,
+                Equal.cong(List<&2, U32>, Maybe<&2, List<&2, U32>>, x => Some{x}, ws, Node.code(Node{l, left, xs}, []), w)
+              )
+            )(
+              Equal.trans(
+                Hashes.Hash,
+                Hashes.Sha.hash(Node.code(Node{l, left, xs}, [])),
+                Hashes.Sha.hash(ws),
+                h,
+                Equal.cong(
+                  List<&2, U32>,
+                  Hashes.Hash,
+                  x => Hashes.Sha.hash(x),
+                  Node.code(Node{l, left, xs}, []),
+                  ws,
+                  Equal.sym(List<&2, U32>, ws, Node.code(Node{l, left, xs}, []), w)
+                ),
+                Hashes.Hash.is_eq_sound(Hashes.Sha.hash(ws), h)(eh)
+              )
+            )(Mst.node.in_of(~S, ~fetch, s, h, up, lo, hi, ws, l, left, xs, ew, er2, elt, ee, Mst.pieces_fit(xs, l, left, lo, hi, ps)(ep)))(elt)(ee)(ep)
+        )(e3)
+      )(e2)
+    )(e1)
+  )(e)
+
+# Listings
+# --------
+
+# the read l found the value v
+def Look.has(l: Look, v: List<&2, U32>) -> Bool:
+  Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Look.value(l), Some{v})
+
+# the pieces ps hold the key k bound to v, as reads f levels down find it: as
+# a binding, or in a subtree whose bounds hold k
+def Pieces.has(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>
+) -> Bool:
+  match ps:
+    case Nil{}:
+      False{}
+    case Con{Piece.Bind{k2, v2}, rest}:
+      Bool.or(Binding.is_eq(Binding{k2, v2}, Binding{k, v}), Pieces.has(~S, ~fetch, f, s, rest, k, v))
+    case Con{Piece.Sub{h, up, +lo, +hi}, rest}:
+      Bool.or(
+        Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Look.has(Mst.look.go(~S, ~fetch, f, s, Room{up, lo, hi}, Some{h}, k), v)),
+        Pieces.has(~S, ~fetch, f, s, rest, k, v)
+      )
+
+# a read of the empty tree finds that it lacks the key
+def Mst.look_none(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +r: Room,
+  +k: List<&2, U32>
+) -> {Mst.look.go(~S, ~fetch, f, s, r, None{}, k) == Look.Absent{}: Look}:
+  match f:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
+
+# the pieces of a subtree m hold k bound to v when its bounds hold k and a
+# read of m finds v
+def Pieces.has_at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  m: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>
+) -> {
+  Pieces.has(~S, ~fetch, f, s, Piece.sub(m, l, lo, hi, rest), k, v)
+    == Bool.or(
+      Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, m, k), v)),
+      Pieces.has(~S, ~fetch, f, s, rest, k, v)
+    ): Bool
+}:
+  match m:
+    case None{}:
+      %Equal.sym(Look, Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, None{}, k), Look.Absent{}, Mst.look_none(~S, ~fetch, f, s, Room{l, lo, hi}, k)): {
+        Pieces.has(~S, ~fetch, f, s, rest, k, v)
+          == Bool.or(Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Look.has(_, v)), Pieces.has(~S, ~fetch, f, s, rest, k, v)): Bool
+      }
+      %Equal.sym(
+        Bool,
+        Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), False{}),
+        False{},
+        Shared.Bool.and_false_right(Bool.and(Bound.after(lo, k), Bound.before(k, hi)))
+      ): {Pieces.has(~S, ~fetch, f, s, rest, k, v) == Bool.or(_, Pieces.has(~S, ~fetch, f, s, rest, k, v)): Bool}
+      {==}
+    case Some{h}:
+      {==}
+
+# Mst.has_pick where k comes before the key of the item: the subtree before
+# it decides
+def Mst.has_pick.lt(
+  b: Bool,
+  l1: Bool,
+  l2: Bool,
+  e: Bool,
+  a: Bool,
+  -v: Bool,
+  x: Bool,
+  -y: Bool,
+  eb: {b == True{}: Bool},
+  el1: {l1 == True{}: Bool},
+  el2: {l2 == False{}: Bool},
+  ee: {e == False{}: Bool}
+) -> {
+  Bool.or(Bool.and(Bool.and(a, l1), x), Bool.or(List.all.if(u => v, e), Bool.and(Bool.and(l2, b), y)))
+    == Bool.and(Bool.and(a, b), x): Bool
+}:
+  match b l1 l2 e:
+    case True{} True{} False{} False{}:
+      Equal.sym(Bool, Bool.and(Bool.and(a, True{}), x), Bool.or(Bool.and(Bool.and(a, True{}), x), False{}), Shared.Bool.or_false(Bool.and(Bool.and(a, True{}), x)))
+    case False{} w1 w2 w3:
+      Empty.absurd(
+        {
+          Bool.or(Bool.and(Bool.and(a, w1), x), Bool.or(List.all.if(u => v, w3), Bool.and(Bool.and(w2, False{}), y)))
+            == Bool.and(Bool.and(a, False{}), x): Bool
+        },
+        Shared.Bool.false_ne_true(eb)
+      )
+    case True{} False{} w2 w3:
+      Empty.absurd(
+        {
+          Bool.or(Bool.and(Bool.and(a, False{}), x), Bool.or(List.all.if(u => v, w3), Bool.and(Bool.and(w2, True{}), y)))
+            == Bool.and(Bool.and(a, True{}), x): Bool
+        },
+        Shared.Bool.false_ne_true(el1)
+      )
+    case True{} True{} True{} w3:
+      Empty.absurd(
+        {
+          Bool.or(Bool.and(Bool.and(a, True{}), x), Bool.or(List.all.if(u => v, w3), Bool.and(Bool.and(True{}, True{}), y)))
+            == Bool.and(Bool.and(a, True{}), x): Bool
+        },
+        Shared.Bool.true_ne_false(el2)
+      )
+    case True{} True{} False{} True{}:
+      Empty.absurd(
+        {
+          Bool.or(Bool.and(Bool.and(a, True{}), x), Bool.or(List.all.if(u => v, True{}), Bool.and(Bool.and(False{}, True{}), y)))
+            == Bool.and(Bool.and(a, True{}), x): Bool
+        },
+        Shared.Bool.true_ne_false(ee)
+      )
+
+# Mst.has_pick where k is the key of the item: its value decides
+def Mst.has_pick.eq(
+  a: Bool,
+  b: Bool,
+  l1: Bool,
+  l2: Bool,
+  e: Bool,
+  w: Bool,
+  -x: Bool,
+  -y: Bool,
+  +h: Hashes.Hash,
+  +iv: List<&2, U32>,
+  +v: List<&2, U32>,
+  ea: {a == True{}: Bool},
+  eb: {b == True{}: Bool},
+  el1: {l1 == False{}: Bool},
+  el2: {l2 == False{}: Bool},
+  ee: {e == True{}: Bool},
+  ew: {w == True{}: Bool}
+) -> {
+  Bool.or(
+    Bool.and(Bool.and(a, l1), x),
+    Bool.or(List.all.if(u => Shared.List.is_eq(~U32, ~U32.is_eq, iv, v), e), Bool.and(Bool.and(l2, b), y))
+  )
+    == Bool.and(Bool.and(a, b), Look.has(Shared.Bool.when(Look, w, u => Look.Found{iv}, u => Look.Missing{h}), v)): Bool
+}:
+  match a b l1 l2 e w:
+    case True{} True{} False{} False{} True{} True{}:
+      Equal.sym(
+        Bool,
+        Shared.List.is_eq(~U32, ~U32.is_eq, iv, v),
+        Bool.or(Shared.List.is_eq(~U32, ~U32.is_eq, iv, v), False{}),
+        Shared.Bool.or_false(Shared.List.is_eq(~U32, ~U32.is_eq, iv, v))
+      )
+    case False{} w1 w2 w3 w4 w5:
+      Empty.absurd(
+        {
+          Bool.or(
+            Bool.and(Bool.and(False{}, w2), x),
+            Bool.or(List.all.if(u => Shared.List.is_eq(~U32, ~U32.is_eq, iv, v), w4), Bool.and(Bool.and(w3, w1), y))
+          )
+            == Bool.and(Bool.and(False{}, w1), Look.has(Shared.Bool.when(Look, w5, u => Look.Found{iv}, u => Look.Missing{h}), v)): Bool
+        },
+        Shared.Bool.false_ne_true(ea)
+      )
+    case True{} False{} w2 w3 w4 w5:
+      Empty.absurd(
+        {
+          Bool.or(
+            Bool.and(Bool.and(True{}, w2), x),
+            Bool.or(List.all.if(u => Shared.List.is_eq(~U32, ~U32.is_eq, iv, v), w4), Bool.and(Bool.and(w3, False{}), y))
+          )
+            == Bool.and(Bool.and(True{}, False{}), Look.has(Shared.Bool.when(Look, w5, u => Look.Found{iv}, u => Look.Missing{h}), v)): Bool
+        },
+        Shared.Bool.false_ne_true(eb)
+      )
+    case True{} True{} True{} w3 w4 w5:
+      Empty.absurd(
+        {
+          Bool.or(
+            Bool.and(Bool.and(True{}, True{}), x),
+            Bool.or(List.all.if(u => Shared.List.is_eq(~U32, ~U32.is_eq, iv, v), w4), Bool.and(Bool.and(w3, True{}), y))
+          )
+            == Bool.and(Bool.and(True{}, True{}), Look.has(Shared.Bool.when(Look, w5, u => Look.Found{iv}, u => Look.Missing{h}), v)): Bool
+        },
+        Shared.Bool.true_ne_false(el1)
+      )
+    case True{} True{} False{} True{} w4 w5:
+      Empty.absurd(
+        {
+          Bool.or(
+            Bool.and(Bool.and(True{}, False{}), x),
+            Bool.or(List.all.if(u => Shared.List.is_eq(~U32, ~U32.is_eq, iv, v), w4), Bool.and(Bool.and(True{}, True{}), y))
+          )
+            == Bool.and(Bool.and(True{}, True{}), Look.has(Shared.Bool.when(Look, w5, u => Look.Found{iv}, u => Look.Missing{h}), v)): Bool
+        },
+        Shared.Bool.true_ne_false(el2)
+      )
+    case True{} True{} False{} False{} False{} w5:
+      Empty.absurd(
+        {
+          Bool.or(
+            Bool.and(Bool.and(True{}, False{}), x),
+            Bool.or(List.all.if(u => Shared.List.is_eq(~U32, ~U32.is_eq, iv, v), False{}), Bool.and(Bool.and(False{}, True{}), y))
+          )
+            == Bool.and(Bool.and(True{}, True{}), Look.has(Shared.Bool.when(Look, w5, u => Look.Found{iv}, u => Look.Missing{h}), v)): Bool
+        },
+        Shared.Bool.false_ne_true(ee)
+      )
+    case True{} True{} False{} False{} True{} False{}:
+      Empty.absurd(
+        {
+          Bool.or(
+            Bool.and(Bool.and(True{}, False{}), x),
+            Bool.or(List.all.if(u => Shared.List.is_eq(~U32, ~U32.is_eq, iv, v), True{}), Bool.and(Bool.and(False{}, True{}), y))
+          )
+            == Bool.and(Bool.and(True{}, True{}), Look.has(Shared.Bool.when(Look, False{}, u => Look.Found{iv}, u => Look.Missing{h}), v)): Bool
+        },
+        Shared.Bool.false_ne_true(ew)
+      )
+
+# Mst.has_pick where k comes after the key of the item: the items after it
+# decide
+def Mst.has_pick.gt(
+  a: Bool,
+  l1: Bool,
+  l2: Bool,
+  e: Bool,
+  -b: Bool,
+  -v: Bool,
+  -x: Bool,
+  -y: Bool,
+  ea: {a == True{}: Bool},
+  el1: {l1 == False{}: Bool},
+  el2: {l2 == True{}: Bool},
+  ee: {e == False{}: Bool}
+) -> {
+  Bool.or(Bool.and(Bool.and(a, l1), x), Bool.or(List.all.if(u => v, e), Bool.and(Bool.and(l2, b), y)))
+    == Bool.and(Bool.and(a, b), y): Bool
+}:
+  match a l1 l2 e:
+    case True{} False{} True{} False{}:
+      {==}
+    case False{} w1 w2 w3:
+      Empty.absurd(
+        {
+          Bool.or(Bool.and(Bool.and(False{}, w1), x), Bool.or(List.all.if(u => v, w3), Bool.and(Bool.and(w2, b), y)))
+            == Bool.and(Bool.and(False{}, b), y): Bool
+        },
+        Shared.Bool.false_ne_true(ea)
+      )
+    case True{} True{} w2 w3:
+      Empty.absurd(
+        {
+          Bool.or(Bool.and(Bool.and(True{}, True{}), x), Bool.or(List.all.if(u => v, w3), Bool.and(Bool.and(w2, b), y)))
+            == Bool.and(Bool.and(True{}, b), y): Bool
+        },
+        Shared.Bool.true_ne_false(el1)
+      )
+    case True{} False{} False{} w3:
+      Empty.absurd(
+        {
+          Bool.or(Bool.and(Bool.and(True{}, False{}), x), Bool.or(List.all.if(u => v, w3), Bool.and(Bool.and(False{}, b), y)))
+            == Bool.and(Bool.and(True{}, b), y): Bool
+        },
+        Shared.Bool.false_ne_true(el2)
+      )
+    case True{} False{} True{} True{}:
+      Empty.absurd(
+        {
+          Bool.or(Bool.and(Bool.and(True{}, False{}), x), Bool.or(List.all.if(u => v, True{}), Bool.and(Bool.and(True{}, b), y)))
+            == Bool.and(Bool.and(True{}, b), y): Bool
+        },
+        Shared.Bool.true_ne_false(ee)
+      )
+
+# Mst.has_pick at an item of the key ik, whose comparison with k is c
+def Mst.has_pick.con(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  c: Cmp,
+  +f: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +ik: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +ec: {Key.cmp(k, ik) == c: Cmp},
+  ea: {Bound.after(lo, ik) == True{}: Bool},
+  eb: {Bound.before(ik, hi) == True{}: Bool},
+  ew: {Nat.is_eq(Key.level(ik), l) == True{}: Bool}
+) -> {
+  Bool.or(
+    Bool.and(Bool.and(Bound.after(lo, k), Key.is_lt(k, ik)), Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, Some{ik}}, prev, k), v)),
+    Bool.or(
+      Binding.is_eq(Binding{ik, iv}, Binding{k, v}),
+      Bool.and(
+        Bool.and(Key.is_lt(ik, k), Bound.before(k, hi)),
+        Look.has(Mst.look.pick(Mst.pick(rest, r, l, Some{ik}, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)), v)
+      )
+    )
+  )
+    == Bool.and(
+      Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+      Look.has(
+        Mst.look.pick(
+          Shared.Bool.when(
+            Pick,
+            Cmp.is_lt(c),
+            u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+            u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, l, Some{ik}, hi, k))
+          ),
+          h,
+          l,
+          k,
+          m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)
+        ),
+        v
+      )
+    ): Bool
+}:
+  match c:
+    case LT{}:
+      +l1 = Key.lt_of(k, ik, LT{})(ec)
+      Mst.has_pick.lt(
+        Bound.before(k, hi),
+        Key.is_lt(k, ik),
+        Key.is_lt(ik, k),
+        Shared.List.is_eq(~U32, ~U32.is_eq, ik, k),
+        Bound.after(lo, k),
+        Shared.List.is_eq(~U32, ~U32.is_eq, iv, v),
+        Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, Some{ik}}, prev, k), v),
+        Look.has(Mst.look.pick(Mst.pick(rest, r, l, Some{ik}, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)), v),
+        Bound.before_trans(k, ik, hi)(l1)(eb),
+        l1,
+        Key.gt_of(k, ik, LT{})(ec),
+        Key.eq_of(k, ik, LT{})(ec)
+      )
+    case EQ{}:
+      +ke = Key.cmp_eq(k, ik)(ec)
+      Mst.has_pick.eq(
+        Bound.after(lo, k),
+        Bound.before(k, hi),
+        Key.is_lt(k, ik),
+        Key.is_lt(ik, k),
+        Shared.List.is_eq(~U32, ~U32.is_eq, ik, k),
+        Nat.is_eq(Key.level(k), l),
+        Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, Some{ik}}, prev, k), v),
+        Look.has(Mst.look.pick(Mst.pick(rest, r, l, Some{ik}, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)), v),
+        h,
+        iv,
+        v,
+        Equal.trans(Bool, Bound.after(lo, k), Bound.after(lo, ik), True{}, Equal.cong(List<&2, U32>, Bool, x => Bound.after(lo, x), k, ik, ke), ea),
+        Equal.trans(Bool, Bound.before(k, hi), Bound.before(ik, hi), True{}, Equal.cong(List<&2, U32>, Bool, x => Bound.before(x, hi), k, ik, ke), eb),
+        Key.lt_of(k, ik, EQ{})(ec),
+        Key.gt_of(k, ik, EQ{})(ec),
+        Key.eq_of(k, ik, EQ{})(ec),
+        Equal.trans(
+          Bool,
+          Nat.is_eq(Key.level(k), l),
+          Nat.is_eq(Key.level(ik), l),
+          True{},
+          Equal.cong(List<&2, U32>, Bool, x => Nat.is_eq(Key.level(x), l), k, ik, ke),
+          ew
+        )
+      )
+    case GT{}:
+      +l2 = Key.gt_of(k, ik, GT{})(ec)
+      Mst.has_pick.gt(
+        Bound.after(lo, k),
+        Key.is_lt(k, ik),
+        Key.is_lt(ik, k),
+        Shared.List.is_eq(~U32, ~U32.is_eq, ik, k),
+        Bound.before(k, hi),
+        Shared.List.is_eq(~U32, ~U32.is_eq, iv, v),
+        Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, Some{ik}}, prev, k), v),
+        Look.has(Mst.look.pick(Mst.pick(rest, r, l, Some{ik}, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)), v),
+        Bound.after_trans(lo, ik, k)(ea)(l2),
+        Key.lt_of(k, ik, GT{})(ec),
+        l2,
+        Key.eq_of(k, ik, GT{})(ec)
+      )
+
+# the pieces of the items xs of the node of the hash h hold k bound to v
+# exactly when k is in their bounds and a read of k in the node finds v
+def Mst.has_pick(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ks: List<&2, Piece>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {
+  Pieces.has(~S, ~fetch, f, s, ks, k, v)
+    == Bool.and(
+      Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+      Look.has(Mst.look.pick(Mst.pick(xs, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)), v)
+    ): Bool
+}:
+  match xs:
+    case Nil{}:
+      e =>
+        %Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev, l, lo, hi, []), ks, e): {
+          Pieces.has(~S, ~fetch, f, s, _, k, v)
+            == Bool.and(
+              Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+              Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, prev, k), v)
+            ): Bool
+        }
+        %Equal.sym(
+          Bool,
+          Pieces.has(~S, ~fetch, f, s, Piece.sub(prev, l, lo, hi, []), k, v),
+          Bool.or(
+            Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, prev, k), v)),
+            False{}
+          ),
+          Pieces.has_at(~S, ~fetch, f, s, prev, l, lo, hi, [], k, v)
+        ): {
+          _
+            == Bool.and(
+              Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+              Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, prev, k), v)
+            ): Bool
+        }
+        Equal.sym(
+          Bool,
+          Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, prev, k), v)),
+          Bool.or(
+            Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, prev, k), v)),
+            False{}
+          ),
+          Shared.Bool.or_false(
+            Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, prev, k), v))
+          )
+        )
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      e => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(
+          Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+          Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+        ),
+        u => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          Mst.pieces(rest, l, r, Some{ik}, hi)
+        ),
+        ks,
+        {
+          Pieces.has(~S, ~fetch, f, s, ks, k, v)
+            == Bool.and(
+              Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+              Look.has(
+                Mst.look.pick(Mst.pick(Item{ik, iv, r} <> rest, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)),
+                v
+              )
+            ): Bool
+        },
+        +c => e2 => Maybe.map_cases(
+          List<&2, Piece>,
+          List<&2, Piece>,
+          Mst.pieces(rest, l, r, Some{ik}, hi),
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          ks,
+          {
+            Pieces.has(~S, ~fetch, f, s, ks, k, v)
+              == Bool.and(
+                Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                Look.has(
+                  Mst.look.pick(Mst.pick(Item{ik, iv, r} <> rest, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)),
+                  v
+                )
+              ): Bool
+          },
+          +ks2 => e3 => e4 =>
+            +c1 = Shared.Bool.and_true_left(
+              Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+              Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+            )(c)
+            +c2 = Shared.Bool.and_true_right(
+              Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+              Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+            )(c)
+            %e4: {
+              Pieces.has(~S, ~fetch, f, s, _, k, v)
+                == Bool.and(
+                  Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                  Look.has(
+                    Mst.look.pick(Mst.pick(Item{ik, iv, r} <> rest, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)),
+                    v
+                  )
+                ): Bool
+            }
+            %Equal.sym(
+              Bool,
+              Pieces.has(~S, ~fetch, f, s, Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2), k, v),
+              Bool.or(
+                Bool.and(Bool.and(Bound.after(lo, k), Key.is_lt(k, ik)), Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, Some{ik}}, prev, k), v)),
+                Pieces.has(~S, ~fetch, f, s, Piece.Bind{ik, iv} <> ks2, k, v)
+              ),
+              Pieces.has_at(~S, ~fetch, f, s, prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2, k, v)
+            ): {
+              _
+                == Bool.and(
+                  Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                  Look.has(
+                    Mst.look.pick(Mst.pick(Item{ik, iv, r} <> rest, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)),
+                    v
+                  )
+                ): Bool
+            }
+            %Equal.sym(
+              Bool,
+              Pieces.has(~S, ~fetch, f, s, ks2, k, v),
+              Bool.and(
+                Bool.and(Key.is_lt(ik, k), Bound.before(k, hi)),
+                Look.has(Mst.look.pick(Mst.pick(rest, r, l, Some{ik}, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)), v)
+              ),
+              Mst.has_pick(~S, ~fetch, f, s, h, rest, l, r, Some{ik}, hi, ks2, k, v)(e3)
+            ): {
+              Bool.or(
+                Bool.and(Bool.and(Bound.after(lo, k), Key.is_lt(k, ik)), Look.has(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, Some{ik}}, prev, k), v)),
+                Bool.or(Binding.is_eq(Binding{ik, iv}, Binding{k, v}), _)
+              )
+                == Bool.and(
+                  Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                  Look.has(
+                    Mst.look.pick(Mst.pick(Item{ik, iv, r} <> rest, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)),
+                    v
+                  )
+                ): Bool
+            }
+            Mst.has_pick.con(
+              ~S,
+              ~fetch,
+              Key.cmp(k, ik),
+              f,
+              s,
+              h,
+              ik,
+              iv,
+              r,
+              rest,
+              l,
+              prev,
+              lo,
+              hi,
+              k,
+              v,
+              {==},
+              Shared.Bool.and_true_left(Bound.after(lo, ik), Bound.before(ik, hi))(c2),
+              Shared.Bool.and_true_right(Bound.after(lo, ik), Bound.before(ik, hi))(c2),
+              Shared.Bool.and_true_left(
+                Nat.is_eq(Key.level(ik), l),
+                Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))
+              )(c1)
+            )
+        )(e2)
+      )(e)
+
+# the pieces of an opened node hold k bound to v exactly when k is in its
+# bounds and a read of its subtree finds v
+def Mst.has_open(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ks: List<&2, Piece>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>
+) -> {Mst.open(~S, ~fetch, s, h, up, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {
+  Pieces.has(~S, ~fetch, q, s, ks, k, v)
+    == Bool.and(
+      Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+      Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+    ): Bool
+}:
+  e => Mst.open_cases(
+    ~S,
+    ~fetch,
+    s,
+    h,
+    up,
+    lo,
+    hi,
+    ks,
+    {
+      Pieces.has(~S, ~fetch, q, s, ks, k, v)
+        == Bool.and(
+          Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+          Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+        ): Bool
+    },
+    +l => +left => +xs => ef => eh => en => elt => ee0 => ep =>
+      %Equal.sym(Maybe<&2, Node>, Mst.node.in(~S, ~fetch, s, h, Room{up, lo, hi}), Some{Node{l, left, xs}}, en): {
+        Pieces.has(~S, ~fetch, q, s, ks, k, v)
+          == Bool.and(
+            Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+            Look.has(Mst.look.at(h, _, Room{up, lo, hi}, k, m2 => r2 => Mst.look.go(~S, ~fetch, q, s, r2, m2, k)), v)
+          ): Bool
+      }
+      Mst.has_pick(~S, ~fetch, q, s, h, xs, l, left, lo, hi, ks, k, v)(ep)
+  )(e)
+
+# an or of two ands with one first side is the and of it with the or
+def Bool.and_or_left(a: Bool, -b: Bool, -c: Bool) -> {Bool.or(Bool.and(a, b), Bool.and(a, c)) == Bool.and(a, Bool.or(b, c)): Bool}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# an and whose first side is False is False
+def Bool.and_false_left(a: Bool, -b: Bool) -> {a == False{}: Bool} -> {Bool.and(a, b) == False{}: Bool}:
+  match a:
+    case False{}:
+      e => {==}
+    case True{}:
+      e => Empty.absurd({b == False{}: Bool}, Shared.Bool.true_ne_false(e))
+
+# a listing of a binding of k2 then of bs2 holds k bound to v as its pieces
+# do, when bs2 does (ih)
+def Mst.lists_bind(
+  +p: List<&2, U32>,
+  +k2: List<&2, U32>,
+  +v2: List<&2, U32>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  -bs2: List<&2, Binding>,
+  t: Bool,
+  be: Bool,
+  -hr: Bool,
+  et: {Key.leads(p, k2) == t: Bool},
+  +ebe: {Binding.is_eq(Binding{k2, v2}, Binding{k, v}) == be: Bool},
+  ih: {List.contains(~Binding, ~Binding.is_eq, bs2, Binding{k, v}) == Bool.and(Key.leads(p, k), hr): Bool}
+) -> {
+  List.contains(~Binding, ~Binding.is_eq, Shared.Bool.when(List<&2, Binding>, t, u => Binding{k2, v2} <> bs2, u => bs2), Binding{k, v})
+    == Bool.and(Key.leads(p, k), Bool.or(be, hr)): Bool
+}:
+  match t be:
+    case True{} True{}:
+      +keq = Shared.List.is_eq_sound(
+        ~U32,
+        ~U32.is_eq,
+        ~Shared.U32.laws(),
+        k2,
+        k
+      )(
+        Shared.List.all.if_hit(
+          Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+          u => Shared.List.is_eq(~U32, ~U32.is_eq, v2, v)
+        )(ebe)
+      )
+      %Equal.sym(Bool, Binding.is_eq(Binding{k2, v2}, Binding{k, v}), True{}, ebe): {
+        List.any.if(u => List.contains(~Binding, ~Binding.is_eq, bs2, Binding{k, v}), _) == Bool.and(Key.leads(p, k), True{}): Bool
+      }
+      %Equal.sym(
+        Bool,
+        Key.leads(p, k),
+        True{},
+        Equal.trans(
+          Bool,
+          Key.leads(p, k),
+          Key.leads(p, k2),
+          True{},
+          Equal.cong(List<&2, U32>, Bool, x => Key.leads(p, x), k, k2, Equal.sym(List<&2, U32>, k2, k, keq)),
+          et
+        )
+      ): {True{} == Bool.and(_, True{}): Bool}
+      {==}
+    case True{} False{}:
+      %Equal.sym(Bool, Binding.is_eq(Binding{k2, v2}, Binding{k, v}), False{}, ebe): {
+        List.any.if(u => List.contains(~Binding, ~Binding.is_eq, bs2, Binding{k, v}), _) == Bool.and(Key.leads(p, k), hr): Bool
+      }
+      ih
+    case False{} True{}:
+      +keq = Shared.List.is_eq_sound(
+        ~U32,
+        ~U32.is_eq,
+        ~Shared.U32.laws(),
+        k2,
+        k
+      )(
+        Shared.List.all.if_hit(
+          Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+          u => Shared.List.is_eq(~U32, ~U32.is_eq, v2, v)
+        )(ebe)
+      )
+      +lkf = Equal.trans(
+        Bool,
+        Key.leads(p, k),
+        Key.leads(p, k2),
+        False{},
+        Equal.cong(List<&2, U32>, Bool, x => Key.leads(p, x), k, k2, Equal.sym(List<&2, U32>, k2, k, keq)),
+        et
+      )
+      %Equal.sym(Bool, Key.leads(p, k), False{}, lkf): {
+        List.contains(~Binding, ~Binding.is_eq, bs2, Binding{k, v}) == Bool.and(_, True{}): Bool
+      }
+      Equal.trans(
+        Bool,
+        List.contains(~Binding, ~Binding.is_eq, bs2, Binding{k, v}),
+        Bool.and(Key.leads(p, k), hr),
+        False{},
+        ih,
+        Bool.and_false_left(Key.leads(p, k), hr)(lkf)
+      )
+    case False{} False{}:
+      ih
+
+# a subtree that a listing skips holds no key under its prefix
+def Mst.lists_skip(
+  l: Bool,
+  i: Bool,
+  -z: Bool,
+  -h: Bool,
+  -m: Bool,
+  em: {m == False{}: Bool},
+  imp: {l == True{}: Bool} -> {i == True{}: Bool} -> {m == True{}: Bool}
+) -> {Bool.and(l, h) == Bool.and(l, Bool.or(Bool.and(i, z), h)): Bool}:
+  match l i:
+    case False{} y:
+      {==}
+    case True{} False{}:
+      {==}
+    case True{} True{}:
+      Empty.absurd(
+        {Bool.and(True{}, h) == Bool.and(True{}, Bool.or(Bool.and(True{}, z), h)): Bool},
+        Shared.Bool.true_ne_false(Equal.trans(Bool, True{}, m, False{}, Equal.sym(Bool, m, True{}, imp({==})({==})), em))
+      )
+
+# Mst.lists_has at a subtree, by whether the listing reads it (t)
+def Mst.lists_sub(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  t: Bool,
+  +q: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  -bs: List<&2, Binding>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  et: {Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)) == t: Bool},
+  ihr: @-b: List<&2, Binding> -> {Mst.range.go(~S, ~fetch, 1n+q, s, p, rest) == Some{b}: Maybe<&2, List<&2, Binding>>} -> {
+    List.contains(~Binding, ~Binding.is_eq, b, Binding{k, v}) == Bool.and(Key.leads(p, k), Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)): Bool
+  },
+  ihs: @ks: List<&2, Piece> -> @-a: List<&2, Binding> -> {
+    Mst.range.go(~S, ~fetch, q, s, p, ks) == Some{a}: Maybe<&2, List<&2, Binding>>
+  } -> {List.contains(~Binding, ~Binding.is_eq, a, Binding{k, v}) == Bool.and(Key.leads(p, k), Pieces.has(~S, ~fetch, q, s, ks, k, v)): Bool}
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, List<&2, Binding>>,
+    t,
+    u => Maybe.bind(
+      &2,
+      List<&2, Piece>,
+      List<&2, Binding>,
+      Mst.open(~S, ~fetch, s, h, up, lo, hi),
+      ks => Maybe.bind(
+        &2,
+        List<&2, Binding>,
+        List<&2, Binding>,
+        Mst.range.go(~S, ~fetch, q, s, p, ks),
+        a => Maybe.map(
+          &2,
+          List<&2, Binding>,
+          List<&2, Binding>,
+          b => List.append(&2, Binding, a, b),
+          Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+        )
+      )
+    ),
+    u => Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+  )
+    == Some{bs}: Maybe<&2, List<&2, Binding>>
+} -> {
+  List.contains(~Binding, ~Binding.is_eq, bs, Binding{k, v})
+    == Bool.and(
+      Key.leads(p, k),
+      Bool.or(
+        Bool.and(
+          Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+          Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+        ),
+        Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+      )
+    ): Bool
+}:
+  match t:
+    case True{}:
+      e => Maybe.bind_cases(
+        List<&2, Piece>,
+        List<&2, Binding>,
+        Mst.open(~S, ~fetch, s, h, up, lo, hi),
+        ks => Maybe.bind(
+          &2,
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, q, s, p, ks),
+          a => Maybe.map(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            b => List.append(&2, Binding, a, b),
+            Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+          )
+        ),
+        bs,
+        {
+          List.contains(~Binding, ~Binding.is_eq, bs, Binding{k, v})
+            == Bool.and(
+              Key.leads(p, k),
+              Bool.or(
+                Bool.and(
+                  Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                  Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                ),
+                Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+              )
+            ): Bool
+        },
+        +ks => +eo => e2 => Maybe.bind_cases(
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, q, s, p, ks),
+          a => Maybe.map(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            b => List.append(&2, Binding, a, b),
+            Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+          ),
+          bs,
+          {
+            List.contains(~Binding, ~Binding.is_eq, bs, Binding{k, v})
+              == Bool.and(
+                Key.leads(p, k),
+                Bool.or(
+                  Bool.and(
+                    Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                    Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                  ),
+                  Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+                )
+              ): Bool
+          },
+          +a => ea => e3 => Maybe.map_cases(
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, 1n+q, s, p, rest),
+            b => List.append(&2, Binding, a, b),
+            bs,
+            {
+              List.contains(~Binding, ~Binding.is_eq, bs, Binding{k, v})
+                == Bool.and(
+                  Key.leads(p, k),
+                  Bool.or(
+                    Bool.and(
+                      Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                      Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                    ),
+                    Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+                  )
+                ): Bool
+            },
+            +b => eb => e4 =>
+              %e4: {
+                List.contains(~Binding, ~Binding.is_eq, _, Binding{k, v})
+                  == Bool.and(
+                    Key.leads(p, k),
+                    Bool.or(
+                      Bool.and(
+                        Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                        Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                      ),
+                      Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+                    )
+                  ): Bool
+              }
+              %Equal.sym(
+                Bool,
+                List.contains(~Binding, ~Binding.is_eq, List.append(&2, Binding, a, b), Binding{k, v}),
+                Bool.or(List.contains(~Binding, ~Binding.is_eq, a, Binding{k, v}), List.contains(~Binding, ~Binding.is_eq, b, Binding{k, v})),
+                Shared.List.contains_append(~Binding, ~Binding.is_eq, a, b, Binding{k, v})
+              ): {
+                _
+                  == Bool.and(
+                    Key.leads(p, k),
+                    Bool.or(
+                      Bool.and(
+                        Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                        Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                      ),
+                      Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+                    )
+                  ): Bool
+              }
+              %Equal.sym(
+                Bool,
+                List.contains(~Binding, ~Binding.is_eq, a, Binding{k, v}),
+                Bool.and(Key.leads(p, k), Pieces.has(~S, ~fetch, q, s, ks, k, v)),
+                ihs(ks)(a)(ea)
+              ): {
+                Bool.or(_, List.contains(~Binding, ~Binding.is_eq, b, Binding{k, v}))
+                  == Bool.and(
+                    Key.leads(p, k),
+                    Bool.or(
+                      Bool.and(
+                        Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                        Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                      ),
+                      Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+                    )
+                  ): Bool
+              }
+              %Equal.sym(
+                Bool,
+                Pieces.has(~S, ~fetch, q, s, ks, k, v),
+                Bool.and(
+                  Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                  Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                ),
+                Mst.has_open(~S, ~fetch, q, s, h, up, lo, hi, ks, k, v)(eo)
+              ): {
+                Bool.or(Bool.and(Key.leads(p, k), _), List.contains(~Binding, ~Binding.is_eq, b, Binding{k, v}))
+                  == Bool.and(
+                    Key.leads(p, k),
+                    Bool.or(
+                      Bool.and(
+                        Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                        Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                      ),
+                      Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+                    )
+                  ): Bool
+              }
+              %Equal.sym(
+                Bool,
+                List.contains(~Binding, ~Binding.is_eq, b, Binding{k, v}),
+                Bool.and(Key.leads(p, k), Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)),
+                ihr(b)(eb)
+              ): {
+                Bool.or(
+                  Bool.and(
+                    Key.leads(p, k),
+                    Bool.and(
+                      Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                      Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                    )
+                  ),
+                  _
+                )
+                  == Bool.and(
+                    Key.leads(p, k),
+                    Bool.or(
+                      Bool.and(
+                        Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                        Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                      ),
+                      Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+                    )
+                  ): Bool
+              }
+              Bool.and_or_left(
+                Key.leads(p, k),
+                Bool.and(
+                  Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                  Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+                ),
+                Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+              )
+          )(e3)
+        )(e2)
+      )(e)
+    case False{}:
+      e => Equal.trans(
+        Bool,
+        List.contains(~Binding, ~Binding.is_eq, bs, Binding{k, v}),
+        Bool.and(Key.leads(p, k), Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)),
+        Bool.and(
+          Key.leads(p, k),
+          Bool.or(
+            Bool.and(
+              Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+              Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v)
+            ),
+            Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v)
+          )
+        ),
+        ihr(bs)(e),
+        Mst.lists_skip(
+          Key.leads(p, k),
+          Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+          Look.has(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k), v),
+          Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v),
+          Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)),
+          et,
+          Bound.meets(p, k, lo, hi)
+        )
+      )
+
+# a listing of the pieces ps holds k bound to v exactly when k starts with
+# the prefix and the pieces hold it
+def Mst.lists_has(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  ps: List<&2, Piece>,
+  -bs: List<&2, Binding>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>
+) -> {Mst.range.go(~S, ~fetch, f, s, p, ps) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {
+  List.contains(~Binding, ~Binding.is_eq, bs, Binding{k, v}) == Bool.and(Key.leads(p, k), Pieces.has(~S, ~fetch, f, s, ps, k, v)): Bool
+}:
+  match f ps:
+    case x Nil{}:
+      e =>
+        %Shared.Maybe.some_inj(List<&2, Binding>, [], bs, e): {
+          List.contains(~Binding, ~Binding.is_eq, _, Binding{k, v}) == Bool.and(Key.leads(p, k), False{}): Bool
+        }
+        Equal.sym(Bool, Bool.and(Key.leads(p, k), False{}), False{}, Shared.Bool.and_false_right(Key.leads(p, k)))
+    case 0n Con{x, rest}:
+      e => Empty.absurd(
+        {
+          List.contains(~Binding, ~Binding.is_eq, bs, Binding{k, v}) == Bool.and(Key.leads(p, k), Pieces.has(~S, ~fetch, 0n, s, x <> rest, k, v)): Bool
+        },
+        Shared.Maybe.none_ne_some(List<&2, Binding>, bs, e)
+      )
+    case 1n+(+q) Con{Piece.Bind{+k2, +v2}, +rest}:
+      e => Maybe.map_cases(
+        List<&2, Binding>,
+        List<&2, Binding>,
+        Mst.range.go(~S, ~fetch, 1n+q, s, p, rest),
+        +bs2 => Shared.Bool.when(List<&2, Binding>, Key.leads(p, k2), u => Binding{k2, v2} <> bs2, u => bs2),
+        bs,
+        {
+          List.contains(~Binding, ~Binding.is_eq, bs, Binding{k, v})
+            == Bool.and(
+              Key.leads(p, k),
+              Bool.or(Binding.is_eq(Binding{k2, v2}, Binding{k, v}), Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v))
+            ): Bool
+        },
+        +bs2 => e1 => e2 =>
+          %e2: {
+            List.contains(~Binding, ~Binding.is_eq, _, Binding{k, v})
+              == Bool.and(
+                Key.leads(p, k),
+                Bool.or(Binding.is_eq(Binding{k2, v2}, Binding{k, v}), Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v))
+              ): Bool
+          }
+          Mst.lists_bind(
+            p,
+            k2,
+            v2,
+            k,
+            v,
+            bs2,
+            Key.leads(p, k2),
+            Binding.is_eq(Binding{k2, v2}, Binding{k, v}),
+            Pieces.has(~S, ~fetch, 1n+q, s, rest, k, v),
+            {==},
+            {==},
+            Mst.lists_has(~S, ~fetch, 1n+q, s, p, rest, bs2, k, v)(e1)
+          )
+      )(e)
+    case 1n+(+q) Con{Piece.Sub{+h, +up, +lo, +hi}, +rest}:
+      e => Mst.lists_sub(
+        ~S,
+        ~fetch,
+        Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)),
+        q,
+        s,
+        p,
+        h,
+        up,
+        lo,
+        hi,
+        rest,
+        bs,
+        k,
+        v,
+        {==},
+        b => eb => Mst.lists_has(~S, ~fetch, 1n+q, s, p, rest, b, k, v)(eb),
+        ks => a => ea => Mst.lists_has(~S, ~fetch, q, s, p, ks, a, k, v)(ea)
+      )(e)
+
+# the bindings bs come in the order of their keys, after lo and before hi
+def Bindings.within(bs: List<&2, Binding>, lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> Bool:
+  match bs:
+    case Nil{}:
+      True{}
+    case Con{Binding{+k, v}, rest}:
+      Bool.and(Bool.and(Bound.after(lo, k), Bound.before(k, hi)), Bindings.within(rest, Some{k}, hi))
+
+# bindings in order between two bounds are in order
+def Bindings.within_sorted(bs: List<&2, Binding>, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Bindings.within(bs, lo, hi) == True{}: Bool
+} -> {Bindings.sorted(bs) == True{}: Bool}:
+  match bs:
+    case Nil{}:
+      e => {==}
+    case Con{a, Nil{}}:
+      e => {==}
+    case Con{Binding{+ka, +va}, Con{Binding{+kb, +vb}, +rest}}:
+      +e =>
+        +w = Shared.Bool.and_true_right(
+          Bool.and(Bound.after(lo, ka), Bound.before(ka, hi)),
+          Bindings.within(Binding{kb, vb} <> rest, Some{ka}, hi)
+        )(e)
+        Shared.List.all.if_both(
+          Key.is_lt(ka, kb),
+          u => Bindings.sorted(Binding{kb, vb} <> rest)
+        )(
+          Shared.Bool.and_true_left(
+            Key.is_lt(ka, kb),
+            Bound.before(kb, hi)
+          )(
+            Shared.Bool.and_true_left(
+              Bool.and(Key.is_lt(ka, kb), Bound.before(kb, hi)),
+              Bindings.within(rest, Some{kb}, hi)
+            )(w)
+          )
+        )(Bindings.within_sorted(Binding{kb, vb} <> rest, Some{ka}, hi)(w))
+
+# bindings after a key a are after a bound below a
+def Bindings.within_weak(
+  bs: List<&2, Binding>,
+  +a: List<&2, U32>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Bindings.within(bs, Some{a}, hi) == True{}: Bool} -> {Bound.after(lo, a) == True{}: Bool} -> {
+  Bindings.within(bs, lo, hi) == True{}: Bool
+}:
+  match bs:
+    case Nil{}:
+      e => g => {==}
+    case Con{Binding{+k, +v}, +rest}:
+      +e => g =>
+        +x = Shared.Bool.and_true_left(Bool.and(Key.is_lt(a, k), Bound.before(k, hi)), Bindings.within(rest, Some{k}, hi))(e)
+        Shared.Bool.and_both(
+          Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+          Bindings.within(rest, Some{k}, hi)
+        )(
+          Shared.Bool.and_both(
+            Bound.after(lo, k),
+            Bound.before(k, hi)
+          )(Bound.after_trans(lo, a, k)(g)(Shared.Bool.and_true_left(Key.is_lt(a, k), Bound.before(k, hi))(x)))(
+            Shared.Bool.and_true_right(Key.is_lt(a, k), Bound.before(k, hi))(x)
+          )
+        )(Shared.Bool.and_true_right(Bool.and(Key.is_lt(a, k), Bound.before(k, hi)), Bindings.within(rest, Some{k}, hi))(e))
+
+# bindings before m, the binding of m, then bindings after it, are in order
+def Bindings.within_cons(
+  a: List<&2, Binding>,
+  +m: List<&2, U32>,
+  +w: List<&2, U32>,
+  +b: List<&2, Binding>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Bindings.within(a, lo, Some{m}) == True{}: Bool} -> {Bool.and(Bound.after(lo, m), Bound.before(m, hi)) == True{}: Bool} -> {
+  Bindings.within(b, Some{m}, hi) == True{}: Bool
+} -> {Bindings.within(List.append(&2, Binding, a, Binding{m, w} <> b), lo, hi) == True{}: Bool}:
+  match a:
+    case Nil{}:
+      ha => hm => hb => Shared.Bool.and_both(Bool.and(Bound.after(lo, m), Bound.before(m, hi)), Bindings.within(b, Some{m}, hi))(hm)(hb)
+    case Con{Binding{+k, +v}, +rest}:
+      +ha => +hm => hb =>
+        +x = Shared.Bool.and_true_left(Bool.and(Bound.after(lo, k), Key.is_lt(k, m)), Bindings.within(rest, Some{k}, Some{m}))(ha)
+        +km = Shared.Bool.and_true_right(Bound.after(lo, k), Key.is_lt(k, m))(x)
+        +mh = Shared.Bool.and_true_right(Bound.after(lo, m), Bound.before(m, hi))(hm)
+        Shared.Bool.and_both(
+          Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+          Bindings.within(List.append(&2, Binding, rest, Binding{m, w} <> b), Some{k}, hi)
+        )(
+          Shared.Bool.and_both(
+            Bound.after(lo, k),
+            Bound.before(k, hi)
+          )(Shared.Bool.and_true_left(Bound.after(lo, k), Key.is_lt(k, m))(x))(Bound.before_trans(k, m, hi)(km)(mh))
+        )(
+          Bindings.within_cons(
+            rest,
+            m,
+            w,
+            b,
+            Some{k},
+            hi
+          )(Shared.Bool.and_true_right(Bool.and(Bound.after(lo, k), Key.is_lt(k, m)), Bindings.within(rest, Some{k}, Some{m}))(ha))(
+            Shared.Bool.and_both(Key.is_lt(k, m), Bound.before(m, hi))(km)(mh)
+          )(hb)
+        )
+
+# bindings before m, then bindings after it, are in order
+def Bindings.within_cat(
+  a: List<&2, Binding>,
+  +m: List<&2, U32>,
+  +b: List<&2, Binding>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Bindings.within(a, lo, Some{m}) == True{}: Bool} -> {Bool.and(Bound.after(lo, m), Bound.before(m, hi)) == True{}: Bool} -> {
+  Bindings.within(b, Some{m}, hi) == True{}: Bool
+} -> {Bindings.within(List.append(&2, Binding, a, b), lo, hi) == True{}: Bool}:
+  match a:
+    case Nil{}:
+      ha => hm => hb => Bindings.within_weak(b, m, lo, hi)(hb)(Shared.Bool.and_true_left(Bound.after(lo, m), Bound.before(m, hi))(hm))
+    case Con{Binding{+k, +v}, +rest}:
+      +ha => +hm => hb =>
+        +x = Shared.Bool.and_true_left(Bool.and(Bound.after(lo, k), Key.is_lt(k, m)), Bindings.within(rest, Some{k}, Some{m}))(ha)
+        +km = Shared.Bool.and_true_right(Bound.after(lo, k), Key.is_lt(k, m))(x)
+        +mh = Shared.Bool.and_true_right(Bound.after(lo, m), Bound.before(m, hi))(hm)
+        Shared.Bool.and_both(
+          Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+          Bindings.within(List.append(&2, Binding, rest, b), Some{k}, hi)
+        )(
+          Shared.Bool.and_both(
+            Bound.after(lo, k),
+            Bound.before(k, hi)
+          )(Shared.Bool.and_true_left(Bound.after(lo, k), Key.is_lt(k, m))(x))(Bound.before_trans(k, m, hi)(km)(mh))
+        )(
+          Bindings.within_cat(
+            rest,
+            m,
+            b,
+            Some{k},
+            hi
+          )(Shared.Bool.and_true_right(Bool.and(Bound.after(lo, k), Key.is_lt(k, m)), Bindings.within(rest, Some{k}, Some{m}))(ha))(
+            Shared.Bool.and_both(Key.is_lt(k, m), Bound.before(m, hi))(km)(mh)
+          )(hb)
+        )
+
+# a listing with no levels left lists nothing
+def Mst.range_zero(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +p: List<&2, U32>,
+  ps: List<&2, Piece>,
+  -bs: List<&2, Binding>
+) -> {Mst.range.go(~S, ~fetch, 0n, s, p, ps) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {bs == []: List<&2, Binding>}:
+  match ps:
+    case Nil{}:
+      e => Equal.sym(List<&2, Binding>, [], bs, Shared.Maybe.some_inj(List<&2, Binding>, [], bs, e))
+    case Con{x, rest}:
+      e => Empty.absurd({bs == []: List<&2, Binding>}, Shared.Maybe.none_ne_some(List<&2, Binding>, bs, e))
+
+# Mst.range_sub at a subtree, by whether the listing reads it (t)
+def Mst.range_sub.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  t: Bool,
+  +q: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  +h: Hashes.Hash,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  +bs: List<&2, Binding>,
+  -P: Type,
+  k: @a: List<&2, Binding> -> @b: List<&2, Binding> -> {List.append(&2, Binding, a, b) == bs: List<&2, Binding>} -> {
+    Mst.range.go(~S, ~fetch, 1n+q, s, p, rest) == Some{b}: Maybe<&2, List<&2, Binding>>
+  } -> {Bindings.within(a, lo, hi) == True{}: Bool} -> P,
+  ihc: @ks: List<&2, Piece> -> @a: List<&2, Binding> -> {
+    Mst.open(~S, ~fetch, s, h, l, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, q, s, p, ks) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Bindings.within(a, lo, hi) == True{}: Bool}
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, List<&2, Binding>>,
+    t,
+    u => Maybe.bind(
+      &2,
+      List<&2, Piece>,
+      List<&2, Binding>,
+      Mst.open(~S, ~fetch, s, h, l, lo, hi),
+      ks => Maybe.bind(
+        &2,
+        List<&2, Binding>,
+        List<&2, Binding>,
+        Mst.range.go(~S, ~fetch, q, s, p, ks),
+        a => Maybe.map(
+          &2,
+          List<&2, Binding>,
+          List<&2, Binding>,
+          b => List.append(&2, Binding, a, b),
+          Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+        )
+      )
+    ),
+    u => Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+  )
+    == Some{bs}: Maybe<&2, List<&2, Binding>>
+} -> P:
+  match t:
+    case True{}:
+      e => Maybe.bind_cases(
+        List<&2, Piece>,
+        List<&2, Binding>,
+        Mst.open(~S, ~fetch, s, h, l, lo, hi),
+        ks => Maybe.bind(
+          &2,
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, q, s, p, ks),
+          a => Maybe.map(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            b => List.append(&2, Binding, a, b),
+            Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+          )
+        ),
+        bs,
+        P,
+        +ks => eo => e2 => Maybe.bind_cases(
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, q, s, p, ks),
+          a => Maybe.map(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            b => List.append(&2, Binding, a, b),
+            Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+          ),
+          bs,
+          P,
+          +a => ea => e3 => Maybe.map_cases(
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, 1n+q, s, p, rest),
+            b => List.append(&2, Binding, a, b),
+            bs,
+            P,
+            b => eb => e4 => k(a)(b)(e4)(eb)(ihc(ks)(a)(eo)(ea))
+          )(e3)
+        )(e2)
+      )(e)
+    case False{}:
+      e => k([])(bs)({==})(e)({==})
+
+# a listing of the subtree m, then of the pieces rest, is a listing of m
+# (whose bindings are in its bounds, by ihc), then one of rest
+def Mst.range_sub(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  m: Maybe<&2, Hashes.Hash>,
+  +q: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  +bs: List<&2, Binding>,
+  -P: Type,
+  k: @a: List<&2, Binding> -> @b: List<&2, Binding> -> {List.append(&2, Binding, a, b) == bs: List<&2, Binding>} -> {
+    Mst.range.go(~S, ~fetch, 1n+q, s, p, rest) == Some{b}: Maybe<&2, List<&2, Binding>>
+  } -> {Bindings.within(a, lo, hi) == True{}: Bool} -> P,
+  ihc: @h: Hashes.Hash -> @ks: List<&2, Piece> -> @a: List<&2, Binding> -> {
+    Mst.open(~S, ~fetch, s, h, l, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, q, s, p, ks) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Bindings.within(a, lo, hi) == True{}: Bool}
+) -> {Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.sub(m, l, lo, hi, rest)) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> P:
+  match m:
+    case None{}:
+      e => k([])(bs)({==})(e)({==})
+    case Some{+h}:
+      e => Mst.range_sub.at(
+        ~S,
+        ~fetch,
+        Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)),
+        q,
+        s,
+        p,
+        h,
+        l,
+        lo,
+        hi,
+        rest,
+        bs,
+        P,
+        k,
+        ks => a => ihc(h)(ks)(a)
+      )(e)
+
+# Mst.lists_within at an item of the key ik, by whether the prefix leads it (t)
+def Mst.lists_within.bind(
+  t: Bool,
+  a: List<&2, Binding>,
+  +ik: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +b: List<&2, Binding>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  ha: {Bindings.within(a, lo, Some{ik}) == True{}: Bool},
+  hm: {Bool.and(Bound.after(lo, ik), Bound.before(ik, hi)) == True{}: Bool},
+  hb: {Bindings.within(b, Some{ik}, hi) == True{}: Bool}
+) -> {
+  Bindings.within(List.append(&2, Binding, a, Shared.Bool.when(List<&2, Binding>, t, u => Binding{ik, iv} <> b, u => b)), lo, hi) == True{}: Bool
+}:
+  match t:
+    case True{}:
+      Bindings.within_cons(a, ik, iv, b, lo, hi)(ha)(hm)(hb)
+    case False{}:
+      Bindings.within_cat(a, ik, b, lo, hi)(ha)(hm)(hb)
+
+# a listing of the pieces of the items xs comes in order, between their bounds
+def Mst.lists_within(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>,
+  +bs: List<&2, Binding>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {
+  Mst.range.go(~S, ~fetch, f, s, p, ks) == Some{bs}: Maybe<&2, List<&2, Binding>>
+} -> {Bindings.within(bs, lo, hi) == True{}: Bool}:
+  match f:
+    case 0n:
+      ep => e =>
+        %Equal.sym(List<&2, Binding>, bs, [], Mst.range_zero(~S, ~fetch, s, p, ks, bs)(e)): {Bindings.within(_, lo, hi) == True{}: Bool}
+        {==}
+    case 1n+(+q):
+      match xs:
+        case Nil{}:
+          ep => e => Mst.range_sub(
+              ~S,
+              ~fetch,
+              prev,
+              q,
+              s,
+              p,
+              l,
+              lo,
+              hi,
+              [],
+              bs,
+              {Bindings.within(bs, lo, hi) == True{}: Bool},
+              a => b => e4 => eb => wa =>
+                %e4: {Bindings.within(_, lo, hi) == True{}: Bool}
+                %Shared.Maybe.some_inj(List<&2, Binding>, [], b, eb): {Bindings.within(List.append(&2, Binding, a, _), lo, hi) == True{}: Bool}
+                %Equal.sym(List<&2, Binding>, List.append(&2, Binding, a, []), a, Shared.List.append_nil(Binding, a)): {
+                  Bindings.within(_, lo, hi) == True{}: Bool
+                }
+                wa,
+              h => ks2 => a => eo => ea => Mst.open_cases(
+                ~S,
+                ~fetch,
+                s,
+                h,
+                l,
+                lo,
+                hi,
+                ks2,
+                {Bindings.within(a, lo, hi) == True{}: Bool},
+                +l2 => +left2 => +xs2 => ef => eh => en => elt => ee0 => ep2 => Mst.lists_within(~S, ~fetch, q, s, p, xs2, l2, left2, lo, hi, ks2, a)(ep2)(ea)
+              )(eo)
+            )(
+              Equal.trans(
+                Maybe<&2, List<&2, Binding>>,
+                Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.sub(prev, l, lo, hi, [])),
+                Mst.range.go(~S, ~fetch, 1n+q, s, p, ks),
+                Some{bs},
+                Equal.cong(
+                  List<&2, Piece>,
+                  Maybe<&2, List<&2, Binding>>,
+                  x => Mst.range.go(~S, ~fetch, 1n+q, s, p, x),
+                  Piece.sub(prev, l, lo, hi, []),
+                  ks,
+                  Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev, l, lo, hi, []), ks, ep)
+                ),
+                e
+              )
+            )
+        case Con{Item{+ik, +iv, +r}, +rest}:
+          ep => e => Maybe.when_cases(
+            List<&2, Piece>,
+            Bool.and(
+              Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+              Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+            ),
+            u => Maybe.map(
+              &2,
+              List<&2, Piece>,
+              List<&2, Piece>,
+              ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+              Mst.pieces(rest, l, r, Some{ik}, hi)
+            ),
+            ks,
+            {Bindings.within(bs, lo, hi) == True{}: Bool},
+            +c => e2 => Maybe.map_cases(
+              List<&2, Piece>,
+              List<&2, Piece>,
+              Mst.pieces(rest, l, r, Some{ik}, hi),
+              ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+              ks,
+              {Bindings.within(bs, lo, hi) == True{}: Bool},
+              +ks2 => e3 => e4 =>
+                +hm = Shared.Bool.and_true_right(
+                  Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+                  Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+                )(c)
+                Mst.range_sub(
+                  ~S,
+                  ~fetch,
+                  prev,
+                  q,
+                  s,
+                  p,
+                  l,
+                  lo,
+                  Some{ik},
+                  Piece.Bind{ik, iv} <> ks2,
+                  bs,
+                  {Bindings.within(bs, lo, hi) == True{}: Bool},
+                  a => b => e5 => eb => wa => Maybe.map_cases(
+                    List<&2, Binding>,
+                    List<&2, Binding>,
+                    Mst.range.go(~S, ~fetch, 1n+q, s, p, ks2),
+                    +b2 => Shared.Bool.when(List<&2, Binding>, Key.leads(p, ik), u => Binding{ik, iv} <> b2, u => b2),
+                    b,
+                    {Bindings.within(bs, lo, hi) == True{}: Bool},
+                    +b2 => eb2 => e6 =>
+                      %e5: {Bindings.within(_, lo, hi) == True{}: Bool}
+                      %e6: {Bindings.within(List.append(&2, Binding, a, _), lo, hi) == True{}: Bool}
+                      Mst.lists_within.bind(
+                        Key.leads(p, ik),
+                        a,
+                        ik,
+                        iv,
+                        b2,
+                        lo,
+                        hi,
+                        wa,
+                        hm,
+                        Mst.lists_within(~S, ~fetch, 1n+q, s, p, rest, l, r, Some{ik}, hi, ks2, b2)(e3)(eb2)
+                      )
+                  )(eb),
+                  h => ks3 => a => eo => ea => Mst.open_cases(
+                    ~S,
+                    ~fetch,
+                    s,
+                    h,
+                    l,
+                    lo,
+                    Some{ik},
+                    ks3,
+                    {Bindings.within(a, lo, Some{ik}) == True{}: Bool},
+                    +l2 => +left2 => +xs2 => ef => eh => en => elt => ee0 => ep2 => Mst.lists_within(~S, ~fetch, q, s, p, xs2, l2, left2, lo, Some{ik}, ks3, a)(ep2)(ea)
+                  )(eo)
+                )(Equal.trans(
+                  Maybe<&2, List<&2, Binding>>,
+                  Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2)),
+                  Mst.range.go(~S, ~fetch, 1n+q, s, p, ks),
+                  Some{bs},
+                  Equal.cong(List<&2, Piece>, Maybe<&2, List<&2, Binding>>, x => Mst.range.go(~S, ~fetch, 1n+q, s, p, x), Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2), ks, e4),
+                  e
+                ))
+            )(e2)
+          )(ep)
+
+# a listing of a tree comes in the order of its keys
+def Mst.lists_sorted(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +p: List<&2, U32>,
+  +bs: List<&2, Binding>
+) -> {Mst.range(~S, ~fetch, s, h, p) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {Bindings.sorted(bs) == True{}: Bool}:
+  match h:
+    case None{}:
+      e =>
+        %Shared.Maybe.some_inj(List<&2, Binding>, [], bs, e): {Bindings.sorted(_) == True{}: Bool}
+        {==}
+    case Some{+h2}:
+      e => Mst.range_sub(
+        ~S,
+        ~fetch,
+        Some{h2},
+        63n,
+        s,
+        p,
+        Mst.depth(),
+        None{},
+        None{},
+        [],
+        bs,
+        {Bindings.sorted(bs) == True{}: Bool},
+        +a => b => e4 => eb => wa =>
+          %e4: {Bindings.sorted(_) == True{}: Bool}
+          %Shared.Maybe.some_inj(List<&2, Binding>, [], b, eb): {Bindings.sorted(List.append(&2, Binding, a, _)) == True{}: Bool}
+          %Equal.sym(List<&2, Binding>, List.append(&2, Binding, a, []), a, Shared.List.append_nil(Binding, a)): {
+            Bindings.sorted(_) == True{}: Bool
+          }
+          Bindings.within_sorted(a, None{}, None{})(wa),
+        h3 => ks => a => eo => ea => Mst.open_cases(
+          ~S,
+          ~fetch,
+          s,
+          h3,
+          Mst.depth(),
+          None{},
+          None{},
+          ks,
+          {Bindings.within(a, None{}, None{}) == True{}: Bool},
+          +l2 => +left2 => +xs2 => ef => eh => en => elt => ee0 => ep => Mst.lists_within(~S, ~fetch, 63n, s, p, xs2, l2, left2, None{}, None{}, ks, a)(ep)(ea)
+        )(eo)
+      )(e)
+
+# the pieces of a root hold k bound to v exactly when a read of the root
+# finds v
+def Mst.lists_root(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>
+) -> {Pieces.has(~S, ~fetch, Mst.depth(), s, Mst.root(h), k, v) == Look.has(Mst.look(~S, ~fetch, s, h, k), v): Bool}:
+  match h:
+    case None{}:
+      {==}
+    case Some{+h2}:
+      Equal.sym(
+        Bool,
+        Look.has(Mst.look(~S, ~fetch, s, Some{h2}, k), v),
+        Bool.or(Look.has(Mst.look(~S, ~fetch, s, Some{h2}, k), v), False{}),
+        Shared.Bool.or_false(Look.has(Mst.look(~S, ~fetch, s, Some{h2}, k), v))
+      )
+
+# One shape
+# ---------
+
+# the bindings of the subtree m under the prefix p, in the room of the level
+# l between lo and hi, read q levels down: none when a node does not read
+def Mst.sub_list(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  q: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  m: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> Maybe<&2, List<&2, Binding>>:
+  match m:
+    case None{}:
+      Some{[]}
+    case Some{+h}:
+      Shared.Bool.when(
+        Maybe<&2, List<&2, Binding>>,
+        Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)),
+        u => Maybe.bind(
+          &2,
+          List<&2, Piece>,
+          List<&2, Binding>,
+          Mst.open(~S, ~fetch, s, h, l, lo, hi),
+          ks => Mst.range.go(~S, ~fetch, q, s, p, ks)
+        ),
+        u => Some{[]}
+      )
+
+# the bindings of a subtree that a listing reads: those of its node's pieces
+def Mst.sub_list_read(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  +h: Hashes.Hash,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -ks: List<&2, Piece>,
+  -a: List<&2, Binding>,
+  et: {Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)) == True{}: Bool},
+  eo: {Mst.open(~S, ~fetch, s, h, l, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>},
+  ea: {Mst.range.go(~S, ~fetch, q, s, p, ks) == Some{a}: Maybe<&2, List<&2, Binding>>}
+) -> {Mst.sub_list(~S, ~fetch, q, s, p, Some{h}, l, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>}:
+  %Equal.sym(Bool, Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)), True{}, et): {
+    Shared.Bool.when(
+      Maybe<&2, List<&2, Binding>>,
+      _,
+      u => Maybe.bind(
+        &2,
+        List<&2, Piece>,
+        List<&2, Binding>,
+        Mst.open(~S, ~fetch, s, h, l, lo, hi),
+        ks2 => Mst.range.go(~S, ~fetch, q, s, p, ks2)
+      ),
+      u => Some{[]}
+    )
+      == Some{a}: Maybe<&2, List<&2, Binding>>
+  }
+  %Equal.sym(Maybe<&2, List<&2, Piece>>, Mst.open(~S, ~fetch, s, h, l, lo, hi), Some{ks}, eo): {
+    Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, _, ks2 => Mst.range.go(~S, ~fetch, q, s, p, ks2))
+      == Some{a}: Maybe<&2, List<&2, Binding>>
+  }
+  ea
+
+# a subtree that a listing skips lists nothing
+def Mst.sub_list_skip(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  +h: Hashes.Hash,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  et: {Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)) == False{}: Bool}
+) -> {Mst.sub_list(~S, ~fetch, q, s, p, Some{h}, l, lo, hi) == Some{[]}: Maybe<&2, List<&2, Binding>>}:
+  %Equal.sym(Bool, Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)), False{}, et): {
+    Shared.Bool.when(
+      Maybe<&2, List<&2, Binding>>,
+      _,
+      u => Maybe.bind(
+        &2,
+        List<&2, Piece>,
+        List<&2, Binding>,
+        Mst.open(~S, ~fetch, s, h, l, lo, hi),
+        ks2 => Mst.range.go(~S, ~fetch, q, s, p, ks2)
+      ),
+      u => Some{[]}
+    )
+      == Some{[]}: Maybe<&2, List<&2, Binding>>
+  }
+  {==}
+
+# Mst.range_list at a subtree, by whether the listing reads it (t)
+def Mst.range_list.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  t: Bool,
+  +q: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  +h: Hashes.Hash,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  +bs: List<&2, Binding>,
+  -P: Type,
+  k: @a: List<&2, Binding> -> @b: List<&2, Binding> -> {List.append(&2, Binding, a, b) == bs: List<&2, Binding>} -> {
+    Mst.range.go(~S, ~fetch, 1n+q, s, p, rest) == Some{b}: Maybe<&2, List<&2, Binding>>
+  } -> {Mst.sub_list(~S, ~fetch, q, s, p, Some{h}, l, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>} -> P,
+  et: {Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)) == t: Bool}
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, List<&2, Binding>>,
+    t,
+    u => Maybe.bind(
+      &2,
+      List<&2, Piece>,
+      List<&2, Binding>,
+      Mst.open(~S, ~fetch, s, h, l, lo, hi),
+      ks => Maybe.bind(
+        &2,
+        List<&2, Binding>,
+        List<&2, Binding>,
+        Mst.range.go(~S, ~fetch, q, s, p, ks),
+        a => Maybe.map(
+          &2,
+          List<&2, Binding>,
+          List<&2, Binding>,
+          b => List.append(&2, Binding, a, b),
+          Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+        )
+      )
+    ),
+    u => Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+  )
+    == Some{bs}: Maybe<&2, List<&2, Binding>>
+} -> P:
+  match t:
+    case True{}:
+      e => Maybe.bind_cases(
+        List<&2, Piece>,
+        List<&2, Binding>,
+        Mst.open(~S, ~fetch, s, h, l, lo, hi),
+        ks => Maybe.bind(
+          &2,
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, q, s, p, ks),
+          a => Maybe.map(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            b => List.append(&2, Binding, a, b),
+            Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+          )
+        ),
+        bs,
+        P,
+        +ks => eo => e2 => Maybe.bind_cases(
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, q, s, p, ks),
+          a => Maybe.map(
+            &2,
+            List<&2, Binding>,
+            List<&2, Binding>,
+            b => List.append(&2, Binding, a, b),
+            Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+          ),
+          bs,
+          P,
+          +a => ea => e3 => Maybe.map_cases(
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, 1n+q, s, p, rest),
+            b => List.append(&2, Binding, a, b),
+            bs,
+            P,
+            b => eb => e4 => k(a)(b)(e4)(eb)(Mst.sub_list_read(~S, ~fetch, q, s, p, h, l, lo, hi, ks, a, et, eo, ea))
+          )(e3)
+        )(e2)
+      )(e)
+    case False{}:
+      e => k([])(bs)({==})(e)(Mst.sub_list_skip(~S, ~fetch, q, s, p, h, l, lo, hi, et))
+
+# a listing of the subtree m, then of the pieces rest, is the listing of m,
+# then one of rest
+def Mst.range_list(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  m: Maybe<&2, Hashes.Hash>,
+  +q: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  +bs: List<&2, Binding>,
+  -P: Type,
+  k: @a: List<&2, Binding> -> @b: List<&2, Binding> -> {List.append(&2, Binding, a, b) == bs: List<&2, Binding>} -> {
+    Mst.range.go(~S, ~fetch, 1n+q, s, p, rest) == Some{b}: Maybe<&2, List<&2, Binding>>
+  } -> {Mst.sub_list(~S, ~fetch, q, s, p, m, l, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>} -> P
+) -> {Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.sub(m, l, lo, hi, rest)) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> P:
+  match m:
+    case None{}:
+      e => k([])(bs)({==})(e)({==})
+    case Some{+h}:
+      e => Mst.range_list.at(
+        ~S,
+        ~fetch,
+        Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)),
+        q,
+        s,
+        p,
+        h,
+        l,
+        lo,
+        hi,
+        rest,
+        bs,
+        P,
+        k,
+        {==}
+      )(e)
+
+# a listing with no levels left has no pieces
+def Mst.range_zero_nil(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +p: List<&2, U32>,
+  ps: List<&2, Piece>,
+  -bs: List<&2, Binding>
+) -> {Mst.range.go(~S, ~fetch, 0n, s, p, ps) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {ps == []: List<&2, Piece>}:
+  match ps:
+    case Nil{}:
+      e => {==}
+    case Con{x, rest}:
+      e => Empty.absurd({x <> rest == []: List<&2, Piece>}, Shared.Maybe.none_ne_some(List<&2, Binding>, bs, e))
+
+# a subtree, then a piece, is no empty run
+def Mst.sub_ne_nil(
+  m: Maybe<&2, Hashes.Hash>,
+  -l: Nat,
+  -lo: Maybe<&2, List<&2, U32>>,
+  -hi: Maybe<&2, List<&2, U32>>,
+  -x: Piece,
+  -r: List<&2, Piece>
+) -> {Piece.sub(m, l, lo, hi, x <> r) == []: List<&2, Piece>} -> Empty:
+  match m:
+    case None{}:
+      e => Shared.Bool.false_ne_true(Equal.cong(List<&2, Piece>, Bool, ys => List.is_empty(&2, Piece, ys), x <> r, [], e))
+    case Some{h}:
+      e => Shared.Bool.false_ne_true(
+        Equal.cong(List<&2, Piece>, Bool, ys => List.is_empty(&2, Piece, ys), Piece.Sub{h, l, lo, hi} <> (x <> r), [], e)
+      )
+
+# the items that give no piece: none, and no subtree before them
+def Mst.pieces_empty(
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{[]}: Maybe<&2, List<&2, Piece>>} -> {Node{l, prev, xs} == Node{l, None{}, []}: Node}:
+  match xs:
+    case Nil{}:
+      match prev:
+        case None{}:
+          e => {==}
+        case Some{h}:
+          e => Empty.absurd(
+            {Node{l, Some{h}, []} == Node{l, None{}, []}: Node},
+            Shared.Bool.false_ne_true(
+              Equal.cong(
+                List<&2, Piece>,
+                Bool,
+                ys => List.is_empty(&2, Piece, ys),
+                [Piece.Sub{h, l, lo, hi}],
+                [],
+                Shared.Maybe.some_inj(List<&2, Piece>, [Piece.Sub{h, l, lo, hi}], [], e)
+              )
+            )
+          )
+    case Con{Item{+k, +v, +r}, +rest}:
+      e => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(
+          Bool.and(Nat.is_eq(Key.level(k), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, k)))),
+          Bool.and(Bound.after(lo, k), Bound.before(k, hi))
+        ),
+        u => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          ps2 => Piece.sub(prev, l, lo, Some{k}, Piece.Bind{k, v} <> ps2),
+          Mst.pieces(rest, l, r, Some{k}, hi)
+        ),
+        [],
+        {Node{l, prev, Item{k, v, r} <> rest} == Node{l, None{}, []}: Node},
+        c => e2 => Maybe.map_cases(
+          List<&2, Piece>,
+          List<&2, Piece>,
+          Mst.pieces(rest, l, r, Some{k}, hi),
+          ps2 => Piece.sub(prev, l, lo, Some{k}, Piece.Bind{k, v} <> ps2),
+          [],
+          {Node{l, prev, Item{k, v, r} <> rest} == Node{l, None{}, []}: Node},
+          ks2 => e3 => e4 => Empty.absurd(
+            {Node{l, prev, Item{k, v, r} <> rest} == Node{l, None{}, []}: Node},
+            Mst.sub_ne_nil(prev, l, lo, Some{k}, Piece.Bind{k, v}, ks2)(e4)
+          )
+        )(e2)
+      )(e)
+
+# the keys of the bindings bs have levels below n
+def Bindings.below(bs: List<&2, Binding>, +n: Nat) -> Bool:
+  match bs:
+    case Nil{}:
+      True{}
+    case Con{Binding{k, v}, rest}:
+      Bool.and(Nat.is_lt(Key.level(k), n), Bindings.below(rest, n))
+
+# bindings below n, then bindings below n, are below n
+def Bindings.below_append(a: List<&2, Binding>, +b: List<&2, Binding>, +n: Nat) -> {Bindings.below(a, n) == True{}: Bool} -> {
+  Bindings.below(b, n) == True{}: Bool
+} -> {Bindings.below(List.append(&2, Binding, a, b), n) == True{}: Bool}:
+  match a:
+    case Nil{}:
+      ha => hb => hb
+    case Con{Binding{+k, +v}, +rest}:
+      +ha => hb => Shared.Bool.and_both(
+        Nat.is_lt(Key.level(k), n),
+        Bindings.below(List.append(&2, Binding, rest, b), n)
+      )(Shared.Bool.and_true_left(Nat.is_lt(Key.level(k), n), Bindings.below(rest, n))(ha))(
+        Bindings.below_append(rest, b, n)(Shared.Bool.and_true_right(Nat.is_lt(Key.level(k), n), Bindings.below(rest, n))(ha))(hb)
+      )
+
+# bindings below n are below any m from n on
+def Bindings.below_mono(a: List<&2, Binding>, +n: Nat, +m: Nat) -> {Bindings.below(a, n) == True{}: Bool} -> {
+  Nat.is_le(n, m) == True{}: Bool
+} -> {Bindings.below(a, m) == True{}: Bool}:
+  match a:
+    case Nil{}:
+      h => g => {==}
+    case Con{Binding{+k, +v}, +rest}:
+      +h => +g => Shared.Bool.and_both(
+        Nat.is_lt(Key.level(k), m),
+        Bindings.below(rest, m)
+      )(Shared.Nat.lt_le(Key.level(k), n, m)(Shared.Bool.and_true_left(Nat.is_lt(Key.level(k), n), Bindings.below(rest, n))(h))(g))(
+        Bindings.below_mono(rest, n, m)(Shared.Bool.and_true_right(Nat.is_lt(Key.level(k), n), Bindings.below(rest, n))(h))(g)
+      )
+
+# the bindings b, with the binding of k first when t holds, are below n
+def Bindings.below_when(t: Bool, +k: List<&2, U32>, +v: List<&2, U32>, b: List<&2, Binding>, +n: Nat) -> {
+  Nat.is_lt(Key.level(k), n) == True{}: Bool
+} -> {Bindings.below(b, n) == True{}: Bool} -> {
+  Bindings.below(Shared.Bool.when(List<&2, Binding>, t, u => Binding{k, v} <> b, u => b), n) == True{}: Bool
+}:
+  match t:
+    case True{}:
+      hk => hb => Shared.Bool.and_both(Nat.is_lt(Key.level(k), n), Bindings.below(b, n))(hk)(hb)
+    case False{}:
+      hk => hb => hb
+
+# a key of the bindings bs has the level l
+def Bindings.has_level(bs: List<&2, Binding>, +l: Nat) -> Bool:
+  match bs:
+    case Nil{}:
+      False{}
+    case Con{Binding{k, v}, rest}:
+      Bool.or(Nat.is_eq(Key.level(k), l), Bindings.has_level(rest, l))
+
+# bindings that hold a key of the level l, after others, still do
+def Bindings.has_level_right(a: List<&2, Binding>, +b: List<&2, Binding>, +l: Nat) -> {Bindings.has_level(b, l) == True{}: Bool} -> {
+  Bindings.has_level(List.append(&2, Binding, a, b), l) == True{}: Bool
+}:
+  match a:
+    case Nil{}:
+      h => h
+    case Con{Binding{+k, +v}, +rest}:
+      h =>
+        %Equal.sym(Bool, Bindings.has_level(List.append(&2, Binding, rest, b), l), True{}, Bindings.has_level_right(rest, b, l)(h)): {
+          Bool.or(Nat.is_eq(Key.level(k), l), _) == True{}: Bool
+        }
+        Shared.Bool.or_true_right(Nat.is_eq(Key.level(k), l))
+
+# Bindings.has_level_lt at a binding of k, by whether k has the level l (t)
+def Bindings.has_level_lt.at(
+  t: Bool,
+  +k: List<&2, U32>,
+  +l: Nat,
+  +n: Nat,
+  rest: List<&2, Binding>,
+  et: {Nat.is_eq(Key.level(k), l) == t: Bool},
+  ih: {Bindings.has_level(rest, l) == True{}: Bool} -> {Nat.is_lt(l, n) == True{}: Bool}
+) -> {Bool.and(Nat.is_lt(Key.level(k), n), Bindings.below(rest, n)) == True{}: Bool} -> {
+  Bool.or(t, Bindings.has_level(rest, l)) == True{}: Bool
+} -> {Nat.is_lt(l, n) == True{}: Bool}:
+  match t:
+    case True{}:
+      hb => hh =>
+        %Shared.Nat.is_eq_sound(Key.level(k), l)(et): {Nat.is_lt(_, n) == True{}: Bool}
+        Shared.Bool.and_true_left(Nat.is_lt(Key.level(k), n), Bindings.below(rest, n))(hb)
+    case False{}:
+      hb => hh => ih(hh)
+
+# a key of the level l among bindings below n has l below n
+def Bindings.has_level_lt(bs: List<&2, Binding>, +l: Nat, +n: Nat) -> {Bindings.below(bs, n) == True{}: Bool} -> {
+  Bindings.has_level(bs, l) == True{}: Bool
+} -> {Nat.is_lt(l, n) == True{}: Bool}:
+  match bs:
+    case Nil{}:
+      hb => hh => Empty.absurd({Nat.is_lt(l, n) == True{}: Bool}, Shared.Bool.false_ne_true(hh))
+    case Con{Binding{+k, +v}, +rest}:
+      +hb => hh => Bindings.has_level_lt.at(
+        Nat.is_eq(Key.level(k), l),
+        k,
+        l,
+        n,
+        rest,
+        {==},
+        Bindings.has_level_lt(rest, l, n)(Shared.Bool.and_true_right(Nat.is_lt(Key.level(k), n), Bindings.below(rest, n))(hb))
+      )(hb)(hh)
+
+# bindings a then the empty rest b are a
+def Bindings.cat_nil(+a: List<&2, Binding>, -b: List<&2, Binding>, -c: List<&2, Binding>) -> {
+  Some{[]} == Some{b}: Maybe<&2, List<&2, Binding>>
+} -> {List.append(&2, Binding, a, b) == c: List<&2, Binding>} -> {a == c: List<&2, Binding>}:
+  eb => e => Equal.trans(
+    List<&2, Binding>,
+    a,
+    List.append(&2, Binding, a, b),
+    c,
+    Equal.trans(
+      List<&2, Binding>,
+      a,
+      List.append(&2, Binding, a, []),
+      List.append(&2, Binding, a, b),
+      Equal.sym(List<&2, Binding>, List.append(&2, Binding, a, []), a, Shared.List.append_nil(Binding, a)),
+      Equal.cong(
+        List<&2, Binding>,
+        List<&2, Binding>,
+        y => List.append(&2, Binding, a, y),
+        [],
+        b,
+        Shared.Maybe.some_inj(List<&2, Binding>, [], b, eb)
+      )
+    ),
+    e
+  )
+
+# a < b gives a + 1 <= b
+def Nat.lt_le_succ(a: Nat, b: Nat) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Nat.is_le(1n+a, b) == True{}: Bool}:
+  match a b:
+    case 0n 0n:
+      h => Empty.absurd({Nat.is_le(1n, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case 0n 1n+q:
+      h => Shared.Nat.le_zero(q)
+    case 1n+p 0n:
+      h => Empty.absurd({Nat.is_le(2n+p, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case 1n+p 1n+q:
+      h => Nat.lt_le_succ(p, q)(h)
+
+# a <= b and b <= a give a == b
+def Nat.lt_succ_eq(+a: Nat, +b: Nat) -> {Nat.is_lt(a, 1n+b) == True{}: Bool} -> {Nat.is_lt(b, 1n+a) == True{}: Bool} -> {a == b: Nat}:
+  h => g => Shared.Nat.is_eq_sound(
+    a,
+    b
+  )(
+    Equal.trans(
+      Bool,
+      Nat.is_eq(a, b),
+      Bool.and(Nat.is_le(a, b), Nat.is_le(b, a)),
+      True{},
+      Equal.sym(Bool, Bool.and(Nat.is_le(a, b), Nat.is_le(b, a)), Nat.is_eq(a, b), Shared.Nat.le_both(a, b)),
+      Shared.Bool.and_both(Nat.is_le(a, b), Nat.is_le(b, a))(Shared.Nat.lt_succ_le(a, b)(h))(Shared.Nat.lt_succ_le(b, a)(g))
+    )
+  )
+
+# a key of the level l has a level below l + 1
+def Mst.level_lt(+k: List<&2, U32>, +l: Nat) -> {Nat.is_eq(Key.level(k), l) == True{}: Bool} -> {
+  Nat.is_lt(Key.level(k), 1n+l) == True{}: Bool
+}:
+  e =>
+    %Equal.sym(Nat, Key.level(k), l, Shared.Nat.is_eq_sound(Key.level(k), l)(e)): {Nat.is_lt(_, 1n+l) == True{}: Bool}
+    Shared.Nat.lt_succ(l)
+
+# an or whose first side is True is True
+def Bool.or_true_left(a: Bool, -b: Bool) -> {a == True{}: Bool} -> {Bool.or(a, b) == True{}: Bool}:
+  match a:
+    case True{}:
+      e => {==}
+    case False{}:
+      e => Empty.absurd({b == True{}: Bool}, Shared.Bool.false_ne_true(e))
+
+# an or whose second side is True is True
+def Bool.or_true_of(a: Bool, -b: Bool) -> {b == True{}: Bool} -> {Bool.or(a, b) == True{}: Bool}:
+  match a:
+    case True{}:
+      e => {==}
+    case False{}:
+      e => e
+
+# the bindings of a subtree in the room of the level l have levels below l
+def Mst.sub_below(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  q: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  m: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +a: List<&2, Binding>,
+  ihn: @xs: List<&2, Item> -> @l2: Nat -> @left: Maybe<&2, Hashes.Hash> -> @ks: List<&2, Piece> -> {
+    Mst.pieces(xs, l2, left, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, q, s, p, ks) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Bindings.below(a, 1n+l2) == True{}: Bool}
+) -> {Mst.sub_list(~S, ~fetch, q, s, p, m, l, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Bindings.below(a, l) == True{}: Bool}:
+  match m:
+    case None{}:
+      e =>
+        %Shared.Maybe.some_inj(List<&2, Binding>, [], a, e): {Bindings.below(_, l) == True{}: Bool}
+        {==}
+    case Some{+h}:
+      e => Shared.Bool.when_cases(
+        Maybe<&2, List<&2, Binding>>,
+        x => {x == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Bindings.below(a, l) == True{}: Bool},
+        Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)),
+        u => Maybe.bind(
+          &2,
+          List<&2, Piece>,
+          List<&2, Binding>,
+          Mst.open(~S, ~fetch, s, h, l, lo, hi),
+          ks => Mst.range.go(~S, ~fetch, q, s, p, ks)
+        ),
+        u => Some{[]},
+        et => e2 => Maybe.bind_cases(
+          List<&2, Piece>,
+          List<&2, Binding>,
+          Mst.open(~S, ~fetch, s, h, l, lo, hi),
+          ks => Mst.range.go(~S, ~fetch, q, s, p, ks),
+          a,
+          {Bindings.below(a, l) == True{}: Bool},
+          +ks => eo => ea => Mst.open_cases(
+            ~S,
+            ~fetch,
+            s,
+            h,
+            l,
+            lo,
+            hi,
+            ks,
+            {Bindings.below(a, l) == True{}: Bool},
+            +l2 => +left => +xs => ef => eh => en => elt => ee0 => ep => Bindings.below_mono(
+              a,
+              1n+l2,
+              l
+            )(ihn(xs)(l2)(left)(ks)(ep)(ea))(Nat.lt_le_succ(l2, l)(elt))
+          )(eo)
+        )(e2),
+        et => e2 =>
+          %Shared.Maybe.some_inj(List<&2, Binding>, [], a, e2): {Bindings.below(_, l) == True{}: Bool}
+          {==}
+      )(e)
+
+# a listing of the pieces of a node of the level l has levels up to l
+def Mst.lists_below(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>,
+  +a: List<&2, Binding>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {
+  Mst.range.go(~S, ~fetch, f, s, p, ks) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Bindings.below(a, 1n+l) == True{}: Bool}:
+  match f:
+    case 0n:
+      ep => e =>
+        %Equal.sym(List<&2, Binding>, a, [], Mst.range_zero(~S, ~fetch, s, p, ks, a)(e)): {Bindings.below(_, 1n+l) == True{}: Bool}
+        {==}
+    case 1n+(+q):
+      match xs:
+        case Nil{}:
+          ep => e => Mst.range_list(
+            ~S,
+            ~fetch,
+            prev,
+            q,
+            s,
+            p,
+            l,
+            lo,
+            hi,
+            [],
+            a,
+            {Bindings.below(a, 1n+l) == True{}: Bool},
+            +a1 => b => e4 => eb => esl =>
+              %Bindings.cat_nil(a1, b, a)(eb)(e4): {Bindings.below(_, 1n+l) == True{}: Bool}
+              Bindings.below_mono(
+                a1,
+                l,
+                1n+l
+              )(
+                Mst.sub_below(
+                  ~S,
+                  ~fetch,
+                  q,
+                  s,
+                  p,
+                  prev,
+                  l,
+                  lo,
+                  hi,
+                  a1,
+                  xs2 => l2 => left2 => ks2 => ep2 => ea2 => Mst.lists_below(~S, ~fetch, q, s, p, xs2, l2, left2, lo, hi, ks2, a1)(ep2)(ea2)
+                )(esl)
+              )(Shared.Nat.le_succ(l, l)(Shared.Nat.le_refl(l)))
+          )(
+            Equal.trans(
+              Maybe<&2, List<&2, Binding>>,
+              Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.sub(prev, l, lo, hi, [])),
+              Mst.range.go(~S, ~fetch, 1n+q, s, p, ks),
+              Some{a},
+              Equal.cong(
+                List<&2, Piece>,
+                Maybe<&2, List<&2, Binding>>,
+                x => Mst.range.go(~S, ~fetch, 1n+q, s, p, x),
+                Piece.sub(prev, l, lo, hi, []),
+                ks,
+                Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev, l, lo, hi, []), ks, ep)
+              ),
+              e
+            )
+          )
+        case Con{Item{+ik, +iv, +r}, +rest}:
+          ep => e => Maybe.when_cases(
+            List<&2, Piece>,
+            Bool.and(
+              Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+              Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+            ),
+            u => Maybe.map(
+              &2,
+              List<&2, Piece>,
+              List<&2, Piece>,
+              ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+              Mst.pieces(rest, l, r, Some{ik}, hi)
+            ),
+            ks,
+            {Bindings.below(a, 1n+l) == True{}: Bool},
+            +c => e2 => Maybe.map_cases(
+              List<&2, Piece>,
+              List<&2, Piece>,
+              Mst.pieces(rest, l, r, Some{ik}, hi),
+              ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+              ks,
+              {Bindings.below(a, 1n+l) == True{}: Bool},
+              +ks2 => e3 => e4 => Mst.range_list(
+                ~S,
+                ~fetch,
+                prev,
+                q,
+                s,
+                p,
+                l,
+                lo,
+                Some{ik},
+                Piece.Bind{ik, iv} <> ks2,
+                a,
+                {Bindings.below(a, 1n+l) == True{}: Bool},
+                +c1 => b => e5 => eb => esl => Maybe.map_cases(
+                  List<&2, Binding>,
+                  List<&2, Binding>,
+                  Mst.range.go(~S, ~fetch, 1n+q, s, p, ks2),
+                  +b2 => Shared.Bool.when(List<&2, Binding>, Key.leads(p, ik), u => Binding{ik, iv} <> b2, u => b2),
+                  b,
+                  {Bindings.below(a, 1n+l) == True{}: Bool},
+                  +b2 => eb2 => e6 =>
+                    %e5: {Bindings.below(_, 1n+l) == True{}: Bool}
+                    %e6: {Bindings.below(List.append(&2, Binding, c1, _), 1n+l) == True{}: Bool}
+                    Bindings.below_append(
+                      c1,
+                      Shared.Bool.when(List<&2, Binding>, Key.leads(p, ik), u => Binding{ik, iv} <> b2, u => b2),
+                      1n+l
+                    )(
+                      Bindings.below_mono(
+                        c1,
+                        l,
+                        1n+l
+                      )(
+                        Mst.sub_below(
+                          ~S,
+                          ~fetch,
+                          q,
+                          s,
+                          p,
+                          prev,
+                          l,
+                          lo,
+                          Some{ik},
+                          c1,
+                          xs2 => l2 => left2 => ks3 => ep2 => ea2 => Mst.lists_below(~S, ~fetch, q, s, p, xs2, l2, left2, lo, Some{ik}, ks3, c1)(ep2)(ea2)
+                        )(esl)
+                      )(Shared.Nat.le_succ(l, l)(Shared.Nat.le_refl(l)))
+                    )(
+                      Bindings.below_when(
+                        Key.leads(p, ik),
+                        ik,
+                        iv,
+                        b2,
+                        1n+l
+                      )(
+                        Mst.level_lt(
+                          ik,
+                          l
+                        )(
+                          Shared.Bool.and_true_left(
+                            Nat.is_eq(Key.level(ik), l),
+                            Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))
+                          )(
+                            Shared.Bool.and_true_left(
+                              Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+                              Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+                            )(c)
+                          )
+                        )
+                      )(Mst.lists_below(~S, ~fetch, 1n+q, s, p, rest, l, r, Some{ik}, hi, ks2, b2)(e3)(eb2))
+                    )
+                )(eb)
+              )(
+                Equal.trans(
+                  Maybe<&2, List<&2, Binding>>,
+                  Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2)),
+                  Mst.range.go(~S, ~fetch, 1n+q, s, p, ks),
+                  Some{a},
+                  Equal.cong(
+                    List<&2, Piece>,
+                    Maybe<&2, List<&2, Binding>>,
+                    x => Mst.range.go(~S, ~fetch, 1n+q, s, p, x),
+                    Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2),
+                    ks,
+                    e4
+                  ),
+                  e
+                )
+              )
+            )(e2)
+          )(ep)
+
+# Mst.lists_level at the first item of the key ik, read f levels down
+def Mst.lists_level.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +ik: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +ks2: List<&2, Piece>,
+  +a: List<&2, Binding>,
+  lvl: {Nat.is_eq(Key.level(ik), l) == True{}: Bool}
+) -> {
+  Mst.range.go(~S, ~fetch, f, s, [], Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2)) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Bindings.has_level(a, l) == True{}: Bool}:
+  match f:
+    case 0n:
+      e => Empty.absurd(
+        {Bindings.has_level(a, l) == True{}: Bool},
+        Mst.sub_ne_nil(
+          prev,
+          l,
+          lo,
+          Some{ik},
+          Piece.Bind{ik, iv},
+          ks2
+        )(Mst.range_zero_nil(~S, ~fetch, s, [], Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2), a)(e))
+      )
+    case 1n+(+q):
+      e => Mst.range_list(
+        ~S,
+        ~fetch,
+        prev,
+        q,
+        s,
+        [],
+        l,
+        lo,
+        Some{ik},
+        Piece.Bind{ik, iv} <> ks2,
+        a,
+        {Bindings.has_level(a, l) == True{}: Bool},
+        +c1 => b => e5 => eb => esl => Maybe.map_cases(
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2),
+          +b2 => Shared.Bool.when(List<&2, Binding>, Key.leads([], ik), u => Binding{ik, iv} <> b2, u => b2),
+          b,
+          {Bindings.has_level(a, l) == True{}: Bool},
+          +b2 => eb2 => e6 =>
+            %e5: {Bindings.has_level(_, l) == True{}: Bool}
+            %e6: {Bindings.has_level(List.append(&2, Binding, c1, _), l) == True{}: Bool}
+            Bindings.has_level_right(
+              c1,
+              Binding{ik, iv} <> b2,
+              l
+            )(Bool.or_true_left(Nat.is_eq(Key.level(ik), l), Bindings.has_level(b2, l))(lvl))
+        )(eb)
+      )(e)
+
+# a listing of the pieces of a node of the level l with an item, under no
+# prefix, holds a key of the level l
+def Mst.lists_level(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>,
+  +a: List<&2, Binding>
+) -> {List.is_empty(&2, Item, xs) == False{}: Bool} -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {
+  Mst.range.go(~S, ~fetch, f, s, [], ks) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Bindings.has_level(a, l) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      ee => ep => e => Empty.absurd({Bindings.has_level(a, l) == True{}: Bool}, Shared.Bool.true_ne_false(ee))
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      ee => ep => e => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(
+          Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+          Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+        ),
+        u => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          Mst.pieces(rest, l, r, Some{ik}, hi)
+        ),
+        ks,
+        {Bindings.has_level(a, l) == True{}: Bool},
+        +c => e2 => Maybe.map_cases(
+          List<&2, Piece>,
+          List<&2, Piece>,
+          Mst.pieces(rest, l, r, Some{ik}, hi),
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          ks,
+          {Bindings.has_level(a, l) == True{}: Bool},
+          +ks2 => e3 => e4 => Mst.lists_level.at(
+            ~S,
+            ~fetch,
+            f,
+            s,
+            ik,
+            iv,
+            l,
+            prev,
+            lo,
+            ks2,
+            a,
+            Shared.Bool.and_true_left(
+              Nat.is_eq(Key.level(ik), l),
+              Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))
+            )(
+              Shared.Bool.and_true_left(
+                Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+                Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+              )(c)
+            )
+          )(
+            Equal.trans(
+              Maybe<&2, List<&2, Binding>>,
+              Mst.range.go(~S, ~fetch, f, s, [], Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2)),
+              Mst.range.go(~S, ~fetch, f, s, [], ks),
+              Some{a},
+              Equal.cong(
+                List<&2, Piece>,
+                Maybe<&2, List<&2, Binding>>,
+                x => Mst.range.go(~S, ~fetch, f, s, [], x),
+                Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2),
+                ks,
+                e4
+              ),
+              e
+            )
+          )
+        )(e2)
+      )(ep)
+
+# a key of the level l has no level below l
+def Mst.level_clash(+k: List<&2, U32>, +l: Nat) -> {Nat.is_eq(Key.level(k), l) == True{}: Bool} -> {
+  Nat.is_lt(Key.level(k), l) == True{}: Bool
+} -> Empty:
+  e => g => Shared.Bool.true_ne_false(
+    Equal.trans(
+      Bool,
+      True{},
+      Nat.is_lt(Key.level(k), l),
+      False{},
+      Equal.sym(Bool, Nat.is_lt(Key.level(k), l), True{}, g),
+      Equal.trans(
+        Bool,
+        Nat.is_lt(Key.level(k), l),
+        Nat.is_lt(l, l),
+        False{},
+        Equal.cong(Nat, Bool, z => Nat.is_lt(z, l), Key.level(k), l, Shared.Nat.is_eq_sound(Key.level(k), l)(e)),
+        Shared.Nat.lt_irrefl(l)
+      )
+    )
+  )
+
+# bindings below the level l hold no key of the level l
+def Bindings.level_clash(+a: List<&2, Binding>, +l: Nat) -> {Bindings.below(a, l) == True{}: Bool} -> {
+  Bindings.has_level(a, l) == True{}: Bool
+} -> Empty:
+  hb => hh => Shared.Bool.true_ne_false(
+    Equal.trans(Bool, True{}, Nat.is_lt(l, l), False{}, Equal.sym(Bool, Nat.is_lt(l, l), True{}, Bindings.has_level_lt(a, l, l)(hb)(hh)), Shared.Nat.lt_irrefl(l))
+  )
+
+# the value of a binding
+def Binding.value(b: Binding) -> List<&2, U32>:
+  match b:
+    case Binding{k, v}:
+      v
+
+# a node of the level l, left subtree p, and the binding of k to v, with the
+# left subtree and the items of n after it
+def Node.under(n: Node, +l: Nat, +p: Maybe<&2, Hashes.Hash>, +k: List<&2, U32>, +v: List<&2, U32>) -> Node:
+  match n:
+    case Node{x, left, xs}:
+      Node{l, p, Item{k, v, left} <> xs}
+
+# two listings of a subtree below the level l, a binding of the level l, and
+# more, that are equal, have equal parts
+def Bindings.split_eq(
+  c1: List<&2, Binding>,
+  c2: List<&2, Binding>,
+  +x1: Binding,
+  +x2: Binding,
+  +r1: List<&2, Binding>,
+  +r2: List<&2, Binding>,
+  +l: Nat,
+  -P: Type,
+  k: {c1 == c2: List<&2, Binding>} -> {x1 == x2: Binding} -> {r1 == r2: List<&2, Binding>} -> P
+) -> {
+  List.append(&2, Binding, c1, x1 <> r1) == List.append(&2, Binding, c2, x2 <> r2): List<&2, Binding>
+} -> {Bindings.below(c1, l) == True{}: Bool} -> {Bindings.below(c2, l) == True{}: Bool} -> {
+  Nat.is_eq(Key.level(Binding.key(x1)), l) == True{}: Bool
+} -> {Nat.is_eq(Key.level(Binding.key(x2)), l) == True{}: Bool} -> P:
+  match c1 c2:
+    case Nil{} Nil{}:
+      +e => h1 => h2 => g1 => g2 => k({==})(Shared.List.head_eq(Binding, x1, x2, r1, r2, e))(Shared.List.tail_eq(Binding, x1, x2, r1, r2, e))
+    case Nil{} Con{Binding{+ky, +vy}, +cr}:
+      e => h1 => h2 => g1 => g2 => Empty.absurd(
+        P,
+        Mst.level_clash(
+          ky,
+          l
+        )(
+          Equal.trans(
+            Bool,
+            Nat.is_eq(Key.level(ky), l),
+            Nat.is_eq(Key.level(Binding.key(x1)), l),
+            True{},
+            Equal.cong(
+              Binding,
+              Bool,
+              z => Nat.is_eq(Key.level(Binding.key(z)), l),
+              Binding{ky, vy},
+              x1,
+              Equal.sym(
+                Binding,
+                x1,
+                Binding{ky, vy},
+                Shared.List.head_eq(Binding, x1, Binding{ky, vy}, r1, List.append(&2, Binding, cr, x2 <> r2), e)
+              )
+            ),
+            g1
+          )
+        )(Shared.Bool.and_true_left(Nat.is_lt(Key.level(ky), l), Bindings.below(cr, l))(h2))
+      )
+    case Con{Binding{+ky, +vy}, +cr} Nil{}:
+      e => h1 => h2 => g1 => g2 => Empty.absurd(
+        P,
+        Mst.level_clash(
+          ky,
+          l
+        )(
+          Equal.trans(
+            Bool,
+            Nat.is_eq(Key.level(ky), l),
+            Nat.is_eq(Key.level(Binding.key(x2)), l),
+            True{},
+            Equal.cong(
+              Binding,
+              Bool,
+              z => Nat.is_eq(Key.level(Binding.key(z)), l),
+              Binding{ky, vy},
+              x2,
+              Shared.List.head_eq(Binding, Binding{ky, vy}, x2, List.append(&2, Binding, cr, x1 <> r1), r2, e)
+            ),
+            g2
+          )
+        )(Shared.Bool.and_true_left(Nat.is_lt(Key.level(ky), l), Bindings.below(cr, l))(h1))
+      )
+    case Con{Binding{+ky1, +vy1}, +cr1} Con{Binding{+ky2, +vy2}, +cr2}:
+      +e => h1 => h2 => g1 => g2 => Bindings.split_eq(
+        cr1,
+        cr2,
+        x1,
+        x2,
+        r1,
+        r2,
+        l,
+        P,
+        ec => k(
+          Shared.List.cons_eq(
+            Binding,
+            Binding{ky1, vy1},
+            Binding{ky2, vy2},
+            cr1,
+            cr2,
+            Shared.List.head_eq(
+              Binding,
+              Binding{ky1, vy1},
+              Binding{ky2, vy2},
+              List.append(&2, Binding, cr1, x1 <> r1),
+              List.append(&2, Binding, cr2, x2 <> r2),
+              e
+            ),
+            ec
+          )
+        )
+      )(
+        Shared.List.tail_eq(
+          Binding,
+          Binding{ky1, vy1},
+          Binding{ky2, vy2},
+          List.append(&2, Binding, cr1, x1 <> r1),
+          List.append(&2, Binding, cr2, x2 <> r2),
+          e
+        )
+      )(Shared.Bool.and_true_right(Nat.is_lt(Key.level(ky1), l), Bindings.below(cr1, l))(h1))(
+        Shared.Bool.and_true_right(Nat.is_lt(Key.level(ky2), l), Bindings.below(cr2, l))(h2)
+      )(g1)(g2)
+
+# a key before the empty bound hi of a node meets every listing
+def Bound.meets_nil(lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> {Bound.before([], hi) == True{}: Bool} -> {
+  Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)) == True{}: Bool
+}:
+  match lo hi:
+    case None{} None{}:
+      h => {==}
+    case None{} Some{b}:
+      h => h
+    case Some{+a} None{}:
+      h =>
+        %Equal.sym(Bool, Key.is_lt(a, []), False{}, Key.lt_nil(a)): {Bool.and(Bool.or(_, Key.leads([], a)), True{}) == True{}: Bool}
+        {==}
+    case Some{+a} Some{b}:
+      h =>
+        %Equal.sym(Bool, Key.is_lt(a, []), False{}, Key.lt_nil(a)): {Bool.and(Bool.or(_, Key.leads([], a)), Key.is_lt([], b)) == True{}: Bool}
+        h
+
+# no key is before the empty key: before it is the key that has words
+def Key.lt_nil_left(k: List<&2, U32>) -> {Key.is_lt([], k) == Bool.not(List.is_empty(&2, U32, k)): Bool}:
+  match k:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      {==}
+
+# a subtree whose bounds hold keys lists the bindings of its node
+def Mst.sub_list_on(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  -a: List<&2, Binding>
+) -> {Bound.before([], hi) == True{}: Bool} -> {Mst.sub_list(~S, ~fetch, f, s, [], Some{h}, up, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+  Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, up, lo, hi), ks => Mst.range.go(~S, ~fetch, f, s, [], ks))
+    == Some{a}: Maybe<&2, List<&2, Binding>>
+}:
+  hb => e => Equal.trans(
+    Maybe<&2, List<&2, Binding>>,
+    Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, up, lo, hi), ks => Mst.range.go(~S, ~fetch, f, s, [], ks)),
+    Mst.sub_list(~S, ~fetch, f, s, [], Some{h}, up, lo, hi),
+    Some{a},
+    Equal.cong(
+      Bool,
+      Maybe<&2, List<&2, Binding>>,
+      t => Shared.Bool.when(
+        Maybe<&2, List<&2, Binding>>,
+        t,
+        u => Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, up, lo, hi), ks => Mst.range.go(~S, ~fetch, f, s, [], ks)),
+        u => Some{[]}
+      ),
+      True{},
+      Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)),
+      Equal.sym(Bool, Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)), True{}, Bound.meets_nil(lo, hi)(hb))
+    ),
+    e
+  )
+
+# a subtree whose bounds hold keys lists a binding
+def Mst.canon_sub.one(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +a: List<&2, Binding>,
+  hb: {Bound.before([], hi) == True{}: Bool}
+) -> {Some{[]} == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+  Mst.sub_list(~S, ~fetch, f, s, [], Some{h}, up, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> Empty:
+  e0 => e => Maybe.bind_cases(
+    List<&2, Piece>,
+    List<&2, Binding>,
+    Mst.open(~S, ~fetch, s, h, up, lo, hi),
+    ks => Mst.range.go(~S, ~fetch, f, s, [], ks),
+    a,
+    Empty,
+    +ks => eo => ea => Mst.open_cases(
+      ~S,
+      ~fetch,
+      s,
+      h,
+      up,
+      lo,
+      hi,
+      ks,
+      Empty,
+      +l2 => +left2 => +xs2 => ef => eh => en => elt => ee => ep => Shared.Bool.false_ne_true(
+        Equal.trans(
+          Bool,
+          False{},
+          Bindings.has_level(a, l2),
+          True{},
+          Equal.cong(List<&2, Binding>, Bool, x => Bindings.has_level(x, l2), [], a, Shared.Maybe.some_inj(List<&2, Binding>, [], a, e0)),
+          Mst.lists_level(~S, ~fetch, f, s, xs2, l2, left2, lo, hi, ks, a)(ee)(ep)(ea)
+        )
+      )
+    )(eo)
+  )(Mst.sub_list_on(~S, ~fetch, f, s, h, up, lo, hi, a)(hb)(e))
+
+# two subtrees whose bounds hold keys, with nodes whose listings are one
+# (ihn: two such nodes of one level are one), are one subtree
+def Mst.canon_sub.both(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  +h1: Hashes.Hash,
+  +h2: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +a: List<&2, Binding>,
+  +hb: {Bound.before([], hi) == True{}: Bool},
+  ihn: @xs1: List<&2, Item> -> @xs2: List<&2, Item> -> @l: Nat -> @p1: Maybe<&2, Hashes.Hash> -> @p2: Maybe<&2, Hashes.Hash> -> @ks1: List<
+    &2,
+    Piece> -> @ks2: List<&2, Piece> -> {Bound.before([], hi) == True{}: Bool} -> {
+    Mst.pieces(xs1, l, p1, lo, hi) == Some{ks1}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, f, s, [], ks1) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+    Mst.pieces(xs2, l, p2, lo, hi) == Some{ks2}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, f, s, [], ks2) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Node{l, p1, xs1} == Node{l, p2, xs2}: Node}
+) -> {Mst.sub_list(~S, ~fetch, f, s, [], Some{h1}, up, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+  Mst.sub_list(~S, ~fetch, f, s, [], Some{h2}, up, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Some{h1} == Some{h2}: Maybe<&2, Hashes.Hash>}:
+  e1 => e2 => Maybe.bind_cases(
+    List<&2, Piece>,
+    List<&2, Binding>,
+    Mst.open(~S, ~fetch, s, h1, up, lo, hi),
+    ks => Mst.range.go(~S, ~fetch, f, s, [], ks),
+    a,
+    {Some{h1} == Some{h2}: Maybe<&2, Hashes.Hash>},
+    +ks1 => eo1 => +ea1 => Mst.open_cases(
+      ~S,
+      ~fetch,
+      s,
+      h1,
+      up,
+      lo,
+      hi,
+      ks1,
+      {Some{h1} == Some{h2}: Maybe<&2, Hashes.Hash>},
+      +l1 => +left1 => +xs1 => ef1 => +eh1 => en1 => elt1 => +ee1 => +ep1 => Maybe.bind_cases(
+        List<&2, Piece>,
+        List<&2, Binding>,
+        Mst.open(~S, ~fetch, s, h2, up, lo, hi),
+        ks => Mst.range.go(~S, ~fetch, f, s, [], ks),
+        a,
+        {Some{h1} == Some{h2}: Maybe<&2, Hashes.Hash>},
+        +ks2 => eo2 => +ea2 => Mst.open_cases(
+          ~S,
+          ~fetch,
+          s,
+          h2,
+          up,
+          lo,
+          hi,
+          ks2,
+          {Some{h1} == Some{h2}: Maybe<&2, Hashes.Hash>},
+          +l2 => +left2 => +xs2 => ef2 => +eh2 => en2 => elt2 => +ee2 => +ep2 =>
+            +l12 = Nat.lt_succ_eq(
+              l1,
+              l2
+            )(
+              Bindings.has_level_lt(
+                a,
+                l1,
+                1n+l2
+              )(Mst.lists_below(~S, ~fetch, f, s, [], xs2, l2, left2, lo, hi, ks2, a)(ep2)(ea2))(
+                Mst.lists_level(~S, ~fetch, f, s, xs1, l1, left1, lo, hi, ks1, a)(ee1)(ep1)(ea1)
+              )
+            )(
+              Bindings.has_level_lt(
+                a,
+                l2,
+                1n+l1
+              )(Mst.lists_below(~S, ~fetch, f, s, [], xs1, l1, left1, lo, hi, ks1, a)(ep1)(ea1))(
+                Mst.lists_level(~S, ~fetch, f, s, xs2, l2, left2, lo, hi, ks2, a)(ee2)(ep2)(ea2)
+              )
+            )
+            +nodes = ihn(xs1)(xs2)(l1)(left1)(left2)(ks1)(ks2)(hb)(ep1)(ea1)(
+              Equal.trans(
+                Maybe<&2, List<&2, Piece>>,
+                Mst.pieces(xs2, l1, left2, lo, hi),
+                Mst.pieces(xs2, l2, left2, lo, hi),
+                Some{ks2},
+                Equal.cong(Nat, Maybe<&2, List<&2, Piece>>, x => Mst.pieces(xs2, x, left2, lo, hi), l1, l2, l12),
+                ep2
+              )
+            )(ea2)
+            +n12 = Equal.trans(
+              Node,
+              Node{l1, left1, xs1},
+              Node{l1, left2, xs2},
+              Node{l2, left2, xs2},
+              nodes,
+              Equal.cong(Nat, Node, x => Node{x, left2, xs2}, l1, l2, l12)
+            )
+            Equal.cong(
+              Hashes.Hash,
+              Maybe<&2, Hashes.Hash>,
+              x => Some{x},
+              h1,
+              h2,
+              Equal.trans(
+                Hashes.Hash,
+                h1,
+                Hashes.Sha.hash(Node.code(Node{l1, left1, xs1}, [])),
+                h2,
+                Equal.sym(Hashes.Hash, Hashes.Sha.hash(Node.code(Node{l1, left1, xs1}, [])), h1, eh1),
+                Equal.trans(
+                  Hashes.Hash,
+                  Hashes.Sha.hash(Node.code(Node{l1, left1, xs1}, [])),
+                  Hashes.Sha.hash(Node.code(Node{l2, left2, xs2}, [])),
+                  h2,
+                  Equal.cong(Node, Hashes.Hash, x => Hashes.Sha.hash(Node.code(x, [])), Node{l1, left1, xs1}, Node{l2, left2, xs2}, n12),
+                  eh2
+                )
+              )
+            )
+        )(eo2)
+      )(Mst.sub_list_on(~S, ~fetch, f, s, h2, up, lo, hi, a)(hb)(e2))
+    )(eo1)
+  )(Mst.sub_list_on(~S, ~fetch, f, s, h1, up, lo, hi, a)(hb)(e1))
+
+# two subtrees in one room that list the same bindings, under no prefix, are
+# one subtree, when two such nodes of one level are one (ihn)
+def Mst.canon_sub(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  m1: Maybe<&2, Hashes.Hash>,
+  m2: Maybe<&2, Hashes.Hash>,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +a: List<&2, Binding>,
+  hn1: {Bool.or(Maybe.is_none(&2, Hashes.Hash, m1), Bound.before([], hi)) == True{}: Bool},
+  hn2: {Bool.or(Maybe.is_none(&2, Hashes.Hash, m2), Bound.before([], hi)) == True{}: Bool},
+  ihn: @xs1: List<&2, Item> -> @xs2: List<&2, Item> -> @l: Nat -> @p1: Maybe<&2, Hashes.Hash> -> @p2: Maybe<&2, Hashes.Hash> -> @ks1: List<
+    &2,
+    Piece> -> @ks2: List<&2, Piece> -> {Bound.before([], hi) == True{}: Bool} -> {
+    Mst.pieces(xs1, l, p1, lo, hi) == Some{ks1}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, f, s, [], ks1) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+    Mst.pieces(xs2, l, p2, lo, hi) == Some{ks2}: Maybe<&2, List<&2, Piece>>
+  } -> {Mst.range.go(~S, ~fetch, f, s, [], ks2) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Node{l, p1, xs1} == Node{l, p2, xs2}: Node}
+) -> {Mst.sub_list(~S, ~fetch, f, s, [], m1, up, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+  Mst.sub_list(~S, ~fetch, f, s, [], m2, up, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {m1 == m2: Maybe<&2, Hashes.Hash>}:
+  match m1 m2:
+    case None{} None{}:
+      e1 => e2 => {==}
+    case None{} Some{+h2}:
+      e1 => e2 => Empty.absurd({None{} == Some{h2}: Maybe<&2, Hashes.Hash>}, Mst.canon_sub.one(~S, ~fetch, f, s, h2, up, lo, hi, a, hn2)(e1)(e2))
+    case Some{+h1} None{}:
+      e1 => e2 => Empty.absurd({Some{h1} == None{}: Maybe<&2, Hashes.Hash>}, Mst.canon_sub.one(~S, ~fetch, f, s, h1, up, lo, hi, a, hn1)(e2)(e1))
+    case Some{+h1} Some{+h2}:
+      e1 => e2 => Mst.canon_sub.both(~S, ~fetch, f, s, h1, h2, up, lo, hi, a, hn1, ihn)(e1)(e2)
+
+# a node with no item and a node with an item, of one level and room, list
+# different bindings: the second holds a key of its level, the first none
+def Mst.canon_clash(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>,
+  +a: List<&2, Binding>,
+  hh: {Bindings.has_level(a, l) == True{}: Bool}
+) -> {Mst.pieces([], l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {
+  Mst.range.go(~S, ~fetch, 1n+q, s, [], ks) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> Empty:
+  ep => e => Mst.range_list(
+    ~S,
+    ~fetch,
+    prev,
+    q,
+    s,
+    [],
+    l,
+    lo,
+    hi,
+    [],
+    a,
+    Empty,
+    +a1 => b => e4 => eb => esl => Bindings.level_clash(
+      a,
+      l
+    )(
+      Equal.trans(
+        Bool,
+        Bindings.below(a, l),
+        Bindings.below(a1, l),
+        True{},
+        Equal.cong(List<&2, Binding>, Bool, x => Bindings.below(x, l), a, a1, Equal.sym(List<&2, Binding>, a1, a, Bindings.cat_nil(a1, b, a)(eb)(e4))),
+        Mst.sub_below(
+          ~S,
+          ~fetch,
+          q,
+          s,
+          [],
+          prev,
+          l,
+          lo,
+          hi,
+          a1,
+          xs2 => l2 => left2 => ks2 => ep2 => ea2 => Mst.lists_below(~S, ~fetch, q, s, [], xs2, l2, left2, lo, hi, ks2, a1)(ep2)(ea2)
+        )(esl)
+      )
+    )(hh)
+  )(
+    Equal.trans(
+      Maybe<&2, List<&2, Binding>>,
+      Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev, l, lo, hi, [])),
+      Mst.range.go(~S, ~fetch, 1n+q, s, [], ks),
+      Some{a},
+      Equal.cong(
+        List<&2, Piece>,
+        Maybe<&2, List<&2, Binding>>,
+        x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+        Piece.sub(prev, l, lo, hi, []),
+        ks,
+        Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev, l, lo, hi, []), ks, ep)
+      ),
+      e
+    )
+  )
+
+# two nodes of one level, in one room, whose pieces list the same bindings
+# under no prefix, are one node
+def Mst.canon_node(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  xs1: List<&2, Item>,
+  +xs2: List<&2, Item>,
+  +l: Nat,
+  +prev1: Maybe<&2, Hashes.Hash>,
+  +prev2: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks1: List<&2, Piece>,
+  +ks2: List<&2, Piece>,
+  +a: List<&2, Binding>
+) -> {Bound.before([], hi) == True{}: Bool} -> {Mst.pieces(xs1, l, prev1, lo, hi) == Some{ks1}: Maybe<&2, List<&2, Piece>>} -> {
+  Mst.range.go(~S, ~fetch, f, s, [], ks1) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Mst.pieces(xs2, l, prev2, lo, hi) == Some{ks2}: Maybe<&2, List<&2, Piece>>} -> {
+  Mst.range.go(~S, ~fetch, f, s, [], ks2) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Node{l, prev1, xs1} == Node{l, prev2, xs2}: Node}:
+  match f:
+    case 0n:
+      hb => ep1 => e1 => ep2 => e2 => Equal.trans(
+        Node,
+        Node{l, prev1, xs1},
+        Node{l, None{}, []},
+        Node{l, prev2, xs2},
+        Mst.pieces_empty(
+          xs1,
+          l,
+          prev1,
+          lo,
+          hi
+        )(
+          Equal.trans(
+            Maybe<&2, List<&2, Piece>>,
+            Mst.pieces(xs1, l, prev1, lo, hi),
+            Some{ks1},
+            Some{[]},
+            ep1,
+            Equal.cong(List<&2, Piece>, Maybe<&2, List<&2, Piece>>, x => Some{x}, ks1, [], Mst.range_zero_nil(~S, ~fetch, s, [], ks1, a)(e1))
+          )
+        ),
+        Equal.sym(
+          Node,
+          Node{l, prev2, xs2},
+          Node{l, None{}, []},
+          Mst.pieces_empty(
+            xs2,
+            l,
+            prev2,
+            lo,
+            hi
+          )(
+            Equal.trans(
+              Maybe<&2, List<&2, Piece>>,
+              Mst.pieces(xs2, l, prev2, lo, hi),
+              Some{ks2},
+              Some{[]},
+              ep2,
+              Equal.cong(List<&2, Piece>, Maybe<&2, List<&2, Piece>>, x => Some{x}, ks2, [], Mst.range_zero_nil(~S, ~fetch, s, [], ks2, a)(e2))
+            )
+          )
+        )
+      )
+    case 1n+(+q):
+      match xs1 xs2:
+        case Nil{} Nil{}:
+          +hb => ep1 => e1 => ep2 => e2 => Mst.range_list(
+            ~S,
+            ~fetch,
+            prev1,
+            q,
+            s,
+            [],
+            l,
+            lo,
+            hi,
+            [],
+            a,
+            {Node{l, prev1, []} == Node{l, prev2, []}: Node},
+            +a1 => b1 => e41 => eb1 => esl1 => Mst.range_list(
+              ~S,
+              ~fetch,
+              prev2,
+              q,
+              s,
+              [],
+              l,
+              lo,
+              hi,
+              [],
+              a,
+              {Node{l, prev1, []} == Node{l, prev2, []}: Node},
+              +a2 => b2 => e42 => eb2 => esl2 => Equal.cong(
+                Maybe<&2, Hashes.Hash>,
+                Node,
+                x => Node{l, x, []},
+                prev1,
+                prev2,
+                Mst.canon_sub(
+                  ~S,
+                  ~fetch,
+                  q,
+                  s,
+                  prev1,
+                  prev2,
+                  l,
+                  lo,
+                  hi,
+                  a,
+                  Bool.or_true_of(Maybe.is_none(&2, Hashes.Hash, prev1), Bound.before([], hi))(hb),
+                  Bool.or_true_of(Maybe.is_none(&2, Hashes.Hash, prev2), Bound.before([], hi))(hb),
+                  ys1 => ys2 => l3 => p1 => p2 => j1 => j2 => hb3 => f1 => g1 => f2 => g2 => Mst.canon_node(
+                    ~S,
+                    ~fetch,
+                    q,
+                    s,
+                    ys1,
+                    ys2,
+                    l3,
+                    p1,
+                    p2,
+                    lo,
+                    hi,
+                    j1,
+                    j2,
+                    a
+                  )(hb3)(f1)(g1)(f2)(g2)
+                )(
+                  Equal.trans(
+                    Maybe<&2, List<&2, Binding>>,
+                    Mst.sub_list(~S, ~fetch, q, s, [], prev1, l, lo, hi),
+                    Some{a1},
+                    Some{a},
+                    esl1,
+                    Equal.cong(List<&2, Binding>, Maybe<&2, List<&2, Binding>>, x => Some{x}, a1, a, Bindings.cat_nil(a1, b1, a)(eb1)(e41))
+                  )
+                )(
+                  Equal.trans(
+                    Maybe<&2, List<&2, Binding>>,
+                    Mst.sub_list(~S, ~fetch, q, s, [], prev2, l, lo, hi),
+                    Some{a2},
+                    Some{a},
+                    esl2,
+                    Equal.cong(List<&2, Binding>, Maybe<&2, List<&2, Binding>>, x => Some{x}, a2, a, Bindings.cat_nil(a2, b2, a)(eb2)(e42))
+                  )
+                )
+              )
+            )(
+              Equal.trans(
+                Maybe<&2, List<&2, Binding>>,
+                Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev2, l, lo, hi, [])),
+                Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2),
+                Some{a},
+                Equal.cong(
+                  List<&2, Piece>,
+                  Maybe<&2, List<&2, Binding>>,
+                  x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+                  Piece.sub(prev2, l, lo, hi, []),
+                  ks2,
+                  Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev2, l, lo, hi, []), ks2, ep2)
+                ),
+                e2
+              )
+            )
+          )(
+            Equal.trans(
+              Maybe<&2, List<&2, Binding>>,
+              Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev1, l, lo, hi, [])),
+              Mst.range.go(~S, ~fetch, 1n+q, s, [], ks1),
+              Some{a},
+              Equal.cong(
+                List<&2, Piece>,
+                Maybe<&2, List<&2, Binding>>,
+                x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+                Piece.sub(prev1, l, lo, hi, []),
+                ks1,
+                Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev1, l, lo, hi, []), ks1, ep1)
+              ),
+              e1
+            )
+          )
+        case Nil{} Con{Item{+k2, +v2, +r2}, +rest2}:
+          hb => ep1 => e1 => ep2 => e2 => Empty.absurd(
+            {Node{l, prev1, []} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+            Mst.canon_clash(
+              ~S,
+              ~fetch,
+              q,
+              s,
+              l,
+              prev1,
+              lo,
+              hi,
+              ks1,
+              a,
+              Mst.lists_level(~S, ~fetch, 1n+q, s, Item{k2, v2, r2} <> rest2, l, prev2, lo, hi, ks2, a)({==})(ep2)(e2)
+            )(ep1)(e1)
+          )
+        case Con{Item{+k1, +v1, +r1}, +rest1} Nil{}:
+          hb => ep1 => e1 => ep2 => e2 => Empty.absurd(
+            {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, []}: Node},
+            Mst.canon_clash(
+              ~S,
+              ~fetch,
+              q,
+              s,
+              l,
+              prev2,
+              lo,
+              hi,
+              ks2,
+              a,
+              Mst.lists_level(~S, ~fetch, 1n+q, s, Item{k1, v1, r1} <> rest1, l, prev1, lo, hi, ks1, a)({==})(ep1)(e1)
+            )(ep2)(e2)
+          )
+        case Con{Item{+k1, +v1, +r1}, +rest1} Con{Item{+k2, +v2, +r2}, +rest2}:
+          +hb => ep1 => e1 => ep2 => e2 => Maybe.when_cases(
+            List<&2, Piece>,
+            Bool.and(
+              Bool.and(Nat.is_eq(Key.level(k1), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1)))),
+              Bool.and(Bound.after(lo, k1), Bound.before(k1, hi))
+            ),
+            u => Maybe.map(
+              &2,
+              List<&2, Piece>,
+              List<&2, Piece>,
+              ps2 => Piece.sub(prev1, l, lo, Some{k1}, Piece.Bind{k1, v1} <> ps2),
+              Mst.pieces(rest1, l, r1, Some{k1}, hi)
+            ),
+            ks1,
+            {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+            +c1 => e21 => Maybe.map_cases(
+              List<&2, Piece>,
+              List<&2, Piece>,
+              Mst.pieces(rest1, l, r1, Some{k1}, hi),
+              ps2 => Piece.sub(prev1, l, lo, Some{k1}, Piece.Bind{k1, v1} <> ps2),
+              ks1,
+              {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+              +ks1b => +e31 => e41 => Maybe.when_cases(
+                List<&2, Piece>,
+                Bool.and(
+                  Bool.and(Nat.is_eq(Key.level(k2), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2)))),
+                  Bool.and(Bound.after(lo, k2), Bound.before(k2, hi))
+                ),
+                u => Maybe.map(
+                  &2,
+                  List<&2, Piece>,
+                  List<&2, Piece>,
+                  ps2 => Piece.sub(prev2, l, lo, Some{k2}, Piece.Bind{k2, v2} <> ps2),
+                  Mst.pieces(rest2, l, r2, Some{k2}, hi)
+                ),
+                ks2,
+                {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                +c2 => e22 => Maybe.map_cases(
+                  List<&2, Piece>,
+                  List<&2, Piece>,
+                  Mst.pieces(rest2, l, r2, Some{k2}, hi),
+                  ps2 => Piece.sub(prev2, l, lo, Some{k2}, Piece.Bind{k2, v2} <> ps2),
+                  ks2,
+                  {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                  +ks2b => +e32 => e42 => Mst.range_list(
+                    ~S,
+                    ~fetch,
+                    prev1,
+                    q,
+                    s,
+                    [],
+                    l,
+                    lo,
+                    Some{k1},
+                    Piece.Bind{k1, v1} <> ks1b,
+                    a,
+                    {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                    +ca => +ba => e51 => eb1 => +esl1 => Maybe.map_cases(
+                      List<&2, Binding>,
+                      List<&2, Binding>,
+                      Mst.range.go(~S, ~fetch, 1n+q, s, [], ks1b),
+                      +bb => Shared.Bool.when(List<&2, Binding>, Key.leads([], k1), u => Binding{k1, v1} <> bb, u => bb),
+                      ba,
+                      {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                      +ba2 => +eb12 => e61 => Mst.range_list(
+                        ~S,
+                        ~fetch,
+                        prev2,
+                        q,
+                        s,
+                        [],
+                        l,
+                        lo,
+                        Some{k2},
+                        Piece.Bind{k2, v2} <> ks2b,
+                        a,
+                        {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                        +cb => +bx => e52 => eb2 => +esl2 => Maybe.map_cases(
+                          List<&2, Binding>,
+                          List<&2, Binding>,
+                          Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2b),
+                          +bb => Shared.Bool.when(List<&2, Binding>, Key.leads([], k2), u => Binding{k2, v2} <> bb, u => bb),
+                          bx,
+                          {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                          +bb2 => +eb22 => e62 => Bindings.split_eq(
+                            ca,
+                            cb,
+                            Binding{k1, v1},
+                            Binding{k2, v2},
+                            ba2,
+                            bb2,
+                            l,
+                            {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev2, Item{k2, v2, r2} <> rest2}: Node},
+                            +ec => +ex => +er =>
+                              +kk = Equal.cong(Binding, List<&2, U32>, Binding.key, Binding{k1, v1}, Binding{k2, v2}, ex)
+                              +vv = Equal.cong(Binding, List<&2, U32>, Binding.value, Binding{k1, v1}, Binding{k2, v2}, ex)
+                              +pp = Mst.canon_sub(
+                                ~S,
+                                ~fetch,
+                                q,
+                                s,
+                                prev1,
+                                prev2,
+                                l,
+                                lo,
+                                Some{k1},
+                                ca,
+                                Equal.trans(
+                                  Bool,
+                                  Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Key.is_lt([], k1)),
+                                  Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1))),
+                                  True{},
+                                  Equal.cong(
+                                    Bool,
+                                    Bool,
+                                    x => Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), x),
+                                    Key.is_lt([], k1),
+                                    Bool.not(List.is_empty(&2, U32, k1)),
+                                    Key.lt_nil_left(k1)
+                                  ),
+                                  Shared.Bool.and_true_right(
+                                    Nat.is_eq(Key.level(k1), l),
+                                    Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1)))
+                                  )(
+                                    Shared.Bool.and_true_left(
+                                      Bool.and(
+                                        Nat.is_eq(Key.level(k1), l),
+                                        Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1)))
+                                      ),
+                                      Bool.and(Bound.after(lo, k1), Bound.before(k1, hi))
+                                    )(c1)
+                                  )
+                                ),
+                                Equal.trans(
+                                  Bool,
+                                  Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Key.is_lt([], k1)),
+                                  Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Key.is_lt([], k2)),
+                                  True{},
+                                  Equal.cong(List<&2, U32>, Bool, x => Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Key.is_lt([], x)), k1, k2, kk),
+                                  Equal.trans(
+                                    Bool,
+                                    Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Key.is_lt([], k2)),
+                                    Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2))),
+                                    True{},
+                                    Equal.cong(
+                                      Bool,
+                                      Bool,
+                                      x => Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), x),
+                                      Key.is_lt([], k2),
+                                      Bool.not(List.is_empty(&2, U32, k2)),
+                                      Key.lt_nil_left(k2)
+                                    ),
+                                    Shared.Bool.and_true_right(
+                                      Nat.is_eq(Key.level(k2), l),
+                                      Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2)))
+                                    )(
+                                      Shared.Bool.and_true_left(
+                                        Bool.and(
+                                          Nat.is_eq(Key.level(k2), l),
+                                          Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2)))
+                                        ),
+                                        Bool.and(Bound.after(lo, k2), Bound.before(k2, hi))
+                                      )(c2)
+                                    )
+                                  )
+                                ),
+                                ys1 => ys2 => l3 => p1 => p2 => j1 => j2 => hb3 => f1 => g1 => f2 => g2 => Mst.canon_node(
+                                  ~S,
+                                  ~fetch,
+                                  q,
+                                  s,
+                                  ys1,
+                                  ys2,
+                                  l3,
+                                  p1,
+                                  p2,
+                                  lo,
+                                  Some{k1},
+                                  j1,
+                                  j2,
+                                  ca
+                                )(hb3)(f1)(g1)(f2)(g2)
+                              )(esl1)(
+                                Equal.trans(
+                                  Maybe<&2, List<&2, Binding>>,
+                                  Mst.sub_list(~S, ~fetch, q, s, [], prev2, l, lo, Some{k1}),
+                                  Mst.sub_list(~S, ~fetch, q, s, [], prev2, l, lo, Some{k2}),
+                                  Some{ca},
+                                  Equal.cong(
+                                    List<&2, U32>,
+                                    Maybe<&2, List<&2, Binding>>,
+                                    x => Mst.sub_list(~S, ~fetch, q, s, [], prev2, l, lo, Some{x}),
+                                    k1,
+                                    k2,
+                                    kk
+                                  ),
+                                  Equal.trans(
+                                    Maybe<&2, List<&2, Binding>>,
+                                    Mst.sub_list(~S, ~fetch, q, s, [], prev2, l, lo, Some{k2}),
+                                    Some{cb},
+                                    Some{ca},
+                                    esl2,
+                                    Equal.cong(
+                                      List<&2, Binding>,
+                                      Maybe<&2, List<&2, Binding>>,
+                                      x => Some{x},
+                                      cb,
+                                      ca,
+                                      Equal.sym(List<&2, Binding>, ca, cb, ec)
+                                    )
+                                  )
+                                )
+                              )
+                              +nr = Mst.canon_node(
+                                ~S,
+                                ~fetch,
+                                1n+q,
+                                s,
+                                rest1,
+                                rest2,
+                                l,
+                                r1,
+                                r2,
+                                Some{k1},
+                                hi,
+                                ks1b,
+                                ks2b,
+                                ba2
+                              )(hb)(e31)(eb12)(
+                                Equal.trans(
+                                  Maybe<&2, List<&2, Piece>>,
+                                  Mst.pieces(rest2, l, r2, Some{k1}, hi),
+                                  Mst.pieces(rest2, l, r2, Some{k2}, hi),
+                                  Some{ks2b},
+                                  Equal.cong(List<&2, U32>, Maybe<&2, List<&2, Piece>>, x => Mst.pieces(rest2, l, r2, Some{x}, hi), k1, k2, kk),
+                                  e32
+                                )
+                              )(
+                                Equal.trans(
+                                  Maybe<&2, List<&2, Binding>>,
+                                  Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2b),
+                                  Some{bb2},
+                                  Some{ba2},
+                                  eb22,
+                                  Equal.cong(
+                                    List<&2, Binding>,
+                                    Maybe<&2, List<&2, Binding>>,
+                                    x => Some{x},
+                                    bb2,
+                                    ba2,
+                                    Equal.sym(List<&2, Binding>, ba2, bb2, er)
+                                  )
+                                )
+                              )
+                              %pp: {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, _, Item{k2, v2, r2} <> rest2}: Node}
+                              %kk: {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev1, Item{_, v2, r2} <> rest2}: Node}
+                              %vv: {Node{l, prev1, Item{k1, v1, r1} <> rest1} == Node{l, prev1, Item{k1, _, r2} <> rest2}: Node}
+                              Equal.cong(Node, Node, n => Node.under(n, l, prev1, k1, v1), Node{l, r1, rest1}, Node{l, r2, rest2}, nr)
+                          )(
+                            Equal.trans(
+                              List<&2, Binding>,
+                              List.append(&2, Binding, ca, Binding{k1, v1} <> ba2),
+                              a,
+                              List.append(&2, Binding, cb, Binding{k2, v2} <> bb2),
+                              Equal.trans(
+                                List<&2, Binding>,
+                                List.append(&2, Binding, ca, Binding{k1, v1} <> ba2),
+                                List.append(&2, Binding, ca, ba),
+                                a,
+                                Equal.cong(List<&2, Binding>, List<&2, Binding>, x => List.append(&2, Binding, ca, x), Binding{k1, v1} <> ba2, ba, e61),
+                                e51
+                              ),
+                              Equal.sym(
+                                List<&2, Binding>,
+                                List.append(&2, Binding, cb, Binding{k2, v2} <> bb2),
+                                a,
+                                Equal.trans(
+                                  List<&2, Binding>,
+                                  List.append(&2, Binding, cb, Binding{k2, v2} <> bb2),
+                                  List.append(&2, Binding, cb, bx),
+                                  a,
+                                  Equal.cong(List<&2, Binding>, List<&2, Binding>, x => List.append(&2, Binding, cb, x), Binding{k2, v2} <> bb2, bx, e62),
+                                  e52
+                                )
+                              )
+                            )
+                          )(
+                            Mst.sub_below(
+                              ~S,
+                              ~fetch,
+                              q,
+                              s,
+                              [],
+                              prev1,
+                              l,
+                              lo,
+                              Some{k1},
+                              ca,
+                              xs3 => l3 => left3 => ks3 => ep3 => ea3 => Mst.lists_below(~S, ~fetch, q, s, [], xs3, l3, left3, lo, Some{k1}, ks3, ca)(ep3)(ea3)
+                            )(esl1)
+                          )(
+                            Mst.sub_below(
+                              ~S,
+                              ~fetch,
+                              q,
+                              s,
+                              [],
+                              prev2,
+                              l,
+                              lo,
+                              Some{k2},
+                              cb,
+                              xs3 => l3 => left3 => ks3 => ep3 => ea3 => Mst.lists_below(~S, ~fetch, q, s, [], xs3, l3, left3, lo, Some{k2}, ks3, cb)(ep3)(ea3)
+                            )(esl2)
+                          )(
+                            Shared.Bool.and_true_left(
+                              Nat.is_eq(Key.level(k1), l),
+                              Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1)))
+                            )(
+                              Shared.Bool.and_true_left(
+                                Bool.and(Nat.is_eq(Key.level(k1), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev1), Bool.not(List.is_empty(&2, U32, k1)))),
+                                Bool.and(Bound.after(lo, k1), Bound.before(k1, hi))
+                              )(c1)
+                            )
+                          )(
+                            Shared.Bool.and_true_left(
+                              Nat.is_eq(Key.level(k2), l),
+                              Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2)))
+                            )(
+                              Shared.Bool.and_true_left(
+                                Bool.and(Nat.is_eq(Key.level(k2), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev2), Bool.not(List.is_empty(&2, U32, k2)))),
+                                Bool.and(Bound.after(lo, k2), Bound.before(k2, hi))
+                              )(c2)
+                            )
+                          )
+                        )(eb2)
+                      )(
+                        Equal.trans(
+                          Maybe<&2, List<&2, Binding>>,
+                          Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev2, l, lo, Some{k2}, Piece.Bind{k2, v2} <> ks2b)),
+                          Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2),
+                          Some{a},
+                          Equal.cong(
+                            List<&2, Piece>,
+                            Maybe<&2, List<&2, Binding>>,
+                            x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+                            Piece.sub(prev2, l, lo, Some{k2}, Piece.Bind{k2, v2} <> ks2b),
+                            ks2,
+                            e42
+                          ),
+                          e2
+                        )
+                      )
+                    )(eb1)
+                  )(
+                    Equal.trans(
+                      Maybe<&2, List<&2, Binding>>,
+                      Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev1, l, lo, Some{k1}, Piece.Bind{k1, v1} <> ks1b)),
+                      Mst.range.go(~S, ~fetch, 1n+q, s, [], ks1),
+                      Some{a},
+                      Equal.cong(
+                        List<&2, Piece>,
+                        Maybe<&2, List<&2, Binding>>,
+                        x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+                        Piece.sub(prev1, l, lo, Some{k1}, Piece.Bind{k1, v1} <> ks1b),
+                        ks1,
+                        e41
+                      ),
+                      e1
+                    )
+                  )
+                )(e22)
+              )(ep2)
+            )(e21)
+          )(ep1)
+
+# a write to a tree that lists whole reads every node it needs
+def Mst.put_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +bs: List<&2, Binding>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>
+) -> {Mst.range(~S, ~fetch, s, h, []) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {
+  Maybe.is_some(&2, Edit, Mst.put(~S, ~fetch, s, h, k, m)) == True{}: Bool
+}:
+  ?TODO
+
 # a root is a function of its bindings, over any root
 law Mst.canon:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   Laws.Canon(S, Mst.ops(~S, ~fetch))
 
+# Whole trees
+# -----------
+
+# no key under no prefix is before the bound lo: every key may come after it
+def Bound.meets_lo_nil(lo: Maybe<&2, List<&2, U32>>) -> {Bound.meets_lo([], lo) == True{}: Bool}:
+  match lo:
+    case None{}:
+      {==}
+    case Some{+a}:
+      %Equal.sym(Bool, Key.is_lt(a, []), False{}, Key.lt_nil(a)): {Bool.or(_, Key.leads([], a)) == True{}: Bool}
+      {==}
+
+# a subtree that a listing under no prefix skips, a listing under any prefix
+# skips
+def Bound.meets_any(+p: List<&2, U32>, +lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> {
+  Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)) == False{}: Bool
+} -> {Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)) == False{}: Bool}:
+  match hi:
+    case None{}:
+      e => Empty.absurd(
+        {Bool.and(Bound.meets_lo(p, lo), True{}) == False{}: Bool},
+        Shared.Bool.true_ne_false(
+          Equal.trans(
+            Bool,
+            True{},
+            Bool.and(Bound.meets_lo([], lo), True{}),
+            False{},
+            Equal.trans(Bool, True{}, Bound.meets_lo([], lo), Bool.and(Bound.meets_lo([], lo), True{}), Equal.sym(Bool, Bound.meets_lo([], lo), True{}, Bound.meets_lo_nil(lo)), Shared.Bool.and_true(Bound.meets_lo([], lo))),
+            e
+          )
+        )
+      )
+    case Some{b}:
+      match b:
+        case Nil{}:
+          e =>
+            %Equal.sym(Bool, Key.is_lt(p, []), False{}, Key.lt_nil(p)): {Bool.and(Bound.meets_lo(p, lo), _) == False{}: Bool}
+            Shared.Bool.and_false_right(Bound.meets_lo(p, lo))
+        case Con{x, r}:
+          e => Empty.absurd(
+            {Bool.and(Bound.meets_lo(p, lo), Key.is_lt(p, x <> r)) == False{}: Bool},
+            Shared.Bool.true_ne_false(
+              Equal.trans(
+                Bool,
+                True{},
+                Bool.and(Bound.meets_lo([], lo), True{}),
+                False{},
+                Equal.trans(Bool, True{}, Bound.meets_lo([], lo), Bool.and(Bound.meets_lo([], lo), True{}), Equal.sym(Bool, Bound.meets_lo([], lo), True{}, Bound.meets_lo_nil(lo)), Shared.Bool.and_true(Bound.meets_lo([], lo))),
+                e
+              )
+            )
+          )
+
+# a map has a value exactly when what it maps has one
+def Maybe.map_is_some(-A: Data, -B: Data, -f: A -> B, m: Maybe<&2, A>) -> {
+  Maybe.is_some(&2, B, Maybe.map(&2, A, B, f, m)) == Maybe.is_some(&2, A, m): Bool
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{a}:
+      {==}
+
+# a Maybe that has a value holds one
+def Maybe.some_cases(-A: Data, m: Maybe<&2, A>, -P: Type, k: @a: A -> {m == Some{a}: Maybe<&2, A>} -> P) -> {
+  Maybe.is_some(&2, A, m) == True{}: Bool
+} -> P:
+  match m:
+    case None{}:
+      e => Empty.absurd(P, Shared.Bool.false_ne_true(e))
+    case Some{+a}:
+      e => k(a)({==})
+
+# Mst.range_some at a subtree that the listing under no prefix reads (t)
+def Mst.range_some.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  t: Bool,
+  +q: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  +a: List<&2, Binding>,
+  et: {Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)) == t: Bool},
+  ihr: @b: List<&2, Binding> -> {Mst.range.go(~S, ~fetch, 1n+q, s, [], rest) == Some{b}: Maybe<&2, List<&2, Binding>>} -> {
+    Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)) == True{}: Bool
+  },
+  ihs: @ks: List<&2, Piece> -> @b: List<&2, Binding> -> {Mst.range.go(~S, ~fetch, q, s, [], ks) == Some{b}: Maybe<&2, List<&2, Binding>>} -> {
+    Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, q, s, p, ks)) == True{}: Bool
+  }
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, List<&2, Binding>>,
+    t,
+    u => Maybe.bind(
+      &2,
+      List<&2, Piece>,
+      List<&2, Binding>,
+      Mst.open(~S, ~fetch, s, h, up, lo, hi),
+      ks => Maybe.bind(
+        &2,
+        List<&2, Binding>,
+        List<&2, Binding>,
+        Mst.range.go(~S, ~fetch, q, s, [], ks),
+        a2 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b => List.append(&2, Binding, a2, b), Mst.range.go(~S, ~fetch, 1n+q, s, [], rest))
+      )
+    ),
+    u => Mst.range.go(~S, ~fetch, 1n+q, s, [], rest)
+  )
+    == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.Sub{h, up, lo, hi} <> rest)) == True{}: Bool}:
+  match t:
+    case True{}:
+      e => Maybe.bind_cases(
+        List<&2, Piece>,
+        List<&2, Binding>,
+        Mst.open(~S, ~fetch, s, h, up, lo, hi),
+        ks => Maybe.bind(
+          &2,
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, q, s, [], ks),
+          a2 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b => List.append(&2, Binding, a2, b), Mst.range.go(~S, ~fetch, 1n+q, s, [], rest))
+        ),
+        a,
+        {Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.Sub{h, up, lo, hi} <> rest)) == True{}: Bool},
+        +ks => +eo => e2 => Maybe.bind_cases(
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, q, s, [], ks),
+          a2 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b => List.append(&2, Binding, a2, b), Mst.range.go(~S, ~fetch, 1n+q, s, [], rest)),
+          a,
+          {Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.Sub{h, up, lo, hi} <> rest)) == True{}: Bool},
+          +a2 => ea => e3 => Maybe.map_cases(
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, 1n+q, s, [], rest),
+            b => List.append(&2, Binding, a2, b),
+            a,
+            {Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.Sub{h, up, lo, hi} <> rest)) == True{}: Bool},
+            +b => +eb => e4 =>
+              +ir = ihr(b)(eb)
+              Shared.Bool.when_cases(
+              Maybe<&2, List<&2, Binding>>,
+              x => {Maybe.is_some(&2, List<&2, Binding>, x) == True{}: Bool},
+              Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)),
+              u => Maybe.bind(
+                &2,
+                List<&2, Piece>,
+                List<&2, Binding>,
+                Mst.open(~S, ~fetch, s, h, up, lo, hi),
+                ks2 => Maybe.bind(
+                  &2,
+                  List<&2, Binding>,
+                  List<&2, Binding>,
+                  Mst.range.go(~S, ~fetch, q, s, p, ks2),
+                  a3 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b2 => List.append(&2, Binding, a3, b2), Mst.range.go(~S, ~fetch, 1n+q, s, p, rest))
+                )
+              ),
+              u => Mst.range.go(~S, ~fetch, 1n+q, s, p, rest),
+              et2 =>
+                %Equal.sym(Maybe<&2, List<&2, Piece>>, Mst.open(~S, ~fetch, s, h, up, lo, hi), Some{ks}, eo): {
+                  Maybe.is_some(
+                    &2,
+                    List<&2, Binding>,
+                    Maybe.bind(
+                      &2,
+                      List<&2, Piece>,
+                      List<&2, Binding>,
+                      _,
+                      ks2 => Maybe.bind(
+                        &2,
+                        List<&2, Binding>,
+                        List<&2, Binding>,
+                        Mst.range.go(~S, ~fetch, q, s, p, ks2),
+                        a3 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b2 => List.append(&2, Binding, a3, b2), Mst.range.go(~S, ~fetch, 1n+q, s, p, rest))
+                      )
+                    )
+                  )
+                    == True{}: Bool
+                }
+                Maybe.some_cases(
+                  List<&2, Binding>,
+                  Mst.range.go(~S, ~fetch, q, s, p, ks),
+                  {
+                    Maybe.is_some(
+                      &2,
+                      List<&2, Binding>,
+                      Maybe.bind(
+                        &2,
+                        List<&2, Binding>,
+                        List<&2, Binding>,
+                        Mst.range.go(~S, ~fetch, q, s, p, ks),
+                        a3 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b2 => List.append(&2, Binding, a3, b2), Mst.range.go(~S, ~fetch, 1n+q, s, p, rest))
+                      )
+                    )
+                      == True{}: Bool
+                  },
+                  +x => ex =>
+                    %Equal.sym(Maybe<&2, List<&2, Binding>>, Mst.range.go(~S, ~fetch, q, s, p, ks), Some{x}, ex): {
+                      Maybe.is_some(
+                        &2,
+                        List<&2, Binding>,
+                        Maybe.bind(
+                          &2,
+                          List<&2, Binding>,
+                          List<&2, Binding>,
+                          _,
+                          a3 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b2 => List.append(&2, Binding, a3, b2), Mst.range.go(~S, ~fetch, 1n+q, s, p, rest))
+                        )
+                      )
+                        == True{}: Bool
+                    }
+                    %Equal.sym(
+                      Bool,
+                      Maybe.is_some(
+                        &2,
+                        List<&2, Binding>,
+                        Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b2 => List.append(&2, Binding, x, b2), Mst.range.go(~S, ~fetch, 1n+q, s, p, rest))
+                      ),
+                      Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)),
+                      Maybe.map_is_some(List<&2, Binding>, List<&2, Binding>, b2 => List.append(&2, Binding, x, b2), Mst.range.go(~S, ~fetch, 1n+q, s, p, rest))
+                    ): {_ == True{}: Bool}
+                    ir
+                )(ihs(ks)(a2)(ea)),
+              ef2 => ir
+            )
+          )(e3)
+        )(e2)
+      )(e)
+    case False{}:
+      e =>
+        %Equal.sym(
+          Bool,
+          Bool.and(Bound.meets_lo(p, lo), Bound.meets_hi(p, hi)),
+          False{},
+          Bound.meets_any(p, lo, hi)(et)
+        ): {
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Shared.Bool.when(
+              Maybe<&2, List<&2, Binding>>,
+              _,
+              u => Maybe.bind(
+                &2,
+                List<&2, Piece>,
+                List<&2, Binding>,
+                Mst.open(~S, ~fetch, s, h, up, lo, hi),
+                ks2 => Maybe.bind(
+                  &2,
+                  List<&2, Binding>,
+                  List<&2, Binding>,
+                  Mst.range.go(~S, ~fetch, q, s, p, ks2),
+                  a3 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b2 => List.append(&2, Binding, a3, b2), Mst.range.go(~S, ~fetch, 1n+q, s, p, rest))
+                )
+              ),
+              u => Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+            )
+          )
+            == True{}: Bool
+        }
+        ihr(a)(e)
+
+# a listing under no prefix that reads lets a listing under any prefix read
+def Mst.range_some(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +p: List<&2, U32>,
+  ps: List<&2, Piece>,
+  +a: List<&2, Binding>
+) -> {Mst.range.go(~S, ~fetch, f, s, [], ps) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {
+  Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, f, s, p, ps)) == True{}: Bool
+}:
+  match f ps:
+    case x Nil{}:
+      e => {==}
+    case 0n Con{x, rest}:
+      e => Empty.absurd(
+        {Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, 0n, s, p, x <> rest)) == True{}: Bool},
+        Shared.Maybe.none_ne_some(List<&2, Binding>, a, e)
+      )
+    case 1n+(+q) Con{Piece.Bind{+k, +v}, +rest}:
+      e => Maybe.map_cases(
+        List<&2, Binding>,
+        List<&2, Binding>,
+        Mst.range.go(~S, ~fetch, 1n+q, s, [], rest),
+        +bs => Shared.Bool.when(List<&2, Binding>, Key.leads([], k), u => Binding{k, v} <> bs, u => bs),
+        a,
+        {Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, 1n+q, s, p, Piece.Bind{k, v} <> rest)) == True{}: Bool},
+        +b => eb => e2 =>
+          %Equal.sym(
+            Bool,
+            Maybe.is_some(
+              &2,
+              List<&2, Binding>,
+              Maybe.map(
+                &2,
+                List<&2, Binding>,
+                List<&2, Binding>,
+                +bs => Shared.Bool.when(List<&2, Binding>, Key.leads(p, k), u => Binding{k, v} <> bs, u => bs),
+                Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+              )
+            ),
+            Maybe.is_some(&2, List<&2, Binding>, Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)),
+            Maybe.map_is_some(
+              List<&2, Binding>,
+              List<&2, Binding>,
+              +bs => Shared.Bool.when(List<&2, Binding>, Key.leads(p, k), u => Binding{k, v} <> bs, u => bs),
+              Mst.range.go(~S, ~fetch, 1n+q, s, p, rest)
+            )
+          ): {_ == True{}: Bool}
+          Mst.range_some(~S, ~fetch, 1n+q, s, p, rest, b)(eb)
+      )(e)
+    case 1n+(+q) Con{Piece.Sub{+h, +up, +lo, +hi}, +rest}:
+      e => Mst.range_some.at(
+        ~S,
+        ~fetch,
+        Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)),
+        q,
+        s,
+        p,
+        h,
+        up,
+        lo,
+        hi,
+        rest,
+        a,
+        {==},
+        b => eb => Mst.range_some(~S, ~fetch, 1n+q, s, p, rest, b)(eb),
+        ks => b => eb => Mst.range_some(~S, ~fetch, q, s, p, ks, b)(eb)
+      )(e)
+
+# the subtrees of the pieces ps whose bounds hold k read k finally, f levels
+# down
+def Pieces.final(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{Piece.Bind{k2, v2}, rest}:
+      Pieces.final(~S, ~fetch, f, s, rest, k)
+    case Con{Piece.Sub{h, up, +lo, +hi}, rest}:
+      Bool.and(
+        Bool.or(
+          Bool.not(Bool.and(Bound.after(lo, k), Bound.before(k, hi))),
+          Look.is_final(Mst.look.go(~S, ~fetch, f, s, Room{up, lo, hi}, Some{h}, k))
+        ),
+        Pieces.final(~S, ~fetch, f, s, rest, k)
+      )
+
+# a not-or whose test holds is its second side
+def Bool.or_not_true(i: Bool, -x: Bool) -> {Bool.or(Bool.not(i), x) == True{}: Bool} -> {i == True{}: Bool} -> {x == True{}: Bool}:
+  match i:
+    case True{}:
+      h => e => h
+    case False{}:
+      h => e => Empty.absurd({x == True{}: Bool}, Shared.Bool.false_ne_true(e))
+
+# a not-or holds when its second side follows from its test
+def Bool.or_not_of(i: Bool, -x: Bool) -> ({i == True{}: Bool} -> {x == True{}: Bool}) -> {Bool.or(Bool.not(i), x) == True{}: Bool}:
+  match i:
+    case True{}:
+      g => g({==})
+    case False{}:
+      g => {==}
+
+# a subtree whose bounds hold k, of pieces that read k finally, reads it
+# finally
+def Mst.final_at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  m: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Pieces.final(~S, ~fetch, f, s, Piece.sub(m, l, lo, hi, rest), k) == True{}: Bool} -> {
+  Bool.and(Bound.after(lo, k), Bound.before(k, hi)) == True{}: Bool
+} -> {Look.is_final(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, m, k)) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => i =>
+        %Equal.sym(Look, Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, None{}, k), Look.Absent{}, Mst.look_none(~S, ~fetch, f, s, Room{l, lo, hi}, k)): {
+          Look.is_final(_) == True{}: Bool
+        }
+        {==}
+    case Some{+h2}:
+      h => i => Bool.or_not_true(
+        Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+        Look.is_final(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, Some{h2}, k))
+      )(
+        Shared.Bool.and_true_left(
+          Bool.or(
+            Bool.not(Bool.and(Bound.after(lo, k), Bound.before(k, hi))),
+            Look.is_final(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, Some{h2}, k))
+          ),
+          Pieces.final(~S, ~fetch, f, s, rest, k)
+        )(h)
+      )(i)
+
+# the pieces after a subtree read k finally when all do
+def Mst.final_rest(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  m: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Pieces.final(~S, ~fetch, f, s, Piece.sub(m, l, lo, hi, rest), k) == True{}: Bool} -> {
+  Pieces.final(~S, ~fetch, f, s, rest, k) == True{}: Bool
+}:
+  match m:
+    case None{}:
+      h => h
+    case Some{+h2}:
+      h => Shared.Bool.and_true_right(
+        Bool.or(
+          Bool.not(Bool.and(Bound.after(lo, k), Bound.before(k, hi))),
+          Look.is_final(Mst.look.go(~S, ~fetch, f, s, Room{l, lo, hi}, Some{h2}, k))
+        ),
+        Pieces.final(~S, ~fetch, f, s, rest, k)
+      )(h)
+
+# Mst.final_pick at an item of the key ik, whose comparison with k is c
+def Mst.final_pick.con(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  c: Cmp,
+  +f: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +ik: List<&2, U32>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks2: List<&2, Piece>,
+  +k: List<&2, U32>,
+  +ec: {Key.cmp(k, ik) == c: Cmp},
+  hf: {Pieces.final(~S, ~fetch, f, s, Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2), k) == True{}: Bool},
+  +hin: {Bool.and(Bound.after(lo, k), Bound.before(k, hi)) == True{}: Bool},
+  ew: {Nat.is_eq(Key.level(ik), l) == True{}: Bool},
+  ih: {Pieces.final(~S, ~fetch, f, s, ks2, k) == True{}: Bool} -> {Bool.and(Key.is_lt(ik, k), Bound.before(k, hi)) == True{}: Bool} -> {
+    Look.is_final(Mst.look.pick(Mst.pick(rest, r, l, Some{ik}, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k))) == True{}: Bool
+  }
+) -> {
+  Look.is_final(
+    Mst.look.pick(
+      Shared.Bool.when(
+        Pick,
+        Cmp.is_lt(c),
+        u => Pick.Down{prev, Room.of(l, lo, Some{ik})},
+        u => Shared.Bool.when(Pick, Cmp.is_eq(c), w => Pick.Hit{iv}, w => Mst.pick(rest, r, l, Some{ik}, hi, k))
+      ),
+      h,
+      l,
+      k,
+      m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k)
+    )
+  )
+    == True{}: Bool
+}:
+  match c:
+    case LT{}:
+      Mst.final_at(
+        ~S,
+        ~fetch,
+        f,
+        s,
+        prev,
+        l,
+        lo,
+        Some{ik},
+        Piece.Bind{ik, iv} <> ks2,
+        k
+      )(hf)(
+        Shared.Bool.and_both(Bound.after(lo, k), Key.is_lt(k, ik))(Shared.Bool.and_true_left(Bound.after(lo, k), Bound.before(k, hi))(hin))(
+          Key.lt_of(k, ik, LT{})(ec)
+        )
+      )
+    case EQ{}:
+      %Equal.sym(
+        Bool,
+        Nat.is_eq(Key.level(k), l),
+        True{},
+        Equal.trans(
+          Bool,
+          Nat.is_eq(Key.level(k), l),
+          Nat.is_eq(Key.level(ik), l),
+          True{},
+          Equal.cong(List<&2, U32>, Bool, x => Nat.is_eq(Key.level(x), l), k, ik, Key.cmp_eq(k, ik)(ec)),
+          ew
+        )
+      ): {Look.is_final(Shared.Bool.when(Look, _, u => Look.Found{iv}, u => Look.Missing{h})) == True{}: Bool}
+      {==}
+    case GT{}:
+      ih(Mst.final_rest(~S, ~fetch, f, s, prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2, k)(hf))(
+        Shared.Bool.and_both(Key.is_lt(ik, k), Bound.before(k, hi))(Key.gt_of(k, ik, GT{})(ec))(
+          Shared.Bool.and_true_right(Bound.after(lo, k), Bound.before(k, hi))(hin)
+        )
+      )
+
+# a read of k in a node, between the bounds of its items, is final when its
+# pieces read k finally
+def Mst.final_pick(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {Pieces.final(~S, ~fetch, f, s, ks, k) == True{}: Bool} -> {
+  Bool.and(Bound.after(lo, k), Bound.before(k, hi)) == True{}: Bool
+} -> {
+  Look.is_final(Mst.look.pick(Mst.pick(xs, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k))) == True{}: Bool
+}:
+  match xs:
+    case Nil{}:
+      ep => hf => hin => Mst.final_at(
+        ~S,
+        ~fetch,
+        f,
+        s,
+        prev,
+        l,
+        lo,
+        hi,
+        [],
+        k
+      )(
+        Equal.trans(
+          Bool,
+          Pieces.final(~S, ~fetch, f, s, Piece.sub(prev, l, lo, hi, []), k),
+          Pieces.final(~S, ~fetch, f, s, ks, k),
+          True{},
+          Equal.cong(
+            List<&2, Piece>,
+            Bool,
+            x => Pieces.final(~S, ~fetch, f, s, x, k),
+            Piece.sub(prev, l, lo, hi, []),
+            ks,
+            Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev, l, lo, hi, []), ks, ep)
+          ),
+          hf
+        )
+      )(hin)
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      ep => hf => hin => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(
+          Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+          Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+        ),
+        u => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          Mst.pieces(rest, l, r, Some{ik}, hi)
+        ),
+        ks,
+        {
+          Look.is_final(
+            Mst.look.pick(Mst.pick(Item{ik, iv, r} <> rest, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k))
+          )
+            == True{}: Bool
+        },
+        +c => e2 => Maybe.map_cases(
+          List<&2, Piece>,
+          List<&2, Piece>,
+          Mst.pieces(rest, l, r, Some{ik}, hi),
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          ks,
+          {
+            Look.is_final(
+              Mst.look.pick(Mst.pick(Item{ik, iv, r} <> rest, prev, l, lo, hi, k), h, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, f, s, r2, m2, k))
+            )
+              == True{}: Bool
+          },
+          +ks2 => e3 => e4 => Mst.final_pick.con(
+            ~S,
+            ~fetch,
+            Key.cmp(k, ik),
+            f,
+            s,
+            h,
+            ik,
+            iv,
+            r,
+            rest,
+            l,
+            prev,
+            lo,
+            hi,
+            ks2,
+            k,
+            {==},
+            Equal.trans(
+              Bool,
+              Pieces.final(~S, ~fetch, f, s, Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2), k),
+              Pieces.final(~S, ~fetch, f, s, ks, k),
+              True{},
+              Equal.cong(List<&2, Piece>, Bool, x => Pieces.final(~S, ~fetch, f, s, x, k), Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2), ks, e4),
+              hf
+            ),
+            hin,
+            Shared.Bool.and_true_left(
+              Nat.is_eq(Key.level(ik), l),
+              Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))
+            )(
+              Shared.Bool.and_true_left(
+                Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+                Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+              )(c)
+            ),
+            hf3 => hin3 => Mst.final_pick(~S, ~fetch, f, s, h, rest, l, r, Some{ik}, hi, ks2, k)(e3)(hf3)(hin3)
+          )
+        )(e2)
+      )(ep)
+
+# a read of k in an opened node, between its bounds, is final when its pieces
+# read k finally
+def Mst.final_open(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>,
+  +k: List<&2, U32>
+) -> {Mst.open(~S, ~fetch, s, h, up, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {Pieces.final(~S, ~fetch, q, s, ks, k) == True{}: Bool} -> {
+  Bool.and(Bound.after(lo, k), Bound.before(k, hi)) == True{}: Bool
+} -> {Look.is_final(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k)) == True{}: Bool}:
+  eo => hf => hin => Mst.open_cases(
+    ~S,
+    ~fetch,
+    s,
+    h,
+    up,
+    lo,
+    hi,
+    ks,
+    {Look.is_final(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k)) == True{}: Bool},
+    +l => +left => +xs => ef => eh => en => elt => ee => ep =>
+      %Equal.sym(Maybe<&2, Node>, Mst.node.in(~S, ~fetch, s, h, Room{up, lo, hi}), Some{Node{l, left, xs}}, en): {
+        Look.is_final(Mst.look.at(h, _, Room{up, lo, hi}, k, m2 => r2 => Mst.look.go(~S, ~fetch, q, s, r2, m2, k))) == True{}: Bool
+      }
+      Mst.final_pick(~S, ~fetch, q, s, h, xs, l, left, lo, hi, ks, k)(ep)(hf)(hin)
+  )(eo)
+
+# a subtree that a listing under no prefix skips holds no key
+def Bound.not_in(+lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>, +k: List<&2, U32>, -x: Bool) -> {
+  Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)) == False{}: Bool
+} -> {Bool.or(Bool.not(Bool.and(Bound.after(lo, k), Bound.before(k, hi))), x) == True{}: Bool}:
+  match hi:
+    case None{}:
+      e => Empty.absurd(
+        {Bool.or(Bool.not(Bool.and(Bound.after(lo, k), True{})), x) == True{}: Bool},
+        Shared.Bool.true_ne_false(
+          Equal.trans(
+            Bool,
+            True{},
+            Bool.and(Bound.meets_lo([], lo), True{}),
+            False{},
+            Equal.trans(Bool, True{}, Bound.meets_lo([], lo), Bool.and(Bound.meets_lo([], lo), True{}), Equal.sym(Bool, Bound.meets_lo([], lo), True{}, Bound.meets_lo_nil(lo)), Shared.Bool.and_true(Bound.meets_lo([], lo))),
+            e
+          )
+        )
+      )
+    case Some{b}:
+      match b:
+        case Nil{}:
+          e =>
+            %Equal.sym(Bool, Key.is_lt(k, []), False{}, Key.lt_nil(k)): {Bool.or(Bool.not(Bool.and(Bound.after(lo, k), _)), x) == True{}: Bool}
+            %Equal.sym(Bool, Bool.and(Bound.after(lo, k), False{}), False{}, Shared.Bool.and_false_right(Bound.after(lo, k))): {
+              Bool.or(Bool.not(_), x) == True{}: Bool
+            }
+            {==}
+        case Con{y, r}:
+          e => Empty.absurd(
+            {Bool.or(Bool.not(Bool.and(Bound.after(lo, k), Key.is_lt(k, y <> r))), x) == True{}: Bool},
+            Shared.Bool.true_ne_false(
+              Equal.trans(
+                Bool,
+                True{},
+                Bool.and(Bound.meets_lo([], lo), True{}),
+                False{},
+                Equal.trans(Bool, True{}, Bound.meets_lo([], lo), Bool.and(Bound.meets_lo([], lo), True{}), Equal.sym(Bool, Bound.meets_lo([], lo), True{}, Bound.meets_lo_nil(lo)), Shared.Bool.and_true(Bound.meets_lo([], lo))),
+                e
+              )
+            )
+          )
+
+# Mst.final_list at a subtree, by whether the listing reads it (t)
+def Mst.final_list.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  t: Bool,
+  +q: Nat,
+  +s: S,
+  +h: Hashes.Hash,
+  +up: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  +a: List<&2, Binding>,
+  +k: List<&2, U32>,
+  et: {Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)) == t: Bool},
+  ihr: @b: List<&2, Binding> -> {Mst.range.go(~S, ~fetch, 1n+q, s, [], rest) == Some{b}: Maybe<&2, List<&2, Binding>>} -> {
+    Pieces.final(~S, ~fetch, 1n+q, s, rest, k) == True{}: Bool
+  },
+  ihs: @ks: List<&2, Piece> -> @b: List<&2, Binding> -> {Mst.range.go(~S, ~fetch, q, s, [], ks) == Some{b}: Maybe<&2, List<&2, Binding>>} -> {
+    Pieces.final(~S, ~fetch, q, s, ks, k) == True{}: Bool
+  }
+) -> {
+  Shared.Bool.when(
+    Maybe<&2, List<&2, Binding>>,
+    t,
+    u => Maybe.bind(
+      &2,
+      List<&2, Piece>,
+      List<&2, Binding>,
+      Mst.open(~S, ~fetch, s, h, up, lo, hi),
+      ks => Maybe.bind(
+        &2,
+        List<&2, Binding>,
+        List<&2, Binding>,
+        Mst.range.go(~S, ~fetch, q, s, [], ks),
+        a2 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b => List.append(&2, Binding, a2, b), Mst.range.go(~S, ~fetch, 1n+q, s, [], rest))
+      )
+    ),
+    u => Mst.range.go(~S, ~fetch, 1n+q, s, [], rest)
+  )
+    == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Pieces.final(~S, ~fetch, 1n+q, s, Piece.Sub{h, up, lo, hi} <> rest, k) == True{}: Bool}:
+  match t:
+    case True{}:
+      e => Maybe.bind_cases(
+        List<&2, Piece>,
+        List<&2, Binding>,
+        Mst.open(~S, ~fetch, s, h, up, lo, hi),
+        ks => Maybe.bind(
+          &2,
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, q, s, [], ks),
+          a2 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b => List.append(&2, Binding, a2, b), Mst.range.go(~S, ~fetch, 1n+q, s, [], rest))
+        ),
+        a,
+        {Pieces.final(~S, ~fetch, 1n+q, s, Piece.Sub{h, up, lo, hi} <> rest, k) == True{}: Bool},
+        +ks => eo => e2 => Maybe.bind_cases(
+          List<&2, Binding>,
+          List<&2, Binding>,
+          Mst.range.go(~S, ~fetch, q, s, [], ks),
+          a2 => Maybe.map(&2, List<&2, Binding>, List<&2, Binding>, b => List.append(&2, Binding, a2, b), Mst.range.go(~S, ~fetch, 1n+q, s, [], rest)),
+          a,
+          {Pieces.final(~S, ~fetch, 1n+q, s, Piece.Sub{h, up, lo, hi} <> rest, k) == True{}: Bool},
+          +a2 => ea => e3 => Maybe.map_cases(
+            List<&2, Binding>,
+            List<&2, Binding>,
+            Mst.range.go(~S, ~fetch, 1n+q, s, [], rest),
+            b => List.append(&2, Binding, a2, b),
+            a,
+            {Pieces.final(~S, ~fetch, 1n+q, s, Piece.Sub{h, up, lo, hi} <> rest, k) == True{}: Bool},
+            b => eb => e4 => Shared.Bool.and_both(
+              Bool.or(
+                Bool.not(Bool.and(Bound.after(lo, k), Bound.before(k, hi))),
+                Look.is_final(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k))
+              ),
+              Pieces.final(~S, ~fetch, 1n+q, s, rest, k)
+            )(
+              Bool.or_not_of(
+                Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+                Look.is_final(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k))
+              )(hin => Mst.final_open(~S, ~fetch, q, s, h, up, lo, hi, ks, k)(eo)(ihs(ks)(a2)(ea))(hin))
+            )(ihr(b)(eb))
+          )(e3)
+        )(e2)
+      )(e)
+    case False{}:
+      e => Shared.Bool.and_both(
+        Bool.or(
+          Bool.not(Bool.and(Bound.after(lo, k), Bound.before(k, hi))),
+          Look.is_final(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k))
+        ),
+        Pieces.final(~S, ~fetch, 1n+q, s, rest, k)
+      )(Bound.not_in(lo, hi, k, Look.is_final(Mst.look.go(~S, ~fetch, 1n+q, s, Room{up, lo, hi}, Some{h}, k)))(et))(ihr(a)(e))
+
+# the pieces of a listing under no prefix that reads read every key finally
+def Mst.final_list(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +a: List<&2, Binding>,
+  +k: List<&2, U32>
+) -> {Mst.range.go(~S, ~fetch, f, s, [], ps) == Some{a}: Maybe<&2, List<&2, Binding>>} -> {Pieces.final(~S, ~fetch, f, s, ps, k) == True{}: Bool}:
+  match f ps:
+    case x Nil{}:
+      e => {==}
+    case 0n Con{x, rest}:
+      e => Empty.absurd({Pieces.final(~S, ~fetch, 0n, s, x <> rest, k) == True{}: Bool}, Shared.Maybe.none_ne_some(List<&2, Binding>, a, e))
+    case 1n+(+q) Con{Piece.Bind{+k2, +v2}, +rest}:
+      e => Maybe.map_cases(
+        List<&2, Binding>,
+        List<&2, Binding>,
+        Mst.range.go(~S, ~fetch, 1n+q, s, [], rest),
+        +bs => Shared.Bool.when(List<&2, Binding>, Key.leads([], k2), u => Binding{k2, v2} <> bs, u => bs),
+        a,
+        {Pieces.final(~S, ~fetch, 1n+q, s, rest, k) == True{}: Bool},
+        +b => eb => e2 => Mst.final_list(~S, ~fetch, 1n+q, s, rest, b, k)(eb)
+      )(e)
+    case 1n+(+q) Con{Piece.Sub{+h, +up, +lo, +hi}, +rest}:
+      e => Mst.final_list.at(
+        ~S,
+        ~fetch,
+        Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)),
+        q,
+        s,
+        h,
+        up,
+        lo,
+        hi,
+        rest,
+        a,
+        k,
+        {==},
+        b => eb => Mst.final_list(~S, ~fetch, 1n+q, s, rest, b, k)(eb),
+        ks => b => eb => Mst.final_list(~S, ~fetch, q, s, ks, b, k)(eb)
+      )(e)
+
+# a read of a tree that lists whole is final
+def Mst.final_root(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>
+) -> {Pieces.final(~S, ~fetch, Mst.depth(), s, Mst.root(h), k) == True{}: Bool} -> {
+  Look.is_final(Mst.look(~S, ~fetch, s, h, k)) == True{}: Bool
+}:
+  match h:
+    case None{}:
+      hf => {==}
+    case Some{+h2}:
+      hf => Shared.Bool.and_true_left(Look.is_final(Mst.look(~S, ~fetch, s, Some{h2}, k)), True{})(hf)
+
+# Differences of whole trees
+# --------------------------
+
+# each subtree of the pieces ps has keys in its bounds and lists whole, q
+# levels down
+def Pieces.ok(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +q: Nat, +s: S, ps: List<&2, Piece>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{Piece.Bind{k, v}, rest}:
+      Pieces.ok(~S, ~fetch, q, s, rest)
+    case Con{Piece.Sub{h, up, +lo, +hi}, rest}:
+      Bool.and(
+        Bool.and(
+          Bound.before([], hi),
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+          )
+        ),
+        Pieces.ok(~S, ~fetch, q, s, rest)
+      )
+
+# both sides of each of the runs ps are ok
+def Runs.ok(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +q: Nat, +s: S, ps: List<&2, Runs>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Con{Runs{a, b}, rest}:
+      Bool.and(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))
+
+# the pieces ps, then the pieces acc, are ok when both are
+def Pieces.ok_append(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +acc: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, ps) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, acc) == True{}: Bool} -> {
+  Pieces.ok(~S, ~fetch, q, s, List.append(&2, Piece, ps, acc)) == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      h => g => g
+    case Con{Piece.Bind{k, v}, +rest}:
+      h => g => Pieces.ok_append(~S, ~fetch, q, s, rest, acc)(h)(g)
+    case Con{Piece.Sub{+h2, +up, +lo, +hi}, +rest}:
+      +h => g => Shared.Bool.and_both(
+        Bool.and(
+          Bound.before([], hi),
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+          )
+        ),
+        Pieces.ok(~S, ~fetch, q, s, List.append(&2, Piece, rest, acc))
+      )(
+        Shared.Bool.and_true_left(
+          Bool.and(
+            Bound.before([], hi),
+            Maybe.is_some(
+              &2,
+              List<&2, Binding>,
+              Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+            )
+          ),
+          Pieces.ok(~S, ~fetch, q, s, rest)
+        )(h)
+      )(
+        Pieces.ok_append(
+          ~S,
+          ~fetch,
+          q,
+          s,
+          rest,
+          acc
+        )(
+          Shared.Bool.and_true_right(
+            Bool.and(
+              Bound.before([], hi),
+              Maybe.is_some(
+                &2,
+                List<&2, Binding>,
+                Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+              )
+            ),
+            Pieces.ok(~S, ~fetch, q, s, rest)
+          )(h)
+        )(g)
+      )
+
+# the piece x before ok pieces is ok when x before others is
+def Pieces.ok_move(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  x: Piece,
+  -r: List<&2, Piece>,
+  +acc: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, x <> r) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, acc) == True{}: Bool} -> {
+  Pieces.ok(~S, ~fetch, q, s, x <> acc) == True{}: Bool
+}:
+  match x:
+    case Piece.Bind{k, v}:
+      h => g => g
+    case Piece.Sub{+h2, +up, +lo, +hi}:
+      h => g => Shared.Bool.and_both(
+        Bool.and(
+          Bound.before([], hi),
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+          )
+        ),
+        Pieces.ok(~S, ~fetch, q, s, acc)
+      )(
+        Shared.Bool.and_true_left(
+          Bool.and(
+            Bound.before([], hi),
+            Maybe.is_some(
+              &2,
+              List<&2, Binding>,
+              Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+            )
+          ),
+          Pieces.ok(~S, ~fetch, q, s, r)
+        )(h)
+      )(g)
+
+# the pieces after an ok piece are ok
+def Pieces.ok_tail(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  x: Piece,
+  +r: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, x <> r) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, r) == True{}: Bool}:
+  match x:
+    case Piece.Bind{k, v}:
+      h => h
+    case Piece.Sub{+h2, +up, +lo, +hi}:
+      h => Shared.Bool.and_true_right(
+        Bool.and(
+          Bound.before([], hi),
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h2, up, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+          )
+        ),
+        Pieces.ok(~S, ~fetch, q, s, r)
+      )(h)
+
+# ok pieces read back to front, after ok pieces acc, are ok
+def Pieces.ok_reverse(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  +acc: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, ps) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, acc) == True{}: Bool} -> {
+  Pieces.ok(~S, ~fetch, q, s, List.reverse.go(&2, Piece, ps, acc)) == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      h => g => g
+    case Con{+x, +rest}:
+      +h => g => Pieces.ok_reverse(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        rest,
+        x <> acc
+      )(Pieces.ok_tail(~S, ~fetch, q, s, x, rest)(h))(Pieces.ok_move(~S, ~fetch, q, s, x, rest, acc)(h)(g))
+
+# the runs of the round r with the run p first
+def Round.pairs_cons(p: Runs, r: Round) -> {Round.pairs(Round.cons(p, r)) == p <> Round.pairs(r): List<&2, Runs>}:
+  match r:
+    case Round{ks, ps}:
+      {==}
+
+# the runs of a round with a differing key are its runs
+def Round.pairs_differs(k: List<&2, U32>, v1: List<&2, U32>, v2: List<&2, U32>, r: Round) -> {
+  Round.pairs(Round.differs(k, v1, v2, r)) == Round.pairs(r): List<&2, Runs>
+}:
+  match r:
+    case Round{ks, ps}:
+      {==}
+
+# the runs of two rounds, one after the other
+def Round.pairs_append(a: Round, b: Round) -> {
+  Round.pairs(Round.append(a, b)) == List.append(&2, Runs, Round.pairs(a), Round.pairs(b)): List<&2, Runs>
+}:
+  match a b:
+    case Round{k1, p1} Round{k2, p2}:
+      {==}
+
+# ok runs, then ok runs, are ok
+def Runs.ok_append(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  ps: List<&2, Runs>,
+  +acc: List<&2, Runs>
+) -> {Runs.ok(~S, ~fetch, q, s, ps) == True{}: Bool} -> {Runs.ok(~S, ~fetch, q, s, acc) == True{}: Bool} -> {
+  Runs.ok(~S, ~fetch, q, s, List.append(&2, Runs, ps, acc)) == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      h => g => g
+    case Con{Runs{+a, +b}, +rest}:
+      +h => g => Shared.Bool.and_both(
+        Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)),
+        Runs.ok(~S, ~fetch, q, s, List.append(&2, Runs, rest, acc))
+      )(
+        Shared.Bool.and_true_left(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h)
+      )(
+        Runs.ok_append(
+          ~S,
+          ~fetch,
+          q,
+          s,
+          rest,
+          acc
+        )(Shared.Bool.and_true_right(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h))(g)
+      )
+
+# a run cut out of two ok sides, read back to front, is ok
+def Runs.ok_emit(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +sa: List<&2, Piece>,
+  +sb: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, sa) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, sb) == True{}: Bool} -> {
+  Bool.and(Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sa)), Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sb))) == True{}: Bool
+}:
+  ha => hb => Shared.Bool.and_both(
+    Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sa)),
+    Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sb))
+  )(Pieces.ok_reverse(~S, ~fetch, q, s, sa, [])(ha)({==}))(Pieces.ok_reverse(~S, ~fetch, q, s, sb, [])(hb)({==}))
+
+# the runs that a cut of ok pieces gives are ok
+def Mst.cut_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  as: List<&2, Piece>,
+  bs: List<&2, Piece>,
+  +sa: List<&2, Piece>,
+  +sb: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, as) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, bs) == True{}: Bool} -> {
+  Pieces.ok(~S, ~fetch, q, s, sa) == True{}: Bool
+} -> {Pieces.ok(~S, ~fetch, q, s, sb) == True{}: Bool} -> {Runs.ok(~S, ~fetch, q, s, Round.pairs(Mst.cut(as, bs, sa, sb))) == True{}: Bool}:
+  match as bs:
+    case Nil{} Nil{}:
+      ha => hb => hsa => hsb => Shared.Bool.and_both(
+        Bool.and(Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sa)), Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sb))),
+        True{}
+      )(Runs.ok_emit(~S, ~fetch, q, s, sa, sb)(hsa)(hsb))({==})
+    case Nil{} Con{+y, +rb}:
+      ha => +hb => hsa => hsb => Mst.cut_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        [],
+        rb,
+        sa,
+        y <> sb
+      )(ha)(Pieces.ok_tail(~S, ~fetch, q, s, y, rb)(hb))(hsa)(Pieces.ok_move(~S, ~fetch, q, s, y, rb, sb)(hb)(hsb))
+    case Con{+x, +ra} Nil{}:
+      +ha => hb => hsa => hsb => Mst.cut_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        ra,
+        [],
+        x <> sa,
+        sb
+      )(Pieces.ok_tail(~S, ~fetch, q, s, x, ra)(ha))(hb)(Pieces.ok_move(~S, ~fetch, q, s, x, ra, sa)(ha)(hsa))(hsb)
+    case Con{Piece.Sub{+h, +u, +lo, +hi}, +ra} Con{+y, +rb}:
+      +ha => hb => hsa => hsb => Mst.cut_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        ra,
+        y <> rb,
+        Piece.Sub{h, u, lo, hi} <> sa,
+        sb
+      )(Pieces.ok_tail(~S, ~fetch, q, s, Piece.Sub{h, u, lo, hi}, ra)(ha))(hb)(
+        Pieces.ok_move(~S, ~fetch, q, s, Piece.Sub{h, u, lo, hi}, ra, sa)(ha)(hsa)
+      )(hsb)
+    case Con{Piece.Bind{+k1, +v1}, +ra} Con{Piece.Sub{+h, +u, +lo, +hi}, +rb}:
+      ha => +hb => hsa => hsb => Mst.cut_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        Piece.Bind{k1, v1} <> ra,
+        rb,
+        sa,
+        Piece.Sub{h, u, lo, hi} <> sb
+      )(ha)(Pieces.ok_tail(~S, ~fetch, q, s, Piece.Sub{h, u, lo, hi}, rb)(hb))(hsa)(
+        Pieces.ok_move(~S, ~fetch, q, s, Piece.Sub{h, u, lo, hi}, rb, sb)(hb)(hsb)
+      )
+    case Con{Piece.Bind{+k1, +v1}, +ra} Con{Piece.Bind{+k2, +v2}, +rb}:
+      +ha => +hb => +hsa => +hsb => Shared.Bool.when_cases(
+        Round,
+        x => {Runs.ok(~S, ~fetch, q, s, Round.pairs(x)) == True{}: Bool},
+        Cmp.is_lt(Key.cmp(k1, k2)),
+        w => Mst.cut(ra, Piece.Bind{k2, v2} <> rb, Piece.Bind{k1, v1} <> sa, sb),
+        w => Shared.Bool.when(
+          Round,
+          Cmp.is_eq(Key.cmp(k1, k2)),
+          w2 => Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))),
+          w2 => Mst.cut(Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb)
+        ),
+        e1 => Mst.cut_ok(~S, ~fetch, q, s, ra, Piece.Bind{k2, v2} <> rb, Piece.Bind{k1, v1} <> sa, sb)(ha)(hb)(hsa)(hsb),
+        e1 => Shared.Bool.when_cases(
+          Round,
+          x => {Runs.ok(~S, ~fetch, q, s, Round.pairs(x)) == True{}: Bool},
+          Cmp.is_eq(Key.cmp(k1, k2)),
+          w2 => Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))),
+          w2 => Mst.cut(Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb),
+          e2 =>
+            %Equal.sym(
+              List<&2, Runs>,
+              Round.pairs(Round.cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], [])))),
+              Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)} <> Round.pairs(Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))),
+              Round.pairs_cons(Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)}, Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], [])))
+            ): {Runs.ok(~S, ~fetch, q, s, _) == True{}: Bool}
+            %Equal.sym(
+              List<&2, Runs>,
+              Round.pairs(Round.differs(k1, v1, v2, Mst.cut(ra, rb, [], []))),
+              Round.pairs(Mst.cut(ra, rb, [], [])),
+              Round.pairs_differs(k1, v1, v2, Mst.cut(ra, rb, [], []))
+            ): {Runs.ok(~S, ~fetch, q, s, Runs{List.reverse(&2, Piece, sa), List.reverse(&2, Piece, sb)} <> _) == True{}: Bool}
+            Shared.Bool.and_both(
+              Bool.and(Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sa)), Pieces.ok(~S, ~fetch, q, s, List.reverse(&2, Piece, sb))),
+              Runs.ok(~S, ~fetch, q, s, Round.pairs(Mst.cut(ra, rb, [], [])))
+            )(Runs.ok_emit(~S, ~fetch, q, s, sa, sb)(hsa)(hsb))(Mst.cut_ok(~S, ~fetch, q, s, ra, rb, [], [])(ha)(hb)({==})({==})),
+          e2 => Mst.cut_ok(~S, ~fetch, q, s, Piece.Bind{k1, v1} <> ra, rb, sa, Piece.Bind{k2, v2} <> sb)(ha)(hb)(hsa)(hsb)
+        )
+      )
+
+# both sides of the run r are ok
+def Runs.ok1(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +q: Nat, +s: S, r: Runs) -> Bool:
+  match r:
+    case Runs{a, b}:
+      Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b))
+
+# a trim of ok pieces leaves ok pieces
+def Mst.trim_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  as: List<&2, Piece>,
+  bs: List<&2, Piece>
+) -> {Pieces.ok(~S, ~fetch, q, s, as) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, bs) == True{}: Bool} -> {
+  Runs.ok1(~S, ~fetch, q, s, Mst.trim(as, bs)) == True{}: Bool
+}:
+  match as bs:
+    case Con{+x, +ra} Con{+y, +rb}:
+      +ha => +hb => Shared.Bool.when_cases(
+        Runs,
+        r => {Runs.ok1(~S, ~fetch, q, s, r) == True{}: Bool},
+        Piece.same(x, y),
+        u => Mst.trim(ra, rb),
+        u => Runs{x <> ra, y <> rb},
+        e => Mst.trim_ok(~S, ~fetch, q, s, ra, rb)(Pieces.ok_tail(~S, ~fetch, q, s, x, ra)(ha))(Pieces.ok_tail(~S, ~fetch, q, s, y, rb)(hb)),
+        e => Shared.Bool.and_both(Pieces.ok(~S, ~fetch, q, s, x <> ra), Pieces.ok(~S, ~fetch, q, s, y <> rb))(ha)(hb)
+      )
+    case Nil{} ys:
+      ha => hb => Shared.Bool.and_both(True{}, Pieces.ok(~S, ~fetch, q, s, ys))({==})(hb)
+    case Con{+x, +ra} Nil{}:
+      ha => hb => Shared.Bool.and_both(Pieces.ok(~S, ~fetch, q, s, x <> ra), True{})(ha)({==})
+
+# a trimmed run trims to ok sides
+def Runs.trim_front_ok(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +q: Nat, +s: S, r: Runs) -> {
+  Runs.ok1(~S, ~fetch, q, s, r) == True{}: Bool
+} -> {Runs.ok1(~S, ~fetch, q, s, Runs.trim_front(r)) == True{}: Bool}:
+  match r:
+    case Runs{+a, +b}:
+      +h => Mst.trim_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        a,
+        b
+      )(Shared.Bool.and_true_left(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b))(h))(
+        Shared.Bool.and_true_right(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b))(h)
+      )
+
+# a run read back to front has ok sides
+def Runs.reverse_ok(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +q: Nat, +s: S, r: Runs) -> {
+  Runs.ok1(~S, ~fetch, q, s, r) == True{}: Bool
+} -> {Runs.ok1(~S, ~fetch, q, s, Runs.reverse(r)) == True{}: Bool}:
+  match r:
+    case Runs{+a, +b}:
+      +h => Runs.ok_emit(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        a,
+        b
+      )(Shared.Bool.and_true_left(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b))(h))(
+        Shared.Bool.and_true_right(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b))(h)
+      )
+
+# a run trimmed at both ends has ok sides
+def Runs.trim_ok(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +q: Nat, +s: S, +r: Runs) -> {
+  Runs.ok1(~S, ~fetch, q, s, r) == True{}: Bool
+} -> {Runs.ok1(~S, ~fetch, q, s, Runs.trim(r)) == True{}: Bool}:
+  h => Runs.reverse_ok(
+    ~S,
+    ~fetch,
+    q,
+    s,
+    Runs.trim_front(Runs.reverse(Runs.trim_front(r)))
+  )(
+    Runs.trim_front_ok(
+      ~S,
+      ~fetch,
+      q,
+      s,
+      Runs.reverse(Runs.trim_front(r))
+    )(Runs.reverse_ok(~S, ~fetch, q, s, Runs.trim_front(r))(Runs.trim_front_ok(~S, ~fetch, q, s, r)(h)))
+  )
+
+# a subtree whose bounds hold keys and which lists whole, before ok pieces,
+# gives ok pieces
+def Pieces.ok_sub(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  m: Maybe<&2, Hashes.Hash>,
+  +l: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +rest: List<&2, Piece>,
+  +a: List<&2, Binding>
+) -> {Bool.or(Maybe.is_none(&2, Hashes.Hash, m), Bound.before([], hi)) == True{}: Bool} -> {
+  Mst.sub_list(~S, ~fetch, q, s, [], m, l, lo, hi) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Pieces.ok(~S, ~fetch, q, s, rest) == True{}: Bool} -> {Pieces.ok(~S, ~fetch, q, s, Piece.sub(m, l, lo, hi, rest)) == True{}: Bool}:
+  match m:
+    case None{}:
+      hn => esl => hr => hr
+    case Some{+h}:
+      +hn => esl => hr => Shared.Bool.and_both(
+        Bool.and(
+          Bound.before([], hi),
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, l, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+          )
+        ),
+        Pieces.ok(~S, ~fetch, q, s, rest)
+      )(
+        Shared.Bool.and_both(
+          Bound.before([], hi),
+          Maybe.is_some(
+            &2,
+            List<&2, Binding>,
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, l, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks))
+          )
+        )(hn)(
+          Equal.cong(
+            Maybe<&2, List<&2, Binding>>,
+            Bool,
+            x => Maybe.is_some(&2, List<&2, Binding>, x),
+            Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, l, lo, hi), ks => Mst.range.go(~S, ~fetch, q, s, [], ks)),
+            Some{a},
+            Mst.sub_list_on(~S, ~fetch, q, s, h, l, lo, hi, a)(hn)(esl)
+          )
+        )
+      )(hr)
+
+# the pieces of a node whose upper bound holds keys, when a listing of them
+# reads, are ok one level down
+def Mst.pieces_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +ks: List<&2, Piece>,
+  +a: List<&2, Binding>
+) -> {Mst.pieces(xs, l, prev, lo, hi) == Some{ks}: Maybe<&2, List<&2, Piece>>} -> {Bound.before([], hi) == True{}: Bool} -> {
+  Mst.range.go(~S, ~fetch, 1n+q, s, [], ks) == Some{a}: Maybe<&2, List<&2, Binding>>
+} -> {Pieces.ok(~S, ~fetch, q, s, ks) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      +ep => +hb => e => Mst.range_list(
+        ~S,
+        ~fetch,
+        prev,
+        q,
+        s,
+        [],
+        l,
+        lo,
+        hi,
+        [],
+        a,
+        {Pieces.ok(~S, ~fetch, q, s, ks) == True{}: Bool},
+        +a1 => b => e4 => eb => esl =>
+          %Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev, l, lo, hi, []), ks, ep): {Pieces.ok(~S, ~fetch, q, s, _) == True{}: Bool}
+          Pieces.ok_sub(~S, ~fetch, q, s, prev, l, lo, hi, [], a1)(Bool.or_true_of(Maybe.is_none(&2, Hashes.Hash, prev), Bound.before([], hi))(hb))(esl)({==})
+      )(
+        Equal.trans(
+          Maybe<&2, List<&2, Binding>>,
+          Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev, l, lo, hi, [])),
+          Mst.range.go(~S, ~fetch, 1n+q, s, [], ks),
+          Some{a},
+          Equal.cong(
+            List<&2, Piece>,
+            Maybe<&2, List<&2, Binding>>,
+            x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+            Piece.sub(prev, l, lo, hi, []),
+            ks,
+            Shared.Maybe.some_inj(List<&2, Piece>, Piece.sub(prev, l, lo, hi, []), ks, ep)
+          ),
+          e
+        )
+      )
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      ep => +hb => e => Maybe.when_cases(
+        List<&2, Piece>,
+        Bool.and(
+          Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+          Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+        ),
+        u => Maybe.map(
+          &2,
+          List<&2, Piece>,
+          List<&2, Piece>,
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          Mst.pieces(rest, l, r, Some{ik}, hi)
+        ),
+        ks,
+        {Pieces.ok(~S, ~fetch, q, s, ks) == True{}: Bool},
+        +c => e2 => Maybe.map_cases(
+          List<&2, Piece>,
+          List<&2, Piece>,
+          Mst.pieces(rest, l, r, Some{ik}, hi),
+          ps2 => Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ps2),
+          ks,
+          {Pieces.ok(~S, ~fetch, q, s, ks) == True{}: Bool},
+          +ks2 => +e3 => +e4 => Mst.range_list(
+            ~S,
+            ~fetch,
+            prev,
+            q,
+            s,
+            [],
+            l,
+            lo,
+            Some{ik},
+            Piece.Bind{ik, iv} <> ks2,
+            a,
+            {Pieces.ok(~S, ~fetch, q, s, ks) == True{}: Bool},
+            +c1 => b => e5 => eb => esl => Maybe.map_cases(
+              List<&2, Binding>,
+              List<&2, Binding>,
+              Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2),
+              +bb => Shared.Bool.when(List<&2, Binding>, Key.leads([], ik), u => Binding{ik, iv} <> bb, u => bb),
+              b,
+              {Pieces.ok(~S, ~fetch, q, s, ks) == True{}: Bool},
+              +b2 => eb2 => e6 =>
+                %e4: {Pieces.ok(~S, ~fetch, q, s, _) == True{}: Bool}
+                Pieces.ok_sub(
+                  ~S,
+                  ~fetch,
+                  q,
+                  s,
+                  prev,
+                  l,
+                  lo,
+                  Some{ik},
+                  Piece.Bind{ik, iv} <> ks2,
+                  c1
+                )(
+                  Equal.trans(
+                    Bool,
+                    Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Key.is_lt([], ik)),
+                    Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik))),
+                    True{},
+                    Equal.cong(Bool, Bool, x => Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), x), Key.is_lt([], ik), Bool.not(List.is_empty(&2, U32, ik)), Key.lt_nil_left(ik)),
+                    Shared.Bool.and_true_right(
+                      Nat.is_eq(Key.level(ik), l),
+                      Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))
+                    )(
+                      Shared.Bool.and_true_left(
+                        Bool.and(Nat.is_eq(Key.level(ik), l), Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, ik)))),
+                        Bool.and(Bound.after(lo, ik), Bound.before(ik, hi))
+                      )(c)
+                    )
+                  )
+                )(esl)(Mst.pieces_ok(~S, ~fetch, q, s, rest, l, r, Some{ik}, hi, ks2, b2)(e3)(hb)(eb2))
+            )(eb)
+          )(
+            Equal.trans(
+              Maybe<&2, List<&2, Binding>>,
+              Mst.range.go(~S, ~fetch, 1n+q, s, [], Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2)),
+              Mst.range.go(~S, ~fetch, 1n+q, s, [], ks),
+              Some{a},
+              Equal.cong(
+                List<&2, Piece>,
+                Maybe<&2, List<&2, Binding>>,
+                x => Mst.range.go(~S, ~fetch, 1n+q, s, [], x),
+                Piece.sub(prev, l, lo, Some{ik}, Piece.Bind{ik, iv} <> ks2),
+                ks,
+                e4
+              ),
+              e
+            )
+          )
+        )(e2)
+      )(ep)
+
+# ok pieces open, one level, to ok pieces
+def Mst.open_all_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  ps: List<&2, Piece>,
+  -P: Type,
+  k: @ps2: List<&2, Piece> -> {Mst.open.all(~S, ~fetch, s, ps) == Some{ps2}: Maybe<&2, List<&2, Piece>>} -> {
+    Pieces.ok(~S, ~fetch, q, s, ps2) == True{}: Bool
+  } -> P
+) -> {Pieces.ok(~S, ~fetch, 1n+q, s, ps) == True{}: Bool} -> P:
+  match ps:
+    case Nil{}:
+      h => k([])({==})({==})
+    case Con{Piece.Bind{+k1, +v1}, +rest}:
+      h => Mst.open_all_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        rest,
+        P,
+        +r2 => er => gr => k(Piece.Bind{k1, v1} <> r2)(
+          Equal.cong(
+            Maybe<&2, List<&2, Piece>>,
+            Maybe<&2, List<&2, Piece>>,
+            x => Maybe.map(&2, List<&2, Piece>, List<&2, Piece>, r => Piece.Bind{k1, v1} <> r, x),
+            Mst.open.all(~S, ~fetch, s, rest),
+            Some{r2},
+            er
+          )
+        )(gr)
+      )(h)
+    case Con{Piece.Sub{+h, +u, +lo, +hi}, +rest}:
+      +hh =>
+        +hc = Shared.Bool.and_true_left(
+          Bool.and(
+            Bound.before([], hi),
+            Maybe.is_some(
+              &2,
+              List<&2, Binding>,
+              Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks => Mst.range.go(~S, ~fetch, 1n+q, s, [], ks))
+            )
+          ),
+          Pieces.ok(~S, ~fetch, 1n+q, s, rest)
+        )(hh)
+        Maybe.some_cases(
+          List<&2, Binding>,
+          Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks => Mst.range.go(~S, ~fetch, 1n+q, s, [], ks)),
+          P,
+          +x => ex => Maybe.bind_cases(
+            List<&2, Piece>,
+            List<&2, Binding>,
+            Mst.open(~S, ~fetch, s, h, u, lo, hi),
+            ks => Mst.range.go(~S, ~fetch, 1n+q, s, [], ks),
+            x,
+            P,
+            +ks => +eo => ea => Mst.open_cases(
+              ~S,
+              ~fetch,
+              s,
+              h,
+              u,
+              lo,
+              hi,
+              ks,
+              P,
+              +l2 => +left2 => +xs2 => ef => eh => en => elt => ee => ep =>
+                +oks = Mst.pieces_ok(
+                  ~S,
+                  ~fetch,
+                  q,
+                  s,
+                  xs2,
+                  l2,
+                  left2,
+                  lo,
+                  hi,
+                  ks,
+                  x
+                )(ep)(Shared.Bool.and_true_left(Bound.before([], hi), Maybe.is_some(&2, List<&2, Binding>, Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks2 => Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2))))(hc))(ea)
+                Mst.open_all_ok(
+                  ~S,
+                  ~fetch,
+                  q,
+                  s,
+                  rest,
+                  P,
+                  +r2 => er => gr => k(List.append(&2, Piece, ks, r2))(
+                    Equal.trans(
+                      Maybe<&2, List<&2, Piece>>,
+                      Mst.open.all(~S, ~fetch, s, Piece.Sub{h, u, lo, hi} <> rest),
+                      Maybe.map(&2, List<&2, Piece>, List<&2, Piece>, b => List.append(&2, Piece, ks, b), Mst.open.all(~S, ~fetch, s, rest)),
+                      Some{List.append(&2, Piece, ks, r2)},
+                      Equal.cong(
+                        Maybe<&2, List<&2, Piece>>,
+                        Maybe<&2, List<&2, Piece>>,
+                        y => Maybe.bind(
+                          &2,
+                          List<&2, Piece>,
+                          List<&2, Piece>,
+                          y,
+                          a => Maybe.map(&2, List<&2, Piece>, List<&2, Piece>, b => List.append(&2, Piece, a, b), Mst.open.all(~S, ~fetch, s, rest))
+                        ),
+                        Mst.open(~S, ~fetch, s, h, u, lo, hi),
+                        Some{ks},
+                        eo
+                      ),
+                      Equal.cong(
+                        Maybe<&2, List<&2, Piece>>,
+                        Maybe<&2, List<&2, Piece>>,
+                        y => Maybe.map(&2, List<&2, Piece>, List<&2, Piece>, b => List.append(&2, Piece, ks, b), y),
+                        Mst.open.all(~S, ~fetch, s, rest),
+                        Some{r2},
+                        er
+                      )
+                    )
+                  )(Pieces.ok_append(~S, ~fetch, q, s, ks, r2)(oks)(gr))
+                )(
+                  Shared.Bool.and_true_right(
+                    Bool.and(
+                      Bound.before([], hi),
+                      Maybe.is_some(
+                        &2,
+                        List<&2, Binding>,
+                        Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks2 => Mst.range.go(~S, ~fetch, 1n+q, s, [], ks2))
+                      )
+                    ),
+                    Pieces.ok(~S, ~fetch, 1n+q, s, rest)
+                  )(hh)
+                )
+            )(eo)
+          )(ex)
+        )(
+          Shared.Bool.and_true_right(
+            Bound.before([], hi),
+            Maybe.is_some(
+              &2,
+              List<&2, Binding>,
+              Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks => Mst.range.go(~S, ~fetch, 1n+q, s, [], ks))
+            )
+          )(hc)
+        )
+
+# the items of a node
+def Node.items(n: Node) -> List<&2, Item>:
+  match n:
+    case Node{l, left, xs}:
+      xs
+
+# an empty list is the empty list
+def List.empty_nil(-A: Data, xs: List<&2, A>) -> {List.is_empty(&2, A, xs) == True{}: Bool} -> {xs == []: List<&2, A>}:
+  match xs:
+    case Nil{}:
+      x => {==}
+    case Con{head, tail}:
+      x => Empty.absurd({head <> tail == [] : List<&2, A>}, {(%x : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+
+# what the runs of the next round must be, q levels down: none when no level
+# is left, else ok
+def Runs.next(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, q: Nat, +s: S, ps: List<&2, Runs>) -> Bool:
+  match q:
+    case 0n:
+      List.is_empty(&2, Runs, ps)
+    case 1n+p:
+      Runs.ok(~S, ~fetch, p, s, ps)
+
+# no run is a next round
+def Runs.next_nil(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, q: Nat, +s: S) -> {
+  Runs.next(~S, ~fetch, q, s, []) == True{}: Bool
+}:
+  match q:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
+
+# two next rounds, one after the other, are a next round
+def Runs.next_append(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  q: Nat,
+  +s: S,
+  ps: List<&2, Runs>,
+  +acc: List<&2, Runs>
+) -> {Runs.next(~S, ~fetch, q, s, ps) == True{}: Bool} -> {Runs.next(~S, ~fetch, q, s, acc) == True{}: Bool} -> {
+  Runs.next(~S, ~fetch, q, s, List.append(&2, Runs, ps, acc)) == True{}: Bool
+}:
+  match q:
+    case 0n:
+      match ps:
+        case Nil{}:
+          h => g => g
+        case Con{x, r}:
+          h => g => Empty.absurd({List.is_empty(&2, Runs, x <> List.append(&2, Runs, r, acc)) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case 1n+(+p):
+      h => g => Runs.ok_append(~S, ~fetch, p, s, ps, acc)(h)(g)
+
+# a step that read and gave a next round
+def Step.good(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, q: Nat, +s: S, m: Maybe<&2, Round>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{r}:
+      Runs.next(~S, ~fetch, q, s, Round.pairs(r))
+
+# pieces ok with no level left hold no subtree: a node has an item, so its
+# listing needs a level
+def Mst.no_sub(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +s: S, ps: List<&2, Piece>) -> {
+  Pieces.ok(~S, ~fetch, 0n, s, ps) == True{}: Bool
+} -> {Pieces.has_sub(ps) == False{}: Bool}:
+  match ps:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{k, v}, rest}:
+      h => Mst.no_sub(~S, ~fetch, s, rest)(h)
+    case Con{Piece.Sub{+h, +u, +lo, +hi}, rest}:
+      hh => Empty.absurd(
+        {True{} == False{}: Bool},
+        Maybe.some_cases(
+          List<&2, Binding>,
+          Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks => Mst.range.go(~S, ~fetch, 0n, s, [], ks)),
+          Empty,
+          +x => ex => Maybe.bind_cases(
+            List<&2, Piece>,
+            List<&2, Binding>,
+            Mst.open(~S, ~fetch, s, h, u, lo, hi),
+            ks => Mst.range.go(~S, ~fetch, 0n, s, [], ks),
+            x,
+            Empty,
+            +ks => eo => ea => Mst.open_cases(
+              ~S,
+              ~fetch,
+              s,
+              h,
+              u,
+              lo,
+              hi,
+              ks,
+              Empty,
+              +l2 => +left2 => +xs2 => ef => eh => en => elt => ee => ep => Shared.Bool.true_ne_false(
+                Equal.trans(
+                  Bool,
+                  True{},
+                  List.is_empty(&2, Item, xs2),
+                  False{},
+                  Equal.cong(
+                    Node,
+                    Bool,
+                    n => List.is_empty(&2, Item, Node.items(n)),
+                    Node{l2, None{}, []},
+                    Node{l2, left2, xs2},
+                    Equal.sym(
+                      Node,
+                      Node{l2, left2, xs2},
+                      Node{l2, None{}, []},
+                      Mst.pieces_empty(
+                        xs2,
+                        l2,
+                        left2,
+                        lo,
+                        hi
+                      )(
+                        Equal.trans(
+                          Maybe<&2, List<&2, Piece>>,
+                          Mst.pieces(xs2, l2, left2, lo, hi),
+                          Some{ks},
+                          Some{[]},
+                          ep,
+                          Equal.cong(List<&2, Piece>, Maybe<&2, List<&2, Piece>>, y => Some{y}, ks, [], Mst.range_zero_nil(~S, ~fetch, s, [], ks, x)(ea))
+                        )
+                      )
+                    )
+                  ),
+                  ee
+                )
+              )
+            )(eo)
+          )(ex)
+        )(
+          Shared.Bool.and_true_right(
+            Bound.before([], hi),
+            Maybe.is_some(
+              &2,
+              List<&2, Binding>,
+              Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks => Mst.range.go(~S, ~fetch, 0n, s, [], ks))
+            )
+          )(
+            Shared.Bool.and_true_left(
+              Bool.and(
+                Bound.before([], hi),
+                Maybe.is_some(
+                  &2,
+                  List<&2, Binding>,
+                  Maybe.bind(&2, List<&2, Piece>, List<&2, Binding>, Mst.open(~S, ~fetch, s, h, u, lo, hi), ks => Mst.range.go(~S, ~fetch, 0n, s, [], ks))
+                )
+              ),
+              Pieces.ok(~S, ~fetch, 0n, s, rest)
+            )(hh)
+          )
+        )
+      )
+
+# an or of two False sides is not True
+def Bool.or_false_both(a: Bool, -b: Bool) -> {a == False{}: Bool} -> {b == False{}: Bool} -> {Bool.or(a, b) == True{}: Bool} -> Empty:
+  match a:
+    case True{}:
+      ea => eb => e => Shared.Bool.true_ne_false(ea)
+    case False{}:
+      ea => eb => e => Shared.Bool.true_ne_false(Equal.trans(Bool, True{}, b, False{}, Equal.sym(Bool, b, True{}, e), eb))
+
+# a step of a run with ok sides reads and gives a next round
+def Mst.step_at_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  q: Nat,
+  +s: S,
+  p: Runs
+) -> {Runs.ok1(~S, ~fetch, q, s, p) == True{}: Bool} -> {Step.good(~S, ~fetch, q, s, Mst.step.at(~S, ~fetch, s, p)) == True{}: Bool}:
+  match q:
+    case 0n:
+      match p:
+        case Runs{+a, +b}:
+          +h => Shared.Bool.when_cases(
+            Maybe<&2, Round>,
+            x => {Step.good(~S, ~fetch, 0n, s, x) == True{}: Bool},
+            Bool.or(Pieces.has_sub(a), Pieces.has_sub(b)),
+            u => Maybe.bind(
+              &2,
+              List<&2, Piece>,
+              Round,
+              Mst.open.all(~S, ~fetch, s, a),
+              a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, s, b))
+            ),
+            u => Some{Round{Pieces.keys(a, Pieces.keys(b, [])), []}},
+            e => Empty.absurd(
+              {
+                Step.good(
+                  ~S,
+                  ~fetch,
+                  0n,
+                  s,
+                  Maybe.bind(
+                    &2,
+                    List<&2, Piece>,
+                    Round,
+                    Mst.open.all(~S, ~fetch, s, a),
+                    a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, s, b))
+                  )
+                )
+                  == True{}: Bool
+              },
+              Bool.or_false_both(
+                Pieces.has_sub(a),
+                Pieces.has_sub(b)
+              )(Mst.no_sub(~S, ~fetch, s, a)(Shared.Bool.and_true_left(Pieces.ok(~S, ~fetch, 0n, s, a), Pieces.ok(~S, ~fetch, 0n, s, b))(h)))(
+                Mst.no_sub(~S, ~fetch, s, b)(Shared.Bool.and_true_right(Pieces.ok(~S, ~fetch, 0n, s, a), Pieces.ok(~S, ~fetch, 0n, s, b))(h))
+              )(e)
+            ),
+            e => {==}
+          )
+    case 1n+(+q2):
+      match p:
+        case Runs{+a, +b}:
+          +h => Shared.Bool.when_cases(
+            Maybe<&2, Round>,
+            x => {Step.good(~S, ~fetch, 1n+q2, s, x) == True{}: Bool},
+            Bool.or(Pieces.has_sub(a), Pieces.has_sub(b)),
+            u => Maybe.bind(
+              &2,
+              List<&2, Piece>,
+              Round,
+              Mst.open.all(~S, ~fetch, s, a),
+              a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, s, b))
+            ),
+            u => Some{Round{Pieces.keys(a, Pieces.keys(b, [])), []}},
+            e => Mst.open_all_ok(
+              ~S,
+              ~fetch,
+              q2,
+              s,
+              a,
+              {
+                Step.good(
+                  ~S,
+                  ~fetch,
+                  1n+q2,
+                  s,
+                  Maybe.bind(
+                    &2,
+                    List<&2, Piece>,
+                    Round,
+                    Mst.open.all(~S, ~fetch, s, a),
+                    a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, s, b))
+                  )
+                )
+                  == True{}: Bool
+              },
+              +a2 => ea => ga => Mst.open_all_ok(
+                ~S,
+                ~fetch,
+                q2,
+                s,
+                b,
+                {
+                  Step.good(
+                    ~S,
+                    ~fetch,
+                    1n+q2,
+                    s,
+                    Maybe.bind(
+                      &2,
+                      List<&2, Piece>,
+                      Round,
+                      Mst.open.all(~S, ~fetch, s, a),
+                      a3 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a3, b2}]}, Mst.open.all(~S, ~fetch, s, b))
+                    )
+                  )
+                    == True{}: Bool
+                },
+                +b2 => eb => gb =>
+                  %Equal.sym(Maybe<&2, List<&2, Piece>>, Mst.open.all(~S, ~fetch, s, a), Some{a2}, ea): {
+                    Step.good(
+                      ~S,
+                      ~fetch,
+                      1n+q2,
+                      s,
+                      Maybe.bind(
+                        &2,
+                        List<&2, Piece>,
+                        Round,
+                        _,
+                        a3 => Maybe.map(&2, List<&2, Piece>, Round, b3 => Round{[], [Runs{a3, b3}]}, Mst.open.all(~S, ~fetch, s, b))
+                      )
+                    )
+                      == True{}: Bool
+                  }
+                  %Equal.sym(Maybe<&2, List<&2, Piece>>, Mst.open.all(~S, ~fetch, s, b), Some{b2}, eb): {
+                    Step.good(~S, ~fetch, 1n+q2, s, Maybe.map(&2, List<&2, Piece>, Round, b3 => Round{[], [Runs{a2, b3}]}, _)) == True{}: Bool
+                  }
+                  Shared.Bool.and_both(
+                    Bool.and(Pieces.ok(~S, ~fetch, q2, s, a2), Pieces.ok(~S, ~fetch, q2, s, b2)),
+                    True{}
+                  )(Shared.Bool.and_both(Pieces.ok(~S, ~fetch, q2, s, a2), Pieces.ok(~S, ~fetch, q2, s, b2))(ga)(gb))({==})
+              )(Shared.Bool.and_true_right(Pieces.ok(~S, ~fetch, 1n+q2, s, a), Pieces.ok(~S, ~fetch, 1n+q2, s, b))(h))
+            )(Shared.Bool.and_true_left(Pieces.ok(~S, ~fetch, 1n+q2, s, a), Pieces.ok(~S, ~fetch, 1n+q2, s, b))(h)),
+            e => {==}
+          )
+
+# two good steps, one after the other, are a good step
+def Step.good_bind(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  m1: Maybe<&2, Round>,
+  m2: Maybe<&2, Round>
+) -> {Step.good(~S, ~fetch, q, s, m1) == True{}: Bool} -> {Step.good(~S, ~fetch, q, s, m2) == True{}: Bool} -> {
+  Step.good(~S, ~fetch, q, s, Maybe.bind(&2, Round, Round, m1, a => Maybe.map(&2, Round, Round, b => Round.append(a, b), m2))) == True{}: Bool
+}:
+  match m1 m2:
+    case None{} y:
+      h => g => Empty.absurd(
+        {Step.good(~S, ~fetch, q, s, None{}) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Some{r1} None{}:
+      h => g => Empty.absurd(
+        {Step.good(~S, ~fetch, q, s, None{}) == True{}: Bool},
+        Shared.Bool.false_ne_true(g)
+      )
+    case Some{+r1} Some{+r2}:
+      h => g =>
+        %Equal.sym(
+          List<&2, Runs>,
+          Round.pairs(Round.append(r1, r2)),
+          List.append(&2, Runs, Round.pairs(r1), Round.pairs(r2)),
+          Round.pairs_append(r1, r2)
+        ): {Runs.next(~S, ~fetch, q, s, _) == True{}: Bool}
+        Runs.next_append(~S, ~fetch, q, s, Round.pairs(r1), Round.pairs(r2))(h)(g)
+
+# a step of ok runs reads and gives a next round
+def Mst.step_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  ps: List<&2, Runs>
+) -> {Runs.ok(~S, ~fetch, q, s, ps) == True{}: Bool} -> {Step.good(~S, ~fetch, q, s, Mst.step(~S, ~fetch, s, ps)) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      h => Runs.next_nil(~S, ~fetch, q, s)
+    case Con{Runs{+a, +b}, +rest}:
+      +h => Step.good_bind(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        Mst.step.at(~S, ~fetch, s, Runs.trim(Runs{a, b})),
+        Mst.step(~S, ~fetch, s, rest)
+      )(
+        Mst.step_at_ok(
+          ~S,
+          ~fetch,
+          q,
+          s,
+          Runs.trim(Runs{a, b})
+        )(
+          Runs.trim_ok(
+            ~S,
+            ~fetch,
+            q,
+            s,
+            Runs{a, b}
+          )(Shared.Bool.and_true_left(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h))
+        )
+      )(
+        Mst.step_ok(
+          ~S,
+          ~fetch,
+          q,
+          s,
+          rest
+        )(Shared.Bool.and_true_right(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h))
+      )
+
+# a bind of a good step whose next rounds read, reads
+def Step.bind_good(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  q: Nat,
+  +s: S,
+  m: Maybe<&2, Round>,
+  -f: Round -> Maybe<&2, List<&2, List<&2, U32>>>,
+  hg: {Step.good(~S, ~fetch, q, s, m) == True{}: Bool},
+  hf: @r: Round -> {Runs.next(~S, ~fetch, q, s, Round.pairs(r)) == True{}: Bool} -> {
+    Maybe.is_some(&2, List<&2, List<&2, U32>>, f(r)) == True{}: Bool
+  }
+) -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Maybe.bind(&2, Round, List<&2, List<&2, U32>>, m, f)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(hg))
+    case Some{+r}:
+      hf(r)(hg)
+
+# a bind of a value whose every next reads, reads
+def Maybe.bind_some(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, A>,
+  -f: A -> Maybe<&2, B>,
+  h1: {Maybe.is_some(&2, A, m) == True{}: Bool},
+  h2: @x: A -> {Maybe.is_some(&2, B, f(x)) == True{}: Bool}
+) -> {Maybe.is_some(&2, B, Maybe.bind(&2, A, B, m, f)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(h1))
+    case Some{+x}:
+      h2(x)
+
+# a difference of ok runs reads, when its next round (ihn) and its other runs
+# (ihr) read
+def Mst.diff_some.con(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +q: Nat,
+  +s: S,
+  +a: List<&2, Piece>,
+  +b: List<&2, Piece>,
+  +rest: List<&2, Runs>,
+  +h: {Runs.ok(~S, ~fetch, q, s, Runs{a, b} <> rest) == True{}: Bool},
+  ihr: {Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, 1n+q, s, rest)) == True{}: Bool},
+  ihn: @ps: List<&2, Runs> -> {Runs.next(~S, ~fetch, q, s, ps) == True{}: Bool} -> {
+    Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, q, s, ps)) == True{}: Bool
+  }
+) -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest)) == True{}: Bool}:
+  Step.bind_good(
+    ~S,
+    ~fetch,
+    q,
+    s,
+    Mst.step(~S, ~fetch, s, Round.pairs(Mst.cut(a, b, [], []))),
+    +r => Maybe.bind(
+      &2,
+      List<&2, List<&2, U32>>,
+      List<&2, List<&2, U32>>,
+      Mst.diff.go(~S, ~fetch, q, s, Round.pairs(r)),
+      k3 => Maybe.map(
+        &2,
+        List<&2, List<&2, U32>>,
+        List<&2, List<&2, U32>>,
+        k4 => List.append(
+          &2,
+          List<&2, U32>,
+          Round.keys(Mst.cut(a, b, [], [])),
+          List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))
+        ),
+        Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+      )
+    ),
+    Mst.step_ok(
+      ~S,
+      ~fetch,
+      q,
+      s,
+      Round.pairs(Mst.cut(a, b, [], []))
+    )(
+      Mst.cut_ok(
+        ~S,
+        ~fetch,
+        q,
+        s,
+        a,
+        b,
+        [],
+        []
+      )(
+        Shared.Bool.and_true_left(
+          Pieces.ok(~S, ~fetch, q, s, a),
+          Pieces.ok(~S, ~fetch, q, s, b)
+        )(
+          Shared.Bool.and_true_left(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h)
+        )
+      )(
+        Shared.Bool.and_true_right(
+          Pieces.ok(~S, ~fetch, q, s, a),
+          Pieces.ok(~S, ~fetch, q, s, b)
+        )(
+          Shared.Bool.and_true_left(Bool.and(Pieces.ok(~S, ~fetch, q, s, a), Pieces.ok(~S, ~fetch, q, s, b)), Runs.ok(~S, ~fetch, q, s, rest))(h)
+        )
+      )({==})({==})
+    ),
+    +r => hn => Maybe.bind_some(
+      List<&2, List<&2, U32>>,
+      List<&2, List<&2, U32>>,
+      Mst.diff.go(~S, ~fetch, q, s, Round.pairs(r)),
+      k3 => Maybe.map(
+        &2,
+        List<&2, List<&2, U32>>,
+        List<&2, List<&2, U32>>,
+        k4 => List.append(
+          &2,
+          List<&2, U32>,
+          Round.keys(Mst.cut(a, b, [], [])),
+          List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))
+        ),
+        Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+      ),
+      ihn(Round.pairs(r))(hn),
+      x => Equal.trans(
+        Bool,
+        Maybe.is_some(
+          &2,
+          List<&2, List<&2, U32>>,
+          Maybe.map(
+            &2,
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            k4 => List.append(
+              &2,
+              List<&2, U32>,
+              Round.keys(Mst.cut(a, b, [], [])),
+              List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, x, k4))
+            ),
+            Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+          )
+        ),
+        Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, 1n+q, s, rest)),
+        True{},
+        Maybe.map_is_some(
+          List<&2, List<&2, U32>>,
+          List<&2, List<&2, U32>>,
+          k4 => List.append(
+            &2,
+            List<&2, U32>,
+            Round.keys(Mst.cut(a, b, [], [])),
+            List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, x, k4))
+          ),
+          Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+        ),
+        ihr
+      )
+    )
+  )
+
+# a difference of ok runs reads, while levels are left
+def Mst.diff_some(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, q: Nat, +s: S, runs: List<&2, Runs>) -> {
+  Runs.ok(~S, ~fetch, q, s, runs) == True{}: Bool
+} -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, 1n+q, s, runs)) == True{}: Bool}:
+  match q:
+    case 0n:
+      match runs:
+        case Nil{}:
+          h => {==}
+        case Con{Runs{+a, +b}, +rest}:
+          +h => Mst.diff_some.con(
+            ~S,
+            ~fetch,
+            0n,
+            s,
+            a,
+            b,
+            rest,
+            h,
+            Mst.diff_some(
+              ~S,
+              ~fetch,
+              0n,
+              s,
+              rest
+            )(Shared.Bool.and_true_right(Bool.and(Pieces.ok(~S, ~fetch, 0n, s, a), Pieces.ok(~S, ~fetch, 0n, s, b)), Runs.ok(~S, ~fetch, 0n, s, rest))(h)),
+            ps => hn =>
+              %Equal.sym(List<&2, Runs>, ps, [], List.empty_nil(Runs, ps)(hn)): {
+                Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff.go(~S, ~fetch, 0n, s, _)) == True{}: Bool
+              }
+              {==}
+          )
+    case 1n+(+q2):
+      match runs:
+        case Nil{}:
+          h => {==}
+        case Con{Runs{+a, +b}, +rest}:
+          +h => Mst.diff_some.con(
+            ~S,
+            ~fetch,
+            1n+q2,
+            s,
+            a,
+            b,
+            rest,
+            h,
+            Mst.diff_some(
+              ~S,
+              ~fetch,
+              1n+q2,
+              s,
+              rest
+            )(Shared.Bool.and_true_right(Bool.and(Pieces.ok(~S, ~fetch, 1n+q2, s, a), Pieces.ok(~S, ~fetch, 1n+q2, s, b)), Runs.ok(~S, ~fetch, 1n+q2, s, rest))(h)),
+            ps => hn => Mst.diff_some(~S, ~fetch, q2, s, ps)(hn)
+          )
+
+# the root of a tree that lists whole is ok
+def Mst.root_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  +bs: List<&2, Binding>
+) -> {Mst.range(~S, ~fetch, s, h, []) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {Pieces.ok(~S, ~fetch, 63n, s, Mst.root(h)) == True{}: Bool}:
+  match h:
+    case None{}:
+      e => {==}
+    case Some{+h1}:
+      e => Mst.range_list(
+        ~S,
+        ~fetch,
+        Some{h1},
+        63n,
+        s,
+        [],
+        Mst.depth(),
+        None{},
+        None{},
+        [],
+        bs,
+        {Pieces.ok(~S, ~fetch, 63n, s, Mst.root(Some{h1})) == True{}: Bool},
+        +a1 => b => e4 => eb => esl => Pieces.ok_sub(~S, ~fetch, 63n, s, Some{h1}, Mst.depth(), None{}, None{}, [], a1)({==})(esl)({==})
+      )(e)
+
+# a difference of two trees that list whole reads
+def Mst.diff_whole(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  +h2: Maybe<&2, Hashes.Hash>,
+  +bs: List<&2, Binding>,
+  +bs2: List<&2, Binding>
+) -> {Mst.range(~S, ~fetch, s, h, []) == Some{bs}: Maybe<&2, List<&2, Binding>>} -> {
+  Mst.range(~S, ~fetch, s, h2, []) == Some{bs2}: Maybe<&2, List<&2, Binding>>
+} -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Mst.diff(~S, ~fetch, s, h, h2)) == True{}: Bool}:
+  e1 => e2 => Mst.diff_some(
+    ~S,
+    ~fetch,
+    63n,
+    s,
+    [Runs{Mst.root(h), Mst.root(h2)}]
+  )(
+    Shared.Bool.and_both(
+      Bool.and(Pieces.ok(~S, ~fetch, 63n, s, Mst.root(h)), Pieces.ok(~S, ~fetch, 63n, s, Mst.root(h2))),
+      True{}
+    )(
+      Shared.Bool.and_both(Pieces.ok(~S, ~fetch, 63n, s, Mst.root(h)), Pieces.ok(~S, ~fetch, 63n, s, Mst.root(h2)))(Mst.root_ok(~S, ~fetch, s, h, bs)(e1))(
+        Mst.root_ok(~S, ~fetch, s, h2, bs2)(e2)
+      )
+    )({==})
+  )
+
+def Mst.canon(ty, fetch):
+  +s => +h1 => +h2 => +bs => e1 => e2 => Mst.range_list(
+    ~ty,
+    ~fetch,
+    h1,
+    63n,
+    s,
+    [],
+    Mst.depth(),
+    None{},
+    None{},
+    [],
+    bs,
+    {h1 == h2: Maybe<&2, Hashes.Hash>},
+    +a1 => b1 => e41 => eb1 => esl1 => Mst.range_list(
+      ~ty,
+      ~fetch,
+      h2,
+      63n,
+      s,
+      [],
+      Mst.depth(),
+      None{},
+      None{},
+      [],
+      bs,
+      {h1 == h2: Maybe<&2, Hashes.Hash>},
+      +a2 => b2 => e42 => eb2 => esl2 => Mst.canon_sub(
+        ~ty,
+        ~fetch,
+        63n,
+        s,
+        h1,
+        h2,
+        Mst.depth(),
+        None{},
+        None{},
+        bs,
+        Shared.Bool.or_true_right(Maybe.is_none(&2, Hashes.Hash, h1)),
+        Shared.Bool.or_true_right(Maybe.is_none(&2, Hashes.Hash, h2)),
+        ys1 => ys2 => l3 => p1 => p2 => j1 => j2 => hb3 => f1 => g1 => f2 => g2 => Mst.canon_node(
+          ~ty,
+          ~fetch,
+          63n,
+          s,
+          ys1,
+          ys2,
+          l3,
+          p1,
+          p2,
+          None{},
+          None{},
+          j1,
+          j2,
+          bs
+        )(hb3)(f1)(g1)(f2)(g2)
+      )(
+        Equal.trans(
+          Maybe<&2, List<&2, Binding>>,
+          Mst.sub_list(~ty, ~fetch, 63n, s, [], h1, Mst.depth(), None{}, None{}),
+          Some{a1},
+          Some{bs},
+          esl1,
+          Equal.cong(List<&2, Binding>, Maybe<&2, List<&2, Binding>>, x => Some{x}, a1, bs, Bindings.cat_nil(a1, b1, bs)(eb1)(e41))
+        )
+      )(
+        Equal.trans(
+          Maybe<&2, List<&2, Binding>>,
+          Mst.sub_list(~ty, ~fetch, 63n, s, [], h2, Mst.depth(), None{}, None{}),
+          Some{a2},
+          Some{bs},
+          esl2,
+          Equal.cong(List<&2, Binding>, Maybe<&2, List<&2, Binding>>, x => Some{x}, a2, bs, Bindings.cat_nil(a2, b2, bs)(eb2)(e42))
+        )
+      )
+    )(e2)
+  )(e1)
+
 # a listing holds exactly the bindings under its prefix, in order
 law Mst.lists:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   Laws.Range(S, Mst.ops(~S, ~fetch))
+
+def Mst.lists(ty, fetch):
+  +s => +h => +p => +bs => +e => (
+    Mst.lists_sorted(~ty, ~fetch, s, h, p, bs)(e),
+    +k => +v => Equal.trans(
+      Bool,
+      List.contains(~Binding, ~Binding.is_eq, bs, Binding{k, v}),
+      Bool.and(Key.leads(p, k), Pieces.has(~ty, ~fetch, Mst.depth(), s, Mst.root(h), k, v)),
+      Bool.and(Key.leads(p, k), Look.has(Mst.look(~ty, ~fetch, s, h, k), v)),
+      Mst.lists_has(~ty, ~fetch, Mst.depth(), s, p, Mst.root(h), bs, k, v)(e),
+      Equal.cong(
+        Bool,
+        Bool,
+        x => Bool.and(Key.leads(p, k), x),
+        Pieces.has(~ty, ~fetch, Mst.depth(), s, Mst.root(h), k, v),
+        Look.has(Mst.look(~ty, ~fetch, s, h, k), v),
+        Mst.lists_root(~ty, ~fetch, s, h, k, v)
+      )
+    )
+  )
 
 # a difference lists exactly the keys that read differently
 law Mst.differs:
@@ -1815,6 +8752,18 @@ law Mst.whole:
   for ~S: Data
   for ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>
   Laws.Whole(S, Mst.ops(~S, ~fetch))
+
+def Mst.whole(ty, fetch):
+  (
+    s => p => {==},
+    +s => +h => +bs => +e => (
+      +k => +m => +p => (
+        Mst.final_root(~ty, ~fetch, s, h, k)(Mst.final_list(~ty, ~fetch, Mst.depth(), s, Mst.root(h), bs, k)(e)),
+        (Mst.put_some(~ty, ~fetch, s, h, bs, k, m)(e), Mst.range_some(~ty, ~fetch, Mst.depth(), s, p, Mst.root(h), bs)(e))
+      ),
+      +h2 => +bs2 => e2 => Mst.diff_whole(~ty, ~fetch, s, h, h2, bs, bs2)(e)(e2)
+    )
+  )
 
 # a write keeps a whole tree whole
 law Mst.keeps_whole:
