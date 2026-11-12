@@ -17156,7 +17156,6 @@ def Affects.complete_law(
 law Node.affects_holds:
   for ~d: Led()
   for ~kern: Kern(d)
-  for ~rules: Kernel.Rules(d, kern)
   for l: L(d)
   for view: List<&2, Formats.Cond>
   for b: Branch
@@ -17166,7 +17165,7 @@ law Node.affects_holds:
     -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}
     -> {Touch.holds(~d, ~kern, l, view, x) == Some{True{}}: Maybe<&2, Bool>}
 
-def Node.affects_holds(d, kern, rules, l, view, b, ts, x):
+def Node.affects_holds(d, kern, l, view, b, ts, x):
   Affects.holds_law(~d, ~kern, l, view, b, ts, x)
 
 # and they are told about each of them: a touch that holds is among the
@@ -17174,7 +17173,6 @@ def Node.affects_holds(d, kern, rules, l, view, b, ts, x):
 law Node.affects_complete:
   for ~d: Led()
   for ~kern: Kern(d)
-  for ~rules: Kernel.Rules(d, kern)
   for l: L(d)
   for view: List<&2, Formats.Cond>
   for x: Touch
@@ -17183,5 +17181,5 @@ law Node.affects_complete:
     -> {Node.affects(~d, ~kern, l, view, Touch.branch(x)) == Some{ts}: Maybe<&2, List<&2, Touch>>}
     -> {List.contains(~Touch, ~Touch.is_eq, ts, x) == True{}: Bool}
 
-def Node.affects_complete(d, kern, rules, l, view, x, ts):
+def Node.affects_complete(d, kern, l, view, x, ts):
   Affects.complete_law(~d, ~kern, l, view, x, ts)
