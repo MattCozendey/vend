@@ -3990,12 +3990,144 @@ def Book.kind(~Q: Data, ~c: Codes.Codec(Q)) -> Ledger.Kind(Q):
     )
   )
 
+# Name.is_eq is True only for equal names
+def Name.is_eq_sound(a: Name, b: Name) -> {Name.is_eq(a, b) == True{}: Bool} -> {a == b: Name}:
+  ?TODO
+
+# an entry that a book in its one shape holds under n is of the name n
+def Book.get_named(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +n: Name, -e: Entry<Q>) -> {
+  Book.ok(~Q, ~c, b) == True{}: Bool
+} -> {Book.get(Q, b, n) == Some{e}: Maybe<&2, Entry<Q>>} -> {Entry.name(~Q, ~c, e) == n: Name}:
+  ?TODO
+
+# a maybe that is some is itself or another
+def Book.or_some(-A: Data, m: Maybe<&2, A>, -x: Maybe<&2, A>) -> {Maybe.is_some(&2, A, m) == True{}: Bool} -> {
+  m == Maybe.or(&2, A, m, x): Maybe<&2, A>
+}:
+  ?TODO
+
+# a maybe or some value is some
+def Book.or_some_right(-A: Data, m: Maybe<&2, A>, -x: A) -> {Maybe.is_some(&2, A, Maybe.or(&2, A, m, Some{x})) == True{}: Bool}:
+  ?TODO
+
+# what a book with e added holds under n
+def Book.get_add(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +e: Entry<Q>, +n: Name) -> {
+  Book.get(Q, Book.add(~Q, ~c, b, e), n)
+    == Maybe.or(&2, Entry<Q>, Book.get(Q, b, n), Shared.Maybe.when(Entry<Q>, Name.is_eq(Entry.name(~Q, ~c, e), n), u => Some{e})): Maybe<&2, Entry<Q>>
+}:
+  ?TODO
+
+# Book.get_drop once what the book b holds under n is known (mm)
+def Book.get_drop.at(~Q: Data, +b: Book<Q>, +n: Name, +m: Name, mm: Maybe<&2, Entry<Q>>) -> {Book.get(Q, b, n) == mm: Maybe<&2, Entry<Q>>} -> {
+  Book.get(Q, Book.drop.at(~Q, b, n, mm), m)
+    == Shared.Bool.when(Maybe<&2, Entry<Q>>, Name.is_eq(n, m), u => None{}, u => Book.get(Q, b, m)): Maybe<&2, Entry<Q>>
+}:
+  ?TODO
+
+# what a book without the entry of n holds under m
+def Book.get_drop(~Q: Data, +b: Book<Q>, +n: Name, +m: Name) -> {
+  Book.get(Q, Book.drop(~Q, b, n), m)
+    == Shared.Bool.when(Maybe<&2, Entry<Q>>, Name.is_eq(n, m), u => None{}, u => Book.get(Q, b, m)): Maybe<&2, Entry<Q>>
+}:
+  ?TODO
+
+# a book with e added holds e already
+def Book.add_idem(~Q: Data, ~c: Codes.Codec(Q), +b: Book<Q>, +e: Entry<Q>) -> {
+  Book.add(~Q, ~c, Book.add(~Q, ~c, b, e), e) == Book.add(~Q, ~c, b, e): Book<Q>
+}:
+  ?TODO
+
+# books in their one shape are equal when their books are: the proofs of the
+# shape are
+def Book.L.eq(~Q: Data, ~c: Codes.Codec(Q), +b1: Book<Q>, +b2: Book<Q>, e: {b1 == b2: Book<Q>}) -> @w1: {
+  Book.ok(~Q, ~c, b1) == True{}: Bool
+} -> @w2: {Book.ok(~Q, ~c, b2) == True{}: Bool} -> {Tuple{b1, w1} == Tuple{b2, w2}: Book.L(~Q, ~c)}:
+  ?TODO
+
+# two bits are equal when each is True when the other is
+def Book.iff(a: Bool, b: Bool) -> ({a == True{}: Bool} -> {b == True{}: Bool}) -> ({b == True{}: Bool} -> {a == True{}: Bool}) -> {a == b: Bool}:
+  ?TODO
+
+# an "any" whose hit is True is True
+def Book.any_hit(b: Bool, -f: Unit -> Bool) -> {b == True{}: Bool} -> {List.any.if(f, b) == True{}: Bool}:
+  ?TODO
+
+# an "any" whose rest is True is True
+def Book.any_rest(b: Bool, -r: Bool) -> {r == True{}: Bool} -> {List.any.if(u => r, b) == True{}: Bool}:
+  ?TODO
+
+# a maybe that is not some is none
+def Book.none_true(-A: Data, m: Maybe<&2, A>) -> {Maybe.is_some(&2, A, m) == False{}: Bool} -> {Maybe.is_none(&2, A, m) == True{}: Bool}:
+  ?TODO
+
+# a maybe that is none is None
+def Book.none_eq(-A: Data, m: Maybe<&2, A>) -> {Maybe.is_none(&2, A, m) == True{}: Bool} -> {m == None{}: Maybe<&2, A>}:
+  ?TODO
+
+# a value that a test gives is the value it was given
+def Book.when_some(-V: Data, b: Bool, -w: V, -v: V) -> {Shared.Maybe.when(V, b, u => Some{w}) == Some{v}: Maybe<&2, V>} -> {w == v: V}:
+  ?TODO
+
+# a value of the entries l of m that eq calls x is under a key of m
+def Book.vals_sound(~V: Data, ~eq: V -> V -> Bool, l: List<&2, Crits.Bind<V>>, +x: V, -m: Crits.Crit<V>) -> Crits.Crit.agrees(V, l, m) -> {
+  List.contains(~V, ~eq, Crits.Binds.values(V, l), x) == True{}: Bool
+} -> Exists(List<&2, U32>, k => Exists(V, v => {Crits.Crit.lookup(V, m, k) == Some{v}: Maybe<&2, V>} & {eq(v, x) == True{}: Bool})):
+  ?TODO
+
+# the values of the entries of m then rest hold what those of rest hold
+def Book.vals_mono(~V: Data, ~eq: V -> V -> Bool, m: Crits.Crit<V>, +rest: List<&2, Crits.Bind<V>>, +x: V) -> {List.contains(~V, ~eq, Crits.Binds.values(V, rest), x) == True{}: Bool} -> {
+  List.contains(~V, ~eq, Crits.Binds.values(V, Crits.Crit.entries.go(V, m, rest)), x) == True{}: Bool
+}:
+  ?TODO
+
+# a value of m under a key, that eq calls x, is among the values of the entries of m then rest
+def Book.vals_complete(~V: Data, ~eq: V -> V -> Bool, m: Crits.Crit<V>, +rest: List<&2, Crits.Bind<V>>, +k: List<&2, U32>, -v: V, +x: V) -> {
+  Crits.Crit.lookup(V, m, k) == Some{v}: Maybe<&2, V>
+} -> {eq(v, x) == True{}: Bool} -> {List.contains(~V, ~eq, Crits.Binds.values(V, Crits.Crit.entries.go(V, m, rest)), x) == True{}: Bool}:
+  ?TODO
+
+# Book.missing_sound once the key and the entry are found
+def Book.missing_sound.of(~Q: Data, ~c: Codes.Codec(Q), +bs: Book<Q>, +ws: {Book.ok(~Q, ~c, bs) == True{}: Bool}, +br: Book<Q>, +e: Entry<Q>, ex: Exists(List<&2, U32>, k => Exists(Entry<Q>, v => {Crits.Crit.lookup(Entry<Q>, Crits.Dict.crit(Entry<Q>, Crits.Dict.minus(~Entry<Q>, Book.entries(Q, bs), Book.entries(Q, br))), k) == Some{v}: Maybe<&2, Entry<Q>>} & {Entry.same(~Q, ~c)(v, e) == True{}: Bool}))) -> {
+  Bool.and(Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), Book.get(Q, bs, Entry.name(~Q, ~c, e)), Some{e}), Maybe.is_none(&2, Entry<Q>, Book.get(Q, br, Entry.name(~Q, ~c, e)))) == True{}: Bool
+}:
+  ?TODO
+
+# an entry that a book in its one shape sends to another it holds, and the other lacks
+def Book.missing_sound(~Q: Data, ~c: Codes.Codec(Q), +bs: Book<Q>, +ws: {Book.ok(~Q, ~c, bs) == True{}: Bool}, +br: Book<Q>, +e: Entry<Q>) -> {List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Book.missing(~Q, bs, br), e) == True{}: Bool} -> {
+  Bool.and(Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), Book.get(Q, bs, Entry.name(~Q, ~c, e)), Some{e}), Maybe.is_none(&2, Entry<Q>, Book.get(Q, br, Entry.name(~Q, ~c, e)))) == True{}: Bool
+}:
+  ?TODO
+
+# a book sends each entry that it holds and another lacks
+def Book.missing_complete(~Q: Data, ~c: Codes.Codec(Q), +bs: Book<Q>, +br: Book<Q>, +e: Entry<Q>) -> {Bool.and(Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), Book.get(Q, bs, Entry.name(~Q, ~c, e)), Some{e}), Maybe.is_none(&2, Entry<Q>, Book.get(Q, br, Entry.name(~Q, ~c, e)))) == True{}: Bool} -> {List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Book.missing(~Q, bs, br), e) == True{}: Bool}:
+  ?TODO
+
+# Book.law.missing of the books s and r
+def Book.law.missing.at(~Q: Data, ~c: Codes.Codec(Q), s: Book.L(~Q, ~c), r: Book.L(~Q, ~c), +e: Entry<Q>) -> {
+  List.contains(~Entry<Q>, ~Entry.same(~Q, ~c), Book.missing(~Q, Book.L.book(~Q, ~c, s), Book.L.book(~Q, ~c, r)), e)
+    == Bool.and(Shared.Maybe.is_eq(~Entry<Q>, ~Entry.same(~Q, ~c), Book.get(Q, Book.L.book(~Q, ~c, s), Entry.name(~Q, ~c, e)), Some{e}), Maybe.is_none(&2, Entry<Q>, Book.get(Q, Book.L.book(~Q, ~c, r), Entry.name(~Q, ~c, e)))): Bool
+}:
+  ?TODO
+
 # a new book holds nothing
 def Book.law.get_empty(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.GetEmpty(Q, Book.kind(~Q, ~c)):
+  n => {==}
+
+# Book.law.get_add of the book x
+def Book.law.get_add.at(~Q: Data, ~c: Codes.Codec(Q), x: Book.L(~Q, ~c), +e: Entry<Q>, +n: Name) -> {
+  Book.get(Q, Book.L.book(~Q, ~c, Book.L.add(~Q, ~c, x, e)), n)
+    == Maybe.or(&2, Entry<Q>, Book.get(Q, Book.L.book(~Q, ~c, x), n), Shared.Maybe.when(Entry<Q>, Name.is_eq(Entry.name(~Q, ~c, e), n), u => Some{e})): Maybe<&2, Entry<Q>>
+}:
   ?TODO
 
 # an add keeps what a book holds, and puts the entry under its name when nothing is there
 def Book.law.get_add(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.GetAdd(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# Book.law.get_named of the book x
+def Book.law.get_named.at(~Q: Data, ~c: Codes.Codec(Q), x: Book.L(~Q, ~c), +n: Name, -e: Entry<Q>) -> {Book.get(Q, Book.L.book(~Q, ~c, x), n) == Some{e}: Maybe<&2, Entry<Q>>} -> {
+  Entry.name(~Q, ~c, e) == n: Name
+}:
   ?TODO
 
 # a book holds each entry under its own name
@@ -4004,6 +4136,12 @@ def Book.law.get_named(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.GetNamed(Q, c, Book
 
 # two entries that do not clash give one book in either order
 def Book.law.add_comm(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.AddComm(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# Book.law.add_twice of the book x
+def Book.law.add_twice.at(~Q: Data, ~c: Codes.Codec(Q), x: Book.L(~Q, ~c), +e: Entry<Q>) -> {
+  Book.L.add(~Q, ~c, Book.L.add(~Q, ~c, x, e), e) == Book.L.add(~Q, ~c, x, e): Book.L(~Q, ~c)
+}:
   ?TODO
 
 # an entry added twice to a book is added once
@@ -4028,6 +4166,13 @@ def Book.law.heights(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.Heights(Q, c, Book.ki
 
 # the requests of an author in a book are those it holds by the author
 def Book.law.asks(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.Asks(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# Book.law.drop of the book x
+def Book.law.drop.at(~Q: Data, ~c: Codes.Codec(Q), x: Book.L(~Q, ~c), +n: Name, +m: Name) -> {
+  Book.get(Q, Book.L.book(~Q, ~c, Book.L.drop(~Q, ~c, x, n)), m)
+    == Shared.Bool.when(Maybe<&2, Entry<Q>>, Name.is_eq(n, m), u => None{}, u => Book.get(Q, Book.L.book(~Q, ~c, x), m)): Maybe<&2, Entry<Q>>
+}:
   ?TODO
 
 # a book without the entry of a name holds nothing there, and all else it held
