@@ -25362,7 +25362,15 @@ def Bool.or_shuffle(a: Bool, b: Bool, c: Bool, -d: Bool) -> {
 
 # a or b or c or d, regrouped
 def Bool.or_assoc4(a: Bool, b: Bool, c: Bool, -d: Bool) -> {Bool.or(a, Bool.or(b, Bool.or(c, d))) == Bool.or(Bool.or(a, Bool.or(b, c)), d): Bool}:
-  ?TODO
+  match a:
+    case False{}:
+      match b:
+        case False{}:
+          {==}
+        case True{}:
+          {==}
+    case True{}:
+      {==}
 
 # the keys of two rounds, one after the other
 def Round.keys_append(a: Round, b: Round) -> {
