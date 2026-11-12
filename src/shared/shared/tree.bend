@@ -9038,6 +9038,362 @@ def Pieces.value_left(
         Pieces.value_left(~S, ~fetch, f, s, rest, qs, k)(h)
       )
 
+# a Bool, by its two cases
+def Bool.cases(b: Bool, -P: Type, kt: {b == True{}: Bool} -> P, kf: {b == False{}: Bool} -> P) -> P:
+  match b:
+    case True{}:
+      kt({==})
+    case False{}:
+      kf({==})
+
+# a Bool that is not True is False
+def Bool.false_of(b: Bool, no: {b == True{}: Bool} -> Empty) -> {b == False{}: Bool}:
+  match b:
+    case True{}:
+      Empty.absurd({True{} == False{}: Bool}, no({==}))
+    case False{}:
+      {==}
+
+# Piece.disjoint for a binding x, by the lower bound lo of the subtree y
+def Piece.disjoint.bs(+k: List<&2, U32>, lo: Maybe<&2, List<&2, U32>>, -hi: Maybe<&2, List<&2, U32>>, +key: List<&2, U32>) -> {
+  Bound.at_most(k, lo) == True{}: Bool
+} -> {Bool.and(Bound.after(lo, key), Bound.before(key, hi)) == True{}: Bool} -> {Shared.List.is_eq(~U32, ~U32.is_eq, k, key) == False{}: Bool}:
+  match lo:
+    case None{}:
+      hb => hc => Empty.absurd({Shared.List.is_eq(~U32, ~U32.is_eq, k, key) == False{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{+a}:
+      hb => hc => Key.lt_ne(k, key)(Key.le_lt(k, a, key)(hb)(Shared.Bool.and_true_left(Key.is_lt(a, key), Bound.before(key, hi))(hc)))
+
+# Piece.disjoint for a subtree x before a binding, by the upper bound hi of x
+def Piece.disjoint.sb(+lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>, +k: List<&2, U32>, +key: List<&2, U32>) -> {
+  Bound.at_least(hi, k) == True{}: Bool
+} -> {Shared.List.is_eq(~U32, ~U32.is_eq, k, key) == True{}: Bool} -> {Bool.and(Bound.after(lo, key), Bound.before(key, hi)) == False{}: Bool}:
+  match hi:
+    case None{}:
+      hb => hc => Empty.absurd({Bool.and(Bound.after(lo, key), True{}) == False{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{+b}:
+      hb => hc =>
+        %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), k, key)(hc): {Bool.and(Bound.after(lo, _), Key.is_lt(_, b)) == False{}: Bool}
+        %Equal.sym(Bool, Key.is_lt(k, b), False{}, Shared.Bool.not_true(Key.is_lt(k, b))(hb)): {Bool.and(Bound.after(lo, k), _) == False{}: Bool}
+        Shared.Bool.and_false_right(Bound.after(lo, k))
+
+# Piece.disjoint for two subtrees, by the upper bound of x and the lower one
+# of y
+def Piece.disjoint.ss(
+  +lo1: Maybe<&2, List<&2, U32>>,
+  hi1: Maybe<&2, List<&2, U32>>,
+  lo2: Maybe<&2, List<&2, U32>>,
+  -hi2: Maybe<&2, List<&2, U32>>,
+  +key: List<&2, U32>
+) -> {Bound.ends_before(hi1, lo2) == True{}: Bool} -> {Bool.and(Bound.after(lo2, key), Bound.before(key, hi2)) == True{}: Bool} -> {
+  Bool.and(Bound.after(lo1, key), Bound.before(key, hi1)) == False{}: Bool
+}:
+  match hi1 lo2:
+    case Some{+b} Some{+a}:
+      hb => hc =>
+        %Equal.sym(
+          Bool,
+          Key.is_lt(key, b),
+          False{},
+          Key.lt_asym(b, key)(Key.le_lt(b, a, key)(hb)(Shared.Bool.and_true_left(Key.is_lt(a, key), Bound.before(key, hi2))(hc)))
+        ): {Bool.and(Bound.after(lo1, key), _) == False{}: Bool}
+        Shared.Bool.and_false_right(Bound.after(lo1, key))
+    case None{} y:
+      hb => hc => Empty.absurd({Bool.and(Bound.after(lo1, key), True{}) == False{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{+b} None{}:
+      hb => hc => Empty.absurd({Bool.and(Bound.after(lo1, key), Key.is_lt(key, b)) == False{}: Bool}, Shared.Bool.false_ne_true(hb))
+
+# a key that a piece y may hold, the piece x before y may not hold
+def Piece.disjoint(x: Piece, y: Piece, +key: List<&2, U32>) -> {Piece.before(x, y) == True{}: Bool} -> {Piece.covers(y, key) == True{}: Bool} -> {
+  Piece.covers(x, key) == False{}: Bool
+}:
+  match x y:
+    case Piece.Bind{+k1, v1} Piece.Bind{+k2, v2}:
+      hb => hc =>
+        %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), k2, key)(hc): {Shared.List.is_eq(~U32, ~U32.is_eq, k1, _) == False{}: Bool}
+        Key.lt_ne(k1, k2)(hb)
+    case Piece.Bind{+k, v} Piece.Sub{h, u, lo, hi}:
+      hb => hc => Piece.disjoint.bs(k, lo, hi, key)(hb)(hc)
+    case Piece.Sub{h, u, lo, hi} Piece.Bind{+k, v}:
+      hb => hc => Piece.disjoint.sb(lo, hi, k, key)(hb)(hc)
+    case Piece.Sub{h1, u1, lo1, hi1} Piece.Sub{h2, u2, lo2, hi2}:
+      hb => hc => Piece.disjoint.ss(lo1, hi1, lo2, hi2, key)(hb)(hc)
+
+# Piece.below_bind for a subtree, by its upper bound hi
+def Piece.below_bind.s(+lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>, +k1: List<&2, U32>, +key: List<&2, U32>) -> {
+  Bound.at_least(hi, k1) == True{}: Bool
+} -> {Bool.and(Bound.after(lo, key), Bound.before(key, hi)) == True{}: Bool} -> {Key.is_lt(key, k1) == True{}: Bool}:
+  match hi:
+    case None{}:
+      hb => hc => Empty.absurd({Key.is_lt(key, k1) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{+b}:
+      hb => hc => Key.lt_le(key, b, k1)(Shared.Bool.and_true_right(Bound.after(lo, key), Key.is_lt(key, b))(hc))(hb)
+
+# a key that a piece before the binding of k1 may hold is before k1
+def Piece.below_bind(x: Piece, +k1: List<&2, U32>, -v1: List<&2, U32>, +key: List<&2, U32>) -> {
+  Piece.before(x, Piece.Bind{k1, v1}) == True{}: Bool
+} -> {Piece.covers(x, key) == True{}: Bool} -> {Key.is_lt(key, k1) == True{}: Bool}:
+  match x:
+    case Piece.Bind{+k, v}:
+      hb => hc =>
+        %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), k, key)(hc): {Key.is_lt(_, k1) == True{}: Bool}
+        hb
+    case Piece.Sub{h, u, lo, hi}:
+      hb => hc => Piece.below_bind.s(lo, hi, k1, key)(hb)(hc)
+
+# Piece.above_bind for a subtree, by its lower bound lo
+def Piece.above_bind.s(lo: Maybe<&2, List<&2, U32>>, -hi: Maybe<&2, List<&2, U32>>, +k1: List<&2, U32>, +key: List<&2, U32>) -> {
+  Bound.at_most(k1, lo) == True{}: Bool
+} -> {Bool.and(Bound.after(lo, key), Bound.before(key, hi)) == True{}: Bool} -> {Key.is_lt(k1, key) == True{}: Bool}:
+  match lo:
+    case None{}:
+      hb => hc => Empty.absurd({Key.is_lt(k1, key) == True{}: Bool}, Shared.Bool.false_ne_true(hb))
+    case Some{+a}:
+      hb => hc => Key.le_lt(k1, a, key)(hb)(Shared.Bool.and_true_left(Key.is_lt(a, key), Bound.before(key, hi))(hc))
+
+# a key that a piece after the binding of k1 may hold is after k1
+def Piece.above_bind(+k1: List<&2, U32>, -v1: List<&2, U32>, y: Piece, +key: List<&2, U32>) -> {
+  Piece.before(Piece.Bind{k1, v1}, y) == True{}: Bool
+} -> {Piece.covers(y, key) == True{}: Bool} -> {Key.is_lt(k1, key) == True{}: Bool}:
+  match y:
+    case Piece.Bind{+k, v}:
+      hb => hc =>
+        %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), k, key)(hc): {Key.is_lt(k1, _) == True{}: Bool}
+        hb
+    case Piece.Sub{h, u, lo, hi}:
+      hb => hc => Piece.above_bind.s(lo, hi, k1, key)(hb)(hc)
+
+# pieces after a piece that may hold k may not hold it
+def Pieces.after_all_miss(+x: Piece, ps: List<&2, Piece>, +key: List<&2, U32>) -> {Piece.covers(x, key) == True{}: Bool} -> {
+  Pieces.after_all(x, ps) == True{}: Bool
+} -> {Pieces.covers(ps, key) == False{}: Bool}:
+  match ps:
+    case Nil{}:
+      hx => ha => {==}
+    case Con{+y, +rest}:
+      +hx => +ha =>
+        %Equal.sym(
+          Bool,
+          Piece.covers(y, key),
+          False{},
+          Bool.false_of(
+            Piece.covers(y, key),
+            cy => Shared.Bool.true_ne_false(
+              Equal.trans(
+                Bool,
+                True{},
+                Piece.covers(x, key),
+                False{},
+                Equal.sym(Bool, Piece.covers(x, key), True{}, hx),
+                Piece.disjoint(x, y, key)(Shared.Bool.and_true_left(Piece.before(x, y), Pieces.after_all(x, rest))(ha))(cy)
+              )
+            )
+          )
+        ): {Bool.or(_, Pieces.covers(rest, key)) == False{}: Bool}
+        Pieces.after_all_miss(x, rest, key)(hx)(Shared.Bool.and_true_right(Piece.before(x, y), Pieces.after_all(x, rest))(ha))
+
+# each piece of xs comes before each piece of ys
+def Pieces.before_all(xs: List<&2, Piece>, +ys: List<&2, Piece>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{+x, rest}:
+      Bool.and(Pieces.after_all(x, ys), Pieces.before_all(rest, ys))
+
+# pieces after others may not hold a key that the others may hold
+def Pieces.before_miss(xs: List<&2, Piece>, +ys: List<&2, Piece>, +key: List<&2, U32>) -> {Pieces.before_all(xs, ys) == True{}: Bool} -> {
+  Pieces.covers(xs, key) == True{}: Bool
+} -> {Pieces.covers(ys, key) == False{}: Bool}:
+  match xs:
+    case Nil{}:
+      hb => hc => Empty.absurd({Pieces.covers(ys, key) == False{}: Bool}, Shared.Bool.false_ne_true(hc))
+    case Con{+x, +rest}:
+      +hb => hc => Bool.cases(
+        Piece.covers(x, key),
+        {Pieces.covers(ys, key) == False{}: Bool},
+        cx => Pieces.after_all_miss(x, ys, key)(cx)(Shared.Bool.and_true_left(Pieces.after_all(x, ys), Pieces.before_all(rest, ys))(hb)),
+        cx => Pieces.before_miss(
+          rest,
+          ys,
+          key
+        )(Shared.Bool.and_true_right(Pieces.after_all(x, ys), Pieces.before_all(rest, ys))(hb))(
+          Equal.trans(
+            Bool,
+            Pieces.covers(rest, key),
+            Bool.or(Piece.covers(x, key), Pieces.covers(rest, key)),
+            True{},
+            Equal.cong(Bool, Bool, t => Bool.or(t, Pieces.covers(rest, key)), False{}, Piece.covers(x, key), Equal.sym(Bool, Piece.covers(x, key), False{}, cx)),
+            hc
+          )
+        )
+      )
+
+# pieces before others may not hold a key that the others may hold
+def Pieces.after_miss(+xs: List<&2, Piece>, +ys: List<&2, Piece>, +key: List<&2, U32>) -> {Pieces.before_all(xs, ys) == True{}: Bool} -> {
+  Pieces.covers(ys, key) == True{}: Bool
+} -> {Pieces.covers(xs, key) == False{}: Bool}:
+  +hb => +hc => Bool.false_of(
+    Pieces.covers(xs, key),
+    cx => Shared.Bool.true_ne_false(
+      Equal.trans(Bool, True{}, Pieces.covers(ys, key), False{}, Equal.sym(Bool, Pieces.covers(ys, key), True{}, hc), Pieces.before_miss(xs, ys, key)(hb)(cx))
+    )
+  )
+
+# each piece after all of a, then all of b, is after all of a
+def Pieces.after_all_left(+x: Piece, a: List<&2, Piece>, +b: List<&2, Piece>) -> {
+  Pieces.after_all(x, List.append(&2, Piece, a, b)) == True{}: Bool
+} -> {Pieces.after_all(x, a) == True{}: Bool}:
+  match a:
+    case Nil{}:
+      h => {==}
+    case Con{+y, +rest}:
+      +h => Shared.Bool.and_both(
+        Piece.before(x, y),
+        Pieces.after_all(x, rest)
+      )(Shared.Bool.and_true_left(Piece.before(x, y), Pieces.after_all(x, List.append(&2, Piece, rest, b)))(h))(
+        Pieces.after_all_left(x, rest, b)(Shared.Bool.and_true_right(Piece.before(x, y), Pieces.after_all(x, List.append(&2, Piece, rest, b)))(h))
+      )
+
+# each piece after all of a, then all of b, is after all of b
+def Pieces.after_all_right(+x: Piece, a: List<&2, Piece>, +b: List<&2, Piece>) -> {
+  Pieces.after_all(x, List.append(&2, Piece, a, b)) == True{}: Bool
+} -> {Pieces.after_all(x, b) == True{}: Bool}:
+  match a:
+    case Nil{}:
+      h => h
+    case Con{+y, +rest}:
+      h => Pieces.after_all_right(x, rest, b)(Shared.Bool.and_true_right(Piece.before(x, y), Pieces.after_all(x, List.append(&2, Piece, rest, b)))(h))
+
+# a sorted run of a, then b: a is sorted
+def Pieces.sorted_left(a: List<&2, Piece>, +b: List<&2, Piece>) -> {Pieces.sorted(List.append(&2, Piece, a, b)) == True{}: Bool} -> {
+  Pieces.sorted(a) == True{}: Bool
+}:
+  match a:
+    case Nil{}:
+      h => {==}
+    case Con{+x, +rest}:
+      +h => Shared.Bool.and_both(
+        Pieces.after_all(x, rest),
+        Pieces.sorted(rest)
+      )(
+        Pieces.after_all_left(
+          x,
+          rest,
+          b
+        )(Shared.Bool.and_true_left(Pieces.after_all(x, List.append(&2, Piece, rest, b)), Pieces.sorted(List.append(&2, Piece, rest, b)))(h))
+      )(
+        Pieces.sorted_left(
+          rest,
+          b
+        )(Shared.Bool.and_true_right(Pieces.after_all(x, List.append(&2, Piece, rest, b)), Pieces.sorted(List.append(&2, Piece, rest, b)))(h))
+      )
+
+# a sorted run of a, then b: b is sorted
+def Pieces.sorted_right(a: List<&2, Piece>, +b: List<&2, Piece>) -> {Pieces.sorted(List.append(&2, Piece, a, b)) == True{}: Bool} -> {
+  Pieces.sorted(b) == True{}: Bool
+}:
+  match a:
+    case Nil{}:
+      h => h
+    case Con{+x, +rest}:
+      h => Pieces.sorted_right(
+        rest,
+        b
+      )(Shared.Bool.and_true_right(Pieces.after_all(x, List.append(&2, Piece, rest, b)), Pieces.sorted(List.append(&2, Piece, rest, b)))(h))
+
+# a sorted run of a, then b: a is before b
+def Pieces.sorted_split(a: List<&2, Piece>, +b: List<&2, Piece>) -> {Pieces.sorted(List.append(&2, Piece, a, b)) == True{}: Bool} -> {
+  Pieces.before_all(a, b) == True{}: Bool
+}:
+  match a:
+    case Nil{}:
+      h => {==}
+    case Con{+x, +rest}:
+      +h => Shared.Bool.and_both(
+        Pieces.after_all(x, b),
+        Pieces.before_all(rest, b)
+      )(
+        Pieces.after_all_right(
+          x,
+          rest,
+          b
+        )(Shared.Bool.and_true_left(Pieces.after_all(x, List.append(&2, Piece, rest, b)), Pieces.sorted(List.append(&2, Piece, rest, b)))(h))
+      )(
+        Pieces.sorted_split(
+          rest,
+          b
+        )(Shared.Bool.and_true_right(Pieces.after_all(x, List.append(&2, Piece, rest, b)), Pieces.sorted(List.append(&2, Piece, rest, b)))(h))
+      )
+
+# a key that pieces before the binding of k1 may hold is before k1
+def Pieces.below_all(xs: List<&2, Piece>, +k1: List<&2, U32>, +v1: List<&2, U32>, +ys: List<&2, Piece>, +key: List<&2, U32>) -> {
+  Pieces.before_all(xs, Piece.Bind{k1, v1} <> ys) == True{}: Bool
+} -> {Pieces.covers(xs, key) == True{}: Bool} -> {Key.is_lt(key, k1) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      hb => hc => Empty.absurd({Key.is_lt(key, k1) == True{}: Bool}, Shared.Bool.false_ne_true(hc))
+    case Con{+x, +rest}:
+      +hb => hc => Bool.cases(
+        Piece.covers(x, key),
+        {Key.is_lt(key, k1) == True{}: Bool},
+        cx => Piece.below_bind(
+          x,
+          k1,
+          v1,
+          key
+        )(
+          Shared.Bool.and_true_left(
+            Piece.before(x, Piece.Bind{k1, v1}),
+            Pieces.after_all(x, ys)
+          )(Shared.Bool.and_true_left(Pieces.after_all(x, Piece.Bind{k1, v1} <> ys), Pieces.before_all(rest, Piece.Bind{k1, v1} <> ys))(hb))
+        )(cx),
+        cx => Pieces.below_all(
+          rest,
+          k1,
+          v1,
+          ys,
+          key
+        )(Shared.Bool.and_true_right(Pieces.after_all(x, Piece.Bind{k1, v1} <> ys), Pieces.before_all(rest, Piece.Bind{k1, v1} <> ys))(hb))(
+          Equal.trans(
+            Bool,
+            Pieces.covers(rest, key),
+            Bool.or(Piece.covers(x, key), Pieces.covers(rest, key)),
+            True{},
+            Equal.cong(Bool, Bool, t => Bool.or(t, Pieces.covers(rest, key)), False{}, Piece.covers(x, key), Equal.sym(Bool, Piece.covers(x, key), False{}, cx)),
+            hc
+          )
+        )
+      )
+
+# a key that pieces after the binding of k1 may hold is after k1
+def Pieces.above_all(+k1: List<&2, U32>, +v1: List<&2, U32>, ys: List<&2, Piece>, +key: List<&2, U32>) -> {
+  Pieces.after_all(Piece.Bind{k1, v1}, ys) == True{}: Bool
+} -> {Pieces.covers(ys, key) == True{}: Bool} -> {Key.is_lt(k1, key) == True{}: Bool}:
+  match ys:
+    case Nil{}:
+      hb => hc => Empty.absurd({Key.is_lt(k1, key) == True{}: Bool}, Shared.Bool.false_ne_true(hc))
+    case Con{+y, +rest}:
+      +hb => hc => Bool.cases(
+        Piece.covers(y, key),
+        {Key.is_lt(k1, key) == True{}: Bool},
+        cy => Piece.above_bind(k1, v1, y, key)(Shared.Bool.and_true_left(Piece.before(Piece.Bind{k1, v1}, y), Pieces.after_all(Piece.Bind{k1, v1}, rest))(hb))(cy),
+        cy => Pieces.above_all(
+          k1,
+          v1,
+          rest,
+          key
+        )(Shared.Bool.and_true_right(Piece.before(Piece.Bind{k1, v1}, y), Pieces.after_all(Piece.Bind{k1, v1}, rest))(hb))(
+          Equal.trans(
+            Bool,
+            Pieces.covers(rest, key),
+            Bool.or(Piece.covers(y, key), Pieces.covers(rest, key)),
+            True{},
+            Equal.cong(Bool, Bool, t => Bool.or(t, Pieces.covers(rest, key)), False{}, Piece.covers(y, key), Equal.sym(Bool, Piece.covers(y, key), False{}, cy)),
+            hc
+          )
+        )
+      )
+
 def Mst.canon(ty, fetch):
   +s => +h1 => +h2 => +bs => e1 => e2 => Mst.range_list(
     ~ty,
