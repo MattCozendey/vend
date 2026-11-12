@@ -14224,6 +14224,483 @@ def Mst.del_ok.gt(
         )
       )
 
+# a delete of k at the node of the hash h, by how its level compares to the
+# level of k (c)
+def Mst.del_ok.node(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  c: Cmp,
+  +s: S,
+  +p: Nat,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +ll: Nat,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +en: {Mst.node.in(~S, ~fetch, s, h, Room{ur, lo, hi}) == Some{Node{l, left, xs}}: Maybe<&2, Node>},
+  +el: {Key.level(k) == ll: Nat},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  ih: @ur2: Nat -> @lo2: Maybe<&2, List<&2, U32>> -> @hi2: Maybe<&2, List<&2, U32>> -> @m2: Maybe<&2, Hashes.Hash> -> {Key.level(k) == ll: Nat} -> {
+    Bound.after(lo2, k) == True{}: Bool
+  } -> {Bound.before(k, hi2) == True{}: Bool} -> Mst.InsOk(
+    ~S,
+    ~fetch,
+    s,
+    ur2,
+    lo2,
+    hi2,
+    m2,
+    k,
+    None{},
+    Mst.delete(~S, ~fetch, p, s, Room{ur2, lo2, hi2}, m2, k, ll)
+  )
+) -> Mst.InsOk(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  None{},
+  Mst.delete.node(
+    c,
+    h,
+    l,
+    left,
+    xs,
+    lo,
+    hi,
+    k,
+    r1 => r2 => x => y => Mst.merge(~S, ~fetch, p, s, r1, r2, x, y),
+    r2 => c2 => Mst.delete(~S, ~fetch, p, s, r2, c2, k, ll),
+    r2 => c2 => Mst.look.go(~S, ~fetch, p, s, r2, c2, k)
+  )
+):
+  match c:
+    case LT{}:
+      Mst.del_ok.lacks(
+        ~S,
+        ~fetch,
+        Mst.pick(xs, left, l, lo, hi, k),
+        s,
+        p,
+        h,
+        ur,
+        lo,
+        hi,
+        k,
+        l,
+        left,
+        xs,
+        {==},
+        Mst.pick_up(xs, left, l, lo, hi, k),
+        Mst.in_node(~S, ~fetch, s, h, Room{ur, lo, hi}, Node{l, left, xs})(en),
+        Mst.in_open(~S, ~fetch, s, h, Room{ur, lo, hi}, Node{l, left, xs})(en)
+      )
+    case EQ{}:
+      %Equal.sym(
+        Part,
+        Mst.part(xs, left, k, []),
+        Part{List.reverse.go(&2, Item, Mst.pre(xs, k), []), Mst.last(Mst.pre(xs, k), left), Mst.post(xs, k)},
+        Mst.part_eq(xs, left, k, [])
+      ): Mst.InsOk(
+        ~S,
+        ~fetch,
+        s,
+        ur,
+        lo,
+        hi,
+        Some{h},
+        k,
+        None{},
+        Mst.delete.here(
+          h,
+          l,
+          left,
+          k,
+          _,
+          lo,
+          hi,
+          r1 => r2 => x => y => Mst.merge(~S, ~fetch, p, s, r1, r2, x, y),
+          r2 => c2 => Mst.look.go(~S, ~fetch, p, s, r2, c2, k)
+        )
+      )
+      +eN = Equal.trans(
+        Maybe<&2, Node>,
+        Mst.node(~S, ~fetch, s, h),
+        Some{Node{l, left, xs}},
+        Some{Node{l, left, List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k))}},
+        Mst.in_node(~S, ~fetch, s, h, Room{ur, lo, hi}, Node{l, left, xs})(en),
+        Equal.cong(
+          List<&2, Item>,
+          Maybe<&2, Node>,
+          ys => Some{Node{l, left, ys}},
+          xs,
+          List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k)),
+          Equal.sym(List<&2, Item>, List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k)), xs, Mst.pre_post(xs, k))
+        )
+      )
+      +oN = Equal.trans(
+        Bool,
+        Mst.opens(Node{l, left, List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k))}, Room{ur, lo, hi}),
+        Mst.opens(Node{l, left, xs}, Room{ur, lo, hi}),
+        True{},
+        Equal.cong(
+          List<&2, Item>,
+          Bool,
+          ys => Mst.opens(Node{l, left, ys}, Room{ur, lo, hi}),
+          List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k)),
+          xs,
+          Mst.pre_post(xs, k)
+        ),
+        Mst.in_open(~S, ~fetch, s, h, Room{ur, lo, hi}, Node{l, left, xs})(en)
+      )
+      Mst.del_ok.here(
+        ~S,
+        ~fetch,
+        Mst.post(xs, k),
+        s,
+        p,
+        h,
+        ur,
+        lo,
+        hi,
+        k,
+        l,
+        left,
+        Mst.pre(xs, k),
+        eN,
+        oN,
+        Mst.pre_all_lt(xs, k),
+        Mst.post_head(xs, k),
+        a,
+        bb
+      )
+    case GT{}:
+      %Equal.sym(
+        Part,
+        Mst.part(xs, left, k, []),
+        Part{List.reverse.go(&2, Item, Mst.pre(xs, k), []), Mst.last(Mst.pre(xs, k), left), Mst.post(xs, k)},
+        Mst.part_eq(xs, left, k, [])
+      ): Mst.InsOk(
+        ~S,
+        ~fetch,
+        s,
+        ur,
+        lo,
+        hi,
+        Some{h},
+        k,
+        None{},
+        Shared.Bool.when(
+          Maybe<&2, Edit>,
+          Part.hits(_, k),
+          u => None{},
+          u => Mst.with_gap(l, left, _, Mst.delete(~S, ~fetch, p, s, Part.room(_, l, lo, hi), Part.gap(_), k, ll))
+        )
+      )
+      +eN = Equal.trans(
+        Maybe<&2, Node>,
+        Mst.node(~S, ~fetch, s, h),
+        Some{Node{l, left, xs}},
+        Some{Node{l, left, List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k))}},
+        Mst.in_node(~S, ~fetch, s, h, Room{ur, lo, hi}, Node{l, left, xs})(en),
+        Equal.cong(
+          List<&2, Item>,
+          Maybe<&2, Node>,
+          ys => Some{Node{l, left, ys}},
+          xs,
+          List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k)),
+          Equal.sym(List<&2, Item>, List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k)), xs, Mst.pre_post(xs, k))
+        )
+      )
+      +oN = Equal.trans(
+        Bool,
+        Mst.opens(Node{l, left, List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k))}, Room{ur, lo, hi}),
+        Mst.opens(Node{l, left, xs}, Room{ur, lo, hi}),
+        True{},
+        Equal.cong(
+          List<&2, Item>,
+          Bool,
+          ys => Mst.opens(Node{l, left, ys}, Room{ur, lo, hi}),
+          List.append(&2, Item, Mst.pre(xs, k), Mst.post(xs, k)),
+          xs,
+          Mst.pre_post(xs, k)
+        ),
+        Mst.in_open(~S, ~fetch, s, h, Room{ur, lo, hi}, Node{l, left, xs})(en)
+      )
+      Mst.del_ok.gt(
+        ~S,
+        ~fetch,
+        Part.hits(Part{List.reverse.go(&2, Item, Mst.pre(xs, k), []), Mst.last(Mst.pre(xs, k), left), Mst.post(xs, k)}, k),
+        s,
+        p,
+        h,
+        ur,
+        lo,
+        hi,
+        k,
+        ll,
+        l,
+        left,
+        Mst.pre(xs, k),
+        Mst.post(xs, k),
+        {==},
+        eN,
+        oN,
+        Mst.pre_all_lt(xs, k),
+        Mst.post_head(xs, k),
+        el,
+        a,
+        bb,
+        ih
+      )
+
+# a delete of k at the node na of the hash h
+def Mst.del_ok.at(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  na: Maybe<&2, Node>,
+  +s: S,
+  +p: Nat,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +ll: Nat,
+  +en: {Mst.node.in(~S, ~fetch, s, h, Room{ur, lo, hi}) == na: Maybe<&2, Node>},
+  +el: {Key.level(k) == ll: Nat},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  ih: @ur2: Nat -> @lo2: Maybe<&2, List<&2, U32>> -> @hi2: Maybe<&2, List<&2, U32>> -> @m2: Maybe<&2, Hashes.Hash> -> {Key.level(k) == ll: Nat} -> {
+    Bound.after(lo2, k) == True{}: Bool
+  } -> {Bound.before(k, hi2) == True{}: Bool} -> Mst.InsOk(
+    ~S,
+    ~fetch,
+    s,
+    ur2,
+    lo2,
+    hi2,
+    m2,
+    k,
+    None{},
+    Mst.delete(~S, ~fetch, p, s, Room{ur2, lo2, hi2}, m2, k, ll)
+  )
+) -> Mst.InsOk(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  None{},
+  Mst.delete.at(
+    na,
+    h,
+    Room{ur, lo, hi},
+    k,
+    ll,
+    r1 => r2 => x => y => Mst.merge(~S, ~fetch, p, s, r1, r2, x, y),
+    r2 => c2 => Mst.delete(~S, ~fetch, p, s, r2, c2, k, ll),
+    r2 => c2 => Mst.look.go(~S, ~fetch, p, s, r2, c2, k)
+  )
+):
+  match na:
+    case None{}:
+      Unit{}
+    case Some{Node{+l, +left, +xs}}:
+      Mst.del_ok.node(~S, ~fetch, Nat.cmp(l, ll), s, p, h, ur, lo, hi, k, ll, l, left, xs, en, el, a, bb, ih)
+
+# a delete of k from a tree in its room around k reads as Mst.InsOk says
+def Mst.del_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  m: Maybe<&2, Hashes.Hash>,
+  +s: S,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +ll: Nat
+) -> {Key.level(k) == ll: Nat} -> {Bound.after(lo, k) == True{}: Bool} -> {Bound.before(k, hi) == True{}: Bool} -> Mst.InsOk(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  m,
+  k,
+  None{},
+  Mst.delete(~S, ~fetch, f, s, Room{ur, lo, hi}, m, k, ll)
+):
+  match f m:
+    case 0n None{}:
+      +el => +a => +bb => Mst.del_ok.none(~S, ~fetch, s, ur, lo, hi, k)
+    case 1n+q None{}:
+      +el => +a => +bb => Mst.del_ok.none(~S, ~fetch, s, ur, lo, hi, k)
+    case 0n Some{h}:
+      +el => +a => +bb => Unit{}
+    case 1n+(+p) Some{+h}:
+      +el => +a => +bb => Mst.del_ok.at(
+        ~S,
+        ~fetch,
+        Mst.node.in(~S, ~fetch, s, h, Room{ur, lo, hi}),
+        s,
+        p,
+        h,
+        ur,
+        lo,
+        hi,
+        k,
+        ll,
+        {==},
+        el,
+        a,
+        bb,
+        +ur2 => +lo2 => +hi2 => +m2 => Mst.del_ok(~S, ~fetch, p, m2, s, ur2, lo2, hi2, k, ll)
+      )
+
+# the number of zero groups of 5 bits at the top of x, f groups at most, is at
+# most f
+def Mst.zeros_le(+f: Nat, +x: U32) -> {Nat.is_le(Level.zeros(f, x), f) == True{}: Bool}:
+  match f:
+    case 0n:
+      {==}
+    case 1n+(+p):
+      Mst.case_bool(
+        b => {Nat.is_le(Shared.Bool.when(Nat, b, u => 1n+Level.zeros(p, U32.mul(x, 32)), u => 0n), 1n+p) == True{}: Bool},
+        U32.is_eq(U32.and(x, 4160749568), 0),
+        +q => Mst.zeros_le(p, U32.mul(x, 32)),
+        +q => Shared.Nat.le_zero(1n+p)
+      )
+
+# the level of a key is at most 12
+def Mst.level_le(+hh: Hashes.Hash) -> {Nat.is_le(Level.of(hh), 12n) == True{}: Bool}:
+  match hh:
+    case Hashes.Hash{+a, +b, +c, +d, +e, +f, +g, +i}:
+      Mst.case_bool(
+        t => {
+          Nat.is_le(Shared.Bool.when(Nat, t, u => Nat.add(6n, Level.zeros(6n, b)), u => Level.zeros(6n, a)), 12n) == True{}: Bool
+        },
+        Nat.is_eq(Level.zeros(6n, a), 6n),
+        +q => Mst.zeros_le(6n, b),
+        +q => Shared.Nat.le_trans(Level.zeros(6n, a), 6n, 12n)(Mst.zeros_le(6n, a))({==})
+      )
+
+# the level of a key is below the depth of a tree
+def Mst.level_lt(+k: List<&2, U32>) -> {Nat.is_lt(Key.level(k), Mst.depth()) == True{}: Bool}:
+  Shared.Nat.le_lt(Key.level(k), 12n, 64n)(Mst.level_le(Hashes.Sha.hash(k)))({==})
+
+# a read that tells m is the read Look.of(m)
+def Mst.known_of(t: Look, -m: Maybe<&2, List<&2, U32>>) -> {Look.known(t) == Some{m}: Maybe<&2, Maybe<&2, List<&2, U32>>>} -> {
+  t == Look.of(m): Look
+}:
+  match t:
+    case Look.Found{+v}:
+      +e =>
+        %Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, Some{v}, m, e): {Look.Found{v} == Look.of(_): Look}
+        {==}
+    case Look.Absent{}:
+      +e =>
+        %Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, None{}, m, e): {Look.Absent{} == Look.of(_): Look}
+        {==}
+    case Look.Missing{h}:
+      +e => Empty.absurd({Look.Missing{h} == Look.of(m): Look}, Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, m, e))
+
+# a comparison that is not EQ
+def Mst.is_eq_false(c: Cmp, f: {c == EQ{}: Cmp} -> Empty) -> {Cmp.is_eq(c) == False{}: Bool}:
+  match c:
+    case LT{}:
+      {==}
+    case EQ{}:
+      Empty.absurd({True{} == False{}: Bool}, f({==}))
+    case GT{}:
+      {==}
+
+# a write of k as m to a tree reads as Mst.InsOk says
+def Mst.put_ok(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  m: Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>
+) -> Mst.InsOk(~S, ~fetch, s, Mst.depth(), None{}, None{}, h, k, m, Mst.put(~S, ~fetch, s, h, k, m)):
+  match m:
+    case Some{+v}:
+      Mst.ins_ok(~S, ~fetch, Mst.depth(), h, s, Mst.depth(), None{}, None{}, k, v, Key.level(k))({==})(Mst.level_lt(k))({==})({==})
+    case None{}:
+      Mst.del_ok(~S, ~fetch, Mst.depth(), h, s, Mst.depth(), None{}, None{}, k, Key.level(k))({==})({==})({==})
+
+# a write res that gave the edit e reads, once the depot holds its new nodes,
+# as Mst.InsRead says
+def Mst.put_read(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  e: Edit,
+  -res: Maybe<&2, Edit>,
+  +s: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +er: {res == Some{e}: Maybe<&2, Edit>}
+) -> Mst.InsOk(~S, ~fetch, s, Mst.depth(), None{}, None{}, h, k, m, res) -> {Depots.Depot.holds(~S, ~fetch, s, Edit.nodes(e)) == True{}: Bool} -> Mst.InsRead(
+  ~S,
+  ~fetch,
+  s,
+  Mst.depth(),
+  None{},
+  None{},
+  h,
+  k,
+  m,
+  Edit.root(e)
+):
+  match e:
+    case Edit{+nr, +ns}:
+      %Equal.sym(Maybe<&2, Edit>, res, Some{Edit{nr, ns}}, er): (
+        Mst.InsOk(~S, ~fetch, s, Mst.depth(), None{}, None{}, h, k, m, _)
+          -> {Depots.Depot.holds(~S, ~fetch, s, ns) == True{}: Bool}
+          -> Mst.InsRead(~S, ~fetch, s, Mst.depth(), None{}, None{}, h, k, m, nr)
+      )
+      ok => +hold => ok(hold)
+
+# the two parts of Laws.Write, from what the write reads (bi)
+def Mst.writes.of(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +nr: Maybe<&2, Hashes.Hash>,
+  bi: Mst.InsRead(~S, ~fetch, s, Mst.depth(), None{}, None{}, h, k, m, nr)
+) -> {Mst.look(~S, ~fetch, s, nr, k) == Look.of(m): Look}
+  & (
+    @k2: List<&2, U32> -> @x: Maybe<&2, List<&2, U32>> -> {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool} -> {
+      Look.known(Mst.look(~S, ~fetch, s, h, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+    } -> {Look.known(Mst.look(~S, ~fetch, s, nr, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+):
+  (i1, i2) = bi
+  (
+    Mst.known_of(Mst.look(~S, ~fetch, s, nr, k), m)(i1(Mst.depth())(Shared.Nat.le_refl(Mst.depth()))),
+    +k2 => +x => +ne => +e => i2(k2)(x)(Mst.depth())(Mst.depth())(Mst.is_eq_false(Key.cmp(k2, k), +c => Mst.key_ne(k, k2)(ne)(c)))(
+      Shared.Nat.le_refl(Mst.depth())
+    )(e)
+  )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
@@ -14253,6 +14730,30 @@ law Mst.writes:
   for ~grows: S -> S -> Bool
   for ~kept: Depots.Depot.Keeps(S, fetch, grows)
   Laws.Write(S, fetch, grows, Mst.ops(~S, ~fetch))
+
+def Mst.writes(S, fetch, grows, kept):
+  s => +s2 => +h => +k => +m => +e => he => gr => held => Mst.writes.of(
+    ~S,
+    ~fetch,
+    s2,
+    h,
+    k,
+    m,
+    Edit.root(e),
+    Mst.put_read(
+      ~S,
+      ~fetch,
+      e,
+      Mst.put(~S, ~fetch, s2, h, k, m),
+      s2,
+      h,
+      k,
+      m,
+      Mst.put_kept(~S, ~fetch, ~grows, ~kept, m, s, s2, h, k, gr)(e)(he)
+    )(Mst.put_ok(~S, ~fetch, m, s2, h, k))(
+      Mst.holds_of(~S, ~fetch, Edit.nodes(e), Mst.head_has(~S, ~fetch, s2, Edit.nodes(e)), s2, {==}, held)
+    )
+  )
 
 # a root is a function of its bindings, over any root
 law Mst.canon:
