@@ -3149,6 +3149,174 @@ def Deed.consents(-Q: Data, x: Deed<Q>, a: Hashes.Hash) -> Bool:
     case _:
       False{}
 
+# Checks
+# ------
+# Each claim about an entry that a replica takes in is a test here, so the
+# replica can make it, and a law says that the test proves the claim.
+
+# the ballots of the voter at the place w, in l
+def Led.ballots.at(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), w: Ledgers.Place, voter: String) -> List<&2, Ledgers.Ballot>:
+  Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(l)(w)(voter)
+
+# one of the ballots bs names the key k as the next of its chain, which seals b
+def Ballots.link(bs: List<&2, Ledgers.Ballot>, +b: Ledgers.Ballot) -> Bool:
+  match bs:
+    case Nil{}:
+      False{}
+    case Con{b0, rest}:
+      Bool.or(Ledgers.Ballot.sealed(Ballot.next(b0), b), Ballots.link(rest, b))
+
+# the key m seals the ballot b
+def Key.seals(m: Maybe<&2, Hashes.Hash>, b: Ledgers.Ballot) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{k}:
+      Ledgers.Ballot.sealed(k, b)
+
+# what go says of the tip m (False: none)
+def Tip.on(m: Maybe<&2, Tip>, go: Tip -> Bool) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{t}:
+      go(t)
+
+# a tip of the root line c, from the tip t at the height h on, at most f steps
+# on, gives the voter a key that seals b (Root.Gives, by a walk)
+def Root.seals.go(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  f: Nat,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +t: Tip,
+  +voter: String,
+  +b: Ledgers.Ballot
+) -> Bool:
+  match f:
+    case 0n:
+      Key.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b)
+    case 1n+p:
+      Bool.or(
+        Key.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b),
+        Tip.on(Line.next(~mach, ~d, ~kern, l, c, h, t), t2 => Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.inc(h), t2, voter, b))
+      )
+
+# the root line of the root r
+def Root.line(r: Hashes.Hash) -> Ledgers.Line:
+  Ledgers.Line{r, None{}}
+
+# the first ballot b of its voter under its root is sealed by a first key that
+# the root line gives the voter: the request that starts the line, or the
+# content of a tip of the line (Root.Gives). The walk of the line costs its
+# height, once for each first ballot of a voter
+def Ballot.first_ok(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +b: Ledgers.Ballot) -> Bool:
+  +r = Ledgers.Ballot.root(b)
+  +c = Root.line(r)
+  Bool.or(
+    Key.seals(Root.key.at(~mach, Led.get(~mach, ~d, l, Ledgers.Name.Ask{r}), Ledgers.Ballot.voter(b)), b),
+    Maybe.default(
+      &2,
+      Bool,
+      Maybe.map(
+        &2,
+        Tip,
+        Bool,
+        t => Root.seals.go(
+          ~mach,
+          ~d,
+          ~kern,
+          Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(l)(c),
+          l,
+          c,
+          0,
+          t,
+          Ledgers.Ballot.voter(b),
+          b
+        ),
+        Line.start(~mach, ~d, ~kern, l, c)
+      ),
+      False{}
+    )
+  )
+
+# the ballot b is linked in l (Ballot.Linked), when the ballot before it is at
+# p: the ballot there, which l holds, names the key that seals it; or it is
+# the first, and a first key of its voter seals it
+def Ballot.linked.at(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +b: Ledgers.Ballot, p: Maybe<&2, Ledgers.Place>) -> Bool:
+  match p:
+    case None{}:
+      Ballot.first_ok(~mach, ~d, ~kern, l, b)
+    case Some{w}:
+      Ballots.link(Led.ballots.at(~mach, ~d, l, w, Ledgers.Ballot.voter(b)), b)
+
+# the ballot b is linked in l, by the place of the ballot before it
+def Ballot.linked(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +b: Ledgers.Ballot) -> Bool:
+  Ballot.linked.at(~mach, ~d, ~kern, l, b, Ledgers.Ballot.prev(b))
+
+# the lie x is a proof (Lie.Proves): its key seals its two ballots, which are
+# not the same
+def Lie.proves(x: Ledgers.Lie) -> Bool:
+  match x:
+    case Ledgers.Lie{+k, +a, +b}:
+      Bool.and(
+        Bool.and(Ledgers.Ballot.sealed(k, a), Ledgers.Ballot.sealed(k, b)),
+        Bool.not(Ledgers.Ballot.is_eq(a, b))
+      )
+
+# the entry e checks in l (Entry.Checks): a request and data do; a ballot does
+# when l with it is honest and the ballot is linked; a proof of a lie does
+# when it proves
+def Entry.checks(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +e: Entry(mach)) -> Bool:
+  match e:
+    case Ledgers.Entry.Ask{i, t, q}:
+      True{}
+    case Ledgers.Entry.Data{ws}:
+      True{}
+    case Ledgers.Entry.Ballot{+b}:
+      +l2 = Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b})
+      Bool.and(Led.honest(~mach, ~d, l2), Ballot.linked(~mach, ~d, ~kern, l2, b))
+    case Ledgers.Entry.Lie{x}:
+      Lie.proves(x)
+
+# l with the entries es, in order
+def Led.adds(~mach: Machine(), ~d: Led(mach), es: List<&2, Entry(mach)>, l: Led.L(mach, d)) -> Led.L(mach, d):
+  match es:
+    case Nil{}:
+      l
+    case Con{e, rest}:
+      Led.adds(~mach, ~d, rest, Led.add(~mach, ~d, l, e))
+
+# the entry e checks in u, which holds it and the entries that come with it:
+# a ballot is linked in u, and a proof of a lie proves
+def Entry.ok(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +u: Led.L(mach, d), e: Entry(mach)) -> Bool:
+  match e:
+    case Ledgers.Entry.Ballot{b}:
+      Ballot.linked(~mach, ~d, ~kern, u, b)
+    case Ledgers.Entry.Lie{x}:
+      Lie.proves(x)
+    case _:
+      True{}
+
+# each of the entries es checks in u (Entry.ok)
+def Entries.ok(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), es: List<&2, Entry(mach)>, +u: Led.L(mach, d)) -> Bool:
+  match es:
+    case Nil{}:
+      True{}
+    case Con{e, rest}:
+      List.all.if(u2 => Entries.ok(~mach, ~d, ~kern, rest, u), Entry.ok(~mach, ~d, ~kern, u, e))
+
+# the entries that the deed x brings check in l with all of them: the
+# ballots of l with them are honest, and each of them checks there. Then a
+# replica takes them all in one step
+def Deed.checks(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), l: Led.L(mach, d), x: Deed<Machine.Q(mach)>) -> Bool:
+  +es = Deed.entries(Machine.Q(mach), x)
+  +u = Led.adds(~mach, ~d, es, l)
+  Bool.and(Led.honest(~mach, ~d, u), Entries.ok(~mach, ~d, ~kern, es, u))
+
 # the operations of a replica kept as R: the replica of a name and a secret
 # seed that holds nothing; its name; its ledger; the replica after a deed;
 # whether a client that is connected to it asked for a request; its secret
@@ -4000,9 +4168,11 @@ def Laws.Good(
       ) -> Replica.Good(mach, d, kern, k, Kind.does(mach, d, k)(s)(x))
     )
 
-# a replica holds what it takes in: an entry that a deed brings, that checks,
-# that no other entry of the deed clashes with, and whose name the replica
-# lacks, it then holds
+# a replica holds what it takes in: when the entries that a deed brings check
+# with all of them (Deed.checks), each of them that no other entry of the deed
+# clashes with, and whose name the replica lacks, it then holds. (Each entry
+# may check alone and not with the others: two ballots of a liar. Then the
+# replica takes what checks, one entry at a time)
 def Laws.Takes(
   -mach: Machine(),
   -d: Led(mach),
@@ -4026,13 +4196,9 @@ def Laws.Takes(
     mach,
     Deed.entries(Machine.Q(mach), x),
     e
-  ) -> Entry.Checks(
-    mach,
-    d,
-    kern,
-    Kind.ledger(mach, d, k)(s),
-    e
-  ) -> {Led.has(~mach, ~d, Kind.ledger(mach, d, k)(Kind.does(mach, d, k)(s)(x)), e) == True{}: Bool}
+  ) -> {
+    Deed.checks(~mach, ~d, ~kern, Kind.ledger(mach, d, k)(s), x) == True{}: Bool
+  } -> {Led.has(~mach, ~d, Kind.ledger(mach, d, k)(Kind.does(mach, d, k)(s)(x)), e) == True{}: Bool}
 
 # a replica sees a lie: when it holds the ballot a, and a deed brings another
 # ballot b that the same key signs, the replica then names the voter of a a
@@ -16083,139 +16249,6 @@ def Step.run_outs(mach, d, kern, l, c, t, qs, r, a, i, time, q):
 # (Replica.Kind). It takes in an entry only when the entry checks (Entry.Checks,
 # by a test), votes as the rules of rounds say, and keeps the count of its
 # ballots before a ballot leaves it.
-
-# Checks
-# ------
-# Each claim about an entry that a replica takes in is a test here, so the
-# replica can make it, and a law says that the test proves the claim.
-
-# the ballots of the voter at the place w, in l
-def Led.ballots.at(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), w: Ledgers.Place, voter: String) -> List<&2, Ledgers.Ballot>:
-  Ledgers.Kind.ballots(Machine.Q(mach), Led.kind(mach, d))(l)(w)(voter)
-
-# one of the ballots bs names the key k as the next of its chain, which seals b
-def Ballots.link(bs: List<&2, Ledgers.Ballot>, +b: Ledgers.Ballot) -> Bool:
-  match bs:
-    case Nil{}:
-      False{}
-    case Con{b0, rest}:
-      Bool.or(Ledgers.Ballot.sealed(Ballot.next(b0), b), Ballots.link(rest, b))
-
-# the key m seals the ballot b
-def Key.seals(m: Maybe<&2, Hashes.Hash>, b: Ledgers.Ballot) -> Bool:
-  match m:
-    case None{}:
-      False{}
-    case Some{k}:
-      Ledgers.Ballot.sealed(k, b)
-
-# what go says of the tip m (False: none)
-def Tip.on(m: Maybe<&2, Tip>, go: Tip -> Bool) -> Bool:
-  match m:
-    case None{}:
-      False{}
-    case Some{t}:
-      go(t)
-
-# a tip of the root line c, from the tip t at the height h on, at most f steps
-# on, gives the voter a key that seals b (Root.Gives, by a walk)
-def Root.seals.go(
-  ~mach: Machine(),
-  ~d: Led(mach),
-  ~kern: Kernel(mach, d),
-  f: Nat,
-  +l: Led.L(mach, d),
-  +c: Ledgers.Line,
-  +h: U32,
-  +t: Tip,
-  +voter: String,
-  +b: Ledgers.Ballot
-) -> Bool:
-  match f:
-    case 0n:
-      Key.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b)
-    case 1n+p:
-      Bool.or(
-        Key.seals(Tip.key(~mach, ~d, l, Some{t}, voter), b),
-        Tip.on(Line.next(~mach, ~d, ~kern, l, c, h, t), t2 => Root.seals.go(~mach, ~d, ~kern, p, l, c, U32.inc(h), t2, voter, b))
-      )
-
-# the root line of the root r
-def Root.line(r: Hashes.Hash) -> Ledgers.Line:
-  Ledgers.Line{r, None{}}
-
-# the first ballot b of its voter under its root is sealed by a first key that
-# the root line gives the voter: the request that starts the line, or the
-# content of a tip of the line (Root.Gives). The walk of the line costs its
-# height, once for each first ballot of a voter
-def Ballot.first_ok(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +b: Ledgers.Ballot) -> Bool:
-  +r = Ledgers.Ballot.root(b)
-  +c = Root.line(r)
-  Bool.or(
-    Key.seals(Root.key.at(~mach, Led.get(~mach, ~d, l, Ledgers.Name.Ask{r}), Ledgers.Ballot.voter(b)), b),
-    Maybe.default(
-      &2,
-      Bool,
-      Maybe.map(
-        &2,
-        Tip,
-        Bool,
-        t => Root.seals.go(
-          ~mach,
-          ~d,
-          ~kern,
-          Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(l)(c),
-          l,
-          c,
-          0,
-          t,
-          Ledgers.Ballot.voter(b),
-          b
-        ),
-        Line.start(~mach, ~d, ~kern, l, c)
-      ),
-      False{}
-    )
-  )
-
-# the ballot b is linked in l (Ballot.Linked), when the ballot before it is at
-# p: the ballot there, which l holds, names the key that seals it; or it is
-# the first, and a first key of its voter seals it
-def Ballot.linked.at(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +b: Ledgers.Ballot, p: Maybe<&2, Ledgers.Place>) -> Bool:
-  match p:
-    case None{}:
-      Ballot.first_ok(~mach, ~d, ~kern, l, b)
-    case Some{w}:
-      Ballots.link(Led.ballots.at(~mach, ~d, l, w, Ledgers.Ballot.voter(b)), b)
-
-# the ballot b is linked in l, by the place of the ballot before it
-def Ballot.linked(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +b: Ledgers.Ballot) -> Bool:
-  Ballot.linked.at(~mach, ~d, ~kern, l, b, Ledgers.Ballot.prev(b))
-
-# the lie x is a proof (Lie.Proves): its key seals its two ballots, which are
-# not the same
-def Lie.proves(x: Ledgers.Lie) -> Bool:
-  match x:
-    case Ledgers.Lie{+k, +a, +b}:
-      Bool.and(
-        Bool.and(Ledgers.Ballot.sealed(k, a), Ledgers.Ballot.sealed(k, b)),
-        Bool.not(Ledgers.Ballot.is_eq(a, b))
-      )
-
-# the entry e checks in l (Entry.Checks): a request and data do; a ballot does
-# when l with it is honest and the ballot is linked; a proof of a lie does
-# when it proves
-def Entry.checks(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +e: Entry(mach)) -> Bool:
-  match e:
-    case Ledgers.Entry.Ask{i, t, q}:
-      True{}
-    case Ledgers.Entry.Data{ws}:
-      True{}
-    case Ledgers.Entry.Ballot{+b}:
-      +l2 = Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b})
-      Bool.and(Led.honest(~mach, ~d, l2), Ballot.linked(~mach, ~d, ~kern, l2, b))
-    case Ledgers.Entry.Lie{x}:
-      Lie.proves(x)
 
 # Proofs of checks
 # ----------------
