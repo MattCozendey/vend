@@ -25988,16 +25988,38 @@ def Nat.fuel_ins(l: Nat, u: Nat, p: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} ->
   x => x1 => Nat.fuel_down(2n+l, 2n+u, p)(x)(x1)
 
 # the fuel of a delete, one level down
-def Nat.fuel_del(l: Nat, u: Nat, p: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(1n+Nat.add(u, u), 1n+p) == True{}: Bool} -> {
+def Nat.fuel_del(+l: Nat, +u: Nat, +p: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(1n+Nat.add(u, u), 1n+p) == True{}: Bool} -> {
   Nat.is_le(1n+Nat.add(l, l), p) == True{}: Bool
 }:
-  ?TODO
+  e1 => e2 =>
+    +a1 = Nat.lt_le_succ(l, u)(e1)
+    Shared.Nat.le_trans(
+      1n+Nat.add(l, l),
+      1n+(1n+Nat.add(l, l)),
+      p
+    )(Shared.Nat.le_succ(1n+Nat.add(l, l), 1n+Nat.add(l, l))(Shared.Nat.le_refl(1n+Nat.add(l, l))))(
+      Shared.Nat.le_trans(
+        1n+(1n+Nat.add(l, l)),
+        Nat.add(u, u),
+        p
+      )(
+        %Shared.Nat.add_succ(l, l): {Nat.is_le(1n+_, Nat.add(u, u)) == True{}: Bool}
+        Shared.Nat.add_le(1n+l, u, 1n+l, u)(a1)(a1)
+      )(e2)
+    )
 
 # the fuel of a merge, one level down on the first side
 def Nat.fuel_mgt(la: Nat, ua: Nat, ub: Nat, p: Nat) -> {Nat.is_lt(la, ua) == True{}: Bool} -> {
   Nat.is_le(1n+Nat.add(ua, ub), 1n+p) == True{}: Bool
 } -> {Nat.is_le(1n+Nat.add(la, ub), p) == True{}: Bool}:
-  ?TODO
+  match ua:
+    case 0n:
+      x => Empty.absurd(@_:{Nat.is_le(1n+Nat.add(0n, ub), 1n+p) == True{} : Bool} -> {Nat.is_le(1n+Nat.add(la, ub), p) == True{} : Bool}, {(%Nat.lt_le_succ(la, 0n)(x) : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+    case 1n+uap:
+      +la = la
+      +uap = uap
+      +ub = ub
+      x => x1 => Shared.Nat.le_trans(1n+Nat.add(la, ub), 1n+Nat.add(uap, ub), p)(Shared.Nat.add_le_right(uap, la, ub)(Shared.Nat.lt_succ_le(la, uap)(x)))(x1)
 
 # the fuel of a merge, one level down on the second side
 def Nat.fuel_mlt(lb: Nat, ua: Nat, ub: Nat, p: Nat) -> {Nat.is_lt(lb, ub) == True{}: Bool} -> {
@@ -26041,7 +26063,11 @@ def Nat.cmp_eq(a: Nat, b: Nat) -> {Nat.cmp(a, b) == EQ{}: Cmp} -> {a == b: Nat}:
 
 # a level below u is not below nothing
 def Nat.lt_le_zero(l: Nat, u: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(u, 0n) == True{}: Bool} -> Empty:
-  ?TODO
+  match u:
+    case 0n:
+      x => Empty.absurd(@_:{Nat.is_le(0n, 0n) == True{} : Bool} -> Empty, {(%Nat.lt_le_succ(l, 0n)(x) : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+    case 1n+up:
+      x => x1 => {(%x1 : {\{False: Unit; \{True: Empty; \{}}} : Bool -> Type}(_); Unit{}) : Empty}
 
 # Whole trees, for writes
 # A tree that lists whole is whole node by node: each node is in its room,
@@ -26164,7 +26190,7 @@ def Nat.le6_lt13(n: Nat) -> {Nat.is_le(n, 6n) == True{}: Bool} -> {Nat.is_lt(n, 
 
 # 6 and at most 6 more is below 13
 def Nat.add6_lt13(n: Nat) -> {Nat.is_le(n, 6n) == True{}: Bool} -> {Nat.is_lt(Nat.add(6n, n), 13n) == True{}: Bool}:
-  ?TODO
+  h => Shared.Nat.le_lt(n, 6n, 7n)(h)({==})
 
 # a level of a hash is below 13
 def Level.of_lt(h: Hashes.Hash) -> {Nat.is_lt(Level.of(h), 13n) == True{}: Bool}:
@@ -26188,7 +26214,31 @@ def Mst.wf_first(
 ) -> {Mst.wf.items(~S, ~fetch, f, s, xs, l, prev, lo, hi) == True{}: Bool} -> {
   Mst.wf(~S, ~fetch, f, s, l, Room{l, lo, Items.head_key(xs, hi)}, prev) == True{}: Bool
 }:
-  ?TODO
+  match f xs prev:
+    case 0n Nil{} None{}:
+      e => {==}
+    case 0n Nil{} Some{h}:
+      e => e
+    case 1n+p Nil{} None{}:
+      e => {==}
+    case 1n+p Nil{} Some{h}:
+      e => e
+    case 0n Con{Item{k, v, r}, rest} None{}:
+      e => {==}
+    case 0n Con{Item{k, v, r}, rest} Some{h}:
+      e => e
+    case 1n+p Con{Item{+k, v, r}, rest} None{}:
+      e => {==}
+    case 1n+(+p) Con{Item{+k, v, +r}, +rest} Some{+h}:
+      e => Shared.Bool.and_true_right(
+        Bool.and(Nat.is_eq(Key.level(k), l), Bool.not(List.is_empty(&2, U32, k))),
+        Mst.wf(~S, ~fetch, 1n+p, s, l, Room{l, lo, Some{k}}, Some{h})
+      )(
+        Shared.Bool.and_true_left(
+          Bool.and(Bool.and(Nat.is_eq(Key.level(k), l), Bool.not(List.is_empty(&2, U32, k))), Mst.wf(~S, ~fetch, 1n+p, s, l, Room{l, lo, Some{k}}, Some{h})),
+          Mst.wf.items(~S, ~fetch, 1n+p, s, rest, l, r, Some{k}, hi)
+        )(e)
+      )
 
 # the subtree after the items of a node is whole in its room
 def Mst.wf_last(
@@ -26334,34 +26384,49 @@ def Mst.wf_cons(
   +s: S,
   +k: List<&2, U32>,
   -v: List<&2, U32>,
-  -r: Maybe<&2, Hashes.Hash>,
-  -rest: List<&2, Item>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
   +l: Nat,
   prev: Maybe<&2, Hashes.Hash>,
   +lo: Maybe<&2, List<&2, U32>>,
-  -hi: Maybe<&2, List<&2, U32>>
+  +hi: Maybe<&2, List<&2, U32>>
 ) -> {Nat.is_eq(Key.level(k), l) == True{}: Bool} -> {
   Bool.or(Maybe.is_none(&2, Hashes.Hash, prev), Bool.not(List.is_empty(&2, U32, k))) == True{}: Bool
 } -> {Mst.wf(~S, ~fetch, f, s, l, Room{l, lo, Some{k}}, prev) == True{}: Bool} -> {
   Mst.wf.items(~S, ~fetch, f, s, rest, l, r, Some{k}, hi) == True{}: Bool
 } -> {Mst.wf.items(~S, ~fetch, f, s, Item{k, v, r} <> rest, l, prev, lo, hi) == True{}: Bool}:
-  ?TODO
+  match f prev:
+    case 0n None{}:
+      h1 => h2 => h3 => h4 => Shared.Bool.and_both(Nat.is_eq(Key.level(k), l), Mst.wf.items(~S, ~fetch, 0n, s, rest, l, r, Some{k}, hi))(h1)(h4)
+    case 0n Some{h}:
+      h1 => h2 => h3 => h4 => Empty.absurd({Mst.wf.items(~S, ~fetch, 0n, s, Item{k, v, r} <> rest, l, Some{h}, lo, hi) == True{}: Bool}, Shared.Bool.false_ne_true(h3))
+    case 1n+p None{}:
+      h1 => h2 => h3 => h4 => Shared.Bool.and_both(Nat.is_eq(Key.level(k), l), Mst.wf.items(~S, ~fetch, 1n+p, s, rest, l, r, Some{k}, hi))(h1)(h4)
+    case 1n+(+p) Some{+h}:
+      h1 => h2 => h3 => h4 => Shared.Bool.and_both(
+        Bool.and(Bool.and(Nat.is_eq(Key.level(k), l), Bool.not(List.is_empty(&2, U32, k))), Mst.wf(~S, ~fetch, 1n+p, s, l, Room{l, lo, Some{k}}, Some{h})),
+        Mst.wf.items(~S, ~fetch, 1n+p, s, rest, l, r, Some{k}, hi)
+      )(Shared.Bool.and_both(Bool.and(Nat.is_eq(Key.level(k), l), Bool.not(List.is_empty(&2, U32, k))), Mst.wf(~S, ~fetch, 1n+p, s, l, Room{l, lo, Some{k}}, Some{h}))(Shared.Bool.and_both(Nat.is_eq(Key.level(k), l), Bool.not(List.is_empty(&2, U32, k)))(h1)(h2))(h3))(h4)
 
 # the empty tree is whole
 def Mst.wf_none(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, f: Nat, -s: S, -u: Nat, -r: Room) -> {
   Mst.wf(~S, ~fetch, f, s, u, r, None{}) == True{}: Bool
 }:
-  ?TODO
+  match f:
+    case 0n:
+      {==}
+    case 1n+fp:
+      {==}
 
 # a key that is not empty is not the empty bound
 def Bound.meets_key(k: List<&2, U32>) -> {Bool.not(List.is_empty(&2, U32, k)) == True{}: Bool} -> {Bound.meets_hi([], Some{k}) == True{}: Bool}:
-  ?TODO
+  x => (%Equal.sym(Bool, Key.is_lt([], k), Bool.not(List.is_empty(&2, U32, k)), Key.lt_nil_left(k)) : {_ == True{} : Bool}; x)
 
 # a listing under no prefix skips a subtree only before the empty key
 def Bound.skips(lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> {
   Bool.and(Bound.meets_lo([], lo), Bound.meets_hi([], hi)) == False{}: Bool
 } -> {Bound.meets_hi([], hi) == False{}: Bool}:
-  ?TODO
+  x => (%x : {Bound.meets_hi([], hi) == _ : Bool}; (%Equal.sym(Bool, Bound.meets_lo([], lo), True{}, Bound.meets_lo_nil(lo)) : {Bound.meets_hi([], hi) == Bool.and(_, Bound.meets_hi([], hi)) : Bool}; {==}))
 
 # the subtrees of the pieces ps that a listing under no prefix reads are
 # whole, at most f levels down
