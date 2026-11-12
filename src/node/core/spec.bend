@@ -10064,6 +10064,153 @@ def Merge.clashes_go(
     )
   )
 
+# the first of a pair
+def Merge.fst(-A: Type, -B: Type, p: A & B) -> A:
+  match p:
+    case Tuple{a, b}:
+      a
+
+# a tree that lists whole reads each key finally, by the law of a tree
+def Merge.final_look(
+  -S: Data,
+  -o: Trees.Tree.Ops(S),
+  wh: Trees.Laws.Whole(S, o),
+  s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  bs: List<&2, Trees.Binding>,
+  e1: {Trees.Ops.range(S, o)(s)(h)([]) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  k: List<&2, U32>
+) -> {Trees.Look.is_final(Trees.Ops.look(S, o)(s)(h)(k)) == True{}: Bool}:
+  match wh:
+    case Tuple{empty, w2}:
+      Merge.fst(
+        {Trees.Look.is_final(Trees.Ops.look(S, o)(s)(h)(k)) == True{}: Bool},
+        (
+          {Maybe.is_some(&2, Trees.Edit, Trees.Ops.put(S, o)(s)(h)(k)(None{})) == True{}: Bool}
+            & {Maybe.is_some(&2, List<&2, Trees.Binding>, Trees.Ops.range(S, o)(s)(h)([])) == True{}: Bool}
+        ),
+        Merge.fst(
+          (@k2: List<&2, U32> -> @m: Maybe<&2, List<&2, U32>> -> @p: List<&2, U32> -> {
+            Trees.Look.is_final(Trees.Ops.look(S, o)(s)(h)(k2)) == True{}: Bool
+          }
+            & (
+              {Maybe.is_some(&2, Trees.Edit, Trees.Ops.put(S, o)(s)(h)(k2)(m)) == True{}: Bool}
+                & {Maybe.is_some(&2, List<&2, Trees.Binding>, Trees.Ops.range(S, o)(s)(h)(p)) == True{}: Bool}
+            )),
+          (@h3: Maybe<&2, Hashes.Hash> -> @bs3: List<&2, Trees.Binding> -> {
+            Trees.Ops.range(S, o)(s)(h3)([]) == Some{bs3}: Maybe<&2, List<&2, Trees.Binding>>
+          } -> {Maybe.is_some(&2, List<&2, List<&2, U32>>, Trees.Ops.diff(S, o)(s)(h)(h3)) == True{}: Bool}),
+          w2(s)(h)(bs)(e1)
+        )(k)(None{})([])
+      )
+
+# the clashes that a read of the key of the open clashes tells are some (the
+# body of Clash.left, apart from the read)
+def Merge.left_of(m: Maybe<&2, Maybe<&2, List<&2, U32>>>) -> Maybe<&2, Bool>:
+  Maybe.map(&2, List<&2, Resources.Name>, Bool, ns => Bool.not(List.is_empty(&2, Resources.Name, ns)), Merge.names_of(m))
+
+# a final read of the clashes tells whether a resource still clashes, once the
+# read is known (m)
+def Merge.left_some.at(
+  ~d: Led(),
+  +l: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  em: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h, Key.clashes(k)) == m: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  hm: {Maybe.is_some(&2, Maybe<&2, List<&2, U32>>, m) == True{}: Bool}
+) -> {Maybe.is_some(&2, Bool, Clash.left(~d, l, h, k)) == True{}: Bool}:
+  match m:
+    case None{}:
+      Empty.absurd({Maybe.is_some(&2, Bool, Clash.left(~d, l, h, k)) == True{}: Bool}, Shared.Bool.false_ne_true(hm))
+    case Some{+v}:
+      %Equal.sym(
+        Maybe<&2, Maybe<&2, List<&2, U32>>>,
+        Replicas.Tree.find(~Requests.Ask.machine(), ~d, l, h, Key.clashes(k)),
+        Some{v},
+        em
+      ): {Maybe.is_some(&2, Bool, Merge.left_of(_)) == True{}: Bool}
+      {==}
+
+# a tree that lists whole tells whether a resource still clashes after a merge
+def Answer.kn_range(
+  ~d: Led(),
+  l: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  +l2: L(d),
+  +h2: Maybe<&2, Hashes.Hash>,
+  r: Merge.Listed(~d, l2, h2)
+) -> Answer.Known(~d, l, h, l2, h2):
+  (+bs, e1) = r
+  +k => p => Merge.left_some.at(
+    ~d,
+    l2,
+    h2,
+    k,
+    Replicas.Tree.find(~Requests.Ask.machine(), ~d, l2, h2, Key.clashes(k)),
+    {==},
+    Merge.final_look(
+      L(d),
+      Replicas.Led.tree(Requests.Ask.machine(), d),
+      Merge.laws_whole(d),
+      l2,
+      h2,
+      bs,
+      e1,
+      Key.clashes(k)
+    )
+  )
+
+# a read of the clashes of a merge that told tells in a tree that the ledger
+# holds whole
+def Answer.kn_of_kept(
+  ~d: Led(),
+  l: L(d),
+  h: Maybe<&2, Hashes.Hash>,
+  +l2: L(d),
+  +h2: Maybe<&2, Hashes.Hash>,
+  hk: {Tree.kept(~d, l2, h2) == True{}: Bool}
+) -> Answer.Known(~d, l, h, l2, h2):
+  Answer.kn_range(~d, l, h, l2, h2, Merge.kept_range(~d, l2, h2, hk))
+
+# what Node.head_kept says of the ledger d and the kernel kern
+def Node.HeadKept(~d: Led(), ~kern: Kern(d)) -> Type:
+  @l: L(d) -> @c: Ledgers.Line -> @t: Replicas.Tip -> {
+    Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c) == Some{t}: Maybe<&2, Replicas.Tip>
+  } -> {Tree.kept(~d, l, Replicas.Tip.content(t)) == True{}: Bool}
+
+# Node.answer_follows, once Line.get_grows (stays) and Node.head_kept (hk) are
+# known
+def Node.answer_follows.of(
+  ~d: Led(),
+  ~kern: Kern(d),
+  +i: Ledgers.Id,
+  +time: String,
+  +q: Requests.Ask,
+  stays: Answer.Stays(~d, ~kern),
+  hk: Node.HeadKept(~d, ~kern)
+) -> Shared.Read.Forward(
+  L(d),
+  a => b => Replicas.Led.Later(~Requests.Ask.machine(), ~d, a, b),
+  Answer,
+  x => m => {Answer.follows(x, m) == True{}: Bool},
+  l => Node.answer(~d, ~kern, l, i, time, q)
+):
+  +a => +b => +x => g => e => Node.answer_follows.go(
+    ~d,
+    ~kern,
+    a,
+    b,
+    i,
+    time,
+    q,
+    x,
+    g,
+    stays,
+    e,
+    c => +t => +t2 => e1 => e2 => Answer.kn_of_kept(~d, a, Replicas.Tip.content(t), b, Replicas.Tip.content(t2), hk(b)(c)(t2)(e2))
+  )
+
 # a merge never loses a change that only one side made: when the merge of a
 # resource takes the content of one side (Pick.merge: theirs when ours is the
 # base, ours when theirs is the base or both agree), the tree that a taken
