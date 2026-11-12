@@ -5664,8 +5664,8 @@ def Mst.gap_kept(
         ih
       )
 
-# a node with one gap replaced reads the key k there as ih says, when k
-# comes after the items before the gap and before the first after it
+# a node with one gap replaced tells of the key k what ih tells, when a
+# pick of k passes the items before the gap and stops at the first after it
 def Mst.gap_k(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
@@ -5681,7 +5681,7 @@ def Mst.gap_k(
   +post: List<&2, Item>,
   +nc: Maybe<&2, Hashes.Hash>,
   +k: List<&2, U32>,
-  -t: Look,
+  -x: Maybe<&2, List<&2, U32>>,
   +eN2: {
     Mst.node(~S, ~fetch, s, h2)
       == Some{Node{l, Mst.end_left(pre, left, nc), List.append(&2, Item, Mst.set_last(pre, nc), post)}}: Maybe<&2, Node>
@@ -5691,16 +5691,16 @@ def Mst.gap_k(
       == True{}: Bool
   },
   +fu: {Nat.is_le(u, g) == True{}: Bool},
-  +ea: {Mst.all_lt(pre, k) == True{}: Bool},
+  +ep: {Mst.passes(pre, k) == True{}: Bool},
   +es: {Mst.stops_first(post, k) == True{}: Bool},
   ih: @g4: Nat -> {Nat.is_le(l, g4) == True{}: Bool} -> {
-    Mst.look.go(~S, ~fetch, g4, s, Room{l, Items.last_key(pre, lo), Items.head_key(post, hi)}, nc, k) == t: Look
+    Look.known(Mst.look.go(~S, ~fetch, g4, s, Room{l, Items.last_key(pre, lo), Items.head_key(post, hi)}, nc, k)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
   }
-) -> {Mst.look.go(~S, ~fetch, g, s, Room{u, lo, hi}, Some{h2}, k) == t: Look}:
+) -> {Look.known(Mst.look.go(~S, ~fetch, g, s, Room{u, lo, hi}, Some{h2}, k)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
   match g:
     case 0n:
       Empty.absurd(
-        {Look.Missing{h2} == t: Look},
+        {Look.known(Look.Missing{h2}) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
         Mst.opens_fuel(
           l,
           Mst.end_left(pre, left, nc),
@@ -5739,19 +5739,19 @@ def Mst.gap_k(
           eN2,
           oN2
         )
-      ): {_ == t: Look}
+      ): {Look.known(_) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
       %Equal.sym(
         Pick,
         Mst.pick(List.append(&2, Item, Mst.set_last(pre, nc), post), Mst.end_left(pre, left, nc), l, lo, hi, k),
         Mst.pick(post, nc, l, Items.last_key(pre, lo), hi, k),
-        Mst.pick_set_passes(pre, nc, post, left, l, lo, hi, k, Mst.passes_of_all_lt(pre, k)(ea))
-      ): {Mst.look.pick(_, h2, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p, s, r2, m2, k)) == t: Look}
+        Mst.pick_set_passes(pre, nc, post, left, l, lo, hi, k, ep)
+      ): {Look.known(Mst.look.pick(_, h2, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p, s, r2, m2, k))) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
       %Equal.sym(
         Pick,
         Mst.pick(post, nc, l, Items.last_key(pre, lo), hi, k),
         Pick.Down{nc, Room.of(l, Items.last_key(pre, lo), Items.head_key(post, hi))},
         Mst.pick_first(post, nc, l, Items.last_key(pre, lo), hi, k)(es)
-      ): {Mst.look.pick(_, h2, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p, s, r2, m2, k)) == t: Look}
+      ): {Look.known(Mst.look.pick(_, h2, l, k, m2 => r2 => Mst.look.go(~S, ~fetch, p, s, r2, m2, k))) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
       ih(p)(
         Mst.opens_fl(
           l,
@@ -6290,6 +6290,239 @@ def Mst.edge_right(
           Mst.edge_lvl(~S, ~fetch, p, m2, s, False{}, Room{l, lr2, Some{k}})(e2)
         )(b)(f2)(c)
       )(e)
+
+# the empty tree, read with any fuel and in any room, tells the same
+def Mst.none_kept(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  g1: Nat,
+  g2: Nat,
+  -s: S,
+  -r1: Room,
+  -r2: Room,
+  -k2: List<&2, U32>,
+  -x: Maybe<&2, List<&2, U32>>
+) -> {Look.known(Mst.look.go(~S, ~fetch, g1, s, r1, None{}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>} -> {
+  Look.known(Mst.look.go(~S, ~fetch, g2, s, r2, None{}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  match g1 g2:
+    case 0n 0n:
+      +e => e
+    case 0n 1n+q:
+      +e => e
+    case 1n+p 0n:
+      +e => e
+    case 1n+p 1n+q:
+      +e => e
+
+# a read that finds a key absent tells what a read of the empty tree tells
+def Mst.absent_to(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +g1: Nat,
+  +s: S,
+  +r1: Room,
+  +k2: List<&2, U32>,
+  -x: Maybe<&2, List<&2, U32>>,
+  +t: Look,
+  +et: {t == Look.Absent{}: Look}
+) -> {Look.known(Mst.look.go(~S, ~fetch, g1, s, r1, None{}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>} -> {
+  Look.known(t) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  +e =>
+    %Equal.sym(Look, t, Look.Absent{}, et): {Look.known(_) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+    Equal.trans(
+      Maybe<&2, Maybe<&2, List<&2, U32>>>,
+      Look.known(Look.Absent{}),
+      Look.known(Mst.look.go(~S, ~fetch, g1, s, r1, None{}, k2)),
+      Some{x},
+      Equal.cong(
+        Look,
+        Maybe<&2, Maybe<&2, List<&2, U32>>>,
+        Look.known,
+        Look.Absent{},
+        Mst.look.go(~S, ~fetch, g1, s, r1, None{}, k2),
+        Equal.sym(Look, Mst.look.go(~S, ~fetch, g1, s, r1, None{}, k2), Look.Absent{}, Mst.look_none(~S, ~fetch, g1, s, r1, k2))
+      ),
+      e
+    )
+
+# a number above another is after it
+def Mst.nat_gt_lt(+a: Nat, +b: Nat) -> {Nat.cmp(a, b) == GT{}: Cmp} -> {Nat.is_lt(b, a) == True{}: Bool}:
+  +e => Equal.cong(
+    Cmp,
+    Bool,
+    Cmp.is_lt,
+    Nat.cmp(b, a),
+    LT{},
+    Equal.trans(Cmp, Nat.cmp(b, a), Mst.flip(Nat.cmp(a, b)), LT{}, Mst.nat_flip(a, b), Equal.cong(Cmp, Cmp, Mst.flip, Nat.cmp(a, b), GT{}, e))
+  )
+
+# a number below another is before it
+def Mst.nat_lt_of(+a: Nat, +b: Nat) -> {Nat.cmp(a, b) == LT{}: Cmp} -> {Nat.is_lt(a, b) == True{}: Bool}:
+  +e => Equal.cong(Cmp, Bool, Cmp.is_lt, Nat.cmp(a, b), LT{}, e)
+
+# a comparison that is LT or EQ is at or below
+def Mst.le_of_lt(+c: Cmp) -> {c == LT{}: Cmp} -> {Cmp.is_le(c) == True{}: Bool}:
+  +e => Equal.cong(Cmp, Bool, Cmp.is_le, c, LT{}, e)
+
+# a key is at or below itself
+def Mst.le_refl_key(+k: List<&2, U32>) -> {Cmp.is_le(Key.cmp(k, k)) == True{}: Bool}:
+  Equal.cong(Cmp, Bool, Cmp.is_le, Key.cmp(k, k), EQ{}, Mst.key_refl(k))
+
+# items with their last subtree set are as empty as before
+def Mst.empty_set_last(+xs: List<&2, Item>, -m: Maybe<&2, Hashes.Hash>) -> {
+  List.is_empty(&2, Item, Mst.set_last(xs, m)) == List.is_empty(&2, Item, xs): Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Item{+k, +v, +r}, Nil{}}:
+      {==}
+    case Con{Item{+k, +v, +r}, Con{+y, +rest}}:
+      {==}
+
+# items that are not empty, then more, are not empty
+def Mst.empty_append(+xs: List<&2, Item>, -ys: List<&2, Item>) -> {List.is_empty(&2, Item, xs) == False{}: Bool} -> {
+  List.is_empty(&2, Item, List.append(&2, Item, xs, ys)) == False{}: Bool
+}:
+  match xs:
+    case Nil{}:
+      +e => Empty.absurd({List.is_empty(&2, Item, ys) == False{}: Bool}, Shared.Bool.true_ne_false(e))
+    case Con{+x, +rest}:
+      +e => {==}
+
+# k comes before the head key of items after k
+def Mst.before_head(+xb: List<&2, Item>, +k: List<&2, U32>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Items.fit(xb, Some{k}, hi) == True{}: Bool
+} -> {Bound.before(k, hi) == True{}: Bool} -> {Bound.before(k, Items.head_key(xb, hi)) == True{}: Bool}:
+  match xb:
+    case Nil{}:
+      +f => +b => b
+    case Con{Item{+x1, +v1, +r1}, +rest}:
+      +f => +b => Shared.Bool.and_true_left(
+        Key.is_lt(k, x1),
+        Bound.before(x1, hi),
+        Shared.Bool.and_true_left(Bool.and(Key.is_lt(k, x1), Bound.before(x1, hi)), Items.fit(rest, Some{x1}, hi), f)
+      )
+
+# what holds of items holds of them followed by nothing
+def Mst.with_nil(-P: List<&2, Item> -> Type, +xs: List<&2, Item>, p: P(xs)) -> P(List.append(&2, Item, xs, [])):
+  %Equal.sym(List<&2, Item>, List.append(&2, Item, xs, []), xs, Shared.List.append_nil(Item, xs)): P(_)
+  p
+
+# what holds of items followed by nothing holds of them
+def Mst.without_nil(-P: List<&2, Item> -> Type, +xs: List<&2, Item>, p: P(List.append(&2, Item, xs, []))) -> P(xs):
+  %Shared.List.append_nil(Item, xs): P(_)
+  p
+
+# what a merge reads: below k, as the tree ma in the room after lo; above k,
+# as the tree mb in the room before hi; and k, absent; in the room of the up
+# u, between lo and hi
+def Mst.MergeRead(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -s: S,
+  -u: Nat,
+  -lo: Maybe<&2, List<&2, U32>>,
+  -k: List<&2, U32>,
+  -hi: Maybe<&2, List<&2, U32>>,
+  -ma: Maybe<&2, Hashes.Hash>,
+  -mb: Maybe<&2, Hashes.Hash>,
+  -nc: Maybe<&2, Hashes.Hash>
+) -> Type:
+  (
+    @k2: List<&2, U32> -> @x: Maybe<&2, List<&2, U32>> -> @u1: Nat -> @g1: Nat -> @g2: Nat -> {Key.cmp(k2, k) == LT{}: Cmp} -> {
+      Nat.is_le(u, g2) == True{}: Bool
+    } -> {
+      Look.known(Mst.look.go(~S, ~fetch, g1, s, Room{u1, lo, Some{k}}, ma, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+    } -> {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, nc, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+  )
+    & (
+      (
+        @k2: List<&2, U32> -> @x: Maybe<&2, List<&2, U32>> -> @u1: Nat -> @g1: Nat -> @g2: Nat -> {Key.cmp(k2, k) == GT{}: Cmp} -> {
+          Nat.is_le(u, g2) == True{}: Bool
+        } -> {
+          Look.known(Mst.look.go(~S, ~fetch, g1, s, Room{u1, Some{k}, hi}, mb, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+        } -> {Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, nc, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+      )
+        & (
+          @g2: Nat -> {Nat.is_le(u, g2) == True{}: Bool} -> {
+            Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, nc, k)) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+          }
+        )
+    )
+
+# what a merge reads, in any room whose up is above both roots, between
+# bounds around k
+def Mst.MergeMain(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -s: S,
+  -lo: Maybe<&2, List<&2, U32>>,
+  -k: List<&2, U32>,
+  -hi: Maybe<&2, List<&2, U32>>,
+  -ma: Maybe<&2, Hashes.Hash>,
+  -mb: Maybe<&2, Hashes.Hash>,
+  -nc: Maybe<&2, Hashes.Hash>
+) -> Type:
+  @u: Nat -> {Mst.lvl(~S, ~fetch, s, ma, u) == True{}: Bool} -> {Mst.lvl(~S, ~fetch, s, mb, u) == True{}: Bool} -> {
+    Bound.after(lo, k) == True{}: Bool
+  } -> {Bound.before(k, hi) == True{}: Bool} -> Mst.MergeRead(~S, ~fetch, s, u, lo, k, hi, ma, mb, nc)
+
+# a merge res of the trees ma, in the room of the up ua after lo, and mb, in
+# the room of the up ub before hi, around the key k: once the depot holds its
+# new nodes, the roots sit in their rooms, and it reads as Mst.MergeMain says
+def Mst.MergeOk(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  -s: S,
+  -ua: Nat,
+  -lo: Maybe<&2, List<&2, U32>>,
+  -k: List<&2, U32>,
+  -ub: Nat,
+  -hi: Maybe<&2, List<&2, U32>>,
+  -ma: Maybe<&2, Hashes.Hash>,
+  -mb: Maybe<&2, Hashes.Hash>,
+  res: Maybe<&2, Edit>
+) -> Type:
+  match res:
+    case None{}:
+      Unit
+    case Some{Edit{nc, ns}}:
+      {Depots.Depot.holds(~S, ~fetch, s, ns) == True{}: Bool} -> (
+        ({Mst.lvl(~S, ~fetch, s, ma, ua) == True{}: Bool} & {Mst.lvl(~S, ~fetch, s, mb, ub) == True{}: Bool})
+          & Mst.MergeMain(~S, ~fetch, s, lo, k, hi, ma, mb, nc)
+      )
+
+# a merge of two empty trees
+def Mst.merge_ok.none(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  -ua: Nat,
+  -lo: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  -ub: Nat,
+  -hi: Maybe<&2, List<&2, U32>>
+) -> Mst.MergeOk(~S, ~fetch, s, ua, lo, k, ub, hi, None{}, None{}, Some{Edit{None{}, []}}):
+  +hold => (
+    ({==}, {==}),
+    +u => +lva => +lvb => +a => +b => (
+      +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => Mst.none_kept(~S, ~fetch, g1, g2, s, Room{u1, lo, Some{k}}, Room{u, lo, hi}, k2, x),
+      (
+        +k2 => +x => +u1 => +g1 => +g2 => +c => +fu => Mst.none_kept(~S, ~fetch, g1, g2, s, Room{u1, Some{k}, hi}, Room{u, lo, hi}, k2, x),
+        +g2 => +fu => Equal.cong(
+          Look,
+          Maybe<&2, Maybe<&2, List<&2, U32>>>,
+          Look.known,
+          Mst.look.go(~S, ~fetch, g2, s, Room{u, lo, hi}, None{}, k),
+          Look.Absent{},
+          Mst.look_none(~S, ~fetch, g2, s, Room{u, lo, hi}, k)
+        )
+      )
+    )
+  )
 
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
