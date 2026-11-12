@@ -3196,12 +3196,6 @@ def Mst.key_lt_gt(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.cmp(a, b) == LT{
     %Equal.sym(Cmp, Key.cmp(a, b), LT{}, e): {Mst.flip(_) == GT{}: Cmp}
     {==}
 
-# Key.is_lt is transitive
-def Mst.key_lt_trans(+a: List<&2, U32>, +b: List<&2, U32>, +c: List<&2, U32>) -> {Key.is_lt(a, b) == True{}: Bool} -> {
-  Key.is_lt(b, c) == True{}: Bool
-} -> {Key.is_lt(a, c) == True{}: Bool}:
-  e1 => e2 => Mst.key_is_lt(a, c)(Mst.key_trans(a, b, c)(Mst.key_lt_of(a, b)(e1))(Mst.key_lt_of(b, c)(e2)))
-
 # Shared.List.is_eq calls a key the same as one equal to it
 def Mst.key_ne.of(+k: List<&2, U32>, -k2: List<&2, U32>, e: {k2 == k: List<&2, U32>}) -> {
   True{} == Shared.List.is_eq(~U32, ~U32.is_eq, k, k2): Bool
@@ -5191,26 +5185,6 @@ def Mst.look.same_pick(
     )
   )
 
-# the last key of the first items, after wider bounds, is at or below
-def Mst.lo_le_last(+pre: List<&2, Item>, +lo1: Maybe<&2, List<&2, U32>>, +lo2: Maybe<&2, List<&2, U32>>, +wl: {
-  Mst.lo_le(lo2, lo1) == True{}: Bool
-}) -> {Mst.lo_le(Items.last_key(pre, lo2), Items.last_key(pre, lo1)) == True{}: Bool}:
-  match pre:
-    case Nil{}:
-      wl
-    case Con{Item{+k, +v, +r}, +rest}:
-      Mst.lo_le_refl(Items.last_key(rest, Some{k}))
-
-# the head key of items, before wider bounds, is at or above
-def Mst.hi_le_head(+post: List<&2, Item>, +hi1: Maybe<&2, List<&2, U32>>, +hi2: Maybe<&2, List<&2, U32>>, +wh: {
-  Mst.hi_le(hi1, hi2) == True{}: Bool
-}) -> {Mst.hi_le(Items.head_key(post, hi1), Items.head_key(post, hi2)) == True{}: Bool}:
-  match post:
-    case Nil{}:
-      wh
-    case Con{Item{+k, +v, +r}, +rest}:
-      Mst.hi_le_refl(Some{k})
-
 # Mst.gap_kept, once a pick passes the items before the gap (b2: whether the
 # pick stops at the first item after it)
 def Mst.gap_kept.first(
@@ -6407,11 +6381,6 @@ def Mst.before_head(+xb: List<&2, Item>, +k: List<&2, U32>, +hi: Maybe<&2, List<
 # what holds of items holds of them followed by nothing
 def Mst.with_nil(-P: List<&2, Item> -> Type, +xs: List<&2, Item>, p: P(xs)) -> P(List.append(&2, Item, xs, [])):
   %Equal.sym(List<&2, Item>, List.append(&2, Item, xs, []), xs, Shared.List.append_nil(Item, xs)): P(_)
-  p
-
-# what holds of items followed by nothing holds of them
-def Mst.without_nil(-P: List<&2, Item> -> Type, +xs: List<&2, Item>, p: P(List.append(&2, Item, xs, []))) -> P(xs):
-  %Shared.List.append_nil(Item, xs): P(_)
   p
 
 # what a merge reads: below k, as the tree ma in the room after lo; above k,
@@ -7630,7 +7599,6 @@ def Mst.merge_eq_hi(
       == True{}: Bool
   },
   +ps: {Mst.passes(xa, k2) == True{}: Bool},
-  +ak: {Bound.after(Items.last_key(xa, lo), k) == True{}: Bool},
   +fu: {Nat.is_le(u, g2) == True{}: Bool},
   ih: @g3: Nat -> @g4: Nat -> {Nat.is_le(la, g4) == True{}: Bool} -> {
     Look.known(Mst.look.go(~S, ~fetch, g3, s, Room{la, Some{k}, Items.head_key(xb, hi)}, leftb, k2))
@@ -7905,7 +7873,6 @@ def Mst.merge_ok.eq.read(
         eN,
         oN,
         Mst.passes_of_le(xa, k, k2)(all)(Mst.le_of_lt(Key.cmp(k, k2))(Mst.key_gt_lt(k2, k)(c))),
-        ak,
         fu,
         +g3 => +g4 => +fl => +e3 => ihi(k2)(x)(la)(g3)(g4)(c)(fl)(e3)
       )(
