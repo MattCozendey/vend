@@ -25079,13 +25079,34 @@ def Pieces.apart_key(as: List<&2, Piece>, +bs: List<&2, Piece>, +k: List<&2, U32
 def Pieces.apart_right(a: List<&2, Piece>, +b: List<&2, Piece>, +bs: List<&2, Piece>) -> {
   Pieces.apart(List.append(&2, Piece, a, b), bs) == True{}: Bool
 } -> {Pieces.apart(b, bs) == True{}: Bool}:
-  ?TODO
+  match a:
+    case Nil{}:
+      h => h
+    case Con{Piece.Bind{+k, v}, +rest}:
+      h => Pieces.apart_right(
+        rest,
+        b,
+        bs
+      )(Shared.Bool.and_true_right(Bool.not(Pieces.has_key(bs, k)), Pieces.apart(List.append(&2, Piece, rest, b), bs))(h))
+    case Con{Piece.Sub{h2, u, lo, hi}, +rest}:
+      h => Pieces.apart_right(rest, b, bs)(h)
 
 # pieces apart from bs, before others, are apart from bs
 def Pieces.apart_left(a: List<&2, Piece>, +b: List<&2, Piece>, +bs: List<&2, Piece>) -> {
   Pieces.apart(List.append(&2, Piece, a, b), bs) == True{}: Bool
 } -> {Pieces.apart(a, bs) == True{}: Bool}:
-  ?TODO
+  match a:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{+k, v}, +rest}:
+      +h => Shared.Bool.and_both(
+        Bool.not(Pieces.has_key(bs, k)),
+        Pieces.apart(rest, bs)
+      )(Shared.Bool.and_true_left(Bool.not(Pieces.has_key(bs, k)), Pieces.apart(List.append(&2, Piece, rest, b), bs))(h))(
+        Pieces.apart_left(rest, b, bs)(Shared.Bool.and_true_right(Bool.not(Pieces.has_key(bs, k)), Pieces.apart(List.append(&2, Piece, rest, b), bs))(h))
+      )
+    case Con{Piece.Sub{h2, u, lo, hi}, +rest}:
+      h => Pieces.apart_left(rest, b, bs)(h)
 
 # pieces apart from others are apart from the front of them
 def Pieces.apart_sub_left(as: List<&2, Piece>, +a: List<&2, Piece>, +b: List<&2, Piece>) -> {
@@ -25949,6 +25970,237 @@ def Mst.diff_differ(
   +k: List<&2, U32>
 ) -> {Mst.diff.go(~S, ~fetch, f, s, runs) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>} -> {Runs.sorted_all(runs) == True{}: Bool} -> {
   List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, k) == Runs.differ(~S, ~fetch, f, s, runs, k): Bool
+}:
+  ?TODO
+
+# Whole trees, for writes
+# A tree that lists whole is whole node by node: each node is in its room,
+# below a level, with items of its level and no subtree before the empty key,
+# and so is each subtree, at most f levels down.
+
+# the node m, found in the room r, is below the level u, and its items are
+# whole (k)
+def Mst.wf.node(
+  m: Maybe<&2, Node>,
+  +u: Nat,
+  r: Room,
+  k: Nat -> Maybe<&2, Hashes.Hash> -> List<&2, Item> -> Maybe<&2, List<&2, U32>> -> Maybe<&2, List<&2, U32>> -> Bool
+) -> Bool:
+  match m r:
+    case None{} x:
+      False{}
+    case Some{Node{+l, left, xs}} Room{up, lo, hi}:
+      Bool.and(Nat.is_lt(l, u), k(l)(left)(xs)(lo)(hi))
+
+# the items xs of a node of the level l, after the subtree prev, between lo
+# and hi, are of the level l, with no subtree before the empty key, and each
+# subtree is whole in its room, at most f levels down
+def Mst.wf.items(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  xs: List<&2, Item>,
+  +l: Nat,
+  prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> Bool:
+  match f xs prev:
+    case 0n Nil{} None{}:
+      True{}
+    case 0n Nil{} Some{h}:
+      False{}
+    case 1n+p Nil{} None{}:
+      True{}
+    case 1n+p Nil{} Some{+h}:
+      Mst.wf.node(
+        Mst.node.in(~S, ~fetch, s, h, Room{l, lo, hi}),
+        l,
+        Room{l, lo, hi},
+        l2 => left => xs2 => lo2 => hi2 => Mst.wf.items(~S, ~fetch, p, s, xs2, l2, left, lo2, hi2)
+      )
+    case 0n Con{Item{+k, v, r}, rest} None{}:
+      Bool.and(Nat.is_eq(Key.level(k), l), Mst.wf.items(~S, ~fetch, 0n, s, rest, l, r, Some{k}, hi))
+    case 0n Con{Item{k, v, r}, rest} Some{h}:
+      False{}
+    case 1n+p Con{Item{+k, v, r}, rest} None{}:
+      Bool.and(Nat.is_eq(Key.level(k), l), Mst.wf.items(~S, ~fetch, 1n+p, s, rest, l, r, Some{k}, hi))
+    case 1n+(+p) Con{Item{+k, v, r}, rest} Some{+h}:
+      Bool.and(
+        Bool.and(
+          Bool.and(Nat.is_eq(Key.level(k), l), Bool.not(List.is_empty(&2, U32, k))),
+          Mst.wf.node(
+            Mst.node.in(~S, ~fetch, s, h, Room{l, lo, Some{k}}),
+            l,
+            Room{l, lo, Some{k}},
+            l2 => left => xs2 => lo2 => hi2 => Mst.wf.items(~S, ~fetch, p, s, xs2, l2, left, lo2, hi2)
+          )
+        ),
+        Mst.wf.items(~S, ~fetch, 1n+p, s, rest, l, r, Some{k}, hi)
+      )
+
+# the tree of the root m is whole in the room r, below the level u, at most
+# f levels down
+def Mst.wf(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, f: Nat, +s: S, +u: Nat, +r: Room, m: Maybe<&2, Hashes.Hash>) -> Bool:
+  match f m:
+    case x None{}:
+      True{}
+    case 0n Some{h}:
+      False{}
+    case 1n+p Some{+h}:
+      Mst.wf.node(
+        Mst.node.in(~S, ~fetch, s, h, r),
+        u,
+        r,
+        l2 => left => xs2 => lo2 => hi2 => Mst.wf.items(~S, ~fetch, p, s, xs2, l2, left, lo2, hi2)
+      )
+
+# the subtree after no items is whole as a tree in its room
+def Mst.wf_nil(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, f: Nat, +s: S, +l: Nat, prev: Maybe<&2, Hashes.Hash>, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>) -> {
+  Mst.wf.items(~S, ~fetch, f, s, [], l, prev, lo, hi) == Mst.wf(~S, ~fetch, f, s, l, Room{l, lo, hi}, prev): Bool
+}:
+  ?TODO
+
+# a bound after a key is not the empty key
+def Bound.before_meets(+k: List<&2, U32>, hi: Maybe<&2, List<&2, U32>>) -> {Bound.before(k, hi) == True{}: Bool} -> {
+  Bound.meets_hi([], hi) == True{}: Bool
+}:
+  ?TODO
+
+# a level of zero groups is at most the groups counted
+def Level.zeros_le(f: Nat, x: U32) -> {Nat.is_le(Level.zeros(f, x), f) == True{}: Bool}:
+  ?TODO
+
+# a key is of a level below 13
+def Key.level_lt(k: List<&2, U32>) -> {Nat.is_lt(Key.level(k), 13n) == True{}: Bool}:
+  ?TODO
+
+# the subtree before the items of a node is whole in its room
+def Mst.wf_first(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  xs: List<&2, Item>,
+  +l: Nat,
+  prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Mst.wf.items(~S, ~fetch, f, s, xs, l, prev, lo, hi) == True{}: Bool} -> {
+  Mst.wf(~S, ~fetch, f, s, l, Room{l, lo, Items.head_key(xs, hi)}, prev) == True{}: Bool
+}:
+  ?TODO
+
+# the subtree after the items of a node is whole in its room
+def Mst.wf_last(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  xs: List<&2, Item>,
+  +l: Nat,
+  prev: Maybe<&2, Hashes.Hash>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Mst.wf.items(~S, ~fetch, f, s, xs, l, prev, lo, hi) == True{}: Bool} -> {
+  Mst.wf(~S, ~fetch, f, s, l, Room{l, Items.last_key(xs, lo), hi}, Mst.last(xs, prev)) == True{}: Bool
+}:
+  ?TODO
+
+# the items of a node after its first one are whole
+def Mst.wf_rest(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  +s: S,
+  +k: List<&2, U32>,
+  -v: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
+  +l: Nat,
+  prev: Maybe<&2, Hashes.Hash>,
+  -lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
+) -> {Mst.wf.items(~S, ~fetch, f, s, Item{k, v, r} <> rest, l, prev, lo, hi) == True{}: Bool} -> {
+  Mst.wf.items(~S, ~fetch, f, s, rest, l, r, Some{k}, hi) == True{}: Bool
+}:
+  ?TODO
+
+# the first item of a node is of its level
+def Mst.wf_level(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  -s: S,
+  +k: List<&2, U32>,
+  -v: List<&2, U32>,
+  -r: Maybe<&2, Hashes.Hash>,
+  -rest: List<&2, Item>,
+  +l: Nat,
+  prev: Maybe<&2, Hashes.Hash>,
+  -lo: Maybe<&2, List<&2, U32>>,
+  -hi: Maybe<&2, List<&2, U32>>
+) -> {Mst.wf.items(~S, ~fetch, f, s, Item{k, v, r} <> rest, l, prev, lo, hi) == True{}: Bool} -> {Key.level(k) == l: Nat}:
+  ?TODO
+
+# the items of a part before its gap, last first
+def Part.before(p: Part) -> List<&2, Item>:
+  match p:
+    case Part{b, g, a}:
+      b
+
+# the items of a part from its gap on
+def Part.after(p: Part) -> List<&2, Item>:
+  match p:
+    case Part{b, g, a}:
+      a
+
+# the items of a node from the gap of a part on are whole
+def Mst.wf_part(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +f: Nat,
+  +s: S,
+  xs: List<&2, Item>,
+  +l: Nat,
+  +prev: Maybe<&2, Hashes.Hash>,
+  -lo0: Maybe<&2, List<&2, U32>>,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +acc: List<&2, Item>
+) -> {Mst.wf.items(~S, ~fetch, f, s, xs, l, prev, lo, hi) == True{}: Bool} -> {Items.head_key(acc, lo0) == lo: Maybe<&2, List<&2, U32>>} -> {
+  Mst.wf.items(
+    ~S,
+    ~fetch,
+    f,
+    s,
+    Part.after(Mst.part(xs, prev, k, acc)),
+    l,
+    Part.gap(Mst.part(xs, prev, k, acc)),
+    Items.head_key(Part.before(Mst.part(xs, prev, k, acc)), lo0),
+    hi
+  )
+    == True{}: Bool
+}:
+  ?TODO
+
+# a node of another level than k's does not hold k where its part cuts it
+def Mst.hits_false(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  f: Nat,
+  -s: S,
+  -b: List<&2, Item>,
+  after: List<&2, Item>,
+  +l: Nat,
+  g: Maybe<&2, Hashes.Hash>,
+  -lo: Maybe<&2, List<&2, U32>>,
+  -hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>
+) -> {Mst.wf.items(~S, ~fetch, f, s, after, l, g, lo, hi) == True{}: Bool} -> {Nat.is_eq(Key.level(k), l) == False{}: Bool} -> {
+  Part.hits(Part{b, g, after}, k) == False{}: Bool
 }:
   ?TODO
 
