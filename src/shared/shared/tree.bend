@@ -26025,41 +26025,58 @@ def Nat.fuel_mgt(la: Nat, ua: Nat, ub: Nat, p: Nat) -> {Nat.is_lt(la, ua) == Tru
 def Nat.fuel_mlt(lb: Nat, ua: Nat, ub: Nat, p: Nat) -> {Nat.is_lt(lb, ub) == True{}: Bool} -> {
   Nat.is_le(1n+Nat.add(ua, ub), 1n+p) == True{}: Bool
 } -> {Nat.is_le(1n+Nat.add(ua, lb), p) == True{}: Bool}:
-  ?TODO
+  match ua:
+    case 0n:
+      x => x1 => Nat.fuel_down(1n+Nat.add(0n, lb), 1n+Nat.add(0n, ub), p)(x)(x1)
+    case 1n+uap:
+      match p:
+        case 0n:
+          x => x1 => x1
+        case 1n+pp:
+          x => x1 => Nat.fuel_mlt(lb, uap, ub, pp)(x)(x1)
 
 # the fuel of a merge, one level down on both sides
 def Nat.fuel_meq(la: Nat, lb: Nat, ua: Nat, ub: Nat, p: Nat) -> {Nat.is_lt(la, ua) == True{}: Bool} -> {Nat.is_lt(lb, ub) == True{}: Bool} -> {
   Nat.is_le(1n+Nat.add(ua, ub), 1n+p) == True{}: Bool
 } -> {Nat.is_le(1n+Nat.add(la, lb), p) == True{}: Bool}:
-  ?TODO
+  +la = la
+  +ub = ub
+  +p = p
+  x => x1 => x2 => Nat.fuel_mlt(lb, la, ub, p)(x1)(Shared.Nat.le_succ(1n+Nat.add(la, ub), p)(Nat.fuel_mgt(la, ua, ub, p)(x)(x2)))
 
 # below b, which is at most c, is at most c
 def Nat.lt_le_trans(a: Nat, b: Nat, c: Nat) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Nat.is_le(b, c) == True{}: Bool} -> {Nat.is_le(a, c) == True{}: Bool}:
-  ?TODO
+  +b = b
+  +c = c
+  x => x1 => Nat.fuel_down(a, b, c)(x)(Shared.Nat.le_succ(b, c)(x1))
 
 # at most b after one more is at most b
 def Nat.le_of_succ(a: Nat, b: Nat) -> {Nat.is_le(1n+a, b) == True{}: Bool} -> {Nat.is_le(a, b) == True{}: Bool}:
-  ?TODO
+  +a = a
+  x => Nat.lt_le_trans(a, 1n+a, b)(Shared.Nat.lt_succ(a))(x)
 
 # the fuel of a merge of two subtrees of the level l covers l
 def Nat.le_of_double(l: Nat, p: Nat) -> {Nat.is_le(1n+Nat.add(l, l), p) == True{}: Bool} -> {Nat.is_le(l, p) == True{}: Bool}:
-  ?TODO
+  +l = l
+  x => Shared.Nat.le_trans(l, 1n+Nat.add(l, l), p)(Shared.Nat.le_succ(l, Nat.add(l, l))(Shared.Nat.le_add(l, l)))(x)
 
 # a number below b is not b
 def Nat.lt_ne(a: Nat, b: Nat) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Nat.is_eq(b, a) == False{}: Bool}:
-  ?TODO
+  +a = a
+  +b = b
+  x => (%Equal.sym(Cmp, Nat.cmp(b, a), Cmp.flip(Nat.cmp(a, b)), Nat.cmp_flip(a, b)) : {Cmp.is_eq(_) == False{} : Bool}; (%Equal.sym(Cmp, Nat.cmp(a, b), LT{}, Cmp.lt_true(Nat.cmp(a, b))(x)) : {Cmp.is_eq(Cmp.flip(_)) == False{} : Bool}; {==}))
 
 # a number above b is not b
 def Nat.gt_ne(a: Nat, b: Nat) -> {Nat.cmp(a, b) == GT{}: Cmp} -> {Nat.is_eq(b, a) == False{}: Bool}:
-  ?TODO
+  x => (%Equal.sym(Cmp, Nat.cmp(b, a), Cmp.flip(Nat.cmp(a, b)), Nat.cmp_flip(a, b)) : {Cmp.is_eq(_) == False{} : Bool}; (%Equal.sym(Cmp, Nat.cmp(a, b), GT{}, x) : {Cmp.is_eq(Cmp.flip(_)) == False{} : Bool}; {==}))
 
 # a number that compares LT is below
 def Nat.cmp_lt(a: Nat, b: Nat) -> {Nat.cmp(a, b) == LT{}: Cmp} -> {Nat.is_lt(a, b) == True{}: Bool}:
-  ?TODO
+  x => Mst.nat_lt_of(a, b)(x)
 
 # a number that compares EQ is the same
 def Nat.cmp_eq(a: Nat, b: Nat) -> {Nat.cmp(a, b) == EQ{}: Cmp} -> {a == b: Nat}:
-  ?TODO
+  x => Mst.nat_eq(a, b)(x)
 
 # a level below u is not below nothing
 def Nat.lt_le_zero(l: Nat, u: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(u, 0n) == True{}: Bool} -> Empty:
@@ -26621,13 +26638,17 @@ def Mst.look_absent(
 
 # a part is its fields
 def Part.eta(p: Part) -> {p == Part{Part.before(p), Part.gap(p), Part.after(p)}: Part}:
-  ?TODO
+  match p:
+    case Part{before, gap, after}:
+      {==}
 
 # the room of the gap of a part
 def Part.room_eq(p: Part, +l: Nat, lo: Maybe<&2, List<&2, U32>>, hi: Maybe<&2, List<&2, U32>>) -> {
   Part.room(p, l, lo, hi) == Room{l, Items.head_key(Part.before(p), lo), Items.head_key(Part.after(p), hi)}: Room
 }:
-  ?TODO
+  match p:
+    case Part{before, gap, after}:
+      {==}
 
 # a part of whole items of another level than k's does not hold k
 def Mst.part_hits(
