@@ -10391,7 +10391,7 @@ def Kept.laws_kept(d: Led()) -> Trees.Laws.Kept(
   Replicas.Led.tree(Requests.Ask.machine(), d)
 ):
   match d:
-    case Tuple{x, Tuple{o, Tuple{fin, Tuple{pf, Tuple{wr, Tuple{cn, Tuple{rg, Tuple{df, Tuple{wh, kp}}}}}}}}}:
+    case Tuple{x, Tuple{o, Tuple{fin, Tuple{pf, Tuple{wr, Tuple{cn, Tuple{rg, Tuple{df, Tuple{wh, Tuple{kp, rest}}}}}}}}}}:
       kp
 
 # a binding is the same as itself
@@ -10480,6 +10480,1613 @@ def Bind.within_refl(ks: List<&2, Trees.Binding>) -> {
         List.contains(~Trees.Binding, ~Trees.Binding.is_eq, x <> r, x),
         Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, r, x <> r)
       )(Bind.contains_head(x, r))(Bind.within_cons(r, x, r)(Bind.within_refl(r)))
+# a tree that is kept lists its bindings, and the ledger holds each resource
+# among them
+def Kept.Listed(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>) -> Data:
+  Sigma<&2, &2, List<&2, Trees.Binding>, bs => Merge.And({Tree.range(~d, l, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>}, {Res.all_held(~d, l, bs) == True{}: Bool})>
+
+# a tree that is kept is listed, once the listing is known (mr)
+def Kept.split.at(
+  ~d: Led(),
+  +l: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  mr: Maybe<&2, List<&2, Trees.Binding>>,
+  em: {Tree.range(~d, l, h, []) == mr: Maybe<&2, List<&2, Trees.Binding>>},
+  hk: {
+    Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, mr, bs => Some{Res.all_held(~d, l, bs)}), False{}) == True{}: Bool
+  }
+) -> Kept.Listed(~d, l, h):
+  match mr:
+    case None{}:
+      Empty.absurd(Kept.Listed(~d, l, h), Shared.Bool.false_ne_true(hk))
+    case Some{+bs}:
+      (bs, (em, hk))
+
+# a tree that is kept is listed
+def Kept.split(
+  ~d: Led(),
+  +l: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  hk: {Tree.kept(~d, l, h) == True{}: Bool}
+) -> Kept.Listed(~d, l, h):
+  Kept.split.at(~d, l, h, Tree.range(~d, l, h, []), {==}, hk)
+
+# a tree is kept when it is listed and the ledger holds each resource among its
+# bindings
+def Kept.of(
+  ~d: Led(),
+  +l: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +bs: List<&2, Trees.Binding>,
+  e1: {Tree.range(~d, l, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  ha: {Res.all_held(~d, l, bs) == True{}: Bool}
+) -> {Tree.kept(~d, l, h) == True{}: Bool}:
+  %Equal.sym(Maybe<&2, List<&2, Trees.Binding>>, Tree.range(~d, l, h, []), Some{bs}, e1): {
+    Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, _, bs2 => Some{Res.all_held(~d, l, bs2)}), False{}) == True{}: Bool
+  }
+  ha
+
+# the ledger holds each resource among some bindings, when it holds each
+# resource that is among the bindings bs0, and they are among them
+def Kept.all_within(
+  ~d: Led(),
+  ~l: L(d),
+  ~bs0: List<&2, Trees.Binding>,
+  ~f: @B: Trees.Binding -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs0, B) == True{}: Bool} -> {
+    Res.held(~d, l, B) == True{}: Bool
+  },
+  xs: List<&2, Trees.Binding>
+) -> {Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, xs, bs0) == True{}: Bool}
+  -> {Res.all_held(~d, l, xs) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      h => {==}
+    case Con{+x, +r}:
+      +h => Shared.List.all.if_both(Res.held(~d, l, x), u => Res.all_held(~d, l, r))(
+        f(x)(
+          Shared.Bool.and_true_left(
+            List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs0, x),
+            Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, r, bs0)
+          )(h)
+        )
+      )(
+        Kept.all_within(~d, ~l, ~bs0, ~f, r)(
+          Shared.Bool.and_true_right(
+            List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs0, x),
+            Shared.List.within(~Trees.Binding, ~Trees.Binding.is_eq, r, bs0)
+          )(h)
+        )
+      )
+
+# the ledger holds each resource among some bindings, when it holds each
+# resource that is among them
+def Kept.all_of(
+  ~d: Led(),
+  ~l: L(d),
+  ~bs: List<&2, Trees.Binding>,
+  ~f: @B: Trees.Binding -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, B) == True{}: Bool} -> {
+    Res.held(~d, l, B) == True{}: Bool
+  }
+) -> {Res.all_held(~d, l, bs) == True{}: Bool}:
+  Kept.all_within(~d, ~l, ~bs, ~f, bs)(Bind.within_refl(bs))
+
+# a binding among those that the ledger holds, once the first binding is known
+# to be it or not (p), is held
+def Kept.of_all.at(
+  ~d: Led(),
+  +l: L(d),
+  p: Bool,
+  +x: Trees.Binding,
+  +r: List<&2, Trees.Binding>,
+  +B: Trees.Binding,
+  ep: {Trees.Binding.is_eq(x, B) == p: Bool},
+  ha: {Res.all_held(~d, l, x <> r) == True{}: Bool},
+  hc: {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, x <> r, B) == True{}: Bool},
+  ih: {Res.all_held(~d, l, r) == True{}: Bool}
+    -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, r, B) == True{}: Bool}
+    -> {Res.held(~d, l, B) == True{}: Bool}
+) -> {Res.held(~d, l, B) == True{}: Bool}:
+  match p:
+    case True{}:
+      %Bind.is_eq_sound(x, B)(ep): {Res.held(~d, l, _) == True{}: Bool}
+      Shared.List.all.if_hit(Res.held(~d, l, x), u => Res.all_held(~d, l, r))(ha)
+    case False{}:
+      ih(Shared.List.all.if_rest(Res.held(~d, l, x), u => Res.all_held(~d, l, r))(ha))(
+        %ep: {List.any.if(u => List.contains(~Trees.Binding, ~Trees.Binding.is_eq, r, B), _) == True{}: Bool}
+        hc
+      )
+
+# a binding among those that the ledger holds is held
+def Kept.of_all(
+  ~d: Led(),
+  +l: L(d),
+  bs: List<&2, Trees.Binding>,
+  +B: Trees.Binding,
+  ha: {Res.all_held(~d, l, bs) == True{}: Bool}
+) -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, B) == True{}: Bool} -> {Res.held(~d, l, B) == True{}: Bool}:
+  match bs:
+    case Nil{}:
+      hc => Empty.absurd({Res.held(~d, l, B) == True{}: Bool}, Shared.Bool.false_ne_true(hc))
+    case Con{+x, +r}:
+      +hc => Kept.of_all.at(
+        ~d,
+        l,
+        Trees.Binding.is_eq(x, B),
+        x,
+        r,
+        B,
+        {==},
+        ha,
+        hc,
+        ih => ic => Kept.of_all(~d, l, r, B, ih)(ic)
+      )
+# a read whose value is v is the read that found v
+def Kept.look_found(
+  r: Trees.Look,
+  +v: List<&2, U32>,
+  e: {Trees.Look.value(r) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> {r == Trees.Look.Found{v}: Trees.Look}:
+  match r:
+    case Trees.Look.Found{+u}:
+      %Shared.Maybe.some_inj(List<&2, U32>, u, v, e): {Trees.Look.Found{u} == Trees.Look.Found{_}: Trees.Look}
+      {==}
+    case Trees.Look.Absent{}:
+      Empty.absurd({Trees.Look.Absent{} == Trees.Look.Found{v}: Trees.Look}, Shared.Maybe.none_ne_some(List<&2, U32>, v, e))
+    case Trees.Look.Missing{h}:
+      Empty.absurd({Trees.Look.Missing{h} == Trees.Look.Found{v}: Trees.Look}, Shared.Maybe.none_ne_some(List<&2, U32>, v, e))
+
+# the value of the read of a written value is the value
+def Kept.value_of(m: Maybe<&2, List<&2, U32>>) -> {Trees.Look.value(Trees.Look.of(m)) == m: Maybe<&2, List<&2, U32>>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{v}:
+      {==}
+
+# a value that a read of a tree finds is the value of the read, once the read
+# is known (m)
+def Kept.Some(-A: Data, m: Maybe<&2, A>) -> Data:
+  Sigma<&2, &2, A, x => {m == Some{x}: Maybe<&2, A>}>
+
+# a maybe that is some is some value
+def Kept.some_of(-A: Data, m: Maybe<&2, A>, h: {Maybe.is_some(&2, A, m) == True{}: Bool}) -> Kept.Some(A, m):
+  match m:
+    case None{}:
+      Empty.absurd(Kept.Some(A, m), Shared.Bool.false_ne_true(h))
+    case Some{+x}:
+      (x, {==})
+
+# the law of a listing: a binding is in the listing under a prefix exactly when
+# its key leads and the tree reads it so
+def Kept.range_mem(
+  -S: Data,
+  -o: Trees.Tree.Ops(S),
+  rg: Trees.Laws.Range(S, o),
+  s: S,
+  h: Maybe<&2, Hashes.Hash>,
+  p: List<&2, U32>,
+  bs: List<&2, Trees.Binding>,
+  e1: {Trees.Ops.range(S, o)(s)(h)(p) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  k: List<&2, U32>,
+  v: List<&2, U32>
+) -> {
+  List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, Trees.Binding{k, v})
+    == Bool.and(
+      Trees.Key.leads(p, k),
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Trees.Look.value(Trees.Ops.look(S, o)(s)(h)(k)),
+        Some{v}
+      )
+    ): Bool
+}:
+  Merge.snd(
+    {Trees.Bindings.sorted(bs) == True{}: Bool},
+    (@k2: List<&2, U32> -> @v2: List<&2, U32> -> {
+      List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, Trees.Binding{k2, v2})
+        == Bool.and(
+          Trees.Key.leads(p, k2),
+          Shared.Maybe.is_eq(
+            ~List<&2, U32>,
+            ~Shared.List.is_eq(~U32, ~U32.is_eq),
+            Trees.Look.value(Trees.Ops.look(S, o)(s)(h)(k2)),
+            Some{v2}
+          )
+        ): Bool
+    }),
+    rg(s)(h)(p)(bs)(e1)
+  )(k)(v)
+
+# a binding of a listing is read so by the tree
+def Kept.in_range(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +bs: List<&2, Trees.Binding>,
+  e1: {Tree.range(~d, lf, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  hc: {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, Trees.Binding{k, v}) == True{}: Bool}
+) -> {Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k)) == Some{v}: Maybe<&2, List<&2, U32>>}:
+  Shared.Maybe.is_eq_sound(
+    ~List<&2, U32>,
+    ~Shared.List.is_eq(~U32, ~U32.is_eq),
+    x => y => Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), x, y),
+    Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k)),
+    Some{v}
+  )(
+    Shared.Bool.and_true_right(
+      Trees.Key.leads([], k),
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k)),
+        Some{v}
+      )
+    )(
+      Equal.trans(
+        Bool,
+        Bool.and(
+          Trees.Key.leads([], k),
+          Shared.Maybe.is_eq(
+            ~List<&2, U32>,
+            ~Shared.List.is_eq(~U32, ~U32.is_eq),
+            Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k)),
+            Some{v}
+          )
+        ),
+        List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, Trees.Binding{k, v}),
+        True{},
+        Equal.sym(
+          Bool,
+          List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, Trees.Binding{k, v}),
+          Bool.and(
+            Trees.Key.leads([], k),
+            Shared.Maybe.is_eq(
+              ~List<&2, U32>,
+              ~Shared.List.is_eq(~U32, ~U32.is_eq),
+              Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k)),
+              Some{v}
+            )
+          ),
+          Kept.range_mem(
+            L(d),
+            Replicas.Led.tree(Requests.Ask.machine(), d),
+            Kept.laws_range(d),
+            lf,
+            h,
+            [],
+            bs,
+            e1,
+            k,
+            v
+          )
+        ),
+        hc
+      )
+    )
+  )
+
+# a binding that the tree reads so is in a listing of it
+def Kept.of_range(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +bs: List<&2, Trees.Binding>,
+  e1: {Tree.range(~d, lf, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  hv: {Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k)) == Some{v}: Maybe<&2, List<&2, U32>>}
+) -> {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, Trees.Binding{k, v}) == True{}: Bool}:
+  Equal.trans(
+    Bool,
+    List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs, Trees.Binding{k, v}),
+    Bool.and(
+      Trees.Key.leads([], k),
+      Shared.Maybe.is_eq(
+        ~List<&2, U32>,
+        ~Shared.List.is_eq(~U32, ~U32.is_eq),
+        Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k)),
+        Some{v}
+      )
+    ),
+    True{},
+    Kept.range_mem(
+      L(d),
+      Replicas.Led.tree(Requests.Ask.machine(), d),
+      Kept.laws_range(d),
+      lf,
+      h,
+      [],
+      bs,
+      e1,
+      k,
+      v
+    ),
+    Equal.trans(
+      Bool,
+      Bool.and(
+        Trees.Key.leads([], k),
+        Shared.Maybe.is_eq(
+          ~List<&2, U32>,
+          ~Shared.List.is_eq(~U32, ~U32.is_eq),
+          Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k)),
+          Some{v}
+        )
+      ),
+      Bool.and(
+        Trees.Key.leads([], k),
+        Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Some{v}, Some{v})
+      ),
+      True{},
+      Equal.cong(
+        Maybe<&2, List<&2, U32>>,
+        Bool,
+        x => Bool.and(
+          Trees.Key.leads([], k),
+          Shared.Maybe.is_eq(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), x, Some{v})
+        ),
+        Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k)),
+        Some{v},
+        hv
+      ),
+      %Equal.sym(
+        Bool,
+        Shared.List.is_eq(~U32, ~U32.is_eq, v, v),
+        True{},
+        Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), v)
+      ): {Bool.and(Trees.Key.leads([], k), _) == True{}: Bool}
+      {==}
+    )
+  )
+# a binding of a tree after a write of a key whose value is not the one that
+# the tree read is a binding that the tree read before, once the old read is
+# known (sx)
+def Kept.new_held.frame(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +h1: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +bs: List<&2, Trees.Binding>,
+  +k2: List<&2, U32>,
+  +v2: List<&2, U32>,
+  ep: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == False{}: Bool},
+  +e1: {Tree.range(~d, lf, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +ha: {Res.all_held(~d, lf, bs) == True{}: Bool},
+  wr: Merge.Writes(~d, lf, h1, h, k, m),
+  hv: {Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, k2)) == Some{v2}: Maybe<&2, List<&2, U32>>},
+  sx: Kept.Some(Maybe<&2, List<&2, U32>>, Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, h, k2))
+) -> {Res.held(~d, lf, Trees.Binding{k2, v2}) == True{}: Bool}:
+  (+x, +ex) = sx
+  Kept.of_all(
+    ~d,
+    lf,
+    bs,
+    Trees.Binding{k2, v2},
+    ha
+  )(
+    Kept.of_range(
+      ~d,
+      lf,
+      h,
+      bs,
+      e1,
+      k2,
+      v2,
+      Merge.value_known(
+        Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k2),
+        Some{v2},
+        %Equal.sym(
+          Maybe<&2, List<&2, U32>>,
+          Some{v2},
+          x,
+          Shared.Maybe.some_inj(
+            Maybe<&2, List<&2, U32>>,
+            Some{v2},
+            x,
+            %Kept.look_found(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, k2), v2, hv): {
+              Trees.Look.known(_) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+            }
+            Merge.writes_frame(~d, lf, h1, h, k, m, wr, k2, x, ep, ex)
+          )
+        ): {Trees.Look.known(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, k2)) == Some{_}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        ex
+      )
+    )
+  )
+
+# a binding of a tree after a write is held, once the key is known to be the
+# written one or not (p)
+def Kept.new_held.at(
+  ~d: Led(),
+  p: Bool,
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +h1: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +bs: List<&2, Trees.Binding>,
+  +k2: List<&2, U32>,
+  +v2: List<&2, U32>,
+  +ep: {Shared.List.is_eq(~U32, ~U32.is_eq, k, k2) == p: Bool},
+  +e1: {Tree.range(~d, lf, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +ha: {Res.all_held(~d, lf, bs) == True{}: Bool},
+  wr: Merge.Writes(~d, lf, h1, h, k, m),
+  hm: @v: List<&2, U32> -> {m == Some{v}: Maybe<&2, List<&2, U32>>} -> {Res.held(~d, lf, Trees.Binding{k, v}) == True{}: Bool},
+  +hv: {Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, k2)) == Some{v2}: Maybe<&2, List<&2, U32>>}
+) -> {Res.held(~d, lf, Trees.Binding{k2, v2}) == True{}: Bool}:
+  match p:
+    case True{}:
+      %Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), k, k2)(ep): {Res.held(~d, lf, Trees.Binding{_, v2}) == True{}: Bool}
+      hm(v2)(
+        Equal.trans(
+          Maybe<&2, List<&2, U32>>,
+          m,
+          Trees.Look.value(Trees.Look.of(m)),
+          Some{v2},
+          Equal.sym(Maybe<&2, List<&2, U32>>, Trees.Look.value(Trees.Look.of(m)), m, Kept.value_of(m)),
+          %Merge.writes_hit(~d, lf, h1, h, k, m, wr): {Trees.Look.value(_) == Some{v2}: Maybe<&2, List<&2, U32>>}
+          %Equal.sym(
+            List<&2, U32>,
+            k,
+            k2,
+            Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), k, k2)(ep)
+          ): {Trees.Look.value(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h1, _)) == Some{v2}: Maybe<&2, List<&2, U32>>}
+          hv
+        )
+      )
+    case False{}:
+      Kept.new_held.frame(
+        ~d,
+        lf,
+        h,
+        h1,
+        k,
+        m,
+        bs,
+        k2,
+        v2,
+        ep,
+        e1,
+        ha,
+        wr,
+        hv,
+        Kept.some_of(
+          Maybe<&2, List<&2, U32>>,
+          Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, h, k2),
+          Merge.final_look(
+            L(d),
+            Replicas.Led.tree(Requests.Ask.machine(), d),
+            Merge.laws_whole(d),
+            lf,
+            h,
+            bs,
+            e1,
+            k2
+          )
+        )
+      )
+
+# a binding of the listing of a tree after a write is held
+def Kept.new_held(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +h1: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +bs: List<&2, Trees.Binding>,
+  +e1: {Tree.range(~d, lf, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +ha: {Res.all_held(~d, lf, bs) == True{}: Bool},
+  wr: Merge.Writes(~d, lf, h1, h, k, m),
+  hm: @v: List<&2, U32> -> {m == Some{v}: Maybe<&2, List<&2, U32>>} -> {Res.held(~d, lf, Trees.Binding{k, v}) == True{}: Bool},
+  +bs2: List<&2, Trees.Binding>,
+  +e2: {Tree.range(~d, lf, h1, []) == Some{bs2}: Maybe<&2, List<&2, Trees.Binding>>},
+  B: Trees.Binding,
+  hc: {List.contains(~Trees.Binding, ~Trees.Binding.is_eq, bs2, B) == True{}: Bool}
+) -> {Res.held(~d, lf, B) == True{}: Bool}:
+  match B:
+    case Trees.Binding{+k2, +v2}:
+      Kept.new_held.at(
+        ~d,
+        Shared.List.is_eq(~U32, ~U32.is_eq, k, k2),
+        lf,
+        h,
+        h1,
+        k,
+        m,
+        bs,
+        k2,
+        v2,
+        {==},
+        e1,
+        ha,
+        wr,
+        hm,
+        Kept.in_range(~d, lf, h1, bs2, e2, k2, v2, hc)
+      )
+
+# a write to a kept tree, of a key whose value is held, once the tree after it
+# is listed (sr), gives a kept tree
+def Kept.put.range(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +h1: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +bs: List<&2, Trees.Binding>,
+  +e1: {Tree.range(~d, lf, h, []) == Some{bs}: Maybe<&2, List<&2, Trees.Binding>>},
+  +ha: {Res.all_held(~d, lf, bs) == True{}: Bool},
+  wr: Merge.Writes(~d, lf, h1, h, k, m),
+  hm: @v: List<&2, U32> -> {m == Some{v}: Maybe<&2, List<&2, U32>>} -> {Res.held(~d, lf, Trees.Binding{k, v}) == True{}: Bool},
+  sr: Kept.Some(List<&2, Trees.Binding>, Tree.range(~d, lf, h1, []))
+) -> {Tree.kept(~d, lf, h1) == True{}: Bool}:
+  (+bs2, +e2) = sr
+  Kept.of(
+    ~d,
+    lf,
+    h1,
+    bs2,
+    e2,
+    Kept.all_of(
+      ~d,
+      ~lf,
+      ~bs2,
+      ~(B => hc => Kept.new_held(~d, lf, h, h1, k, m, bs, e1, ha, wr, hm, bs2, e2, B, hc))
+    )
+  )
+
+# a write to a kept tree, of a key whose value is held, once the tree is listed
+# (ls), gives a kept tree
+def Kept.put.listed(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +e: Trees.Edit,
+  +ep: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, lf, h, k, m) == Some{e}: Maybe<&2, Trees.Edit>},
+  +hh: Merge.Held(~d, lf, Trees.Edit.nodes(e)),
+  hm: @v: List<&2, U32> -> {m == Some{v}: Maybe<&2, List<&2, U32>>} -> {Res.held(~d, lf, Trees.Binding{k, v}) == True{}: Bool},
+  ls: Kept.Listed(~d, lf, h)
+) -> {Tree.kept(~d, lf, Trees.Edit.root(e)) == True{}: Bool}:
+  (+bs, r1) = ls
+  (+e1, +ha) = r1
+  Kept.put.range(
+    ~d,
+    lf,
+    h,
+    Trees.Edit.root(e),
+    k,
+    m,
+    bs,
+    e1,
+    ha,
+    Replicas.Hist.write(Requests.Ask.machine(), d)(lf)(lf)(h)(k)(m)(e)(ep)(Replicas.Hist.refl(~Requests.Ask.machine(), ~d, lf))(
+      Replicas.Ext.held(~Requests.Ask.machine(), ~d, lf, e, hh)
+    ),
+    hm,
+    Kept.some_of(
+      List<&2, Trees.Binding>,
+      Tree.range(~d, lf, Trees.Edit.root(e), []),
+      Kept.laws_kept(d)(lf)(lf)(h)(bs)(k)(m)(e)(e1)(ep)(Replicas.Hist.refl(~Requests.Ask.machine(), ~d, lf))(
+        Replicas.Ext.held(~Requests.Ask.machine(), ~d, lf, e, hh)
+      )
+    )
+  )
+
+# a write to a kept tree, of a key whose value is held, gives a kept tree
+def Kept.put(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +e: Trees.Edit,
+  hk: {Tree.kept(~d, lf, h) == True{}: Bool},
+  +ep: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, lf, h, k, m) == Some{e}: Maybe<&2, Trees.Edit>},
+  +hh: Merge.Held(~d, lf, Trees.Edit.nodes(e)),
+  hm: @v: List<&2, U32> -> {m == Some{v}: Maybe<&2, List<&2, U32>>} -> {Res.held(~d, lf, Trees.Binding{k, v}) == True{}: Bool}
+) -> {Tree.kept(~d, lf, Trees.Edit.root(e)) == True{}: Bool}:
+  Kept.put.listed(~d, lf, h, k, m, e, ep, hh, hm, Kept.split(~d, lf, h, hk))
+# what an act does to the content of a line, in a ledger: a taken act gives a
+# tree that the ledger holds whole, and an opened line starts from one, with no
+# log
+def Acts.Kept(~d: Led(), lf: L(d), a: Replicas.Act) -> Data:
+  match a:
+    case Replicas.Act.Stale{}:
+      Unit
+    case Replicas.Act.Label{x}:
+      Unit
+    case Replicas.Act.Taken{vs, h, ns}:
+      {Tree.kept(~d, lf, h) == True{}: Bool}
+    case Replicas.Act.Opens{b, t2, ns}:
+      Merge.And({Tree.kept(~d, lf, Replicas.Tip.content(t2)) == True{}: Bool}, {Replicas.Tip.log(t2) == None{}: Maybe<&2, Hashes.Hash>})
+
+# the binding of a resource that the ledger holds is held
+def Res.held_res(
+  ~d: Led(),
+  +lf: L(d),
+  +n: Resources.Name,
+  +new: Maybe<&2, Requests.Res>,
+  hk: {Res.kept(~d, lf, new) == True{}: Bool}
+) -> @v: List<&2, U32> -> {Res.value(new) == Some{v}: Maybe<&2, List<&2, U32>>} -> {
+  Res.held(~d, lf, Trees.Binding{Key.res(n), v}) == True{}: Bool
+}:
+  match new:
+    case None{}:
+      v => x => Empty.absurd({Res.held(d, lf, Trees.Binding{Key.res(n), v}) == True{} : Bool}, {(%x : {\{None: Unit; \{Some: f0 => Empty; \{}}} : Maybe<&2, List<&2, U32>> -> Type}(_); Unit{}) : Empty})
+    case Some{value}:
+      v => x => (%{(%Equal.sym(Maybe<&2, List<&2, U32>>, Some{Requests.Res.code(value, [])}, Some{v}, x) : {\{None: Unit; \{Some: f0 => {f0 == v : List<&2, U32>}; \{}}} : Maybe<&2, List<&2, U32>> -> Type}(_); {==}) : {Requests.Res.code(value, []) == v : List<&2, U32>}} : {Res.held(d, lf, Trees.Binding{Key.res(n), _}) == True{} : Bool}; (%Equal.sym(Maybe<&2, Codes.Read<Requests.Res>>, Requests.Res.code.read(Requests.Res.code(value, [])), Some{Codes.Read{value, []}}, Requests.Res.code_read(value, [])) : {Res.kept(d, lf, Codes.Code.whole.check(Requests.Res, Requests.Res.code, Codes.Read.whole(Requests.Res, _), Requests.Res.code(value, []))) == True{} : Bool}; (%Equal.sym(Bool, Crits.Key.is_eq(Requests.Res.code(value, []), Requests.Res.code(value, [])), True{}, Crits.Key.is_eq_refl(Requests.Res.code(value, []))) : {Res.kept(d, lf, Bool.pick(Maybe<&2, Requests.Res>, _, Some{value}, None{})) == True{} : Bool}; hk)))
+
+# an act that puts a tree gives a kept tree, once the tree that it writes is
+# known (p)
+def Act.put_kept.at(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +vs: Maybe<&2, List<&2, String>>,
+  +ns: List<&2, List<&2, U32>>,
+  +a: Replicas.Act,
+  hk: {Tree.kept(~d, lf, h) == True{}: Bool},
+  p: Maybe<&2, Trees.Edit>,
+  +ep: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, lf, h, k, m) == p: Maybe<&2, Trees.Edit>},
+  +ec: {Act.put(vs, ns, p) == Some{a}: Maybe<&2, Replicas.Act>},
+  +hh: {Replicas.Act.held(~Requests.Ask.machine(), ~d, lf, a) == True{}: Bool},
+  hm: @v: List<&2, U32> -> {m == Some{v}: Maybe<&2, List<&2, U32>>} -> {Res.held(~d, lf, Trees.Binding{k, v}) == True{}: Bool}
+) -> Acts.Kept(~d, lf, a):
+  match p:
+    case None{}:
+      Empty.absurd(Acts.Kept(~d, lf, a), Shared.Maybe.none_ne_some(Replicas.Act, a, ec))
+    case Some{+e}:
+      %Shared.Maybe.some_inj(
+        Replicas.Act,
+        Replicas.Act.Taken{vs, Trees.Edit.root(e), List.append(&2, List<&2, U32>, ns, Trees.Edit.nodes(e))},
+        a,
+        ec
+      ): Acts.Kept(~d, lf, _)
+      Kept.put(
+        ~d,
+        lf,
+        h,
+        k,
+        m,
+        e,
+        hk,
+        ep,
+        Replicas.Ext.holds_right(~Requests.Ask.machine(), ~d, lf, ns, Trees.Edit.nodes(e))(
+          %Equal.sym(
+            Replicas.Act,
+            Replicas.Act.Taken{vs, Trees.Edit.root(e), List.append(&2, List<&2, U32>, ns, Trees.Edit.nodes(e))},
+            a,
+            Shared.Maybe.some_inj(
+              Replicas.Act,
+              Replicas.Act.Taken{vs, Trees.Edit.root(e), List.append(&2, List<&2, U32>, ns, Trees.Edit.nodes(e))},
+              a,
+              ec
+            )
+          ): {Replicas.Act.held(~Requests.Ask.machine(), ~d, lf, _) == True{}: Bool}
+          hh
+        ),
+        hm
+      )
+
+# an act that puts a tree gives a kept tree, when the tree that it writes to is
+# kept, the ledger holds what the act adds, and the value that it writes is held
+def Act.put_kept(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +vs: Maybe<&2, List<&2, String>>,
+  +ns: List<&2, List<&2, U32>>,
+  +a: Replicas.Act,
+  hk: {Tree.kept(~d, lf, h) == True{}: Bool},
+  ec: {Act.put(vs, ns, Replicas.Tree.put(~Requests.Ask.machine(), ~d, lf, h, k, m)) == Some{a}: Maybe<&2, Replicas.Act>},
+  hh: {Replicas.Act.held(~Requests.Ask.machine(), ~d, lf, a) == True{}: Bool},
+  hm: @v: List<&2, U32> -> {m == Some{v}: Maybe<&2, List<&2, U32>>} -> {Res.held(~d, lf, Trees.Binding{k, v}) == True{}: Bool}
+) -> Acts.Kept(~d, lf, a):
+  Act.put_kept.at(~d, lf, h, k, m, vs, ns, a, hk, Replicas.Tree.put(~Requests.Ask.machine(), ~d, lf, h, k, m), {==}, ec, hh, hm)
+
+
+# a bind that gives an act whose content is kept, when the rest gives such an
+# act for each value that the read gives
+def Kept.bind(
+  ~d: Led(),
+  +lf: L(d),
+  -A: Data,
+  m: Maybe<&2, A>,
+  f: A -> Maybe<&2, Replicas.Act>,
+  +a: Replicas.Act,
+  hf: @x: A -> {f(x) == Some{a}: Maybe<&2, Replicas.Act>} -> Acts.Kept(~d, lf, a),
+  e: {Maybe.bind(&2, A, Replicas.Act, m, f) == Some{a}: Maybe<&2, Replicas.Act>}
+) -> Acts.Kept(~d, lf, a):
+  match m:
+    case None{}:
+      Empty.absurd(Acts.Kept(d, lf, a), {(%e : {\{None: Unit; \{Some: f0 => Empty; \{}}} : Maybe<&2, Replicas.Act> -> Type}(_); Unit{}) : Empty})
+    case Some{value}:
+      hf(value)(e)
+
+# a test that gives an act whose content is kept, when each branch does
+def Kept.when(
+  ~d: Led(),
+  +lf: L(d),
+  p: Bool,
+  f: Unit -> Maybe<&2, Replicas.Act>,
+  g: Unit -> Maybe<&2, Replicas.Act>,
+  +a: Replicas.Act,
+  hf: {f(Unit{}) == Some{a}: Maybe<&2, Replicas.Act>} -> Acts.Kept(~d, lf, a),
+  hg: {g(Unit{}) == Some{a}: Maybe<&2, Replicas.Act>} -> Acts.Kept(~d, lf, a),
+  e: {Shared.Bool.when(Maybe<&2, Replicas.Act>, p, f, g) == Some{a}: Maybe<&2, Replicas.Act>}
+) -> Acts.Kept(~d, lf, a):
+  match p:
+    case False{}:
+      hg(e)
+    case True{}:
+      hf(e)
+
+# the act that sets a resource that the ledger holds gives a kept tree, once it
+# is known whether the ledger holds the resource (p)
+def Res.set_kept.at.g22(
+  ~d: Led(),
+  +lf: L(d),
+  +t: Replicas.Tip,
+  +n: Resources.Name,
+  +new: Maybe<&2, Requests.Res>,
+  +a: Replicas.Act,
+  +hk: {Tree.kept(d, lf, Replicas.Tip.content(t)) == True{} : Bool},
+  +hh: {Replicas.Act.held(Requests.Ask.machine(), d, lf, a) == True{} : Bool},
+  +x: Bool,
+  hx: {x == Res.kept(d, lf, new) : Bool},
+  +ep: {x == False{} : Bool},
+  +ec: {Shared.Bool.when(Maybe<&2, Replicas.Act>, x, u => Act.put(None{}, [], Replicas.Tree.put(Requests.Ask.machine(), d, lf, Replicas.Tip.content(t), Key.res(n), Res.value(new))), u => None{}) == Some{a} : Maybe<&2, Replicas.Act>}) ->
+  Acts.Kept(d, lf, a):
+  match x:
+    case False{}:
+      Empty.absurd(Acts.Kept(d, lf, a), {(%ec : {\{None: Unit; \{Some: f0 => Empty; \{}}} : Maybe<&2, Replicas.Act> -> Type}(_); Unit{}) : Empty})
+    case True{}:
+      Empty.absurd(Acts.Kept(d, lf, a), {(%ep : {\{False: Empty; \{True: Unit; \{}}} : Bool -> Type}(_); Unit{}) : Empty})
+
+def Res.set_kept.at(
+  ~d: Led(),
+  +lf: L(d),
+  p: Bool,
+  +t: Replicas.Tip,
+  +n: Resources.Name,
+  +new: Maybe<&2, Requests.Res>,
+  +a: Replicas.Act,
+  ep: {Res.kept(~d, lf, new) == p: Bool},
+  hk: {Tree.kept(~d, lf, Replicas.Tip.content(t)) == True{}: Bool},
+  ec: {Res.set(~d, lf, t, n, new) == Some{a}: Maybe<&2, Replicas.Act>},
+  hh: {Replicas.Act.held(~Requests.Ask.machine(), ~d, lf, a) == True{}: Bool}
+) -> Acts.Kept(~d, lf, a):
+  match p:
+    case False{}:
+      Res.set_kept.at.g22(~d, lf, t, n, new, a, hk, hh, Res.kept(d, lf, new), {==}, ep, ec)
+    case True{}:
+      Kept.when(~d, lf, Res.kept(d, lf, new), u => Act.put(None{}, [], Replicas.Tree.put(Requests.Ask.machine(), d, lf, Replicas.Tip.content(t), Key.res(n), Res.value(new))), u => None{}, a, x => Act.put_kept(~d, lf, Replicas.Tip.content(t), Key.res(n), Res.value(new), None{}, [], a, hk, x, hh, v => x1 => Res.held_res(~d, lf, n, new, ep)(v)(x1)), x => Empty.absurd(Acts.Kept(d, lf, a), {(%x : {\{None: Unit; \{Some: f0 => Empty; \{}}} : Maybe<&2, Replicas.Act> -> Type}(_); Unit{}) : Empty}), ec)
+
+# the act that sets a resource gives a kept tree
+def Res.set_kept(
+  ~d: Led(),
+  +lf: L(d),
+  +t: Replicas.Tip,
+  +n: Resources.Name,
+  +new: Maybe<&2, Requests.Res>,
+  +a: Replicas.Act,
+  hk: {Tree.kept(~d, lf, Replicas.Tip.content(t)) == True{}: Bool},
+  ec: {Res.set(~d, lf, t, n, new) == Some{a}: Maybe<&2, Replicas.Act>},
+  hh: {Replicas.Act.held(~Requests.Ask.machine(), ~d, lf, a) == True{}: Bool}
+) -> Acts.Kept(~d, lf, a):
+  Res.set_kept.at(~d, lf, Res.kept(~d, lf, new), t, n, new, a, {==}, hk, ec, hh)
+
+# a write, once its reads are known, gives a kept tree
+def Write.act.of_kept(
+  ~d: Led(),
+  +lf: L(d),
+  +t: Replicas.Tip,
+  +n: Resources.Name,
+  +ours: Maybe<&2, Requests.Res>,
+  +held: Maybe<&2, Requests.Res>,
+  +new: Maybe<&2, Requests.Res>,
+  +a: Replicas.Act,
+  hk: {Tree.kept(~d, lf, Replicas.Tip.content(t)) == True{}: Bool},
+  ec: {Write.act.of(~d, lf, t, n, ours, held, new) == Some{a}: Maybe<&2, Replicas.Act>},
+  hh: {Replicas.Act.held(~Requests.Ask.machine(), ~d, lf, a) == True{}: Bool}
+) -> Acts.Kept(~d, lf, a):
+  Kept.when(~d, lf, Shared.Maybe.is_eq(Requests.Res, x => y => Codes.Code.is_eq(Requests.Res, Requests.Res.code, x, y), ours, held), u => Res.set(d, lf, t, n, new), u => Some{Replicas.Act.Stale{}}, a, x => Res.set_kept(~d, lf, t, n, new, a, hk, x, hh), x => (%Shared.Maybe.some_inj(Replicas.Act, Replicas.Act.Stale{}, a, x) : Acts.Kept(d, lf, _); Unit{}), ec)
+
+# a write gives a kept tree
+def Write.act_kept(
+  ~d: Led(),
+  +lf: L(d),
+  +t: Replicas.Tip,
+  +n: Resources.Name,
+  +base: Maybe<&2, Ledgers.Id>,
+  +x: Requests.Content,
+  +a: Replicas.Act,
+  hk: {Tree.kept(~d, lf, Replicas.Tip.content(t)) == True{}: Bool},
+  ec: {Write.act(~d, lf, t, n, base, x) == Some{a}: Maybe<&2, Replicas.Act>},
+  hh: {Replicas.Act.held(~Requests.Ask.machine(), ~d, lf, a) == True{}: Bool}
+) -> Acts.Kept(~d, lf, a):
+  Kept.bind(
+    ~d,
+    lf,
+    Maybe<&2, Requests.Res>,
+    Res.find(~d, lf, Replicas.Tip.content(t), n),
+    ours => Maybe.bind(
+      &2,
+      Maybe<&2, Hashes.Hash>,
+      Replicas.Act,
+      Base.root(~d, lf, t, base),
+      h => Maybe.bind(
+        &2,
+        Maybe<&2, Requests.Res>,
+        Replicas.Act,
+        Res.find(~d, lf, h, n),
+        held => Maybe.bind(
+          &2,
+          Maybe<&2, Requests.Res>,
+          Replicas.Act,
+          Content.find(~d, lf, t, n, x),
+          new => Write.act.of(~d, lf, t, n, ours, held, new)
+        )
+      )
+    ),
+    a,
+    +ours => e1 => Kept.bind(
+      ~d,
+      lf,
+      Maybe<&2, Hashes.Hash>,
+      Base.root(~d, lf, t, base),
+      h => Maybe.bind(
+        &2,
+        Maybe<&2, Requests.Res>,
+        Replicas.Act,
+        Res.find(~d, lf, h, n),
+        held => Maybe.bind(
+          &2,
+          Maybe<&2, Requests.Res>,
+          Replicas.Act,
+          Content.find(~d, lf, t, n, x),
+          new => Write.act.of(~d, lf, t, n, ours, held, new)
+        )
+      ),
+      a,
+      +h => e2 => Kept.bind(
+        ~d,
+        lf,
+        Maybe<&2, Requests.Res>,
+        Res.find(~d, lf, h, n),
+        held => Maybe.bind(
+          &2,
+          Maybe<&2, Requests.Res>,
+          Replicas.Act,
+          Content.find(~d, lf, t, n, x),
+          new => Write.act.of(~d, lf, t, n, ours, held, new)
+        ),
+        a,
+        +held => e3 => Kept.bind(
+          ~d,
+          lf,
+          Maybe<&2, Requests.Res>,
+          Content.find(~d, lf, t, n, x),
+          new => Write.act.of(~d, lf, t, n, ours, held, new),
+          a,
+          +new => e4 => Write.act.of_kept(~d, lf, t, n, ours, held, new, a, hk, e4, hh),
+          e3
+        ),
+        e2
+      ),
+      e1
+    ),
+    ec
+  )
+
+# the empty tree lists nothing, by the law of a tree
+def Kept.empty_range(
+  -S: Data,
+  -o: Trees.Tree.Ops(S),
+  wh: Trees.Laws.Whole(S, o),
+  s: S
+) -> {Trees.Ops.range(S, o)(s)(None{})([]) == Some{[]}: Maybe<&2, List<&2, Trees.Binding>>}:
+  match wh:
+    case Tuple{fst, snd}:
+      fst(s)([])
+
+# the empty tree is kept
+def Kept.empty(~d: Led(), +lf: L(d)) -> {Tree.kept(~d, lf, None{}) == True{}: Bool}:
+  Kept.of(
+    ~d,
+    lf,
+    None{},
+    [],
+    Kept.empty_range(L(d), Replicas.Led.tree(Requests.Ask.machine(), d), Merge.laws_whole(d), lf),
+    {==}
+  )
+
+# a move gives a kept tree, once it is known whether the ledger holds the tree
+# whole (p)
+def Move.act_kept.at.g3(
+  ~d: Led(),
+  +lf: L(d),
+  +p: Bool,
+  +s: Requests.Source,
+  +a: Replicas.Act,
+  +x: Bool,
+  hx: {x == Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, Trees.Ops.range(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), lf, Source.root(s), []), bs => Some{Res.all_held(d, lf, bs)}), False{}) : Bool},
+  +ep: {x == p : Bool},
+  +ec: {Shared.Bool.when(Maybe<&2, Replicas.Act>, x, u => Some{Replicas.Act.Taken{None{}, Source.root(s), []}}, u => None{}) == Some{a} : Maybe<&2, Replicas.Act>}) ->
+  Acts.Kept(d, lf, a):
+  match x:
+    case False{}:
+      Empty.absurd(Acts.Kept(d, lf, a), {(%ec : {\{None: Unit; \{Some: f0 => Empty; \{}}} : Maybe<&2, Replicas.Act> -> Type}(_); Unit{}) : Empty})
+    case True{}:
+      %Shared.Maybe.some_inj(Replicas.Act, Replicas.Act.Taken{None{}, Source.root(s), []}, a, ec) :
+        Acts.Kept(d, lf, _)
+      Equal.sym(Bool, True{}, Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, Trees.Ops.range(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), lf, Source.root(s), []), bs => Some{Res.all_held(d, lf, bs)}), False{}), hx)
+
+def Move.act_kept.at(
+  ~d: Led(),
+  +lf: L(d),
+  p: Bool,
+  +s: Requests.Source,
+  +a: Replicas.Act,
+  ep: {Tree.kept(~d, lf, Source.root(s)) == p: Bool},
+  ec: {Tree.when_kept(~d, lf, Source.root(s), u => Some{Replicas.Act.Taken{None{}, Source.root(s), []}}) == Some{a}: Maybe<&2, Replicas.Act>}
+) -> Acts.Kept(~d, lf, a):
+  Move.act_kept.at.g3(~d, lf, p, s, a, Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, Trees.Ops.range(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), lf, Source.root(s), []), bs => Some{Res.all_held(d, lf, bs)}), False{}), {==}, ep, ec)
+
+# a move gives a kept tree
+def Move.act_kept.g3(
+  ~d: Led(),
+  +lf: L(d),
+  +s: Requests.Source,
+  +a: Replicas.Act,
+  +x: Bool,
+  hx: {x == Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, Trees.Ops.range(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), lf, Source.root(s), []), bs => Some{Res.all_held(d, lf, bs)}), False{}) : Bool},
+  +ec: {Shared.Bool.when(Maybe<&2, Replicas.Act>, x, u => Some{Replicas.Act.Taken{None{}, Source.root(s), []}}, u => None{}) == Some{a} : Maybe<&2, Replicas.Act>}) ->
+  Acts.Kept(d, lf, a):
+  match x:
+    case False{}:
+      Empty.absurd(Acts.Kept(d, lf, a), {(%ec : {\{None: Unit; \{Some: f0 => Empty; \{}}} : Maybe<&2, Replicas.Act> -> Type}(_); Unit{}) : Empty})
+    case True{}:
+      +hx = hx
+      Move.act_kept.at.g3(~d, lf, Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, Trees.Ops.range(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), lf, Source.root(s), []), bs => Some{Res.all_held(d, lf, bs)}), False{}), s, a, True{}, hx, hx, ec)
+
+def Move.act_kept(
+  ~d: Led(),
+  +lf: L(d),
+  +s: Requests.Source,
+  +a: Replicas.Act,
+  ec: {Move.act(~d, lf, s) == Some{a}: Maybe<&2, Replicas.Act>}
+) -> Acts.Kept(~d, lf, a):
+  Move.act_kept.g3(~d, lf, s, a, Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, Trees.Ops.range(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), lf, Source.root(s), []), bs => Some{Res.all_held(d, lf, bs)}), False{}), {==}, ec)
+
+# a new branch gives a first tip of a kept tree, once the tree of its source is
+# known to be kept or not (p)
+def Branch.act_kept.at(
+  ~d: Led(),
+  +lf: L(d),
+  p: Bool,
+  +t: Replicas.Tip,
+  +b: String,
+  +s: Requests.Source,
+  +a: Replicas.Act,
+  +ep: {Tree.kept(~d, lf, Source.root(s)) == p: Bool},
+  ec: {Tree.when_kept(~d, lf, Source.root(s), u => Some{Replicas.Act.Opens{b, Branch.tip(t, Source.root(s)), []}}) == Some{a}: Maybe<&2, Replicas.Act>}
+) -> Acts.Kept(~d, lf, a):
+  match p:
+    case True{}:
+      %Shared.Maybe.some_inj(
+        Replicas.Act,
+        Replicas.Act.Opens{b, Branch.tip(t, Source.root(s)), []},
+        a,
+        %ep: {
+          Shared.Bool.when(
+            Maybe<&2, Replicas.Act>,
+            _,
+            u => Some{Replicas.Act.Opens{b, Branch.tip(t, Source.root(s)), []}},
+            u => None{}
+          )
+            == Some{a}: Maybe<&2, Replicas.Act>
+        }
+        ec
+      ): Acts.Kept(~d, lf, _)
+      (ep, {==})
+    case False{}:
+      Empty.absurd(
+        Acts.Kept(~d, lf, a),
+        Shared.Maybe.none_ne_some(
+          Replicas.Act,
+          a,
+          %ep: {
+            Shared.Bool.when(
+              Maybe<&2, Replicas.Act>,
+              _,
+              u => Some{Replicas.Act.Opens{b, Branch.tip(t, Source.root(s)), []}},
+              u => None{}
+            )
+              == Some{a}: Maybe<&2, Replicas.Act>
+          }
+          ec
+        )
+      )
+
+# a new branch gives a first tip of a kept tree
+def Branch.act_kept(
+  ~d: Led(),
+  +lf: L(d),
+  +t: Replicas.Tip,
+  +b: String,
+  m: Maybe<&2, Requests.Source>,
+  +a: Replicas.Act,
+  ec: {Branch.act(~d, lf, t, b, m) == Some{a}: Maybe<&2, Replicas.Act>}
+) -> Acts.Kept(~d, lf, a):
+  match m:
+    case None{}:
+      %Shared.Maybe.some_inj(Replicas.Act, Replicas.Act.Opens{b, Branch.tip(t, None{}), []}, a, ec): Acts.Kept(~d, lf, _)
+      (Kept.empty(~d, lf), {==})
+    case Some{+s}:
+      Branch.act_kept.at(~d, lf, Tree.kept(~d, lf, Source.root(s)), t, b, s, a, {==}, ec)
+
+# the first key of a node gives a kept tree
+def Key.act_kept(
+  ~d: Led(),
+  +lf: L(d),
+  +t: Replicas.Tip,
+  +n: String,
+  +k: Hashes.Hash,
+  +a: Replicas.Act,
+  hk: {Tree.kept(~d, lf, Replicas.Tip.content(t)) == True{}: Bool},
+  ec: {Key.act(~d, lf, t, n, k) == Some{a}: Maybe<&2, Replicas.Act>},
+  hh: {Replicas.Act.held(~Requests.Ask.machine(), ~d, lf, a) == True{}: Bool}
+) -> Acts.Kept(~d, lf, a):
+  Act.put_kept(
+    ~d,
+    lf,
+    Replicas.Tip.content(t),
+    Requests.Key.seal(n),
+    Some{Hashes.Hash.code(k, [])},
+    None{},
+    [],
+    a,
+    hk,
+    ec,
+    hh,
+    v => e => {==}
+  )
+
+# a resource that a kept tree reads is held, once the value that the read finds
+# is known (v)
+def Kept.res_find.at(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +o: Maybe<&2, Requests.Res>,
+  v: Maybe<&2, List<&2, U32>>,
+  ev: {Replicas.Tree.find(~Requests.Ask.machine(), ~d, lf, h, Key.res(n)) == Some{v}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  eo: {Res.found(v) == o: Maybe<&2, Requests.Res>},
+  ls: Kept.Listed(~d, lf, h)
+) -> {Res.kept(~d, lf, o) == True{}: Bool}:
+  match v:
+    case None{}:
+      %eo: {Res.kept(~d, lf, _) == True{}: Bool}
+      {==}
+    case Some{+ws}:
+      (+bs, r1) = ls
+      (+e1, +ha) = r1
+      %eo: {Res.kept(~d, lf, _) == True{}: Bool}
+      Kept.of_all(~d, lf, bs, Trees.Binding{Key.res(n), ws}, ha)(
+        Kept.of_range(
+          ~d,
+          lf,
+          h,
+          bs,
+          e1,
+          Key.res(n),
+          ws,
+          Merge.value_known(Replicas.Tree.look(~Requests.Ask.machine(), ~d, lf, h, Key.res(n)), Some{ws}, ev)
+        )
+      )
+
+# a resource that a kept tree reads is held, once the read is known to find a
+# value that holds it (fo) and the tree is listed (ls)
+def Kept.res_find.found(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +o: Maybe<&2, Requests.Res>,
+  ls: Kept.Listed(~d, lf, h),
+  fo: Merge.Found(~d, lf, h, n, o)
+) -> {Res.kept(~d, lf, o) == True{}: Bool}:
+  (+v, r) = fo
+  (+ev, +eo) = r
+  Kept.res_find.at(~d, lf, h, n, o, v, ev, eo, ls)
+
+# a resource that a kept tree reads is held
+def Kept.res_find(
+  ~d: Led(),
+  +lf: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +n: Resources.Name,
+  +o: Maybe<&2, Requests.Res>,
+  hk: {Tree.kept(~d, lf, h) == True{}: Bool},
+  e: {Res.find(~d, lf, h, n) == Some{o}: Maybe<&2, Maybe<&2, Requests.Res>>}
+) -> {Res.kept(~d, lf, o) == True{}: Bool}:
+  Kept.res_find.found(~d, lf, h, n, o, Kept.split(~d, lf, h, hk), Merge.find_some(~d, lf, h, n, o, e))
+
+# Work.set_kept, once the write of the key to the tree of the work is known (p)
+def Work.set_kept.at(
+  ~d: Led(),
+  +l: L(d),
+  +lw: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  p: Maybe<&2, Trees.Edit>,
+  ep: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, lw, h, k, m) == p: Maybe<&2, Trees.Edit>},
+  wc: Merge.Puts(~d, l, lw, ns),
+  hk: {Tree.kept(~d, l, h) == True{}: Bool},
+  +e: {Work.put(~d, lw, ns, p) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  +hh: {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, Merge.nodes(~d, W1)) == True{}: Bool},
+  hm: @v: List<&2, U32> -> {m == Some{v}: Maybe<&2, List<&2, U32>>} -> {Res.held(~d, l, Trees.Binding{k, v}) == True{}: Bool}
+) -> {Tree.kept(~d, l, Merge.root(~d, W1)) == True{}: Bool}:
+  match p:
+    case None{}:
+      Empty.absurd({Tree.kept(~d, l, Merge.root(~d, W1)) == True{}: Bool}, Shared.Maybe.none_ne_some(Work<L(d)>, W1, e))
+    case Some{+e0}:
+      %Merge.put_root(~d, lw, ns, e0, W1, e): {Tree.kept(~d, l, _) == True{}: Bool}
+      Kept.put(
+        ~d,
+        l,
+        h,
+        k,
+        m,
+        e0,
+        hk,
+        Replicas.Hist.put(
+          ~Requests.Ask.machine(),
+          ~d,
+          lw,
+          l,
+          h,
+          k,
+          m,
+          e0,
+          %Equal.sym(L(d), lw, Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, l), wc): Replicas.Led.Grows(Requests.Ask.machine(), d, _, l)
+          Replicas.Ext.puts_into(
+            ~Requests.Ask.machine(),
+            ~d,
+            ns,
+            l,
+            l,
+            Replicas.Hist.refl(~Requests.Ask.machine(), ~d, l),
+            Replicas.Ext.holds_left(~Requests.Ask.machine(), ~d, l, ns, Trees.Edit.nodes(e0))(
+              %Equal.sym(
+                List<&2, List<&2, U32>>,
+                List.append(&2, List<&2, U32>, ns, Trees.Edit.nodes(e0)),
+                Merge.nodes(~d, W1),
+                Equal.cong(
+                  Work<L(d)>,
+                  List<&2, List<&2, U32>>,
+                  w => Merge.nodes(~d, w),
+                  Work{
+                    Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e0), lw),
+                    Trees.Edit.root(e0),
+                    List.append(&2, List<&2, U32>, ns, Trees.Edit.nodes(e0))
+                  },
+                  W1,
+                  Merge.put_work(~d, lw, ns, e0, W1, e)
+                )
+              ): {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, _) == True{}: Bool}
+              hh
+            )
+          )
+        )(ep),
+        Replicas.Ext.holds_right(~Requests.Ask.machine(), ~d, l, ns, Trees.Edit.nodes(e0))(
+          %Equal.sym(
+            List<&2, List<&2, U32>>,
+            List.append(&2, List<&2, U32>, ns, Trees.Edit.nodes(e0)),
+            Merge.nodes(~d, W1),
+            Equal.cong(
+              Work<L(d)>,
+              List<&2, List<&2, U32>>,
+              w => Merge.nodes(~d, w),
+              Work{
+                Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(e0), lw),
+                Trees.Edit.root(e0),
+                List.append(&2, List<&2, U32>, ns, Trees.Edit.nodes(e0))
+              },
+              W1,
+              Merge.put_work(~d, lw, ns, e0, W1, e)
+            )
+          ): {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, _) == True{}: Bool}
+          hh
+        ),
+        hm
+      )
+
+# a work whose tree is kept, whose ledger is the ledger of its nodes, and whose
+# nodes the ledger holds, after a write of a held value, has a kept tree
+def Work.set_kept(
+  ~d: Led(),
+  +l: L(d),
+  +lw: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  wc: Merge.Puts(~d, l, lw, ns),
+  hk: {Tree.kept(~d, l, h) == True{}: Bool},
+  e: {Work.set(~d, Work{lw, h, ns}, k, m) == Some{W1}: Maybe<&2, Work<L(d)>>},
+  hh: {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, Merge.nodes(~d, W1)) == True{}: Bool},
+  hm: @v: List<&2, U32> -> {m == Some{v}: Maybe<&2, List<&2, U32>>} -> {Res.held(~d, l, Trees.Binding{k, v}) == True{}: Bool}
+) -> {Tree.kept(~d, l, Merge.root(~d, W1)) == True{}: Bool}:
+  Work.set_kept.at(~d, l, lw, h, ns, k, m, W1, Replicas.Tree.put(~Requests.Ask.machine(), ~d, lw, h, k, m), {==}, wc, hk, e, hh, hm)
+
+# a property of what a bind gives, when the rest gives it for each value that
+# the read gives
+def Bind.holds(
+  -A: Data,
+  -B: Data,
+  -P: B -> Type,
+  m: Maybe<&2, A>,
+  f: A -> Maybe<&2, B>,
+  +y: B,
+  hf: @x: A -> {m == Some{x}: Maybe<&2, A>} -> {f(x) == Some{y}: Maybe<&2, B>} -> P(y),
+  e: {Maybe.bind(&2, A, B, m, f) == Some{y}: Maybe<&2, B>}
+) -> P(y):
+  match m:
+    case None{}:
+      Empty.absurd(P(y), Shared.Maybe.none_ne_some(B, y, e))
+    case Some{+x}:
+      hf(x)({==})(e)
+
+# a property of what a test gives, when each branch gives it
+def When.holds(
+  -B: Data,
+  -P: B -> Type,
+  p: Bool,
+  f: Unit -> Maybe<&2, B>,
+  g: Unit -> Maybe<&2, B>,
+  +y: B,
+  hf: {f(Unit{}) == Some{y}: Maybe<&2, B>} -> P(y),
+  hg: {g(Unit{}) == Some{y}: Maybe<&2, B>} -> P(y),
+  e: {Shared.Bool.when(Maybe<&2, B>, p, f, g) == Some{y}: Maybe<&2, B>}
+) -> P(y):
+  match p:
+    case True{}:
+      hf(e)
+    case False{}:
+      hg(e)
+
+# a property of what a default gives, when the read that it defaults gives a
+# value that has it, and the default has it
+def Default.holds(
+  -B: Data,
+  -P: B -> Type,
+  m: Maybe<&2, Maybe<&2, B>>,
+  d: Maybe<&2, B>,
+  +y: B,
+  hm: @z: Maybe<&2, B> -> {z == Some{y}: Maybe<&2, B>} -> P(y),
+  hd: {d == Some{y}: Maybe<&2, B>} -> P(y),
+  e: {Maybe.default(&2, Maybe<&2, B>, m, d) == Some{y}: Maybe<&2, B>}
+) -> P(y):
+  match m:
+    case None{}:
+      hd(e)
+    case Some{+z}:
+      hm(z)(e)
+# what a pick of a merge leaves the ledger to hold: the resource that it takes,
+# or the format of the resource that it makes
+def Pick.Held(~d: Led(), lf: L(d), p: Pick) -> Data:
+  match p:
+    case Pick.Take{x}:
+      {Res.kept(~d, lf, x) == True{}: Bool}
+    case Pick.Make{h, bytes}:
+      {Maybe.is_some(&2, Formats.Format, Format.at(~d, lf, h)) == True{}: Bool}
+    case Pick.Clash{}:
+      Unit
+
+# a pick that a merge of bytes in a format whose hash is h gives makes bytes in
+# that format, or clashes
+def Pick.Shape(h: Hashes.Hash, p: Pick) -> Data:
+  match p:
+    case Pick.Take{x}:
+      Empty
+    case Pick.Make{h2, bytes}:
+      {h2 == h: Hashes.Hash}
+    case Pick.Clash{}:
+      Unit
+
+# the pick of merged bytes makes bytes in the format, or clashes
+def Pick.of_shape(+h: Hashes.Hash, m: Formats.Merged) -> Pick.Shape(h, Pick.of(h, m)):
+  match m:
+    case Formats.Merged.Clean{+x}:
+      {==}
+    case Formats.Merged.Clash{}:
+      Unit{}
+
+# the merge of two pointers makes bytes in the format, or clashes, once the
+# newer of them is known (m)
+def Pointer.merge_shape.at(
+  +h: Hashes.Hash,
+  m: Maybe<&2, Pointer>
+) -> Pick.Shape(
+  h,
+  Maybe.default(
+    &2,
+    Pick,
+    Maybe.bind(&2, Pointer, Pick, m, p => Some{Pick.Make{h, Pointer.bytes(p)}}),
+    Pick.Clash{}
+  )
+):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+p}:
+      {==}
+
+# the merge of two pointers makes bytes in the format, or clashes
+def Pointer.merge_shape(
+  +h: Hashes.Hash,
+  x: Maybe<&2, Pointer>,
+  y: Maybe<&2, Pointer>
+) -> Pick.Shape(h, Pointer.merge(h, x, y)):
+  match x y:
+    case Some{+px} Some{+py}:
+      Pointer.merge_shape.at(h, Pointer.newer(px, py))
+    case Some{px} None{}:
+      Unit{}
+    case None{} z:
+      Unit{}
+
+# the pick of a merge of bytes of one format other than a submodule makes bytes
+# in the format whose hash is h, or clashes
+def Pick.format_shape.g(
+  ~d: Led(),
+  +l: L(d),
+  +h: Hashes.Hash,
+  +g: Formats.Format,
+  +b: Maybe<&2, Requests.Res>,
+  +ob: Texts.Bytes(),
+  +tb: Texts.Bytes(),
+  +p: Pick,
+  e: {
+    Maybe.bind(
+      &2,
+      Texts.Bytes(),
+      Pick,
+      Res.text(~d, l, b),
+      bb => Some{Pick.of(h, Formats.Format.merge(g, bb, ob, tb))}
+    )
+      == Some{p}: Maybe<&2, Pick>
+  }
+) -> Pick.Shape(h, p):
+  Bind.holds(
+    Texts.Bytes(),
+    Pick,
+    q => Pick.Shape(h, q),
+    Res.text(~d, l, b),
+    bb => Some{Pick.of(h, Formats.Format.merge(g, bb, ob, tb))},
+    p,
+    bb => eb => e2 =>
+      %Shared.Maybe.some_inj(Pick, Pick.of(h, Formats.Format.merge(g, bb, ob, tb)), p, e2): Pick.Shape(h, _)
+      Pick.of_shape(h, Formats.Format.merge(g, bb, ob, tb)),
+    e
+  )
+
+# the pick of a merge of bytes of one format, in the format whose hash is h, and
+# in the format f, makes bytes in the format, or clashes
+def Pick.format_shape(
+  ~d: Led(),
+  +l: L(d),
+  +h: Hashes.Hash,
+  +f: Formats.Format,
+  +b: Maybe<&2, Requests.Res>,
+  +ob: Texts.Bytes(),
+  +tb: Texts.Bytes(),
+  +p: Pick,
+  e: {Pick.format(~d, l, h, f, b, ob, tb) == Some{p}: Maybe<&2, Pick>}
+) -> Pick.Shape(h, p):
+  match f:
+    case Formats.Format.Leaf{Formats.Leaf.Module{}}:
+      %Shared.Maybe.some_inj(Pick, Pointer.merge(h, Pointer.read(ob), Pointer.read(tb)), p, e): Pick.Shape(h, _)
+      Pointer.merge_shape(h, Pointer.read(ob), Pointer.read(tb))
+    case Formats.Format.Leaf{Formats.Leaf.Lines{}}:
+      Pick.format_shape.g(~d, l, h, Formats.Format.Leaf{Formats.Leaf.Lines{}}, b, ob, tb, p, e)
+    case Formats.Format.Leaf{Formats.Leaf.Whole{}}:
+      Pick.format_shape.g(~d, l, h, Formats.Format.Leaf{Formats.Leaf.Whole{}}, b, ob, tb, p, e)
+    case Formats.Format.Embed{+fo, +op, +cl, +fi}:
+      Pick.format_shape.g(~d, l, h, Formats.Format.Embed{fo, op, cl, fi}, b, ob, tb, p, e)
+    case Formats.Format.Code{+fb, +ru, +im}:
+      Pick.format_shape.g(~d, l, h, Formats.Format.Code{fb, ru, im}, b, ob, tb, p, e)
+
+# the pick of a merge of both changes in the format f makes bytes in the format
+# whose hash is h, or clashes
+def Pick.in_shape(
+  ~d: Led(),
+  +l: L(d),
+  +h: Hashes.Hash,
+  +f: Formats.Format,
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +t: Maybe<&2, Requests.Res>,
+  +p: Pick,
+  e: {Pick.in(~d, l, h, f, b, o, t) == Some{p}: Maybe<&2, Pick>}
+) -> Pick.Shape(h, p):
+  Bind.holds(
+    Texts.Bytes(),
+    Pick,
+    q => Pick.Shape(h, q),
+    Res.text(~d, l, o),
+    ob => Maybe.bind(&2, Texts.Bytes(), Pick, Res.text(~d, l, t), tb => Pick.format(~d, l, h, f, b, ob, tb)),
+    p,
+    +ob => eo => e1 => Bind.holds(
+      Texts.Bytes(),
+      Pick,
+      q => Pick.Shape(h, q),
+      Res.text(~d, l, t),
+      tb => Pick.format(~d, l, h, f, b, ob, tb),
+      p,
+      +tb => et => e2 => Pick.format_shape(~d, l, h, f, b, ob, tb, p, e2),
+      e1
+    ),
+    e
+  )
+
+# a pick that makes bytes in the format whose hash is h leaves the ledger to hold
+# the format, once it holds it (ef)
+def Pick.held_of_shape(
+  ~d: Led(),
+  +l: L(d),
+  +h: Hashes.Hash,
+  +f: Formats.Format,
+  p: Pick,
+  ef: {Format.at(~d, l, h) == Some{f}: Maybe<&2, Formats.Format>},
+  sh: Pick.Shape(h, p)
+) -> Pick.Held(~d, l, p):
+  match p:
+    case Pick.Take{x}:
+      Empty.absurd(Pick.Held(~d, l, Pick.Take{x}), sh)
+    case Pick.Make{+h2, +bytes}:
+      %Equal.sym(Hashes.Hash, h2, h, sh): {Maybe.is_some(&2, Formats.Format, Format.at(~d, l, _)) == True{}: Bool}
+      %Equal.sym(Maybe<&2, Formats.Format>, Format.at(~d, l, h), Some{f}, ef): {Maybe.is_some(&2, Formats.Format, _) == True{}: Bool}
+      {==}
+    case Pick.Clash{}:
+      Unit{}
+
+# the pick of a merge of both changes leaves the ledger to hold what it needs,
+# once the format of the two is known (fm)
+def Pick.both_held.fm(
+  ~d: Led(),
+  +l: L(d),
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +t: Maybe<&2, Requests.Res>,
+  +p: Pick,
+  fm: Maybe<&2, Hashes.Hash>,
+  e: {
+    Maybe.default(
+      &2,
+      Maybe<&2, Pick>,
+      Maybe.bind(
+        &2,
+        Hashes.Hash,
+        Maybe<&2, Pick>,
+        fm,
+        +h => Some{Maybe.bind(&2, Formats.Format, Pick, Format.at(~d, l, h), f => Pick.in(~d, l, h, f, b, o, t))}
+      ),
+      Some{Pick.Take{None{}}}
+    )
+      == Some{p}: Maybe<&2, Pick>
+  }
+) -> Pick.Held(~d, l, p):
+  match fm:
+    case None{}:
+      %Shared.Maybe.some_inj(Pick, Pick.Take{None{}}, p, e): Pick.Held(~d, l, _)
+      {==}
+    case Some{+h}:
+      Bind.holds(
+        Formats.Format,
+        Pick,
+        q => Pick.Held(~d, l, q),
+        Format.at(~d, l, h),
+        f => Pick.in(~d, l, h, f, b, o, t),
+        p,
+        +f => ef => ei => Pick.held_of_shape(~d, l, h, f, p, ef, Pick.in_shape(~d, l, h, f, b, o, t, p, ei)),
+        e
+      )
+
+# the pick of a merge of both changes leaves the ledger to hold what it needs
+def Pick.both_held(
+  ~d: Led(),
+  +l: L(d),
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +t: Maybe<&2, Requests.Res>,
+  +p: Pick,
+  ho: {Res.kept(~d, l, o) == True{}: Bool},
+  ht: {Res.kept(~d, l, t) == True{}: Bool},
+  e: {Pick.both(~d, l, b, o, t) == Some{p}: Maybe<&2, Pick>}
+) -> Pick.Held(~d, l, p):
+  When.holds(
+    Pick,
+    q => Pick.Held(~d, l, q),
+    Res.one_format(o, t),
+    u => Maybe.default(
+      &2,
+      Maybe<&2, Pick>,
+      Maybe.bind(
+        &2,
+        Hashes.Hash,
+        Maybe<&2, Pick>,
+        Res.format.of(o, t),
+        +h => Some{Maybe.bind(&2, Formats.Format, Pick, Format.at(~d, l, h), f => Pick.in(~d, l, h, f, b, o, t))}
+      ),
+      Some{Pick.Take{None{}}}
+    ),
+    u => Some{Pick.Clash{}},
+    p,
+    e1 => Pick.both_held.fm(~d, l, b, o, t, p, Res.format.of(o, t), e1),
+    e2 =>
+      %Shared.Maybe.some_inj(Pick, Pick.Clash{}, p, e2): Pick.Held(~d, l, _)
+      Unit{},
+    e
+  )
+
+# the pick of a merge leaves the ledger to hold what it needs, once the side that
+# it takes is known (s)
+def Pick.merge_held.at(
+  ~d: Led(),
+  +l: L(d),
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +t: Maybe<&2, Requests.Res>,
+  +p: Pick,
+  s: Sides.Side,
+  ho: {Res.kept(~d, l, o) == True{}: Bool},
+  ht: {Res.kept(~d, l, t) == True{}: Bool},
+  e: {Pick.side(~d, l, b, o, t, s) == Some{p}: Maybe<&2, Pick>}
+) -> Pick.Held(~d, l, p):
+  match s:
+    case Sides.Side.Theirs{}:
+      %Shared.Maybe.some_inj(Pick, Pick.Take{t}, p, e): Pick.Held(~d, l, _)
+      ht
+    case Sides.Side.Ours{}:
+      %Shared.Maybe.some_inj(Pick, Pick.Take{o}, p, e): Pick.Held(~d, l, _)
+      ho
+    case Sides.Side.Both{}:
+      Pick.both_held(~d, l, b, o, t, p, ho, ht, e)
+
+# the pick of a merge leaves the ledger to hold what it needs, when it holds
+# each side
+def Pick.merge_held(
+  ~d: Led(),
+  +l: L(d),
+  +b: Maybe<&2, Requests.Res>,
+  +o: Maybe<&2, Requests.Res>,
+  +t: Maybe<&2, Requests.Res>,
+  +p: Pick,
+  ho: {Res.kept(~d, l, o) == True{}: Bool},
+  ht: {Res.kept(~d, l, t) == True{}: Bool},
+  e: {Pick.merge(~d, l, b, o, t) == Some{p}: Maybe<&2, Pick>}
+) -> Pick.Held(~d, l, p):
+  Pick.merge_held.at(~d, l, b, o, t, p, Sides.Side.of(~Maybe<&2, Requests.Res>, ~Res.same, b, o, t), ho, ht, e)
+
 # TMPK-END
 
 # Touches, proven
