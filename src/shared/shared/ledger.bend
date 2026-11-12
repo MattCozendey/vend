@@ -3990,8 +3990,67 @@ def Book.kind(~Q: Data, ~c: Codes.Codec(Q)) -> Ledger.Kind(Q):
     )
   )
 
+# a new book holds nothing
+def Book.law.get_empty(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.GetEmpty(Q, Book.kind(~Q, ~c)):
+  ?TODO
+
+# an add keeps what a book holds, and puts the entry under its name when nothing is there
+def Book.law.get_add(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.GetAdd(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# a book holds each entry under its own name
+def Book.law.get_named(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.GetNamed(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# two entries that do not clash give one book in either order
+def Book.law.add_comm(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.AddComm(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# an entry added twice to a book is added once
+def Book.law.add_twice(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.AddTwice(Q, Book.kind(~Q, ~c)):
+  ?TODO
+
+# the entries of a book that another lacks are those it holds that the other lacks
+def Book.law.missing(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.Missing(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# the ballots of a voter at a place in a book are those it holds there
+def Book.law.ballots(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.Ballots(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# the round bound of a book is the round of a ballot it holds, above all others
+def Book.law.rounds(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.Rounds(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# the height bound of a book is the height of a ballot it holds, above all others
+def Book.law.heights(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.Heights(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# the requests of an author in a book are those it holds by the author
+def Book.law.asks(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.Asks(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# a book without the entry of a name holds nothing there, and all else it held
+def Book.law.drop(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.Drop(Q, Book.kind(~Q, ~c)):
+  ?TODO
+
+# a liar of a book under a root is the voter of a proof of a lie it holds
+def Book.law.liars_sound(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.LiarsSound(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# each proof of a lie that a book holds names its voter a liar
+def Book.law.liars_complete(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.LiarsComplete(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
+# the ballots that a key signs in a book are those it holds that the key seals
+def Book.law.signed(~Q: Data, ~c: Codes.Codec(Q)) -> Laws.Signed(Q, c, Book.kind(~Q, ~c)):
+  ?TODO
+
 # books obey the laws of a ledger
 law Book.laws:
   for ~Q: Data
   for ~c: Codes.Codec(Q)
   Ledger.Laws(Q, c, Book.kind(~Q, ~c))
+
+def Book.laws(Q, c):
+  (Book.law.get_empty(~Q, ~c), (Book.law.get_add(~Q, ~c), (Book.law.get_named(~Q, ~c), (Book.law.add_comm(~Q, ~c), (Book.law.add_twice(~Q, ~c), (Book.law.missing(~Q, ~c), (Book.law.ballots(~Q, ~c), (Book.law.rounds(~Q, ~c), (Book.law.heights(~Q, ~c), (Book.law.asks(~Q, ~c), (Book.law.drop(~Q, ~c), (Book.law.liars_sound(~Q, ~c), (Book.law.liars_complete(~Q, ~c), Book.law.signed(~Q, ~c))))))))))))))
