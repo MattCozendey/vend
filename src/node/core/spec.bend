@@ -4070,7 +4070,23 @@ def Rd.nodes(
   -ns: List<&2, String>
 ) -> {Group.nodes(~d, a, h, gn) == Some{ns}: Maybe<&2, List<&2, String>>}
   -> {Group.nodes(~d, b, h, gn) == Some{ns}: Maybe<&2, List<&2, String>>}:
-  ?TODO
+  Rd.map(
+    List<&2, Group>,
+    List<&2, String>,
+    Groups.in(~d, a, h),
+    Groups.in(~d, b, h),
+    gs => ge => Rd.map(
+      List<&2, Trees.Binding>,
+      List<&2, Group>,
+      Tree.range(~d, a, h, [2]),
+      Tree.range(~d, b, h, [2]),
+      bs => eb => Replicas.Hist.range(~Requests.Ask.machine(), ~d, a, b, h, [2], bs, g)(eb),
+      Groups.of,
+      gs
+    )(ge),
+    gs => Group.nodes.of(gs, gn),
+    ns
+  )
 
 # a taken request stays as the ledger grows
 def Rd.taken(
@@ -4083,7 +4099,7 @@ def Rd.taken(
   -y: Replicas.Taken
 ) -> {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, a, t, n) == Some{y}: Maybe<&2, Replicas.Taken>}
   -> {Replicas.Tip.taken(~Requests.Ask.machine(), ~d, b, t, n) == Some{y}: Maybe<&2, Replicas.Taken>}:
-  ?TODO
+  x => Replicas.Sim.taken_eq.at(~Requests.Ask.machine(), ~d, a, b, t, n, y, g, Trees.Look.value(Trees.Ops.look(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), a, Replicas.Tip.log(t), [3, n])), {==}, x)
 
 # the newest version stays as the ledger grows, once whether there is none
 # is known (z)
@@ -4124,7 +4140,11 @@ def Rd.newest.at(
   )
     == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Id>>
 }:
-  ?TODO
+  match z:
+    case False{}:
+      x => (%Equal.sym(Maybe<&2, Maybe<&2, Ledgers.Id>>, Maybe.bind(&2, Replicas.Taken, Maybe<&2, Ledgers.Id>, Codes.Code.whole.of(Replicas.Taken, Replicas.Taken.code, Replicas.Taken.code.read, Trees.Look.value(Trees.Ops.look(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), b, Replicas.Tip.log(ts), [3, U32.sub(Replicas.Tip.count(ts), 1)]))), x => Some{Some{Replicas.Taken.id(x)}}), Some{y}, Shared.Maybe.bind_kept(Replicas.Taken, Maybe<&2, Ledgers.Id>, Codes.Code.whole.of(Replicas.Taken, Replicas.Taken.code, Replicas.Taken.code.read, Trees.Look.value(Trees.Ops.look(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), a, Replicas.Tip.log(ts), [3, U32.sub(Replicas.Tip.count(ts), 1)]))), Codes.Code.whole.of(Replicas.Taken, Replicas.Taken.code, Replicas.Taken.code.read, Trees.Look.value(Trees.Ops.look(Ledgers.Kind.L(Requests.Ask, Replicas.Led.kind((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d)), Replicas.Led.tree((Requests.Ask, (Requests.Ask.code, Requests.Ask.code.read, x => r => Requests.Ask.code_read(x, r)), Requests.Ask.arrival, Requests.Ask.governs, Requests.Key.seal), d), b, Replicas.Tip.log(ts), [3, U32.sub(Replicas.Tip.count(ts), 1)]))), x => Some{Some{Replicas.Taken.id(x)}}, x => Some{Some{Replicas.Taken.id(x)}}, y, a1 => x1 => Rd.taken(~d, a, b, g, ts, U32.sub(Replicas.Tip.count(ts), 1), a1)(x1), a1 => x1 => x1)(x)) : {_ == Some{y} : Maybe<&2, Maybe<&2, Ledgers.Id>>}; {==})
+    case True{}:
+      x => x
 
 # the newest version stays as the ledger grows
 def Rd.newest(
@@ -4136,7 +4156,7 @@ def Rd.newest(
   -y: Maybe<&2, Ledgers.Id>
 ) -> {Replicas.Tip.newest(~Requests.Ask.machine(), ~d, a, ts) == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Id>>}
   -> {Replicas.Tip.newest(~Requests.Ask.machine(), ~d, b, ts) == Some{y}: Maybe<&2, Maybe<&2, Ledgers.Id>>}:
-  ?TODO
+  x => (%Equal.sym(Cmp, U32.cmp(Replicas.Tip.count(ts), 0), Trees.Cmp.flip(U32.cmp(0, Replicas.Tip.count(ts))), Trees.U32.cmp_flip(0, Replicas.Tip.count(ts))) : {Shared.Bool.when(Maybe<&2, Maybe<&2, Ledgers.Id>>, Cmp.is_eq(_), u => Some{None{}}, u => Maybe.bind(&2, Replicas.Taken, Maybe<&2, Ledgers.Id>, Replicas.Tip.taken(Requests.Ask.machine(), d, b, ts, U32.sub(Replicas.Tip.count(ts), 1)), x => Some{Some{Replicas.Taken.id(x)}})) == Some{y} : Maybe<&2, Maybe<&2, Ledgers.Id>>}; Rd.newest.at(~d, a, b, g, ts, Cmp.is_eq(Trees.Cmp.flip(U32.cmp(0, Replicas.Tip.count(ts)))), y)((%Trees.U32.cmp_flip(0, Replicas.Tip.count(ts)) : {Shared.Bool.when(Maybe<&2, Maybe<&2, Ledgers.Id>>, Cmp.is_eq(_), u => Some{None{}}, u => Maybe.bind(&2, Replicas.Taken, Maybe<&2, Ledgers.Id>, Replicas.Tip.taken(Requests.Ask.machine(), d, a, ts, U32.sub(Replicas.Tip.count(ts), 1)), x => Some{Some{Replicas.Taken.id(x)}})) == Some{y} : Maybe<&2, Maybe<&2, Ledgers.Id>>}; x)))
 
 # what Vend asks by itself for a line reads only the tips that Own.deps names
 law Own.reads:
