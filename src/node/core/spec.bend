@@ -1155,7 +1155,7 @@ def Groups.set(gs: List<&2, Group>, +g: String, +ms: List<&2, Requests.Member>) 
   match gs:
     case Nil{}:
       [Group{g, ms}]
-    case Con{Group{+n, ns}, rest}:
+    case Con{Group{+n, ns}, +rest}:
       Shared.Bool.when(
         List<&2, Group>,
         String.eq(n, g),
