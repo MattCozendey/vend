@@ -1150,25 +1150,41 @@ def Groups.in(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>) -> Maybe<&2, List<&
 def Group.nodes(~d: Led(), l: L(d), h: Maybe<&2, Hashes.Hash>, +g: String) -> Maybe<&2, List<&2, String>>:
   Maybe.map(&2, List<&2, Group>, List<&2, String>, gs => Group.nodes.of(gs, g), Groups.in(~d, l, h))
 
-# Group.act once the tree with the new members is known: stale when the group
-# then reaches itself
-def Group.act.of(~d: Led(), l: L(d), +g: String, p: Maybe<&2, Trees.Edit>) -> Maybe<&2, Replicas.Act>:
-  match p:
-    case None{}:
-      None{}
-    case Some{+x}:
-      Maybe.bind(
-        &2,
+# the groups gs with the group g of the members ms in place of any group g
+def Groups.set(gs: List<&2, Group>, +g: String, +ms: List<&2, Requests.Member>) -> List<&2, Group>:
+  match gs:
+    case Nil{}:
+      [Group{g, ms}]
+    case Con{Group{+n, ns}, rest}:
+      Shared.Bool.when(
         List<&2, Group>,
-        Replicas.Act,
-        Groups.in(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(x), l), Trees.Edit.root(x)),
-        gs => Shared.Bool.when(
-          Maybe<&2, Replicas.Act>,
-          Crits.Dict.has(Unit, Group.reach(gs, g), Group.key(g)),
-          u => Some{Replicas.Act.Stale{}},
-          u => Act.put(None{}, [], Some{x})
-        )
+        String.eq(n, g),
+        u => Groups.set(rest, g, ms),
+        u => Group{n, ns} <> Groups.set(rest, g, ms)
       )
+
+# Group.act once the groups gs of the tree h are known: stale when the group
+# g with the members ms would reach itself; else the tree h with g set. The
+# groups after it are gs with g set, so the act reads only the tree that the
+# ledger holds
+def Group.act.of(
+  ~d: Led(),
+  +l: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +g: String,
+  +ms: List<&2, Requests.Member>,
+  gs: List<&2, Group>
+) -> Maybe<&2, Replicas.Act>:
+  Shared.Bool.when(
+    Maybe<&2, Replicas.Act>,
+    Crits.Dict.has(Unit, Group.reach(Groups.set(gs, g, ms), g), Group.key(g)),
+    u => Some{Replicas.Act.Stale{}},
+    u => Act.put(
+      None{},
+      [],
+      Replicas.Tree.put(~Requests.Ask.machine(), ~d, l, h, Key.group(g), Some{Requests.Members.code(ms, [])})
+    )
+  )
 
 # what a group g with the members ms does, at the tip t of a store: the tree
 # of the store holds the members of g; a group that would reach itself is
@@ -1178,25 +1194,13 @@ def Group.act(
   +l: L(d),
   t: Replicas.Tip,
   +g: String,
-  ms: List<&2, Requests.Member>
+  +ms: List<&2, Requests.Member>
 ) -> Maybe<&2, Replicas.Act>:
   +h = Replicas.Tip.content(t)
   Shared.Bool.when(
     Maybe<&2, Replicas.Act>,
     Tree.whole(~d, l, h),
-    u => Group.act.of(
-      ~d,
-      l,
-      g,
-      Replicas.Tree.put(
-        ~Requests.Ask.machine(),
-        ~d,
-        l,
-        h,
-        Key.group(g),
-        Some{Requests.Members.code(ms, [])}
-      )
-    ),
+    u => Maybe.bind(&2, List<&2, Group>, Replicas.Act, Groups.in(~d, l, h), gs => Group.act.of(~d, l, h, g, ms, gs)),
     u => None{}
   )
 
