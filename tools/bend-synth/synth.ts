@@ -45,10 +45,13 @@ const bendHash = (dir: string) => sha(fs.readFileSync(path.join(dir, "bend.ts"))
 
 // ---- containment ----
 // A worker applies this to itself before it loads Bend: a failed Windows limit is a failed worker,
-// never an unbounded one. Elsewhere the limit is the worker's own RSS check, plus the watchdog.
-export async function contain(memoryMb: number): Promise<string> {
+// never an unbounded one. Elsewhere the limit is the worker's own RSS check, plus the watchdog. It
+// gives the measure the limit counts, for the worker's own guard: on Windows the committed memory (the
+// job object limits commit, which runs well above RSS), elsewhere RSS
+export async function contain(memoryMb: number): Promise<() => number> {
   try { os.setPriority(0, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* a hint */ }
-  if (process.platform !== "win32") return "cooperative RSS limit " + memoryMb + " MiB; wall-clock watchdog";
+  const rss = () => process.memoryUsage.rss();
+  if (process.platform !== "win32") return rss;
   if (process.arch !== "x64" && process.arch !== "arm64") throw new Error("unsupported Windows ABI for memory containment");
   const { dlopen, ptr } = await import("bun:ffi");
   const lib = dlopen("kernel32.dll", {
@@ -57,6 +60,7 @@ export async function contain(memoryMb: number): Promise<string> {
     AssignProcessToJobObject: { args: ["ptr", "ptr"], returns: "i32" },
     GetCurrentProcess: { args: [], returns: "ptr" },
     GetLastError: { args: [], returns: "u32" },
+    K32GetProcessMemoryInfo: { args: ["ptr", "ptr", "u32"], returns: "i32" },
   });
   const k = lib.symbols, job = k.CreateJobObjectW(null, null);
   if (!job) throw new Error("CreateJobObjectW failed: " + k.GetLastError());
@@ -69,7 +73,10 @@ export async function contain(memoryMb: number): Promise<string> {
     throw new Error("Windows refused the worker memory limit: " + k.GetLastError());
   }
   (globalThis as Record<string, unknown>).__bendSynthJob = { lib, job };
-  return "Windows job memory limit " + memoryMb + " MiB";
+  // PROCESS_MEMORY_COUNTERS_EX (Win64): cb at 0, PrivateUsage (the commit charge) at 72
+  const pmc = new Uint8Array(80), pv = new DataView(pmc.buffer);
+  pv.setUint32(0, pmc.length, true);
+  return () => (k.K32GetProcessMemoryInfo(k.GetCurrentProcess(), ptr(pmc), pmc.length) ? Number(pv.getBigUint64(72, true)) : rss());
 }
 // the supervisor's job object: Windows closes it when the supervisor dies, which kills its workers
 const workerGroup = async (): Promise<((pid: number) => void) | undefined> => {

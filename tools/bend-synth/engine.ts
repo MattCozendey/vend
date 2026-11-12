@@ -80,11 +80,13 @@ const OOF = new Stop("out of fuel"), TIMEOUT = new Stop("out of time"), LIN = ne
 const FUEL_CHECK = 300000, FUEL_NF = 100000, FUEL_FINAL = 50000000, FUEL_PARTIAL = 5000000, FUEL_NFS = 40000, NF_NODES = 3000;
 const META = 1 << 20, FRESH = 1e7;
 let deadline = Infinity, jobDeadline = Infinity, memCap = Infinity, overMem = false;
+// the worker's memory as its limit counts it (contain gives it: committed memory on Windows)
+let memUsed = () => process.memoryUsage.rss();
 BR.out = () => {
   if (BR.f < 0) throw OOF;
   if (performance.now() > deadline) throw TIMEOUT;
   // past the share: collect first (what counts is what is live), then stop
-  if ((BR.t & 0xffff) === 0 && process.memoryUsage.rss() > memCap) { Bun.gc(true); if (process.memoryUsage.rss() > memCap) { overMem = true; throw TIMEOUT; } }
+  if ((BR.t & 0xffff) === 0 && memUsed() > memCap) { Bun.gc(true); if (memUsed() > memCap) { overMem = true; throw TIMEOUT; } }
 };
 // f under at most n units, taken from the units left (limits nest); what it used is charged to the caller
 const withFuel = <T>(n: number, f: () => T): T => {
@@ -107,11 +109,11 @@ const late = () => performance.now() > deadline || overMem;
 // the worker's own memory, between steps (Bend's fuel ticks see only Bend's work): the caches go first;
 // a slice still over its share stops with what it has, before the OS limit kills the worker
 const memoryGuard = (): boolean => {
-  if (!(memCap < Infinity) || process.memoryUsage.rss() < memCap * 0.8) return false;
+  if (!(memCap < Infinity) || memUsed() < memCap * 0.8) return false;
   if (BK) BK.nfs.clear();
   if (S) S.facts.clear();
   nfObj = new WeakMap(); patMemo = new WeakMap(); smemo.clear(); nfHeld = 0; Bun.gc(true);
-  if (process.memoryUsage.rss() < memCap * 0.9) return false;
+  if (memUsed() < memCap * 0.9) return false;
   overMem = true;
   return true;
 };
@@ -3071,7 +3073,7 @@ if (import.meta.main) {
   if (cmd === "worker") {
     const { contain } = await import("./synth.ts");
     const mb = Number(process.env.BEND_SYNTH_MEM_MB) || 768;
-    try { await contain(mb); } catch (e) { process.send?.({ t: "fatal", message: String((e as Error)?.message ?? e) }); setTimeout(() => process.exit(1), 50); }
+    try { memUsed = await contain(mb); } catch (e) { process.send?.({ t: "fatal", message: String((e as Error)?.message ?? e) }); setTimeout(() => process.exit(1), 50); }
     await workerMain(dir);
   } else {
     console.error("engine.ts is bend-synth's worker; run synth.ts");
