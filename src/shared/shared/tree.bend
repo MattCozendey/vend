@@ -11308,6 +11308,131 @@ def Runs.eta(r: Runs) -> {r == Runs{Runs.side_a(r), Runs.side_b(r)}: Runs}:
     case Runs{a, b}:
       {==}
 
+# the pieces at the backs of the runs a and b that a trim drops, in order
+def Mst.trim_back(a: List<&2, Piece>, +b: List<&2, Piece>) -> List<&2, Piece>:
+  +t = Mst.trim(a, b)
+  List.reverse(&2, Piece, Mst.trim_pre(List.reverse(&2, Piece, Runs.side_a(t)), List.reverse(&2, Piece, Runs.side_b(t))))
+
+# the first side of a trimmed run, by the trims of its front and its back
+def Runs.trim_side_a(+a: List<&2, Piece>, +b: List<&2, Piece>) -> {
+  Runs.side_a(Runs.trim(Runs{a, b}))
+    == List.reverse(
+      &2,
+      Piece,
+      Runs.side_a(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))))
+    ): List<&2, Piece>
+}:
+  %Equal.sym(Runs, Mst.trim(a, b), Runs{Runs.side_a(Mst.trim(a, b)), Runs.side_b(Mst.trim(a, b))}, Runs.eta(Mst.trim(a, b))): {
+    Runs.side_a(Runs.reverse(Runs.trim_front(Runs.reverse(_))))
+      == List.reverse(
+        &2,
+        Piece,
+        Runs.side_a(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))))
+      ): List<&2, Piece>
+  }
+  %Equal.sym(
+    Runs,
+    Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))),
+    Runs{
+      Runs.side_a(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b))))),
+      Runs.side_b(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))))
+    },
+    Runs.eta(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))))
+  ): {
+    Runs.side_a(Runs.reverse(_))
+      == List.reverse(
+        &2,
+        Piece,
+        Runs.side_a(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))))
+      ): List<&2, Piece>
+  }
+  {==}
+
+# the second side of a trimmed run, by the trims of its front and its back
+def Runs.trim_side_b(+a: List<&2, Piece>, +b: List<&2, Piece>) -> {
+  Runs.side_b(Runs.trim(Runs{a, b}))
+    == List.reverse(
+      &2,
+      Piece,
+      Runs.side_b(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))))
+    ): List<&2, Piece>
+}:
+  %Equal.sym(Runs, Mst.trim(a, b), Runs{Runs.side_a(Mst.trim(a, b)), Runs.side_b(Mst.trim(a, b))}, Runs.eta(Mst.trim(a, b))): {
+    Runs.side_b(Runs.reverse(Runs.trim_front(Runs.reverse(_))))
+      == List.reverse(
+        &2,
+        Piece,
+        Runs.side_b(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))))
+      ): List<&2, Piece>
+  }
+  %Equal.sym(
+    Runs,
+    Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))),
+    Runs{
+      Runs.side_a(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b))))),
+      Runs.side_b(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))))
+    },
+    Runs.eta(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))))
+  ): {
+    Runs.side_b(Runs.reverse(_))
+      == List.reverse(
+        &2,
+        Piece,
+        Runs.side_b(Mst.trim(List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b))), List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))))
+      ): List<&2, Piece>
+  }
+  {==}
+
+# a run is its dropped front, its trimmed first side, and its dropped back
+def Runs.trim_split_a(+a: List<&2, Piece>, +b: List<&2, Piece>) -> {
+  List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_a(Runs.trim(Runs{a, b})), Mst.trim_back(a, b))) == a: List<&2, Piece>
+}:
+  +ra = List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b)))
+  +rb = List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))
+  %Equal.sym(
+    List<&2, Piece>,
+    Runs.side_a(Runs.trim(Runs{a, b})),
+    List.reverse(&2, Piece, Runs.side_a(Mst.trim(ra, rb))),
+    Runs.trim_side_a(a, b)
+  ): {
+    List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, _, List.reverse(&2, Piece, Mst.trim_pre(ra, rb)))) == a: List<&2, Piece>
+  }
+  %List.rev_append(Piece, Mst.trim_pre(ra, rb), Runs.side_a(Mst.trim(ra, rb))): {
+    List.append(&2, Piece, Mst.trim_pre(a, b), _) == a: List<&2, Piece>
+  }
+  %Equal.sym(List<&2, Piece>, List.append(&2, Piece, Mst.trim_pre(ra, rb), Runs.side_a(Mst.trim(ra, rb))), ra, Mst.trim_a(ra, rb)): {
+    List.append(&2, Piece, Mst.trim_pre(a, b), List.reverse(&2, Piece, _)) == a: List<&2, Piece>
+  }
+  %Equal.sym(List<&2, Piece>, List.reverse(&2, Piece, ra), Runs.side_a(Mst.trim(a, b)), List.rev_rev(Piece, Runs.side_a(Mst.trim(a, b)))): {
+    List.append(&2, Piece, Mst.trim_pre(a, b), _) == a: List<&2, Piece>
+  }
+  Mst.trim_a(a, b)
+
+# a run is its dropped front, its trimmed second side, and its dropped back
+def Runs.trim_split_b(+a: List<&2, Piece>, +b: List<&2, Piece>) -> {
+  List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_b(Runs.trim(Runs{a, b})), Mst.trim_back(a, b))) == b: List<&2, Piece>
+}:
+  +ra = List.reverse(&2, Piece, Runs.side_a(Mst.trim(a, b)))
+  +rb = List.reverse(&2, Piece, Runs.side_b(Mst.trim(a, b)))
+  %Equal.sym(
+    List<&2, Piece>,
+    Runs.side_b(Runs.trim(Runs{a, b})),
+    List.reverse(&2, Piece, Runs.side_b(Mst.trim(ra, rb))),
+    Runs.trim_side_b(a, b)
+  ): {
+    List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, _, List.reverse(&2, Piece, Mst.trim_pre(ra, rb)))) == b: List<&2, Piece>
+  }
+  %List.rev_append(Piece, Mst.trim_pre(ra, rb), Runs.side_b(Mst.trim(ra, rb))): {
+    List.append(&2, Piece, Mst.trim_pre(a, b), _) == b: List<&2, Piece>
+  }
+  %Equal.sym(List<&2, Piece>, List.append(&2, Piece, Mst.trim_pre(ra, rb), Runs.side_b(Mst.trim(ra, rb))), rb, Mst.trim_b(ra, rb)): {
+    List.append(&2, Piece, Mst.trim_pre(a, b), List.reverse(&2, Piece, _)) == b: List<&2, Piece>
+  }
+  %Equal.sym(List<&2, Piece>, List.reverse(&2, Piece, rb), Runs.side_b(Mst.trim(a, b)), List.rev_rev(Piece, Runs.side_b(Mst.trim(a, b)))): {
+    List.append(&2, Piece, Mst.trim_pre(a, b), _) == b: List<&2, Piece>
+  }
+  Mst.trim_b(a, b)
+
 # a write to a tree that lists whole reads every node it needs
 def Mst.put_some(
   ~S: Data,
