@@ -594,7 +594,7 @@ const isLemmaType = (k: string): boolean => {
 
 // ---- books ----
 type Lemma = { k: string; order: number; n: number; np: number; guarded: boolean };
-// stub: no text in the file (a law with no def yet); the search's def goes at the end of the file
+// stub: a law with no def yet, whose def goes at the end of the file
 type Src = { file: string; header: string; body: string; bodyLine: number; stub?: true };
 type Book = {
   entry: string; top: string; book: Term; raw: Record<string, Term>; n0: number; order: Map<string, number>; files: Map<string, Term>;
@@ -707,8 +707,9 @@ const defSrc = (k: string): Src | null => {
     while (be > he + 1 && (lines[be - 1].trim() === "" || lines[be - 1].trim().startsWith("#"))) be--;
     res = { file, header: lines.slice(li, he + 1).join("\n"), body: lines.slice(he + 1, be).join("\n"), bodyLine: he + 1 };
   }
-  BK.src.set(k, res ?? lawStub(k, file));
-  return BK.src.get(k)!;
+  const out = res ?? lawStub(k, file);
+  BK.src.set(k, out);
+  return out;
 };
 // a law with no def yet: its fill as Bend reads one, `def NAME(clause names):` (bare names, one per `for`
 // clause), with the body ?TODO
@@ -2558,6 +2559,7 @@ const inputsOf = (k: string): Term[][] => {
 };
 
 // ---- answers ----
+// edit: what --write does, from replaced by to in file (from "": to appended, a new def)
 export type Report = {
   status: "proven" | "synthesized" | "partial" | "open" | "error" | "nothing" | "running"; text: string;
   body?: string; edit?: { file: string; from: string; to: string }; holes?: number; nodes?: number; ms?: number;
@@ -2596,7 +2598,6 @@ const printed = (hs: Extract<Pf, { t: "def" }>[]): Printed[] => hs.map((h) => ({
 const defsText = (hs: Printed[]) => hs.map((h) => h.head + "\n" + h.body + "\n").join("\n");
 const helperBlock = (hs: Printed[], k: string, proven: boolean): string =>
   hs.length ? "# helper defs (" + (proven ? "proven" : "some open") + "): paste them above `def " + shortOf(k) + "(`\n" + defsText(hs) + "# the body of " + shortOf(k) + ":\n" : "";
-// from "": a stub's def has no text to replace, and goes at the end of the file
 const editOf = (ds: Src, hs: Printed[], body: string) => ({ file: ds.file, from: ds.stub ? "" : ds.header + "\n" + ds.body, to: (hs.length ? defsText(hs) + "\n" : "") + ds.header + "\n" + body });
 const PLUS_LINE = /^[ \t]*\+([A-Za-z_]\w*) = \1[ \t]*\n/gm;
 const trimPlus = (checks: (body: string) => boolean, body: string): string => {
@@ -2756,7 +2757,7 @@ const newSession = (t: Task, L: Book): Session | Report => {
   const whole = ds.body.trim() === "?TODO", holes = todoAt(ds.body).length > 0;
   const bench = t.kind === "bench";
   if (!whole && !holes && !bench) return { status: "nothing", text: "# " + shortOf(k) + ": no ?TODO in its body (nothing to search; `bend " + path.basename(L.entry) + " --check-only` checks it)" };
-  // a law's stub goes at the end of the file: every def of the file is above it
+  // every def of the file is above a stub
   const own = ds.stub ? { ...owner(k), order: BK.book.order.length } : owner(k);
   if (returnsSort(k)) return { status: "nothing", text: "# " + shortOf(k) + ": its result is a sort (a type definition): there is no program to search for it" };
   const kind = isLemmaType(k) ? "proof" : "synth";
@@ -2863,8 +2864,7 @@ const reportOf = (s: Session, t: Task, final: boolean): Report => {
 };
 type Done = (report: Report, fin: boolean, s?: Session) => void;
 // one slice of a job: load (warm when unchanged), continue its session, report. The search stops itself
-// at the slice's end and at the memory share; outside it (loading, starting, reporting) the memory share
-// stops the slice, which ends open and not done: the worker sheds its caches, and the job goes on
+// at the slice's end and at the memory share; outside it, the memory share ends the slice open, not done
 const runSlice = async (t: Task): Promise<void> => {
   const t0 = performance.now();
   jobDeadline = t0 + Math.max(t.sliceMs, t.budgetMs ?? 0);
@@ -2873,18 +2873,20 @@ const runSlice = async (t: Task): Promise<void> => {
     send({ t: "slice", id: t.id, report: { ...report, ms: Math.round(performance.now() - (s?.t0 ?? t0)) }, done: fin, spentMs: Math.round(performance.now() - t0), deps });
     if (fin) dropSession(t.id);
   };
-  try { await slice(t, t0 + Math.max(200, t.sliceMs), done, (L) => { deps = L.hashes; }); } catch (e) {
+  try {
+    const L = await loadBook(t.file);
+    if (typeof L === "string") return done({ status: "error", text: HONEST + "\n# " + L }, true);
+    deps = L.hashes;
+    await sliceOn(t, L, t0 + Math.max(200, t.sliceMs), done);
+  } catch (e) {
     if (e !== TIMEOUT) throw e;
     deadline = Infinity;
-    const why = overMem ? "the worker's memory share (" + Math.round(memCap / 1048576) + " MiB; BEND_SYNTH_MEM_MB raises it)" : "time";
+    const why = overMem ? "the worker's memory share (" + Math.round(memCap / 1048576) + " MiB; BEND_SYNTH_MEM_MB raises it), so the worker drops its books and sessions" : "time";
     done({ status: "open", text: HONEST + "\n# " + t.target + ": OPEN: this slice was stopped by " + why + " after " + secs(performance.now() - t0)
-      + ", outside the search (loading the book, starting the search, or reporting). The worker drops its books and sessions; the job starts again in its next slice" }, false);
+      + ", outside the search (loading the book, starting the search, or reporting); the job goes on in its next slice" }, false);
   }
 };
-const slice = async (t: Task, until: number, done: Done, loaded: (L: Book) => void): Promise<void> => {
-  const L = await loadBook(t.file);
-  if (typeof L === "string") return done({ status: "error", text: HONEST + "\n# " + L }, true);
-  loaded(L);
+const sliceOn = async (t: Task, L: Book, until: number, done: Done): Promise<void> => {
   BK = L;
   let s = sessions.get(t.id);
   if (s && (s.stamp !== L.stamp || s.entry !== L.entry)) { dropSession(t.id); s = undefined; }
@@ -3009,8 +3011,7 @@ const runBench = async (t: Task): Promise<void> => {
 
 // ---- the worker process ----
 let rootSend: (m: FromWorker) => void = () => {};
-// past the memory share: every book, session and memo goes, the current ones too (BK and S held the last
-// job's book alive, so the next book loaded over the share again, and every job after it stopped)
+// past the memory share: every book, session and memo goes, BK and S too (they keep the last book alive)
 const shed = () => {
   books.clear(); sessions.clear(); smemo.clear(); lawTerms.clear(); openNames.clear();
   examples = []; nfObj = new WeakMap(); patMemo = new WeakMap(); nfHeld = 0;

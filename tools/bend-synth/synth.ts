@@ -192,17 +192,12 @@ async function serve(): Promise<void> {
       const j = w.job ? live.get(w.job) : undefined;
       if (j && j.status === "running") { j.status = "interrupted"; j.report = { ...j.report, text: j.report.text + "\n# the worker stopped (exit " + code + "); resume continues from the proven goals" }; save(j); }
       // a worker that dies before it is ready (a broken Bend, a bad install): three in a row fail the jobs
-      // that wait for that Bend, each start's exit and reason in the report
+      // that wait for that Bend (pump drops them from the queue), each start's exit and reason in the report
       if (!w.ready) failures.push("exit " + code + ": " + (w.fatal ?? (logTail(w.p.logStart).trim() || "nothing in " + path.join(STATE, "worker.log"))));
-      if (!w.ready && failures.length >= 3) {
+      if (failures.length >= 3) {
         const text = "# the worker does not start (" + failures.length + " tries, " + MEM_MB + " MiB each):\n" + [...new Set(failures)].join("\n").replace(/^/gm, "#   ");
-        for (const id of queue.filter((id) => live.get(id)?.bend === w.bend)) {
-          const q = live.get(id)!;
-          queue.splice(queue.indexOf(id), 1);
-          q.status = "error"; q.report = { status: "error", text }; save(q);
-        }
+        for (const q of queue.map((id) => live.get(id))) if (q?.bend === w.bend) { q.status = "error"; q.report = { status: "error", text }; save(q); }
         failures = [];
-        return;
       }
       pump();
     });
@@ -210,6 +205,18 @@ async function serve(): Promise<void> {
     try { group?.(w.p.pid); } catch (e) { w.fatal = e instanceof Error ? e.message : String(e); w.p.kill(); }
     workers.push(w);
     return w;
+  };
+  // a job searches the text it was asked about: once its files change (an edit, a delete) it stops, and
+  // `prove` again starts a job on the new text (the old text again attaches to this one)
+  const stale = (j: Job): boolean => {
+    const gone = changed(j);
+    if (!gone.length) return false;
+    j.status = "changed";
+    j.report = { status: "open", text: "# " + j.target + ": stopped after " + (j.spentMs / 1000).toFixed(1) + " s: " + gone.map((f) => path.basename(f)).join(", ")
+      + " changed or went away since the job began; `prove` again searches the new text" + (j.spentMs ? "\n# the last report, of the old text:\n" + j.report.text : "") };
+    for (const x of workers) if (x.warm.includes(j.id) && !x.job) x.p.send({ t: "drop", id: j.id });
+    save(j);
+    return true;
   };
   const pump = () => {
     for (let qi = 0; qi < queue.length;) {
@@ -230,17 +237,7 @@ async function serve(): Promise<void> {
         continue;
       }
       queue.splice(qi, 1);
-      // a job searches the text it was asked about: once its files change (an edit, a delete) it stops,
-      // and `prove` again starts a job on the new text (the same text again attaches to this one)
-      const gone = changed(j);
-      if (gone.length) {
-        j.status = "changed";
-        j.report = { status: "open", text: "# " + j.target + ": stopped after " + (j.spentMs / 1000).toFixed(1) + " s: " + gone.map((f) => path.basename(f)).join(", ")
-          + " changed (or " + (gone.length > 1 ? "are" : "is") + " gone) since the job began; `prove` again searches the new text" + (j.report.text === "# queued" ? "" : "\n# the last report, of the old text:\n" + j.report.text) };
-        for (const x of workers) if (x.warm.includes(j.id) && !x.job) x.p.send({ t: "drop", id: j.id });
-        save(j);
-        continue;
-      }
+      if (stale(j)) continue;
       if (w.idle) clearTimeout(w.idle);
       // another job's warm session in this worker is dropped when the worker's warm list overflows
       w.job = j.id;
@@ -391,7 +388,6 @@ const applyEdit = (r: Report): string => {
   const e = r.edit;
   if (!e) return "# --write: nothing to write";
   const text = fs.readFileSync(e.file, "utf8");
-  // a law's new def (no text to replace) goes at the end of the file
   if (e.from === "") { fs.writeFileSync(e.file, text.replace(/\s*$/, "\n\n") + e.to + "\n"); return "# --write: appended to " + e.file; }
   const n = text.split(e.from).length - 1;
   if (n !== 1) return "# --write: " + path.basename(e.file) + " changed meanwhile (the def's text is " + (n ? "not unique" : "gone") + "); nothing written";
