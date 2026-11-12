@@ -14670,12 +14670,21 @@ def Kp.All(-d: Led(), l: L(d), m: Maybe<&2, Replicas.Run<L(d)>>) -> Type:
       Replicas.Ext.Based(Requests.Ask.machine(), d, l, r) & Kp.Has(d, l, r)
 
 # a log that a write gives for the key k the value v, once the ledger holds the
-# nodes a of the run before the write
-def Kp.WroteIf(-d: Led(), l: L(d), k: List<&2, U32>, v: List<&2, U32>, a: List<&2, List<&2, U32>>) -> Type:
-  {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, a) == True{}: Bool} -> Kp.Wrote(d, l, k, v)
+# nodes a of the run before the write and the content c of its tip is kept
+def Kp.WroteIf(
+  -d: Led(),
+  l: L(d),
+  k: List<&2, U32>,
+  v: List<&2, U32>,
+  a: List<&2, List<&2, U32>>,
+  c: Maybe<&2, Hashes.Hash>
+) -> Type:
+  {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, a) == True{}: Bool}
+    -> {Tree.kept(~d, l, c) == True{}: Bool} -> Kp.Wrote(d, l, k, v)
 
 # what a kernel gives for the run r, in a ledger that holds what it added: if
-# the act that it gives is held, its content is kept
+# the act that it gives is held, and the content of the tip of r is kept, the
+# content that the act gives is kept
 def Kp.ActOk(-d: Led(), l: L(d), r: Replicas.Run<L(d)>, m: Maybe<&2, Replicas.Act>) -> Type:
   match m:
     case None{}:
@@ -14683,6 +14692,7 @@ def Kp.ActOk(-d: Led(), l: L(d), r: Replicas.Run<L(d)>, m: Maybe<&2, Replicas.Ac
     case Some{act}:
       {Replicas.Act.held(~Requests.Ask.machine(), ~d, l, act) == True{}: Bool}
         -> {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, Replicas.Run.added(L(d), r)) == True{}: Bool}
+        -> {Tree.kept(~d, l, Replicas.Tip.content(Replicas.Run.tip(L(d), r))) == True{}: Bool}
         -> Acts.Kept(~d, l, act)
 
 # a write to a log whose tree is listed gives a listed tree, once the tree is
@@ -14946,7 +14956,7 @@ def Kp.logged.good2(
   +ep: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, lr, lg, k, Some{v}) == Some{x}: Maybe<&2, Trees.Edit>},
   +gr: Replicas.Led.Grows(Requests.Ask.machine(), d, lr, l),
   +hx: Merge.Held(~d, l, Trees.Edit.nodes(x)),
-  wk: Kp.Wrote(d, l, k, v),
+  wk: {Tree.kept(~d, l, c) == True{}: Bool} -> Kp.Wrote(d, l, k, v),
   gd: Kp.Good(d, l, Replicas.Tip{c, lg, n, vs})
 ) -> Kp.Good(d, l, Replicas.Tip{c, Trees.Edit.root(x), n, vs}):
   (+g1, r1) = gd
@@ -14965,7 +14975,7 @@ def Kp.logged.good2(
     ep,
     gr,
     hx,
-    wk,
+    wk(g1),
     g1,
     w1,
     st1,
@@ -14989,7 +14999,7 @@ def Kp.logged.good(
   +ep: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, lr, lg, k, Some{v}) == Some{x}: Maybe<&2, Trees.Edit>},
   bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a}),
   hr: Kp.Has(d, l, Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a}),
-  wk: Kp.WroteIf(d, l, k, v, a),
+  wk: Kp.WroteIf(d, l, k, v, a, c),
   +hh: {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, List.append(&2, List<&2, U32>, Trees.Edit.nodes(x), a)) == True{}: Bool}
 ) -> Kp.Good(d, l, Replicas.Tip{c, Trees.Edit.root(x), n, vs}):
   Kp.logged.good2(
@@ -15031,7 +15041,7 @@ def Kp.logged(
   ep: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, lr, Replicas.Tip.log(t), k, Some{v}) == p: Maybe<&2, Trees.Edit>},
   bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, Replicas.Run{lr, t, a}),
   hr: Kp.Has(d, l, Replicas.Run{lr, t, a}),
-  wk: Kp.WroteIf(d, l, k, v, a)
+  wk: Kp.WroteIf(d, l, k, v, a, Replicas.Tip.content(t))
 ) -> Kp.Out(d, l, Replicas.Run.logged(~Requests.Ask.machine(), ~d, lr, t, a, p)):
   match t p:
     case Replicas.Tip{+c, +lg, +n, +vs} None{}:
@@ -15050,7 +15060,7 @@ def Kp.add.at(
   m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
   bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, r),
   hr: Kp.Has(d, l, r),
-  wk: Kp.WroteIf(d, l, k, v, Replicas.Run.added(L(d), r))
+  wk: Kp.WroteIf(d, l, k, v, Replicas.Run.added(L(d), r), Replicas.Tip.content(Replicas.Run.tip(L(d), r)))
 ) -> Kp.Out(d, l, Replicas.Run.add.at(~Requests.Ask.machine(), ~d, r, k, v, m)):
   match r m:
     case Replicas.Run{+lr, +t, +a} Some{None{}}:
@@ -15069,7 +15079,7 @@ def Kp.add(
   +v: List<&2, U32>,
   bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, r),
   hr: Kp.Has(d, l, r),
-  wk: Kp.WroteIf(d, l, k, v, Replicas.Run.added(L(d), r))
+  wk: Kp.WroteIf(d, l, k, v, Replicas.Run.added(L(d), r), Replicas.Tip.content(Replicas.Run.tip(L(d), r)))
 ) -> Kp.Out(d, l, Replicas.Run.add(~Requests.Ask.machine(), ~d, r, k, v)):
   Kp.add.at(
     ~d,
@@ -15155,7 +15165,7 @@ def Kp.stale(
     Replicas.Out.code(Replicas.Out.Stale{a}, []),
     bd,
     hr,
-    hh0 => Kp.wrote_out(~d, l, i, Replicas.Out.code(Replicas.Out.Stale{a}, []))
+    hh0 => g0 => Kp.wrote_out(~d, l, i, Replicas.Out.code(Replicas.Out.Stale{a}, []))
   )
 
 # the run after a request that its line took as the number n has a good tip
@@ -15196,7 +15206,7 @@ def Kp.taken.at(
       Replicas.Out.code(Replicas.Out.Taken{a, n}, []),
       bd,
       hr,
-      hh0 => Kp.wrote_out(~d, l, i, Replicas.Out.code(Replicas.Out.Taken{a, n}, []))
+      hh0 => g0 => Kp.wrote_out(~d, l, i, Replicas.Out.code(Replicas.Out.Taken{a, n}, []))
     ),
     Replicas.Ext.add(~Requests.Ask.machine(), ~d, l, r, Replicas.Log.out(i), Replicas.Out.code(Replicas.Out.Taken{a, n}, [])),
     bd,
@@ -15220,7 +15230,7 @@ def Kp.taken.at(
         Replicas.Taken.code(Replicas.Taken{i, Replicas.Tip.content(Replicas.Run.tip(L(d), r1))}, []),
         bd1,
         hr1,
-        hh0 => Kp.wrote_taken(~d, l, n, Replicas.Taken.code(Replicas.Taken{i, Replicas.Tip.content(Replicas.Run.tip(L(d), r1))}, []))
+        hh0 => g0 => Kp.wrote_taken(~d, l, n, Replicas.Taken.code(Replicas.Taken{i, Replicas.Tip.content(Replicas.Run.tip(L(d), r1))}, []))
       ),
       Replicas.Ext.add(
         ~Requests.Ask.machine(),
@@ -15279,7 +15289,7 @@ def Kp.labelled(
           Ledgers.Id.code(Replicas.Taken.id(x), []),
           bd,
           hr,
-          hh0 => Kp.wrote_label(~d, l, m, Ledgers.Id.code(Replicas.Taken.id(x), []))
+          hh0 => g0 => Kp.wrote_label(~d, l, m, Ledgers.Id.code(Replicas.Taken.id(x), []))
         ),
         Replicas.Ext.add(~Requests.Ask.machine(), ~d, l, r, Replicas.Log.label(m), Ledgers.Id.code(Replicas.Taken.id(x), [])),
         bd,
@@ -15656,6 +15666,1043 @@ def Ask.act_kept(
         e1 => (%Shared.Maybe.some_inj(Replicas.Act, Replicas.Act.Stale{}, a, e1) : Acts.Kept(~d, lf, _); Unit{}),
         ec
       )
+
+# a node that is the first of a list is in it
+def Kp.contains_head(
+  +w: List<&2, U32>,
+  r: List<&2, List<&2, U32>>
+) -> {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), w <> r, w) == True{}: Bool}:
+  %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, w, w), True{}, Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), w)): {
+    List.any.if(u => List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), r, w), _) == True{}: Bool
+  }
+  {==}
+
+# a tip whose node the ledger holds is the tip that its hash names, in a code
+def Kp.tip_named(
+  ~d: Led(),
+  +l: L(d),
+  +t: Replicas.Tip,
+  +ns: List<&2, List<&2, U32>>,
+  hh: {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, Replicas.Tip.code(t, []) <> ns) == True{}: Bool}
+) -> {Replicas.Tip.named(~Requests.Ask.machine(), ~d, l, Hashes.Hash.code(Replicas.Tip.hash(t), [])) == Some{t}: Maybe<&2, Replicas.Tip>}:
+  %Equal.sym(
+    Maybe<&2, Hashes.Hash>,
+    Codes.Code.whole.read(~Hashes.Hash, ~Hashes.Hash.code, ~Hashes.Hash.code.read, Hashes.Hash.code(Replicas.Tip.hash(t), [])),
+    Some{Replicas.Tip.hash(t)},
+    Codes.Code.whole_read(~Hashes.Hash, ~Hashes.Hash.code, ~Hashes.Hash.code.read, ~(x => r => Hashes.Hash.code_read(x, r)), Replicas.Tip.hash(t))
+  ): {Replicas.Tip.of(~Requests.Ask.machine(), ~d, l, _) == Some{t}: Maybe<&2, Replicas.Tip>}
+  %Equal.sym(
+    Maybe<&2, List<&2, U32>>,
+    Replicas.Led.fetch(~Requests.Ask.machine(), ~d)(l)(Replicas.Tip.hash(t)),
+    Some{Replicas.Tip.code(t, [])},
+    Replicas.Ext.held.of(
+      ~Requests.Ask.machine(),
+      ~d,
+      l,
+      Replicas.Tip.code(t, []) <> ns,
+      Replicas.Tip.code(t, []),
+      hh,
+      Kp.contains_head(Replicas.Tip.code(t, []), ns)
+    )
+  ): {Codes.Code.whole.of(~Replicas.Tip, ~Replicas.Tip.code, ~Replicas.Tip.code.read, _) == Some{t}: Maybe<&2, Replicas.Tip>}
+  Codes.Code.whole_read(~Replicas.Tip, ~Replicas.Tip.code, ~Replicas.Tip.code.read, ~(x => r => Replicas.Tip.code_read(x, r)), t)
+
+# the first tip of a sub line that a log names is good, once the ledger holds the
+# node of the tip and the tip is
+def Kp.wrote_start(
+  ~d: Led(),
+  +l: L(d),
+  +b: String,
+  +t: Replicas.Tip,
+  +ns: List<&2, List<&2, U32>>,
+  hh: {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, Replicas.Tip.code(t, []) <> ns) == True{}: Bool},
+  ak: Merge.And({Tree.kept(~d, l, Replicas.Tip.content(t)) == True{}: Bool}, {Replicas.Tip.log(t) == None{}: Maybe<&2, Hashes.Hash>})
+) -> Kp.Wrote(d, l, Replicas.Log.start(b), Hashes.Hash.code(Replicas.Tip.hash(t), [])):
+  +b2 => he => +tb => hn =>
+    %Shared.Maybe.some_inj(
+      Replicas.Tip,
+      t,
+      tb,
+      %Kp.tip_named(~d, l, t, ns, hh): {_ == Some{tb}: Maybe<&2, Replicas.Tip>}
+      hn
+    ): Merge.And({Tree.kept(~d, l, Replicas.Tip.content(_)) == True{}: Bool}, {Replicas.Tip.log(_) == None{}: Maybe<&2, Hashes.Hash>})
+    ak
+
+# a tip with new content that is kept is good, when the tip before it is
+def Kp.over.pair(
+  ~d: Led(),
+  +l: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +c: Maybe<&2, Hashes.Hash>,
+  +lg: Maybe<&2, Hashes.Hash>,
+  +n: U32,
+  +vs: List<&2, String>,
+  hk: {Tree.kept(~d, l, c) == True{}: Bool} -> {Tree.kept(~d, l, h) == True{}: Bool},
+  g: Kp.Good(d, l, Replicas.Tip{c, lg, n, vs})
+) -> Kp.Good(d, l, Replicas.Tip{h, lg, n, vs}):
+  (+g1, g2) = g
+  (hk(g1), g2)
+
+# new content that is kept gives a tip that is good, when the tip before it is,
+# once the ledger holds the nodes that come with the content
+def Kp.over(
+  ~d: Led(),
+  +l: L(d),
+  r: Replicas.Run<L(d)>,
+  +ns: List<&2, List<&2, U32>>,
+  +h: Maybe<&2, Hashes.Hash>,
+  hk: {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, List.append(&2, List<&2, U32>, ns, Replicas.Run.added(L(d), r))) == True{}: Bool}
+    -> {Tree.kept(~d, l, Replicas.Tip.content(Replicas.Run.tip(L(d), r))) == True{}: Bool} -> {Tree.kept(~d, l, h) == True{}: Bool},
+  hr: Kp.Has(d, l, r)
+) -> Kp.Has(d, l, Replicas.Run.over(~Requests.Ask.machine(), ~d, r, ns, h)):
+  match r:
+    case Replicas.Run{+lr, +t, +a}:
+      match t:
+        case Replicas.Tip{+c, +lg, +n, +vs}:
+          +hh => Kp.over.pair(~d, l, h, c, lg, n, vs, +g1 => hk(hh)(g1), hr(Replicas.Ext.holds_right(~Requests.Ask.machine(), ~d, l, ns, a)(hh)))
+
+# the same content, with more nodes, gives a tip that is good, when the tip
+# before it is
+def Kp.over.same(
+  ~d: Led(),
+  +l: L(d),
+  r: Replicas.Run<L(d)>,
+  +ns: List<&2, List<&2, U32>>,
+  hr: Kp.Has(d, l, r)
+) -> Kp.Has(d, l, Replicas.Run.over(~Requests.Ask.machine(), ~d, r, ns, Replicas.Tip.content(Replicas.Run.tip(L(d), r)))):
+  match r:
+    case Replicas.Run{+lr, +t, +a}:
+      match t:
+        case Replicas.Tip{+c, +lg, +n, +vs}:
+          +hh => hr(Replicas.Ext.holds_right(~Requests.Ask.machine(), ~d, l, ns, a)(hh))
+
+# the first tip of a sub line that a run opens gives a run whose tip is good
+def Kp.opens(
+  ~d: Led(),
+  +l: L(d),
+  r: Replicas.Run<L(d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +b: String,
+  +t: Replicas.Tip,
+  +ns: List<&2, List<&2, U32>>,
+  +bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, r),
+  hr: Kp.Has(d, l, r),
+  ak: {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, ns) == True{}: Bool}
+    -> {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, Replicas.Run.added(L(d), r)) == True{}: Bool}
+    -> {Tree.kept(~d, l, Replicas.Tip.content(Replicas.Run.tip(L(d), r))) == True{}: Bool}
+    -> Merge.And({Tree.kept(~d, l, Replicas.Tip.content(t)) == True{}: Bool}, {Replicas.Tip.log(t) == None{}: Maybe<&2, Hashes.Hash>})
+) -> Kp.Out(d, l, Replicas.Step.opens(~Requests.Ask.machine(), ~d, r, i, a, b, t, ns)):
+  match r:
+    case Replicas.Run{+lr, +tr, +a0}:
+      match tr:
+        case Replicas.Tip{+c, +lg, +n, +vs}:
+          +r0 = Replicas.Run.over(
+            ~Requests.Ask.machine(),
+            ~d,
+            Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a0},
+            Replicas.Tip.code(t, []) <> ns,
+            Replicas.Tip.content(Replicas.Run.tip(L(d), Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a0}))
+          )
+          Kp.bind(
+            ~d,
+            l,
+            Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a0},
+            Replicas.Run.add(~Requests.Ask.machine(), ~d, r0, Replicas.Log.start(b), Hashes.Hash.code(Replicas.Tip.hash(t), [])),
+            r2 => Replicas.Step.taken(~Requests.Ask.machine(), ~d, r2, i, a, None{}),
+            Kp.add(
+              ~d,
+              l,
+              r0,
+              Replicas.Log.start(b),
+              Hashes.Hash.code(Replicas.Tip.hash(t), []),
+              Replicas.Ext.based(
+                ~Requests.Ask.machine(),
+                ~d,
+                l,
+                Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a0},
+                r0,
+                bd,
+                Replicas.Ext.over(
+                  ~Requests.Ask.machine(),
+                  ~d,
+                  l,
+                  Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a0},
+                  Replicas.Tip.code(t, []) <> ns,
+                  Replicas.Tip.content(Replicas.Run.tip(L(d), Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a0}))
+                )
+              ),
+              Kp.over.same(
+                ~d,
+                l,
+                Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a0},
+                Replicas.Tip.code(t, []) <> ns,
+                hr
+              ),
+              +hh0 => +g0 => Kp.wrote_start(
+                ~d,
+                l,
+                b,
+                t,
+                ns,
+                Replicas.Ext.holds_left(~Requests.Ask.machine(), ~d, l, Replicas.Tip.code(t, []) <> ns, a0)(hh0),
+                ak(
+                  Shared.List.all.if_rest(
+                    Replicas.Ext.has(~Requests.Ask.machine(), ~d, l, Replicas.Tip.code(t, [])),
+                    u => Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, ns)
+                  )(Replicas.Ext.holds_left(~Requests.Ask.machine(), ~d, l, Replicas.Tip.code(t, []) <> ns, a0)(hh0))
+                )(Replicas.Ext.holds_right(~Requests.Ask.machine(), ~d, l, Replicas.Tip.code(t, []) <> ns, a0)(hh0))(g0)
+              )
+            ),
+            Replicas.Ext.transM(
+              ~Requests.Ask.machine(),
+              ~d,
+              l,
+              Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a0},
+              r0,
+              Replicas.Run.add(~Requests.Ask.machine(), ~d, r0, Replicas.Log.start(b), Hashes.Hash.code(Replicas.Tip.hash(t), [])),
+              Replicas.Ext.over(
+                ~Requests.Ask.machine(),
+                ~d,
+                l,
+                Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a0},
+                Replicas.Tip.code(t, []) <> ns,
+                Replicas.Tip.content(Replicas.Run.tip(L(d), Replicas.Run{lr, Replicas.Tip{c, lg, n, vs}, a0}))
+              ),
+              Replicas.Ext.add(~Requests.Ask.machine(), ~d, l, r0, Replicas.Log.start(b), Hashes.Hash.code(Replicas.Tip.hash(t), []))
+            ),
+            bd,
+            r2 => bd2 => hr2 => Kp.taken(~d, l, r2, i, a, None{}, bd2, hr2)
+          )
+
+# the first part of a good tip: its content is kept
+def Kp.kept_of(
+  ~d: Led(),
+  +l: L(d),
+  +t: Replicas.Tip,
+  g: Kp.Good(d, l, t)
+) -> {Tree.kept(~d, l, Replicas.Tip.content(t)) == True{}: Bool}:
+  (+g1, g2) = g
+  g1
+
+# what the kernel of Vend does with a request is what Ask.act says
+def Kp.rules_change(
+  ~d: Led(),
+  ~kern: Kern(d),
+  rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +t: Replicas.Tip,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +q: Requests.Ask
+) -> {
+  Replicas.Kernel.change(Requests.Ask.machine(), d, kern)(l)(t)(c)(i)(q) == Ask.act(~d, l, t, c, i, q): Maybe<&2, Replicas.Act>
+}:
+  (r1, r2) = rules
+  r1(l)(t)(c)(i)(q)
+
+# what the kernel gives for a run, once its tip is good, is an act that the
+# ledger holds and whose content is kept, once the ledger holds what the run
+# added
+def Kp.act_ok.at(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +r: Replicas.Run<L(d)>,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  m: Maybe<&2, Replicas.Act>,
+  e: {Replicas.Kernel.change(Requests.Ask.machine(), d, kern)(Replicas.Run.ledger(L(d), r))(Replicas.Run.tip(L(d), r))(c)(i)(q) == m: Maybe<&2, Replicas.Act>},
+  bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, r)
+) -> Kp.ActOk(d, l, r, m):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+act}:
+      +hh => +hr0 => +g1 =>
+        Ask.act_kept(
+          ~d,
+          l,
+          Replicas.Run.tip(L(d), r),
+          c,
+          i,
+          q,
+          act,
+          g1,
+          Equal.trans(
+            Maybe<&2, Replicas.Act>,
+            Ask.act(~d, l, Replicas.Run.tip(L(d), r), c, i, q),
+            Replicas.Kernel.change(Requests.Ask.machine(), d, kern)(l)(Replicas.Run.tip(L(d), r))(c)(i)(q),
+            Some{act},
+            Equal.sym(
+              Maybe<&2, Replicas.Act>,
+              Replicas.Kernel.change(Requests.Ask.machine(), d, kern)(l)(Replicas.Run.tip(L(d), r))(c)(i)(q),
+              Ask.act(~d, l, Replicas.Run.tip(L(d), r), c, i, q),
+              Kp.rules_change(~d, ~kern, rules, l, Replicas.Run.tip(L(d), r), c, i, q)
+            ),
+            Replicas.Hist.kern(Requests.Ask.machine(), d, kern)(Replicas.Run.tip(L(d), r))(c)(i)(q)(Replicas.Run.ledger(L(d), r))(l)(act)(
+              Replicas.Ext.based_grows(~Requests.Ask.machine(), ~d, l, r, bd, hr0)
+            )(e)(hh)
+          ),
+          hh
+        )
+
+# what the kernel gives for a run is an act that the ledger holds and whose
+# content is kept
+def Kp.act_ok(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +r: Replicas.Run<L(d)>,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +q: Requests.Ask,
+  bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, r)
+) -> Kp.ActOk(
+  d,
+  l,
+  r,
+  Replicas.Kernel.change(Requests.Ask.machine(), d, kern)(Replicas.Run.ledger(L(d), r))(Replicas.Run.tip(L(d), r))(c)(i)(q)
+):
+  Kp.act_ok.at(
+    ~d,
+    ~kern,
+    ~rules,
+    l,
+    r,
+    c,
+    i,
+    q,
+    Replicas.Kernel.change(Requests.Ask.machine(), d, kern)(Replicas.Run.ledger(L(d), r))(Replicas.Run.tip(L(d), r))(c)(i)(q),
+    {==},
+    bd
+  )
+
+# the run after an act of a kernel has a good tip
+def Kp.act(
+  ~d: Led(),
+  +l: L(d),
+  +r: Replicas.Run<L(d)>,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  m: Maybe<&2, Replicas.Act>,
+  +bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, r),
+  hr: Kp.Has(d, l, r),
+  ok: Kp.ActOk(d, l, r, m)
+) -> Kp.Out(d, l, Replicas.Act.run(~Requests.Ask.machine(), ~d, r, i, a, m)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{Replicas.Act.Stale{}}:
+      Kp.stale(~d, l, r, i, a, bd, hr)
+    case Some{Replicas.Act.Label{+x}}:
+      Kp.label(~d, l, r, i, a, x, bd, hr)
+    case Some{Replicas.Act.Taken{+vs, +h, +ns}}:
+      Kp.taken(
+        ~d,
+        l,
+        Replicas.Run.over(~Requests.Ask.machine(), ~d, r, ns, h),
+        i,
+        a,
+        vs,
+        Replicas.Ext.based(
+          ~Requests.Ask.machine(),
+          ~d,
+          l,
+          r,
+          Replicas.Run.over(~Requests.Ask.machine(), ~d, r, ns, h),
+          bd,
+          Replicas.Ext.over(~Requests.Ask.machine(), ~d, l, r, ns, h)
+        ),
+        Kp.over(
+          ~d,
+          l,
+          r,
+          ns,
+          h,
+          +hh => +g1 => ok(Replicas.Ext.holds_left(~Requests.Ask.machine(), ~d, l, ns, Replicas.Run.added(L(d), r))(hh))(
+            Replicas.Ext.holds_right(~Requests.Ask.machine(), ~d, l, ns, Replicas.Run.added(L(d), r))(hh)
+          )(g1),
+          hr
+        )
+      )
+    case Some{Replicas.Act.Opens{+b, +t, +ns}}:
+      Kp.opens(~d, l, r, i, a, b, t, ns, bd, hr, ok)
+
+# the run after a request with the outcome o has a good tip
+def Kp.fresh(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +r: Replicas.Run<L(d)>,
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +a: Hashes.Hash,
+  +q: Requests.Ask,
+  o: Maybe<&2, Maybe<&2, Replicas.Out>>,
+  +bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, r),
+  hr: Kp.Has(d, l, r)
+) -> Kp.Out(d, l, Replicas.Step.fresh(~Requests.Ask.machine(), ~d, ~kern, r, c, i, a, q, o)):
+  match o:
+    case None{}:
+      Unit{}
+    case Some{Some{x}}:
+      hr
+    case Some{None{}}:
+      Kp.act(
+        ~d,
+        l,
+        r,
+        i,
+        a,
+        Replicas.Kernel.change(Requests.Ask.machine(), d, kern)(Replicas.Run.ledger(L(d), r))(Replicas.Run.tip(L(d), r))(c)(i)(q),
+        bd,
+        hr,
+        Kp.act_ok(~d, ~kern, ~rules, l, r, c, i, q, bd)
+      )
+
+# the run after the entry m has a good tip
+def Kp.asked(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +r: Replicas.Run<L(d)>,
+  +c: Ledgers.Line,
+  +a: Hashes.Hash,
+  m: Maybe<&2, Ledgers.Entry<Requests.Ask>>,
+  +bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, r),
+  hr: Kp.Has(d, l, r)
+) -> Kp.Out(d, l, Replicas.Step.asked(~Requests.Ask.machine(), ~d, ~kern, r, c, a, m)):
+  match m:
+    case Some{Ledgers.Entry.Ask{+i, t, q}}:
+      Kp.fresh(
+        ~d,
+        ~kern,
+        ~rules,
+        l,
+        r,
+        c,
+        i,
+        a,
+        q,
+        Replicas.Tip.known(
+          ~Replicas.Out,
+          ~Replicas.Out.code,
+          ~Replicas.Out.code.read,
+          Replicas.Tip.find(~Requests.Ask.machine(), ~d, Replicas.Run.ledger(L(d), r), Replicas.Run.tip(L(d), r), Replicas.Log.out(i))
+        ),
+        bd,
+        hr
+      )
+    case None{}:
+      Unit{}
+    case Some{Ledgers.Entry.Ballot{x}}:
+      Unit{}
+    case Some{Ledgers.Entry.Data{x}}:
+      Unit{}
+    case Some{Ledgers.Entry.Lie{x}}:
+      Unit{}
+
+# the run after one request has a good tip
+def Kp.one(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +r: Replicas.Run<L(d)>,
+  +c: Ledgers.Line,
+  +a: Hashes.Hash,
+  +bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, r),
+  hr: Kp.Has(d, l, r)
+) -> Kp.Out(d, l, Replicas.Step.one(~Requests.Ask.machine(), ~d, ~kern, r, c, a)):
+  Kp.asked(
+    ~d,
+    ~kern,
+    ~rules,
+    l,
+    r,
+    c,
+    a,
+    Replicas.Led.get(~Requests.Ask.machine(), ~d, Replicas.Run.ledger(L(d), r), Ledgers.Name.Ask{a}),
+    bd,
+    hr
+  )
+
+# Kp.All of a run m2 that follows r1
+def Kp.all_pair(
+  ~d: Led(),
+  +l: L(d),
+  +r1: Replicas.Run<L(d)>,
+  m2: Maybe<&2, Replicas.Run<L(d)>>,
+  ko: Kp.Out(d, l, m2),
+  gm: Replicas.Ext.GainM(Requests.Ask.machine(), d, l, r1, m2),
+  bd: Replicas.Ext.Based(Requests.Ask.machine(), d, l, r1)
+) -> Kp.All(d, l, m2):
+  match m2:
+    case None{}:
+      Unit{}
+    case Some{+r2}:
+      Tuple{Replicas.Ext.based(~Requests.Ask.machine(), ~d, l, r1, r2, bd, gm), ko}
+
+# Kp.All after one more request
+def Kp.all_step(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +c: Ledgers.Line,
+  +q: Hashes.Hash,
+  m: Maybe<&2, Replicas.Run<L(d)>>,
+  hm: Kp.All(d, l, m)
+) -> Kp.All(
+  d,
+  l,
+  Maybe.bind(&2, Replicas.Run<L(d)>, Replicas.Run<L(d)>, m, x => Replicas.Step.one(~Requests.Ask.machine(), ~d, ~kern, x, c, q))
+):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+r1}:
+      match hm:
+        case Tuple{+bd, hr}:
+          Kp.all_pair(
+            ~d,
+            l,
+            r1,
+            Replicas.Step.one(~Requests.Ask.machine(), ~d, ~kern, r1, c, q),
+            Kp.one(~d, ~kern, ~rules, l, r1, c, q, bd, hr),
+            Replicas.Ext.one(~Requests.Ask.machine(), ~d, ~kern, l, r1, c, q),
+            bd
+          )
+
+# Kp.All gives Kp.Out
+def Kp.all_out(
+  ~d: Led(),
+  +l: L(d),
+  m: Maybe<&2, Replicas.Run<L(d)>>,
+  hm: Kp.All(d, l, m)
+) -> Kp.Out(d, l, m):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{r}:
+      match hm:
+        case Tuple{bd, hr}:
+          hr
+
+# the run after each of the requests qs has a good tip
+def Kp.all(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +c: Ledgers.Line,
+  qs: List<&2, Hashes.Hash>,
+  +m: Maybe<&2, Replicas.Run<L(d)>>,
+  hm: Kp.All(d, l, m)
+) -> Kp.Out(d, l, Replicas.Step.all(~Requests.Ask.machine(), ~d, ~kern, c, qs, m)):
+  match qs:
+    case Nil{}:
+      Kp.all_out(~d, l, m, hm)
+    case Con{+q, rest}:
+      Kp.all(
+        ~d,
+        ~kern,
+        ~rules,
+        l,
+        c,
+        rest,
+        Maybe.bind(&2, Replicas.Run<L(d)>, Replicas.Run<L(d)>, m, x => Replicas.Step.one(~Requests.Ask.machine(), ~d, ~kern, x, c, q)),
+        Kp.all_step(~d, ~kern, ~rules, l, c, q, m, hm)
+      )
+
+# a line that lands has a good tip, once the check of its run is known (b)
+def Kp.landed.at(
+  ~d: Led(),
+  +l: L(d),
+  +tr: Replicas.Tip,
+  +a: List<&2, List<&2, U32>>,
+  after: Maybe<&2, Hashes.Hash>,
+  +x: Replicas.Tip,
+  b: Bool,
+  eb: {
+    Bool.and(Replicas.Tips.same(Some{Replicas.Tip.hash(tr)}, after), Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, a)) == b: Bool
+  },
+  ko: {Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, a) == True{}: Bool} -> Kp.Good(d, l, tr),
+  e: {Shared.Maybe.when(Replicas.Tip, b, u => Some{tr}) == Some{x}: Maybe<&2, Replicas.Tip>}
+) -> Kp.Good(d, l, x):
+  match b:
+    case True{}:
+      %Shared.Maybe.some_inj(Replicas.Tip, tr, x, e): Kp.Good(d, l, _)
+      ko(
+        Shared.Bool.and_true_right(
+          Replicas.Tips.same(Some{Replicas.Tip.hash(tr)}, after),
+          Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, a)
+        )(eb)
+      )
+    case False{}:
+      Empty.absurd(Kp.Good(d, l, x), Shared.Maybe.none_ne_some(Replicas.Tip, x, e))
+
+# a run that lands has a good tip
+def Kp.landed(
+  ~d: Led(),
+  +l: L(d),
+  ma: Maybe<&2, Replicas.Run<L(d)>>,
+  +after: Maybe<&2, Hashes.Hash>,
+  +x: Replicas.Tip,
+  ko: Kp.Out(d, l, ma),
+  e: {Replicas.Line.landed(~Requests.Ask.machine(), ~d, l, ma, after) == Some{x}: Maybe<&2, Replicas.Tip>}
+) -> Kp.Good(d, l, x):
+  match ma:
+    case None{}:
+      Empty.absurd(Kp.Good(d, l, x), Shared.Maybe.none_ne_some(Replicas.Tip, x, e))
+    case Some{Replicas.Run{lr, +tr, +a}}:
+      Kp.landed.at(
+        ~d,
+        l,
+        tr,
+        a,
+        after,
+        x,
+        Bool.and(Replicas.Tips.same(Some{Replicas.Tip.hash(tr)}, after), Replicas.Ext.holds(~Requests.Ask.machine(), ~d, l, a)),
+        {==},
+        ko,
+        e
+      )
+
+# a step that moves a line has a good tip, once whether the step names the tip
+# is known (b)
+def Kp.moved.at(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +c: Ledgers.Line,
+  +t: Replicas.Tip,
+  +qs: List<&2, Hashes.Hash>,
+  +after: Maybe<&2, Hashes.Hash>,
+  +x: Replicas.Tip,
+  b: Bool,
+  e: {
+    Shared.Maybe.when(
+      Replicas.Tip,
+      b,
+      u => Replicas.Line.landed(~Requests.Ask.machine(), ~d, l, Replicas.Step.run(~Requests.Ask.machine(), ~d, ~kern, l, c, t, qs), after)
+    )
+      == Some{x}: Maybe<&2, Replicas.Tip>
+  },
+  gt: Kp.Good(d, l, t)
+) -> Kp.Good(d, l, x):
+  match b:
+    case True{}:
+      Kp.landed(
+        ~d,
+        l,
+        Replicas.Step.run(~Requests.Ask.machine(), ~d, ~kern, l, c, t, qs),
+        after,
+        x,
+        Kp.all(
+          ~d,
+          ~kern,
+          ~rules,
+          l,
+          c,
+          qs,
+          Some{Replicas.Run{l, t, []}},
+          Tuple{Tuple{[], Tuple{{==}, {==}}}, u => gt}
+        ),
+        e
+      )
+    case False{}:
+      Empty.absurd(Kp.Good(d, l, x), Shared.Maybe.none_ne_some(Replicas.Tip, x, e))
+
+# a step that moves a line has a good tip
+def Kp.moved(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +c: Ledgers.Line,
+  +t: Replicas.Tip,
+  m: Maybe<&2, Ledgers.Step>,
+  +x: Replicas.Tip,
+  e: {Replicas.Line.moved(~Requests.Ask.machine(), ~d, ~kern, l, c, t, m) == Some{x}: Maybe<&2, Replicas.Tip>},
+  gt: Kp.Good(d, l, t)
+) -> Kp.Good(d, l, x):
+  match m:
+    case None{}:
+      Empty.absurd(Kp.Good(d, l, x), Shared.Maybe.none_ne_some(Replicas.Tip, x, e))
+    case Some{Ledgers.Step{before, qs, after}}:
+      Kp.moved.at(~d, ~kern, ~rules, l, c, t, qs, after, x, Replicas.Tips.same(before, Some{Replicas.Tip.hash(t)}), e, gt)
+
+# a step of a line has a good tip
+def Kp.step(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +t: Replicas.Tip,
+  +x: Replicas.Tip,
+  e: {Replicas.Line.next(~Requests.Ask.machine(), ~d, ~kern, l, c, h, t) == Some{x}: Maybe<&2, Replicas.Tip>},
+  gt: Kp.Good(d, l, t)
+) -> Kp.Good(d, l, x):
+  Kp.moved(
+    ~d,
+    ~kern,
+    ~rules,
+    l,
+    c,
+    t,
+    Replicas.Height.decide(
+      ~Requests.Ask.machine(),
+      ~d,
+      l,
+      c,
+      h,
+      Replicas.Tip.voters(t),
+      Ledgers.Kind.rounds(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(l)(c)(h)
+    ),
+    x,
+    e,
+    gt
+  )
+
+# the walk of a line has a good tip
+def Kp.walk(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  f: Nat,
+  +l: L(d),
+  +c: Ledgers.Line,
+  +h: U32,
+  +t: Replicas.Tip,
+  m: Maybe<&2, Replicas.Tip>,
+  em: {Replicas.Line.next(~Requests.Ask.machine(), ~d, ~kern, l, c, h, t) == m: Maybe<&2, Replicas.Tip>},
+  gt: Kp.Good(d, l, t)
+) -> Kp.Good(d, l, Replicas.Line.walk(~Requests.Ask.machine(), ~d, ~kern, f, l, c, h, t, m)):
+  match f m:
+    case 0n y:
+      gt
+    case 1n+g None{}:
+      gt
+    case 1n+g Some{+t2}:
+      Kp.walk(
+        ~d,
+        ~kern,
+        ~rules,
+        g,
+        l,
+        c,
+        U32.inc(h),
+        t2,
+        Replicas.Line.next(~Requests.Ask.machine(), ~d, ~kern, l, c, U32.inc(h), t2),
+        {==},
+        Kp.step(~d, ~kern, ~rules, l, c, h, t, t2, em, gt)
+      )
+
+# that the tip in m, when there is one, is good
+def Kp.GoodM(-d: Led(), l: L(d), m: Maybe<&2, Replicas.Tip>) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{t}:
+      Kp.Good(d, l, t)
+
+# the empty tree is listed
+def Kp.empty_whole(
+  ~d: Led(),
+  +l: L(d)
+) -> {Maybe.is_some(&2, List<&2, Trees.Binding>, Tree.range(~d, l, None{}, [])) == True{}: Bool}:
+  %Equal.sym(
+    Maybe<&2, List<&2, Trees.Binding>>,
+    Tree.range(~d, l, None{}, []),
+    Some{[]},
+    Kept.empty_range(L(d), Replicas.Led.tree(Requests.Ask.machine(), d), Merge.laws_whole(d), l)
+  ): {Maybe.is_some(&2, List<&2, Trees.Binding>, _) == True{}: Bool}
+  {==}
+
+# the empty tree names no first tip of a sub line
+def Kp.starts_none(~d: Led(), +l: L(d)) -> Kp.StartsAt(d, l, None{}):
+  +b => +ws => +tb => hg => hn =>
+    Empty.absurd(
+      Merge.And({Tree.kept(~d, l, Replicas.Tip.content(tb)) == True{}: Bool}, {Replicas.Tip.log(tb) == None{}: Maybe<&2, Hashes.Hash>}),
+      Shared.Bool.false_ne_true(
+        Kept.of_range(
+          ~d,
+          l,
+          None{},
+          [],
+          Kept.empty_range(L(d), Replicas.Led.tree(Requests.Ask.machine(), d), Merge.laws_whole(d), l),
+          Replicas.Log.start(b),
+          ws,
+          hg
+        )
+      )
+    )
+
+# a tip with no log is good, when its content is kept (the log of a tip is the
+# empty log: its listing is known, and it names no first tip of a sub line)
+def Kp.nolog.whole(
+  ~d: Led(),
+  +l: L(d),
+  +x: Replicas.Tip,
+  elog: {Replicas.Tip.log(x) == None{}: Maybe<&2, Hashes.Hash>}
+) -> {Maybe.is_some(&2, List<&2, Trees.Binding>, Tree.range(~d, l, Replicas.Tip.log(x), [])) == True{}: Bool}:
+  %Equal.sym(Maybe<&2, Hashes.Hash>, Replicas.Tip.log(x), None{}, elog): {
+    Maybe.is_some(&2, List<&2, Trees.Binding>, Tree.range(~d, l, _, [])) == True{}: Bool
+  }
+  Kp.empty_whole(~d, l)
+
+# a tip with no log is good, when its content is kept
+def Kp.nolog.starts(
+  ~d: Led(),
+  +l: L(d),
+  +x: Replicas.Tip,
+  elog: {Replicas.Tip.log(x) == None{}: Maybe<&2, Hashes.Hash>}
+) -> Kp.StartsAt(d, l, Replicas.Tip.log(x)):
+  %Equal.sym(Maybe<&2, Hashes.Hash>, Replicas.Tip.log(x), None{}, elog): Kp.StartsAt(d, l, _)
+  Kp.starts_none(~d, l)
+
+# a tip with no log is good, when its content is kept
+def Kp.nolog(
+  ~d: Led(),
+  +l: L(d),
+  +x: Replicas.Tip,
+  hk: {Tree.kept(~d, l, Replicas.Tip.content(x)) == True{}: Bool},
+  +elog: {Replicas.Tip.log(x) == None{}: Maybe<&2, Hashes.Hash>}
+) -> Kp.Good(d, l, x):
+  (hk, (Kp.nolog.whole(~d, l, x, elog), Kp.nolog.starts(~d, l, x, elog)))
+
+# the first tip of a root line is good
+def Kp.root_first(~d: Led(), +l: L(d), a: Replicas.Arrival) -> Kp.GoodM(d, l, Replicas.Root.first(a)):
+  match a:
+    case Replicas.Arrival.Starts{+vs}:
+      Kp.nolog(~d, l, Replicas.Tip{None{}, None{}, 0, Replicas.Voter.names(vs)}, Kept.empty(~d, l), {==})
+    case Replicas.Arrival.Waits{c}:
+      Unit{}
+
+# the first tip of the root line that the entry m starts is good
+def Kp.root_start.of(
+  ~d: Led(),
+  +l: L(d),
+  m: Maybe<&2, Ledgers.Entry<Requests.Ask>>
+) -> Kp.GoodM(d, l, Replicas.Root.start.of(~Requests.Ask.machine(), m)):
+  match m:
+    case Some{Ledgers.Entry.Ask{i, t, q}}:
+      Kp.root_first(~d, l, Requests.Ask.arrival(q))
+    case None{}:
+      Unit{}
+    case Some{Ledgers.Entry.Ballot{x}}:
+      Unit{}
+    case Some{Ledgers.Entry.Data{x}}:
+      Unit{}
+    case Some{Ledgers.Entry.Lie{x}}:
+      Unit{}
+
+# the first tip of a root line is good
+def Kp.root_start(~d: Led(), +l: L(d), r: Hashes.Hash) -> Kp.GoodM(d, l, Replicas.Root.start(~Requests.Ask.machine(), ~d, l, r)):
+  Kp.root_start.of(~d, l, Replicas.Led.get(~Requests.Ask.machine(), ~d, l, Ledgers.Name.Ask{r}))
+
+# the tip that a log names for a sub line is good, once the tip that is read is
+# known (mt)
+def Kp.sub_named.at(
+  ~d: Led(),
+  +l: L(d),
+  +b: String,
+  +t: Replicas.Tip,
+  +ws: List<&2, U32>,
+  st: Kp.StartsAt(d, l, Replicas.Tip.log(t)),
+  mt: Maybe<&2, Replicas.Tip>,
+  hg: {Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, Replicas.Tip.log(t), Replicas.Log.start(b)) == Some{ws}: Maybe<&2, List<&2, U32>>},
+  en: {Replicas.Tip.named(~Requests.Ask.machine(), ~d, l, ws) == mt: Maybe<&2, Replicas.Tip>}
+) -> Kp.GoodM(d, l, mt):
+  match mt:
+    case None{}:
+      Unit{}
+    case Some{+x}:
+      +ak = st(b)(ws)(x)(hg)(en)
+      Kp.nolog(
+        ~d,
+        l,
+        x,
+        Merge.And.left({Tree.kept(~d, l, Replicas.Tip.content(x)) == True{}: Bool}, {Replicas.Tip.log(x) == None{}: Maybe<&2, Hashes.Hash>}, ak),
+        Merge.And.right({Tree.kept(~d, l, Replicas.Tip.content(x)) == True{}: Bool}, {Replicas.Tip.log(x) == None{}: Maybe<&2, Hashes.Hash>}, ak)
+      )
+
+# the tip that a log names for a sub line is good, once the tip that is read is
+# known (mt)
+def Kp.sub_named(
+  ~d: Led(),
+  +l: L(d),
+  +b: String,
+  +t: Replicas.Tip,
+  +ws: List<&2, U32>,
+  g: Kp.Good(d, l, t),
+  mt: Maybe<&2, Replicas.Tip>,
+  hg: {Replicas.Tree.get(~Requests.Ask.machine(), ~d, l, Replicas.Tip.log(t), Replicas.Log.start(b)) == Some{ws}: Maybe<&2, List<&2, U32>>},
+  en: {Replicas.Tip.named(~Requests.Ask.machine(), ~d, l, ws) == mt: Maybe<&2, Replicas.Tip>}
+) -> Kp.GoodM(d, l, mt):
+  (+g1, r1) = g
+  (+w1, st) = r1
+  Kp.sub_named.at(~d, l, b, t, ws, st, mt, hg, en)
+
+# the tip that a log names for a sub line is good, once the read of it is known (mw)
+def Kp.sub_get(
+  ~d: Led(),
+  +l: L(d),
+  +b: String,
+  +t: Replicas.Tip,
+  g: Kp.Good(d, l, t),
+  mw: Maybe<&2, List<&2, U32>>,
+  ew: {Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, t, Replicas.Log.start(b)) == mw: Maybe<&2, List<&2, U32>>}
+) -> Kp.GoodM(
+  d,
+  l,
+  Maybe.bind(&2, List<&2, U32>, Replicas.Tip, mw, ws => Replicas.Tip.named(~Requests.Ask.machine(), ~d, l, ws))
+):
+  match mw:
+    case None{}:
+      Unit{}
+    case Some{+ws}:
+      Kp.sub_named(~d, l, b, t, ws, g, Replicas.Tip.named(~Requests.Ask.machine(), ~d, l, ws), ew, {==})
+
+# the first tip of a sub line is good, when the tip of its root line is
+def Kp.sub_start(
+  ~d: Led(),
+  +l: L(d),
+  +b: String,
+  m: Maybe<&2, Replicas.Tip>,
+  gm: Kp.GoodM(d, l, m)
+) -> Kp.GoodM(d, l, Replicas.Sub.start(~Requests.Ask.machine(), ~d, l, b, m)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+t}:
+      Kp.sub_get(~d, l, b, t, gm, Replicas.Tip.get(~Requests.Ask.machine(), ~d, l, t, Replicas.Log.start(b)), {==})
+
+# the newest tip of a line is good, when its first tip is
+def Kp.head.of(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +c: Ledgers.Line,
+  m: Maybe<&2, Replicas.Tip>,
+  gm: Kp.GoodM(d, l, m)
+) -> Kp.GoodM(d, l, Replicas.Line.head.of(~Requests.Ask.machine(), ~d, ~kern, l, c, m)):
+  match m:
+    case None{}:
+      Unit{}
+    case Some{+t}:
+      Kp.walk(
+        ~d,
+        ~kern,
+        ~rules,
+        1n+Ledgers.Kind.heights(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(l)(c),
+        l,
+        c,
+        0,
+        t,
+        Replicas.Line.next(~Requests.Ask.machine(), ~d, ~kern, l, c, 0, t),
+        {==},
+        gm
+      )
+
+# the newest tip of a root line is good
+def Kp.root_head(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +r: Hashes.Hash
+) -> Kp.GoodM(d, l, Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, r)):
+  Kp.head.of(~d, ~kern, ~rules, l, Ledgers.Line{r, None{}}, Replicas.Root.start(~Requests.Ask.machine(), ~d, l, r), Kp.root_start(~d, l, r))
+
+# the first tip of a line is good
+def Kp.start(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  c: Ledgers.Line
+) -> Kp.GoodM(d, l, Replicas.Line.start(~Requests.Ask.machine(), ~d, ~kern, l, c)):
+  match c:
+    case Ledgers.Line{+r, None{}}:
+      Kp.root_start(~d, l, r)
+    case Ledgers.Line{+r, Some{+b}}:
+      Kp.sub_start(
+        ~d,
+        l,
+        b,
+        Replicas.Root.head(~Requests.Ask.machine(), ~d, ~kern, l, r),
+        Kp.root_head(~d, ~kern, ~rules, l, r)
+      )
+
+# the newest tip of a line is good
+def Kp.head(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +c: Ledgers.Line
+) -> Kp.GoodM(d, l, Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c)):
+  Kp.head.of(~d, ~kern, ~rules, l, c, Replicas.Line.start(~Requests.Ask.machine(), ~d, ~kern, l, c), Kp.start(~d, ~kern, ~rules, l, c))
+
+# a tip that a line reads, once the line reads one (e), is good
+def Kp.some_of(
+  ~d: Led(),
+  +l: L(d),
+  mt: Maybe<&2, Replicas.Tip>,
+  +t: Replicas.Tip,
+  gm: Kp.GoodM(d, l, mt),
+  e: {mt == Some{t}: Maybe<&2, Replicas.Tip>}
+) -> Kp.Good(d, l, t):
+  match mt:
+    case None{}:
+      Empty.absurd(Kp.Good(d, l, t), Shared.Maybe.none_ne_some(Replicas.Tip, t, e))
+    case Some{+x}:
+      %Shared.Maybe.some_inj(Replicas.Tip, x, t, e): Kp.Good(d, l, _)
+      gm
+
+# the content of the newest tip of a line is kept
+def Kp.head_kept(
+  ~d: Led(),
+  ~kern: Kern(d),
+  ~rules: Kernel.Rules(d, kern),
+  +l: L(d),
+  +c: Ledgers.Line,
+  +t: Replicas.Tip,
+  e: {Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c) == Some{t}: Maybe<&2, Replicas.Tip>}
+) -> {Tree.kept(~d, l, Replicas.Tip.content(t)) == True{}: Bool}:
+  Kp.kept_of(
+    ~d,
+    l,
+    t,
+    Kp.some_of(~d, l, Replicas.Line.head(~Requests.Ask.machine(), ~d, ~kern, l, c), t, Kp.head(~d, ~kern, ~rules, l, c), e)
+  )
+
+def Node.head_kept(d, kern, rules, l, c, t):
+  e => Kp.head_kept(~d, ~kern, ~rules, l, c, t, e)
+
+
+def Node.answer_follows(d, kern, rules, i, time, q):
+  Node.answer_follows.of(
+    ~d,
+    ~kern,
+    i,
+    time,
+    q,
+    c => key => Replicas.Line.get_grows(Requests.Ask.machine(), d, kern, c, key),
+    l => c => t => e => Node.head_kept(d, kern, rules, l, c, t)(e)
+  )
 # TMPK-END
 
 # Touches, proven
