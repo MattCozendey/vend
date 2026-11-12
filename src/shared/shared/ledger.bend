@@ -4000,3 +4000,9 @@ def Book.kind(~Q: Data, ~c: Codes.Codec(Q)) -> Ledger.Kind(Q):
       )
     )
   )
+
+# books obey the laws of a ledger
+law Book.laws:
+  for ~Q: Data
+  for ~c: Codes.Codec(Q)
+  Ledger.Laws(Q, c, Book.kind(~Q, ~c))
