@@ -18589,6 +18589,362 @@ def Stable.own(
     e => Shared.Maybe.none_ne_some(Replicas.Act, x, e)
   )
 
+# the ledger a, the ledger b that grows from it, and the words w that b holds
+def Stable.Plus(~d: Led()) -> Data:
+  Sigma<&2, &2, L(d), a => Sigma<&2, &2, L(d), b => Sigma<&2, &2, List<&2, U32>, w => Merge.And(
+    Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+    {Replicas.Led.fetch(~Requests.Ask.machine(), ~d, b, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>}
+  )>>>
+
+# the ledger a of p with the words w
+def Stable.Plus.added(~d: Led(), p: Stable.Plus(~d)) -> L(d):
+  match p:
+    case Tuple{a, Tuple{b, Tuple{w, r}}}:
+      Replicas.Led.add(~Requests.Ask.machine(), ~d, a, Ledgers.Entry.Data{w})
+
+# the ledger b of p
+def Stable.Plus.top(~d: Led(), p: Stable.Plus(~d)) -> L(d):
+  match p:
+    case Tuple{a, Tuple{b, Tuple{w, r}}}:
+      b
+
+# a ledger that gives the words w under their hash holds them as an entry
+def Stable.word_has(
+  ~d: Led(),
+  +b: L(d),
+  +w: List<&2, U32>,
+  r: Maybe<&2, Ledgers.Entry<Requests.Ask>>,
+  +er: {Ledgers.Kind.get(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(b)(Ledgers.Name.Data{Hashes.Sha.hash(w)}) == r: Maybe<&2, Ledgers.Entry<Requests.Ask>>},
+  hf: {Ledgers.Entry.words(Requests.Ask, r) == Some{w}: Maybe<&2, List<&2, U32>>}
+) -> {Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), b, Ledgers.Entry.Data{w}) == True{}: Bool}:
+  match r:
+    case None{}:
+      Empty.absurd({Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), b, Ledgers.Entry.Data{w}) == True{}: Bool}, Shared.Maybe.none_ne_some(List<&2, U32>, w, hf))
+    case Some{Ledgers.Entry.Ask{i, t, q}}:
+      Empty.absurd({Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), b, Ledgers.Entry.Data{w}) == True{}: Bool}, Shared.Maybe.none_ne_some(List<&2, U32>, w, hf))
+    case Some{Ledgers.Entry.Ballot{x}}:
+      Empty.absurd({Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), b, Ledgers.Entry.Data{w}) == True{}: Bool}, Shared.Maybe.none_ne_some(List<&2, U32>, w, hf))
+    case Some{Ledgers.Entry.Lie{x}}:
+      Empty.absurd({Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), b, Ledgers.Entry.Data{w}) == True{}: Bool}, Shared.Maybe.none_ne_some(List<&2, U32>, w, hf))
+    case Some{Ledgers.Entry.Data{+ws}}:
+      %Equal.sym(Maybe<&2, Ledgers.Entry<Requests.Ask>>, Ledgers.Kind.get(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(b)(Ledgers.Name.Data{Hashes.Sha.hash(w)}), Some{Ledgers.Entry.Data{ws}}, er): {
+        Shared.Maybe.is_eq(~Ledgers.Entry<Requests.Ask>, ~Ledgers.Entry.same(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine())), _, Some{Ledgers.Entry.Data{w}}) == True{}: Bool
+      }
+      %Equal.sym(List<&2, U32>, ws, w, Shared.Maybe.some_inj(List<&2, U32>, ws, w, hf)): {
+        Shared.Maybe.is_eq(~Ledgers.Entry<Requests.Ask>, ~Ledgers.Entry.same(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine())), Some{Ledgers.Entry.Data{_}}, Some{Ledgers.Entry.Data{w}}) == True{}: Bool
+      }
+      Ledgers.Entry.same_refl(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), Ledgers.Entry.Data{w})
+
+# Stable.add_has when a lacks the name of e, once it is known whether it is
+# the name of the words w (q)
+def Stable.add_has.none(
+  ~d: Led(),
+  +b: L(d),
+  +w: List<&2, U32>,
+  +e: Ledgers.Entry<Requests.Ask>,
+  q: Bool,
+  +hf: {Replicas.Led.fetch(~Requests.Ask.machine(), ~d, b, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>}
+) -> {
+  Shared.Maybe.is_eq(~Ledgers.Entry<Requests.Ask>, ~Ledgers.Entry.same(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine())), Shared.Maybe.when(Ledgers.Entry<Requests.Ask>, q, u => Some{Ledgers.Entry.Data{w}}), Some{e}) == True{}: Bool
+} -> {Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), b, e) == True{}: Bool}:
+  match q:
+    case True{}:
+      h => Affects.cast(
+        Ledgers.Entry<Requests.Ask>,
+        z => {Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), b, z) == True{}: Bool},
+        Ledgers.Entry.Data{w},
+        e,
+        Ledgers.Entry.same_sound(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), Ledgers.Entry.Data{w}, e)(h),
+        Stable.word_has(~d, b, w, Ledgers.Kind.get(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(b)(Ledgers.Name.Data{Hashes.Sha.hash(w)}), {==}, hf)
+      )
+    case False{}:
+      h => Empty.absurd({Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), b, e) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+
+# Stable.add_has once the entry m that a gives under the name of e is known
+def Stable.add_has.at(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +w: List<&2, U32>,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +hf: {Replicas.Led.fetch(~Requests.Ask.machine(), ~d, b, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>},
+  +e: Ledgers.Entry<Requests.Ask>,
+  m: Maybe<&2, Ledgers.Entry<Requests.Ask>>,
+  +em: {Ledgers.Kind.get(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(a)(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e)) == m: Maybe<&2, Ledgers.Entry<Requests.Ask>>}
+) -> {
+  Shared.Maybe.is_eq(~Ledgers.Entry<Requests.Ask>, ~Ledgers.Entry.same(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine())), Maybe.or(
+      &2,
+      Ledgers.Entry<Requests.Ask>,
+      m,
+      Shared.Maybe.when(Ledgers.Entry<Requests.Ask>, Ledgers.Name.is_eq(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), Ledgers.Entry.Data{w}), Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e)), u => Some{Ledgers.Entry.Data{w}})
+    ), Some{e})
+    == True{}: Bool
+} -> {Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), b, e) == True{}: Bool}:
+  match m:
+    case Some{+y}:
+      h => Ledgers.Kind.grows_has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), ~Replicas.Led.laws(Requests.Ask.machine(), d), a, b, g, e)(
+        Affects.cast(
+          Maybe<&2, Ledgers.Entry<Requests.Ask>>,
+          z => {Shared.Maybe.is_eq(~Ledgers.Entry<Requests.Ask>, ~Ledgers.Entry.same(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine())), z, Some{e}) == True{}: Bool},
+          Some{y},
+          Ledgers.Kind.get(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(a)(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e)),
+          Equal.sym(Maybe<&2, Ledgers.Entry<Requests.Ask>>, Ledgers.Kind.get(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(a)(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e)), Some{y}, em),
+          h
+        )
+      )
+    case None{}:
+      h => Stable.add_has.none(~d, b, w, e, Ledgers.Name.is_eq(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), Ledgers.Entry.Data{w}), Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e)), hf)(h)
+
+# each entry of a with the words w is an entry of b, which holds them
+def Stable.add_has(~d: Led(), p: Stable.Plus(~d), +e: Ledgers.Entry<Requests.Ask>) -> {Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), Stable.Plus.added(~d, p), e) == True{}: Bool}
+  -> {Ledgers.Kind.has(~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d), Stable.Plus.top(~d, p), e) == True{}: Bool}:
+  match p:
+    case Tuple{+a, Tuple{+b, Tuple{+w, Tuple{+g, +hf}}}}:
+      h => Stable.add_has.at(~d, a, b, w, g, hf, e, Ledgers.Kind.get(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(a)(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e)), {==})(
+        Affects.cast(
+          Maybe<&2, Ledgers.Entry<Requests.Ask>>,
+          z => {Shared.Maybe.is_eq(~Ledgers.Entry<Requests.Ask>, ~Ledgers.Entry.same(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine())), z, Some{e}) == True{}: Bool},
+          Ledgers.Kind.get(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(Replicas.Led.add(~Requests.Ask.machine(), ~d, a, Ledgers.Entry.Data{w}))(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e)),
+          Maybe.or(
+            &2,
+            Ledgers.Entry<Requests.Ask>,
+            Ledgers.Kind.get(Replicas.Machine.Q(Requests.Ask.machine()), Replicas.Led.kind(Requests.Ask.machine(), d))(a)(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e)),
+            Shared.Maybe.when(Ledgers.Entry<Requests.Ask>, Ledgers.Name.is_eq(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), Ledgers.Entry.Data{w}), Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e)), u => Some{Ledgers.Entry.Data{w}})
+          ),
+          Merge.get_add(~d)(a)(Ledgers.Entry.Data{w})(Ledgers.Entry.name(~Requests.Ask, ~Replicas.Machine.code(Requests.Ask.machine()), e)),
+          h
+        )
+      )
+
+# a ledger with some words grows into a ledger that holds them, when the ledger
+# without them does
+def Stable.grows_add(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +w: List<&2, U32>,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +hf: {Replicas.Led.fetch(~Requests.Ask.machine(), ~d, b, Hashes.Sha.hash(w)) == Some{w}: Maybe<&2, List<&2, U32>>}
+) -> Replicas.Led.Grows(Requests.Ask.machine(), d, Replicas.Led.add(~Requests.Ask.machine(), ~d, a, Ledgers.Entry.Data{w}), b):
+  Ledgers.Kind.grows_core(
+    ~Replicas.Machine.Q(Requests.Ask.machine()), ~Replicas.Machine.code(Requests.Ask.machine()), ~Replicas.Led.kind(Requests.Ask.machine(), d),
+    ~Replicas.Led.laws(Requests.Ask.machine(), d),
+    ~Stable.Plus(~d),
+    ~(p => Stable.Plus.added(~d, p)),
+    ~(p => Stable.Plus.top(~d, p)),
+    ~(p => e => h => Stable.add_has(~d, p, e)(h)),
+    Tuple{a, Tuple{b, Tuple{w, Tuple{g, hf}}}}
+  )
+
+# a ledger with the nodes N grows into a ledger that holds them, when the
+# ledger without them does
+def Stable.puts_grows(
+  ~d: Led(),
+  N: List<&2, List<&2, U32>>,
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +hn: {Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), b, N) == True{}: Bool}
+) -> Replicas.Led.Grows(Requests.Ask.machine(), d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, N, a), b):
+  match N:
+    case Nil{}:
+      g
+    case Con{+w, +r}:
+      Stable.puts_grows(
+        ~d,
+        r,
+        Replicas.Led.add(~Requests.Ask.machine(), ~d, a, Ledgers.Entry.Data{w}),
+        b,
+        Stable.grows_add(
+          ~d,
+          a,
+          b,
+          w,
+          g,
+          Replicas.Hist.has(~Requests.Ask.machine(), ~d, b, w)(
+            Shared.List.all.if_hit(
+              Depots.Depot.has(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), b, w),
+              u => Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), b, r)
+            )(hn)
+          )
+        ),
+        Shared.List.all.if_rest(
+          Depots.Depot.has(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), b, w),
+          u => Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), b, r)
+        )(hn)
+      )
+
+# two ledgers that get the same nodes grow, when the larger holds them
+def Stable.puts_mono(
+  ~d: Led(),
+  +N: List<&2, List<&2, U32>>,
+  +a: L(d),
+  +b: L(d),
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b),
+  +hn: {Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), b, N) == True{}: Bool}
+) -> Replicas.Led.Grows(Requests.Ask.machine(), d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, N, a), Replicas.Led.puts(~Requests.Ask.machine(), ~d, N, b)):
+  Replicas.Hist.trans(
+    ~Requests.Ask.machine(),
+    ~d,
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, N, a),
+    b,
+    Replicas.Led.puts(~Requests.Ask.machine(), ~d, N, b),
+    Stable.puts_grows(~d, N, a, b, g, hn),
+    Replicas.Hist.puts(~Requests.Ask.machine(), ~d, N, b)
+  )
+
+# a ledger that holds the nodes A and then B holds A
+def Stable.holds_left(~d: Led(), +l: L(d), A: List<&2, List<&2, U32>>, +B: List<&2, List<&2, U32>>) -> {Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, List.append(&2, List<&2, U32>, A, B)) == True{}: Bool} -> {Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, A) == True{}: Bool}:
+  match A:
+    case Nil{}:
+      e => {==}
+    case Con{+w, +r}:
+      +e => Shared.List.all.if_both(
+        Depots.Depot.has(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, w),
+        u => Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, r)
+      )(
+        Shared.List.all.if_hit(
+          Depots.Depot.has(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, w),
+          u => Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, List.append(&2, List<&2, U32>, r, B))
+        )(e)
+      )(
+        Stable.holds_left(~d, l, r, B)(
+          Shared.List.all.if_rest(
+            Depots.Depot.has(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, w),
+            u => Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, List.append(&2, List<&2, U32>, r, B))
+          )(e)
+        )
+      )
+
+# a ledger that holds some nodes holds the nodes before them
+def Stable.holds_prefix(~d: Led(), +l: L(d), +P: List<&2, List<&2, U32>>, +N: List<&2, List<&2, U32>>, nd: Merge.Nodes(P, N), +hn: {Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, N) == True{}: Bool}) -> {Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, P) == True{}: Bool}:
+  match nd:
+    case Tuple{+ex, pe}:
+      Stable.holds_left(~d, l, P, ex)(
+        Affects.cast(List<&2, List<&2, U32>>, z => {Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), l, z) == True{}: Bool}, N, List.append(&2, List<&2, U32>, P, ex), pe, hn)
+      )
+
+# the nodes after the nodes of a pair of facts
+def Stable.nodes_of(-A: Data, -P: List<&2, List<&2, U32>>, -N: List<&2, List<&2, U32>>, p: Merge.And(A, Merge.Nodes(P, N))) -> Merge.Nodes(P, N):
+  match p:
+    case Tuple{x, y}:
+      y
+
+# the ledger of a pair of facts
+def Stable.puts_of(-A: Data, -B: Data, p: Merge.And(A, B)) -> A:
+  match p:
+    case Tuple{x, y}:
+      x
+
+# the work w as a ledger b that grows from its own would hold it: b with the
+# nodes of w
+def Stable.over(~d: Led(), +b: L(d), w: Work<L(d)>) -> Work<L(d)>:
+  match w:
+    case Work{l, h, +ns}:
+      Work{Replicas.Led.puts(~Requests.Ask.machine(), ~d, ns, b), h, ns}
+
+# a bind that gives x gives y of a read that gives what the first gave, when
+# each rest that gives x gives y
+def Stable.bind_to(
+  -A: Data,
+  -B: Data,
+  m: Maybe<&2, A>,
+  -m2: Maybe<&2, A>,
+  -k: A -> Maybe<&2, B>,
+  -k2: A -> Maybe<&2, B>,
+  -x: B,
+  -y: B,
+  hm: @v: A -> {m == Some{v}: Maybe<&2, A>} -> {m2 == Some{v}: Maybe<&2, A>},
+  hk: @v: A -> {k(v) == Some{x}: Maybe<&2, B>} -> {k2(v) == Some{y}: Maybe<&2, B>}
+) -> {Maybe.bind(&2, A, B, m, k) == Some{x}: Maybe<&2, B>} -> {Maybe.bind(&2, A, B, m2, k2) == Some{y}: Maybe<&2, B>}:
+  match m:
+    case None{}:
+      e => Empty.absurd({Maybe.bind(&2, A, B, m2, k2) == Some{y}: Maybe<&2, B>}, Shared.Maybe.none_ne_some(B, x, e))
+    case Some{+v}:
+      e =>
+        %Equal.sym(Maybe<&2, A>, m2, Some{v}, hm(v)({==})): {Maybe.bind(&2, A, B, _, k2) == Some{y}: Maybe<&2, B>}
+        hk(v)(e)
+
+# Stable.set once the write pr of the work is known
+def Stable.set.at(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +la: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +P: List<&2, List<&2, U32>>,
+  +km: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  pr: Maybe<&2, Trees.Edit>,
+  +epr: {Replicas.Tree.put(~Requests.Ask.machine(), ~d, la, h, km, m) == pr: Maybe<&2, Trees.Edit>},
+  +W1: Work<L(d)>,
+  +wa: Merge.Puts(~d, a, la, P),
+  +hold1: {Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), b, Merge.nodes(~d, W1)) == True{}: Bool},
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Work.put(~d, la, P, pr) == Some{W1}: Maybe<&2, Work<L(d)>>}
+  -> {Work.set(~d, Work{Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, b), h, P}, km, m) == Some{Stable.over(~d, b, W1)}: Maybe<&2, Work<L(d)>>}:
+  match pr:
+    case None{}:
+      e => Empty.absurd(
+        {Work.set(~d, Work{Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, b), h, P}, km, m) == Some{Stable.over(~d, b, W1)}: Maybe<&2, Work<L(d)>>},
+        Shared.Maybe.none_ne_some(Work<L(d)>, W1, e)
+      )
+    case Some{+ed}:
+      +e =>
+        +ew = Merge.put_work(~d, la, P, ed, W1, e)
+        +hN = Affects.cast(
+          Work<L(d)>,
+          z => {Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), b, Merge.nodes(~d, z)) == True{}: Bool},
+          W1,
+          Work{Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(ed), la), Trees.Edit.root(ed), List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(ed))},
+          Equal.sym(Work<L(d)>, Work{Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(ed), la), Trees.Edit.root(ed), List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(ed))}, W1, ew),
+          hold1
+        )
+        +gla = Affects.cast(
+          L(d),
+          z => Replicas.Led.Grows(Requests.Ask.machine(), d, z, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, b)),
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, a),
+          la,
+          Equal.sym(L(d), la, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, a), wa),
+          Stable.puts_mono(~d, P, a, b, g, Stable.holds_left(~d, b, P, Trees.Edit.nodes(ed))(hN))
+        )
+        %ew: {Work.set(~d, Work{Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, b), h, P}, km, m) == Some{Stable.over(~d, b, _)}: Maybe<&2, Work<L(d)>>}
+        %Equal.sym(
+          L(d),
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(ed)), b),
+          Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(ed), Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, b)),
+          Merge.puts_append(~d, P, Trees.Edit.nodes(ed), b)
+        ): {
+          Work.set(~d, Work{Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, b), h, P}, km, m) == Some{Work{_, Trees.Edit.root(ed), List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(ed))}}: Maybe<&2, Work<L(d)>>
+        }
+        %Equal.sym(
+          Maybe<&2, Trees.Edit>,
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, b), h, km, m),
+          Some{ed},
+          Replicas.Hist.put(~Requests.Ask.machine(), ~d, la, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, b), h, km, m, ed, gla)(epr)
+        ): {
+          Work.put(~d, Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, b), P, _)
+            == Some{Work{Replicas.Led.puts(~Requests.Ask.machine(), ~d, Trees.Edit.nodes(ed), Replicas.Led.puts(~Requests.Ask.machine(), ~d, P, b)), Trees.Edit.root(ed), List.append(&2, List<&2, U32>, P, Trees.Edit.nodes(ed))}}: Maybe<&2, Work<L(d)>>
+        }
+        {==}
+
+# a write to a work stays, in a ledger that grows and holds its nodes
+def Stable.set(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  w: Work<L(d)>,
+  +km: List<&2, U32>,
+  +m: Maybe<&2, List<&2, U32>>,
+  +W1: Work<L(d)>,
+  +wa: Merge.Puts(~d, a, Merge.ledger(~d, w), Merge.nodes(~d, w)),
+  +hold1: {Depots.Depot.holds(~L(d), ~(s => x => Replicas.Led.fetch(~Requests.Ask.machine(), ~d, s, x)), b, Merge.nodes(~d, W1)) == True{}: Bool},
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Work.set(~d, w, km, m) == Some{W1}: Maybe<&2, Work<L(d)>>} -> {Work.set(~d, Stable.over(~d, b, w), km, m) == Some{Stable.over(~d, b, W1)}: Maybe<&2, Work<L(d)>>}:
+  match w:
+    case Work{+la, +h, +P}:
+      e => Stable.set.at(~d, a, b, la, h, P, km, m, Replicas.Tree.put(~Requests.Ask.machine(), ~d, la, h, km, m), {==}, W1, wa, hold1, g)(e)
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
