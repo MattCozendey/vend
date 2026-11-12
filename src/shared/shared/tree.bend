@@ -10860,6 +10860,367 @@ def Mst.ins_ok.none(
       )({==})
     )
 
+# Mst.ins_ok.top.read, for a key other than k, by how it compares to k (c)
+def Mst.ins_ok.top.k2(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  c: Cmp,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +ll: Nat,
+  +hl: Maybe<&2, Hashes.Hash>,
+  +hh: Maybe<&2, Hashes.Hash>,
+  +k2: List<&2, U32>,
+  +x: Maybe<&2, List<&2, U32>>,
+  +g1: Nat,
+  +g2: Nat,
+  +ec: {Key.cmp(k2, k) == c: Cmp},
+  +eT: {Mst.node(~S, ~fetch, s, Hashes.Sha.hash(Node.code(Node{ll, hl, [Item{k, v, hh}]}, []))) == Some{Node{ll, hl, [Item{k, v, hh}]}}: Maybe<&2, Node>},
+  +oT: {Mst.opens(Node{ll, hl, [Item{k, v, hh}]}, Room{ur, lo, hi}) == True{}: Bool},
+  +fu: {Nat.is_le(ur, g2) == True{}: Bool},
+  +ne: {Cmp.is_eq(Key.cmp(k2, k)) == False{}: Bool},
+  +lv: {Mst.lvl(~S, ~fetch, s, Some{h}, ll) == True{}: Bool},
+  +e: {Look.known(Mst.look.go(~S, ~fetch, g1, s, Room{ur, lo, hi}, Some{h}, k2)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  sr: Mst.SplitRead(~S, ~fetch, s, lo, hi, k, Some{h}, hl, hh)
+) -> {
+  Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, Some{Hashes.Sha.hash(Node.code(Node{ll, hl, [Item{k, v, hh}]}, []))}, k2))
+    == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  match c:
+    case LT{}:
+      (slo, shi) = sr
+      Mst.single_lt(
+        ~S,
+        ~fetch,
+        g2,
+        s,
+        Hashes.Sha.hash(Node.code(Node{ll, hl, [Item{k, v, hh}]}, [])),
+        ur,
+        lo,
+        hi,
+        ll,
+        hl,
+        k,
+        v,
+        hh,
+        k2,
+        x,
+        eT,
+        oT,
+        fu,
+        ec,
+        +g4 => +fl => slo(ll)(lv)(k2)(x)(ur)(g1)(g4)(ec)(fl)(e)
+      )
+    case GT{}:
+      (slo, shi) = sr
+      Mst.single_gt(
+        ~S,
+        ~fetch,
+        g2,
+        s,
+        Hashes.Sha.hash(Node.code(Node{ll, hl, [Item{k, v, hh}]}, [])),
+        ur,
+        lo,
+        hi,
+        ll,
+        hl,
+        k,
+        v,
+        hh,
+        k2,
+        x,
+        eT,
+        oT,
+        fu,
+        ec,
+        +g4 => +fl => shi(ll)(lv)(k2)(x)(ur)(g1)(g4)(ec)(fl)(e)
+      )
+    case EQ{}:
+      Empty.absurd(
+        {
+          Look.known(Mst.look.go(~S, ~fetch, g2, s, Room{ur, lo, hi}, Some{Hashes.Sha.hash(Node.code(Node{ll, hl, [Item{k, v, hh}]}, []))}, k2))
+            == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+        },
+        Mst.ne_eq(k2, k, ne, ec)
+      )
+
+# what a write of k as a new root reads, from what the split of the old root
+# reads (bi)
+def Mst.ins_ok.top.read(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +ll: Nat,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +hl: Maybe<&2, Hashes.Hash>,
+  +hh: Maybe<&2, Hashes.Hash>,
+  +ns: List<&2, List<&2, U32>>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, xs}}: Maybe<&2, Node>},
+  +ec: {Nat.cmp(l, ll) == LT{}: Cmp},
+  +el: {Key.level(k) == ll: Nat},
+  +lt: {Nat.is_lt(ll, ur) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  +hold: {Depots.Depot.holds(~S, ~fetch, s, Node.code(Node{ll, hl, [Item{k, v, hh}]}, []) <> ns) == True{}: Bool},
+  bi: {Mst.lvl(~S, ~fetch, s, Some{h}, ur) == True{}: Bool} & Mst.SplitRead(~S, ~fetch, s, lo, hi, k, Some{h}, hl, hh)
+) -> Mst.InsRead(~S, ~fetch, s, ur, lo, hi, Some{h}, k, Some{v}, Some{Hashes.Sha.hash(Node.code(Node{ll, hl, [Item{k, v, hh}]}, []))}):
+  (lvh, sr) = bi
+  +eT = Mst.node_code(
+    ~S,
+    ~fetch,
+    s,
+    Node{ll, hl, [Item{k, v, hh}]},
+    Mst.holds_head(~S, ~fetch, s, Node.code(Node{ll, hl, [Item{k, v, hh}]}, []), ns, hold)
+  )
+  +oT = Mst.opens_of(
+    ll,
+    hl,
+    [Item{k, v, hh}],
+    ur,
+    lo,
+    hi,
+    lt,
+    {==},
+    Shared.Bool.and_both(
+      Bool.and(Bound.after(lo, k), Bound.before(k, hi)),
+      True{},
+      Shared.Bool.and_both(Bound.after(lo, k), Bound.before(k, hi), a, bb),
+      {==}
+    )
+  )
+  (
+    +g => +fu => Mst.new_hit(
+      ~S,
+      ~fetch,
+      g,
+      s,
+      Hashes.Sha.hash(Node.code(Node{ll, hl, [Item{k, v, hh}]}, [])),
+      ur,
+      lo,
+      hi,
+      ll,
+      hl,
+      [Item{k, v, hh}],
+      k,
+      v,
+      eT,
+      oT,
+      fu,
+      Mst.hit_first(k, v, hh, [], hl, ll, lo, hi),
+      Mst.level_ok(k, ll, el)
+    ),
+    +k2 => +x => +g1 => +g2 => +ne => +fu => +e => Mst.ins_ok.top.k2(
+      ~S,
+      ~fetch,
+      Key.cmp(k2, k),
+      s,
+      h,
+      ur,
+      lo,
+      hi,
+      k,
+      v,
+      ll,
+      hl,
+      hh,
+      k2,
+      x,
+      g1,
+      g2,
+      {==},
+      eT,
+      oT,
+      fu,
+      ne,
+      Mst.lvl_of(~S, ~fetch, s, h, ll, l, left, xs, eN, Mst.nat_lt_of(l, ll)(ec)),
+      e,
+      sr
+    )
+  )
+
+# a write of k into a tree of a lower level: a new root over its split
+def Mst.ins_ok.top(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  ms: Maybe<&2, Halves>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +ll: Nat,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +xs: List<&2, Item>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, xs}}: Maybe<&2, Node>},
+  +ec: {Nat.cmp(l, ll) == LT{}: Cmp},
+  +el: {Key.level(k) == ll: Nat},
+  +lt: {Nat.is_lt(ll, ur) == True{}: Bool},
+  +a: {Bound.after(lo, k) == True{}: Bool},
+  +bb: {Bound.before(k, hi) == True{}: Bool},
+  ihs: Mst.SplitOk(~S, ~fetch, s, ur, lo, hi, k, Some{h}, ms)
+) -> Mst.InsOk(~S, ~fetch, s, ur, lo, hi, Some{h}, k, Some{v}, Mst.insert.top(ll, k, v, ms)):
+  match ms:
+    case None{}:
+      Unit{}
+    case Some{Halves{+hl, +hh, +ns}}:
+      +hold => Mst.ins_ok.top.read(
+        ~S,
+        ~fetch,
+        s,
+        h,
+        ur,
+        lo,
+        hi,
+        k,
+        v,
+        ll,
+        l,
+        left,
+        xs,
+        hl,
+        hh,
+        ns,
+        eN,
+        ec,
+        el,
+        lt,
+        a,
+        bb,
+        hold,
+        ihs(Mst.holds_tail(~S, ~fetch, s, Node.code(Node{ll, hl, [Item{k, v, hh}]}, []), ns, hold))
+      )
+
+# a write of k as v to a node of its level that holds k: the value replaced
+def Mst.ins_ok.replace(
+  ~S: Data,
+  ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
+  +s: S,
+  +h: Hashes.Hash,
+  +ur: Nat,
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>,
+  +k: List<&2, U32>,
+  +v: List<&2, U32>,
+  +l: Nat,
+  +left: Maybe<&2, Hashes.Hash>,
+  +pre: List<&2, Item>,
+  +iv: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
+  +eN: {Mst.node(~S, ~fetch, s, h) == Some{Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}}: Maybe<&2, Node>},
+  +oN: {Mst.opens(Node{l, left, List.append(&2, Item, pre, Item{k, iv, r} <> rest)}, Room{ur, lo, hi}) == True{}: Bool},
+  +all: {Mst.all_lt(pre, k) == True{}: Bool},
+  +ell: {Nat.is_eq(Key.level(k), l) == True{}: Bool}
+) -> Mst.InsOk(
+  ~S,
+  ~fetch,
+  s,
+  ur,
+  lo,
+  hi,
+  Some{h},
+  k,
+  Some{v},
+  Some{Mst.store(Node{l, left, Mst.rejoin(List.reverse.go(&2, Item, pre, []), Mst.last(pre, left), Item{k, v, r} <> rest)}, [])}
+):
+  %Equal.sym(
+    List<&2, Item>,
+    Mst.rejoin(List.reverse.go(&2, Item, pre, []), Mst.last(pre, left), Item{k, v, r} <> rest),
+    List.append(&2, Item, Mst.set_last(pre, Mst.last(pre, left)), Item{k, v, r} <> rest),
+    Mst.rejoin_rev(pre, Mst.last(pre, left), Item{k, v, r} <> rest)
+  ): Mst.InsOk(~S, ~fetch, s, ur, lo, hi, Some{h}, k, Some{v}, Some{Mst.store(Node{l, left, _}, [])})
+  %Equal.sym(List<&2, Item>, Mst.set_last(pre, Mst.last(pre, left)), pre, Mst.set_last_last(pre, left)): Mst.InsOk(
+    ~S,
+    ~fetch,
+    s,
+    ur,
+    lo,
+    hi,
+    Some{h},
+    k,
+    Some{v},
+    Some{Mst.store(Node{l, left, List.append(&2, Item, _, Item{k, v, r} <> rest)}, [])}
+  )
+  +hold =>
+    +eR = Mst.node_code(
+      ~S,
+      ~fetch,
+      s,
+      Node{l, left, List.append(&2, Item, pre, Item{k, v, r} <> rest)},
+      Mst.holds_head(~S, ~fetch, s, Node.code(Node{l, left, List.append(&2, Item, pre, Item{k, v, r} <> rest)}, []), [], hold)
+    )
+    +oR = Mst.opens_val(l, left, pre, k, iv, v, r, rest, ur, lo, hi, oN)
+    (
+      +g => +fu => Mst.new_hit(
+        ~S,
+        ~fetch,
+        g,
+        s,
+        Hashes.Sha.hash(Node.code(Node{l, left, List.append(&2, Item, pre, Item{k, v, r} <> rest)}, [])),
+        ur,
+        lo,
+        hi,
+        l,
+        left,
+        List.append(&2, Item, pre, Item{k, v, r} <> rest),
+        k,
+        v,
+        eR,
+        oR,
+        fu,
+        Equal.trans(
+          Pick,
+          Mst.pick(List.append(&2, Item, pre, Item{k, v, r} <> rest), left, l, lo, hi, k),
+          Mst.pick(Item{k, v, r} <> rest, Mst.last(pre, left), l, Items.last_key(pre, lo), hi, k),
+          Pick.Hit{v},
+          Mst.pick_passes(pre, Item{k, v, r} <> rest, left, l, lo, hi, k)(Mst.passes_of_all_lt(pre, k)(all)),
+          Mst.hit_first(k, v, r, rest, Mst.last(pre, left), l, Items.last_key(pre, lo), hi)
+        ),
+        ell
+      ),
+      +k2 => +x => +g1 => +g2 => +ne => +fu => +e => Mst.same_read(
+        ~S,
+        ~fetch,
+        g1,
+        g2,
+        s,
+        h,
+        Hashes.Sha.hash(Node.code(Node{l, left, List.append(&2, Item, pre, Item{k, v, r} <> rest)}, [])),
+        ur,
+        lo,
+        hi,
+        l,
+        left,
+        List.append(&2, Item, pre, Item{k, iv, r} <> rest),
+        left,
+        List.append(&2, Item, pre, Item{k, v, r} <> rest),
+        k2,
+        x,
+        eN,
+        oN,
+        eR,
+        oR,
+        fu,
+        Mst.pick_val(pre, k, v, iv, r, rest, left, l, lo, hi, k2, ne)
+      )(e)
+    )
+
 # what a read tells stays, in a depot that keeps what it holds
 law Mst.reads_final:
   for ~S: Data
