@@ -5,7 +5,7 @@
   "scripts": {
     "lint": "bend-lint",
     "build": "bun tools/build.ts",
-    "gen3": "bun tools/gen3/gen3.ts"
+    "synth": "bun tools/bend-synth/synth.ts"
   },
   "devDependencies": {
     "bend-lint": "0.3.1"

@@ -484,6 +484,71 @@ def U32.is_eq_refl(x: U32) -> {U32.is_eq(x, x) == True{}: Bool}:
   {==}
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# U32.is_eq is the same either way round
+def U32.is_eq_comm.g30(
+  +data: Word(32n),
+  +b: U32,
+  +x: Cmp,
+  +hx: {x == U32.cmp(U32{data}, b) : Cmp},
+  +x1: Cmp,
+  hx1: {x1 == U32.cmp(b, U32{data}) : Cmp}) ->
+  {Cmp.is_eq(U32.cmp(U32{data}, b)) == Cmp.is_eq(x1) : Bool}:
+  match data:
+    case WCon{head, tail}:
+      match b:
+        case U32{data}:
+          match x:
+            case LT{}:
+              match x1:
+                case LT{}:
+                  Equal.cong(Cmp, Bool, Cmp.is_eq, U32.cmp(U32{WCon{head, tail}}, U32{data}), LT{}, Equal.sym(Cmp, LT{}, Word.cmp(32n, WCon{head, tail}, data), hx))
+                case EQ{}:
+                  %Equal.sym(Word(32n), data, WCon{head, tail}, Word.cmp_eq(32n, data, WCon{head, tail})(Equal.sym(Cmp, EQ{}, Word.cmp(32n, data, WCon{head, tail}), hx1))) :
+                    {Cmp.is_eq(Word.cmp(32n, WCon{head, tail}, _)) == Cmp.is_eq(EQ{}) : Bool}
+                  %Equal.sym(Cmp, Word.cmp(32n, WCon{head, tail}, WCon{head, tail}), EQ{}, Word.cmp_refl(32n, WCon{head, tail})) :
+                    {Cmp.is_eq(_) == Cmp.is_eq(EQ{}) : Bool}
+                  {==}
+                case GT{}:
+                  %hx :
+                    {Cmp.is_eq(_) == False{} : Bool}
+                  {==}
+            case EQ{}:
+              %Equal.sym(Cmp, x1, Word.cmp(32n, data, WCon{head, tail}), hx1) :
+                {Cmp.is_eq(Word.cmp(32n, WCon{head, tail}, data)) == Cmp.is_eq(_) : Bool}
+              %Word.cmp_eq(32n, WCon{head, tail}, data)(Equal.sym(Cmp, EQ{}, Word.cmp(32n, WCon{head, tail}, data), hx)) :
+                {Cmp.is_eq(Word.cmp(32n, WCon{head, tail}, _)) == Cmp.is_eq(Word.cmp(32n, _, WCon{head, tail})) : Bool}
+              {==}
+            case GT{}:
+              match x1:
+                case LT{}:
+                  %hx :
+                    {Cmp.is_eq(_) == False{} : Bool}
+                  {==}
+                case EQ{}:
+                  %Equal.sym(Word(32n), data, WCon{head, tail}, Word.cmp_eq(32n, data, WCon{head, tail})(Equal.sym(Cmp, EQ{}, Word.cmp(32n, data, WCon{head, tail}), hx1))) :
+                    {Cmp.is_eq(Word.cmp(32n, WCon{head, tail}, _)) == Cmp.is_eq(EQ{}) : Bool}
+                  %Equal.sym(Cmp, Word.cmp(32n, WCon{head, tail}, WCon{head, tail}), EQ{}, Word.cmp_refl(32n, WCon{head, tail})) :
+                    {Cmp.is_eq(_) == Cmp.is_eq(EQ{}) : Bool}
+                  {==}
+                case GT{}:
+                  Equal.cong(Cmp, Bool, Cmp.is_eq, U32.cmp(U32{WCon{head, tail}}, U32{data}), GT{}, Equal.sym(Cmp, GT{}, Word.cmp(32n, WCon{head, tail}, data), hx))
+
+def U32.is_eq_comm.g1(
+  +a: U32,
+  +b: U32,
+  +x: Cmp,
+  hx: {x == U32.cmp(a, b) : Cmp}) ->
+  {Cmp.is_eq(x) == Cmp.is_eq(U32.cmp(b, a)) : Bool}:
+  match a:
+    case U32{data}:
+      +hx = hx
+      %Equal.sym(Cmp, x, U32.cmp(U32{data}, b), hx) :
+        {Cmp.is_eq(_) == Cmp.is_eq(U32.cmp(b, U32{data})) : Bool}
+      U32.is_eq_comm.g30(data, b, x, hx, U32.cmp(b, U32{data}), {==})
+
+def U32.is_eq_comm(+a: U32, +b: U32) -> {U32.is_eq(a, b) == U32.is_eq(b, a): Bool}:
+  U32.is_eq_comm.g1(a, b, U32.cmp(a, b), {==})
+
 # the laws of U32.is_eq
 def U32.laws() -> Eq.Laws(U32, U32.is_eq):
   (U32.is_eq_refl, U32.is_eq_sound)

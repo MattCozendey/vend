@@ -2039,116 +2039,46 @@ def Text.cuts_after_join(ps, c, last):
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
-# String.order.go of a string with itself, from EQ, is EQ
-def String.order_refl(a: String) -> {String.order.go(a, a, EQ{}) == EQ{}: Cmp}:
+# every string equals itself
+def String.eq_refl(a: String) -> {String.eq(a, a) == True{}: Bool}:
   match a:
     case SNil{}:
       {==}
-    case SCon{c, t}:
-      match c:
-        case Chr{x}:
-          %Equal.sym(
-            Cmp,
-            U32.cmp(x, x),
-            EQ{},
-            Shared.U32.cmp_refl(x)
-          ): {String.order.go(t, t, _) == EQ{}: Cmp}
-          String.order_refl(t)
-# String.order.go from c is c, then the order from EQ
-def String.order_then(
-  c: Cmp,
-  a: String,
-  b: String
-) -> {String.order.go(a, b, c) == Shared.Cmp.then(c, String.order.go(a, b, EQ{})): Cmp}:
-  match c a b:
-    case EQ{} x y:
-      {==}
-    case LT{} SNil{} SNil{}:
-      {==}
-    case LT{} SNil{} SCon{y, t}:
-      {==}
-    case LT{} SCon{x, t} SNil{}:
-      {==}
-    case LT{} SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
-      {==}
-    case GT{} SNil{} SNil{}:
-      {==}
-    case GT{} SNil{} SCon{y, t}:
-      {==}
-    case GT{} SCon{x, t} SNil{}:
-      {==}
-    case GT{} SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
-      {==}
-
-# String.order.go ends at EQ only if it started at EQ
-def String.order_keeps(
-  +c: Cmp,
-  +a: String,
-  +b: String
-) -> {String.order.go(a, b, c) == EQ{}: Cmp} -> {c == EQ{}: Cmp}:
-  go1 = String.order.go(a, b, EQ{})
-  go2 = String.order.go(a, b, c)
-  h => Shared.Cmp.then_eq_left(
-    c,
-    go1
-  )(
-    Equal.trans(
-      Cmp,
-      Shared.Cmp.then(c, go1),
-      go2,
-      EQ{},
-      Equal.sym(Cmp, go2, Shared.Cmp.then(c, go1), String.order_then(c, a, b)),
-      h
-    )
-  )
-# String.order.go from c is String.order.go from EQ, when c is EQ
-def String.order_at(
-  -c: Cmp,
-  -t1: String,
-  -t2: String,
-  e: {c == EQ{}: Cmp}
-) -> {String.order.go(t1, t2, c) == EQ{}: Cmp} -> {String.order.go(t1, t2, EQ{}) == EQ{}: Cmp}:
-  %e: {String.order.go(t1, t2, c) == EQ{}: Cmp} -> {String.order.go(t1, t2, _) == EQ{}: Cmp}
-  h => h
-# String.order.go from EQ ends at EQ only for equal strings
-def String.order_sound(
-  a: String,
-  b: String
-) -> {String.order.go(a, b, EQ{}) == EQ{}: Cmp} -> {a == b: String}:
-  match a b:
-    case SNil{} SNil{}:
-      _ => {==}
-    case SNil{} SCon{y, t2}:
-      h => Empty.absurd({SNil{} == SCon{y, t2}: String}, Shared.Cmp.ne_eq(LT{}, Unit{}, h))
-    case SCon{x, t1} SNil{}:
-      h => Empty.absurd({SCon{x, t1} == SNil{}: String}, Shared.Cmp.ne_eq(GT{}, Unit{}, h))
-    case SCon{Chr{U32{+w1}}, +t1} SCon{Chr{U32{+w2}}, +t2}:
-      +h =>
-        +cmp1 = Word.cmp(32n, w1, w2)
-        +e = String.order_keeps(cmp1, t1, t2)(h)
-        h2 = String.order_at(cmp1, t1, t2, e)(h)
-        %Shared.Word.cmp_eq(
-          32n,
-          w1,
-          w2
-        )(e): {SCon{Chr{U32{w1}}, t1} == SCon{Chr{U32{_}}, t2}: String}
-        %String.order_sound(t1, t2)(h2): {SCon{Chr{U32{w1}}, t1} == SCon{Chr{U32{w1}}, _}: String}
+    case SCon{head, tail}:
+      %Equal.sym(Bool, Char.is_eq(head, head), True{}, Shared.Char.is_eq_refl(head)) : {String.eq.go(tail, tail, _) == True{} : Bool}; String.eq_refl(tail)
+# String.eq_sound for two strings with the heads x and y, once String.eq of
+# the heads is known (c), with rec for the tails
+def String.eq_sound.at(
+  +x: Char,
+  +y: Char,
+  +t1: String,
+  +t2: String,
+  c: Bool,
+  rec: {String.eq(t1, t2) == True{}: Bool} -> {t1 == t2: String}
+) -> {Char.is_eq(x, y) == c: Bool} -> {String.eq.go(t1, t2, c) == True{}: Bool} -> {SCon{x, t1} == SCon{y, t2}: String}:
+  match c:
+    case False{}:
+      e => h => Empty.absurd({SCon{x, t1} == SCon{y, t2}: String}, Shared.Bool.false_ne_true(h))
+    case True{}:
+      e => h =>
+        %Shared.Char.is_eq_sound(x, y)(e): {SCon{x, t1} == SCon{_, t2}: String}
+        %rec(h): {SCon{x, t1} == SCon{x, _}: String}
         {==}
-# every string equals itself
-def String.eq_refl(a: String) -> {String.eq(a, a) == True{}: Bool}:
-  %Equal.sym(
-    Cmp,
-    String.order.go(a, a, EQ{}),
-    EQ{},
-    String.order_refl(a)
-  ): {Cmp.is_eq(_) == True{}: Bool}
-  {==}
+
 # String.eq is True only for equal strings
 def String.eq_sound(
   +a: String,
   +b: String
 ) -> {String.eq(a, b) == True{}: Bool} -> {a == b: String}:
-  h => String.order_sound(a, b)(Shared.Cmp.is_eq_sound(String.order.go(a, b, EQ{}))(h))
+  match a b:
+    case SNil{} SNil{}:
+      h => {==}
+    case SNil{} SCon{y, t}:
+      h => Empty.absurd({SNil{} == SCon{y, t}: String}, Shared.Bool.false_ne_true(h))
+    case SCon{x, t} SNil{}:
+      h => Empty.absurd({SCon{x, t} == SNil{}: String}, Shared.Bool.false_ne_true(h))
+    case SCon{+x, +t1} SCon{+y, +t2}:
+      String.eq_sound.at(x, y, t1, t2, Char.is_eq(x, y), String.eq_sound(t1, t2))({==})
 
 # the laws of String.eq
 def String.laws() -> Shared.Eq.Laws(String, String.eq):
@@ -2156,224 +2086,13 @@ def String.laws() -> Shared.Eq.Laws(String, String.eq):
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# a comparison decided as LT stays decided: it is never EQ
-def String.order_ne_lt(
-  a: String,
-  b: String
-) -> {Cmp.is_eq(String.order.go(a, b, LT{})) == False{}: Bool}:
-  match a b:
-    case SNil{} SNil{}:
+# a step of String.eq whose first characters gave b is b, and then the rests
+def String.eq.go_and(b: Bool, t1: String, t2: String) -> {String.eq.go(t1, t2, b) == Bool.and(b, String.eq(t1, t2)): Bool}:
+  match b:
+    case False{}:
       {==}
-    case SNil{} SCon{y, t2}:
+    case True{}:
       {==}
-    case SCon{x, t1} SNil{}:
-      {==}
-    case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
-      {==}
-
-# a comparison decided as GT stays decided: it is never EQ
-def String.order_ne_gt(
-  a: String,
-  b: String
-) -> {Cmp.is_eq(String.order.go(a, b, GT{})) == False{}: Bool}:
-  match a b:
-    case SNil{} SNil{}:
-      {==}
-    case SNil{} SCon{y, t2}:
-      {==}
-    case SCon{x, t1} SNil{}:
-      {==}
-    case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
-      {==}
-
-# String.eq_cons, given o1 and o2, the comparisons of the two characters
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
-def String.eq_cons.at(
-  cx: U32,
-  dx: U32,
-  o1: Cmp,
-  o2: Cmp,
-  qt: String,
-  pt: String
-) -> {
-  o1 == U32.cmp(cx, dx): Cmp
-} -> {
-  o2 == U32.cmp(dx, cx): Cmp
-} -> {
-  Cmp.is_eq(
-    String.order.go(qt, pt, U32.cmp(dx, cx))
-  )
-    == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
-}:
-  match o1 o2:
-    case LT{} LT{}:
-      e1 => e2 =>
-        %e1: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, U32.cmp(dx, cx))
-          )
-            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
-        }
-        %e2: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, _)
-          )
-            == Bool.and(Cmp.is_eq(LT{}), String.eq(qt, pt)): Bool
-        }
-        String.order_ne_lt(qt, pt)
-    case LT{} EQ{}:
-      e1 => e2 =>
-        z = Shared.Cmp.ne_eq(
-          LT{},
-          Unit{},
-          Equal.trans(
-            Cmp,
-            LT{},
-            U32.cmp(cx, dx),
-            EQ{},
-            e1,
-            Equal.sym(Cmp, EQ{}, U32.cmp(cx, dx), Shared.U32.cmp_swap_eq(dx, cx, e2))
-          )
-        )
-        Empty.absurd(
-          {
-            Cmp.is_eq(
-              String.order.go(qt, pt, U32.cmp(dx, cx))
-            )
-              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
-          },
-          z
-        )
-    case LT{} GT{}:
-      e1 => e2 =>
-        %e1: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, U32.cmp(dx, cx))
-          )
-            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
-        }
-        %e2: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, _)
-          )
-            == Bool.and(Cmp.is_eq(LT{}), String.eq(qt, pt)): Bool
-        }
-        String.order_ne_gt(qt, pt)
-    case EQ{} LT{}:
-      e1 => e2 =>
-        z = Shared.Cmp.ne_eq(
-          LT{},
-          Unit{},
-          Equal.trans(
-            Cmp,
-            LT{},
-            U32.cmp(dx, cx),
-            EQ{},
-            e2,
-            Equal.sym(Cmp, EQ{}, U32.cmp(dx, cx), Shared.U32.cmp_swap_eq(cx, dx, e1))
-          )
-        )
-        Empty.absurd(
-          {
-            Cmp.is_eq(
-              String.order.go(qt, pt, U32.cmp(dx, cx))
-            )
-              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
-          },
-          z
-        )
-    case EQ{} EQ{}:
-      e1 => e2 =>
-        %e1: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, U32.cmp(dx, cx))
-          )
-            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
-        }
-        %e2: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, _)
-          )
-            == Bool.and(Cmp.is_eq(EQ{}), String.eq(qt, pt)): Bool
-        }
-        {==}
-    case EQ{} GT{}:
-      e1 => e2 =>
-        z = Shared.Cmp.ne_eq(
-          GT{},
-          Unit{},
-          Equal.trans(
-            Cmp,
-            GT{},
-            U32.cmp(dx, cx),
-            EQ{},
-            e2,
-            Equal.sym(Cmp, EQ{}, U32.cmp(dx, cx), Shared.U32.cmp_swap_eq(cx, dx, e1))
-          )
-        )
-        Empty.absurd(
-          {
-            Cmp.is_eq(
-              String.order.go(qt, pt, U32.cmp(dx, cx))
-            )
-              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
-          },
-          z
-        )
-    case GT{} LT{}:
-      e1 => e2 =>
-        %e1: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, U32.cmp(dx, cx))
-          )
-            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
-        }
-        %e2: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, _)
-          )
-            == Bool.and(Cmp.is_eq(GT{}), String.eq(qt, pt)): Bool
-        }
-        String.order_ne_lt(qt, pt)
-    case GT{} EQ{}:
-      e1 => e2 =>
-        z = Shared.Cmp.ne_eq(
-          GT{},
-          Unit{},
-          Equal.trans(
-            Cmp,
-            GT{},
-            U32.cmp(cx, dx),
-            EQ{},
-            e1,
-            Equal.sym(Cmp, EQ{}, U32.cmp(cx, dx), Shared.U32.cmp_swap_eq(dx, cx, e2))
-          )
-        )
-        Empty.absurd(
-          {
-            Cmp.is_eq(
-              String.order.go(qt, pt, U32.cmp(dx, cx))
-            )
-              == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
-          },
-          z
-        )
-    case GT{} GT{}:
-      e1 => e2 =>
-        %e1: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, U32.cmp(dx, cx))
-          )
-            == Bool.and(Cmp.is_eq(_), String.eq(qt, pt)): Bool
-        }
-        %e2: {
-          Cmp.is_eq(
-            String.order.go(qt, pt, _)
-          )
-            == Bool.and(Cmp.is_eq(GT{}), String.eq(qt, pt)): Bool
-        }
-        String.order_ne_gt(qt, pt)
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # two strings with a first character are equal exactly when the characters
 # are, compared the other way round, and the rests are
@@ -2389,7 +2108,9 @@ def String.eq_cons(
   )
     == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)): Bool
 }:
-  String.eq_cons.at(cx, dx, U32.cmp(cx, dx), U32.cmp(dx, cx), qt, pt)({==}, {==})
+  %Equal.sym(Bool, U32.is_eq(dx, cx), U32.is_eq(cx, dx), Shared.U32.is_eq_comm(dx, cx)) :
+    {String.eq.go(qt, pt, _) == Bool.and(Cmp.is_eq(U32.cmp(cx, dx)), String.eq(qt, pt)) : Bool}
+  String.eq.go_and(Cmp.is_eq(U32.cmp(cx, dx)), qt, pt)
 
 # the characters of a, then b, are the characters of a, then those of b
 def String.to_list_append(
