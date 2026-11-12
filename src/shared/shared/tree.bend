@@ -4559,13 +4559,27 @@ def Mst.Hop(
         Mst.opens(n, r2) == True{}: Bool
       }
 
+# a hit tells the same, whatever node it names when it cannot tell
+def Mst.look.hit_kept(b: Bool, -v: List<&2, U32>, -h1: Hashes.Hash, -h2: Hashes.Hash, -x: Maybe<&2, List<&2, U32>>) -> {
+  Look.known(Shared.Bool.when(Look, b, u => Look.Found{v}, u => Look.Missing{h1})) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {Look.known(Shared.Bool.when(Look, b, u => Look.Found{v}, u => Look.Missing{h2})) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  match b:
+    case True{}:
+      e => e
+    case False{}:
+      e => Empty.absurd(
+        {Look.known(Look.Missing{h2}) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, x, e)
+      )
+
 # a read of a pick tells as a read of a pick in a wider room
 def Mst.look.wide.pick(
   +l: Nat,
   +p1: Pick,
   +p2: Pick,
   -h: Hashes.Hash,
-  -k: List<&2, U32>,
+  -h2: Hashes.Hash,
+  +k: List<&2, U32>,
   -goa: Maybe<&2, Hashes.Hash> -> Room -> Look,
   -gob: Maybe<&2, Hashes.Hash> -> Room -> Look,
   -x: Maybe<&2, List<&2, U32>>,
@@ -4577,14 +4591,14 @@ def Mst.look.wide.pick(
   }
 ) -> {
   Look.known(Mst.look.pick(p1, h, l, k, goa)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
-} -> {Look.known(Mst.look.pick(p2, h, l, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+} -> {Look.known(Mst.look.pick(p2, h2, l, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
   match p1 p2:
     case Pick.Hit{+v1} Pick.Hit{+v2}:
       %ps: (
         {Look.known(Mst.look.pick(Pick.Hit{v1}, h, l, k, goa)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
-          -> {Look.known(Mst.look.pick(Pick.Hit{_}, h, l, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+          -> {Look.known(Mst.look.pick(Pick.Hit{_}, h2, l, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
       )
-      +e => e
+      Mst.look.hit_kept(Nat.is_eq(Key.level(k), l), v1, h, h2, x)
     case Pick.Down{+m1, +r1} Pick.Down{+m2, +r2}:
       match ps:
         case Tuple{+em, +eo}:
@@ -4597,12 +4611,12 @@ def Mst.look.wide.pick(
           )
     case Pick.Hit{+v1} Pick.Down{+m2, +r2}:
       +e => Empty.absurd(
-        {Look.known(Mst.look.pick(Pick.Down{m2, r2}, h, l, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        {Look.known(Mst.look.pick(Pick.Down{m2, r2}, h2, l, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
         ps
       )
     case Pick.Down{+m1, +r1} Pick.Hit{+v2}:
       +e => Empty.absurd(
-        {Look.known(Mst.look.pick(Pick.Hit{v2}, h, l, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        {Look.known(Mst.look.pick(Pick.Hit{v2}, h2, l, k, gob)) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
         ps
       )
 
@@ -4647,6 +4661,7 @@ def Mst.look.wide.at(
         l,
         Mst.pick(xs, left, l, lo1, hi1, k),
         Mst.pick(xs, left, l, lo2, hi2, k),
+        h,
         h,
         k,
         goa,
