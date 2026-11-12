@@ -26309,15 +26309,21 @@ def Cmp.eq_true(c: Cmp) -> {Cmp.is_eq(c) == True{}: Bool} -> {c == EQ{}: Cmp}:
 # what a node that is whole in its room is
 def Mst.wf.node_cases(
   m: Maybe<&2, Node>,
-  -u: Nat,
+  +u: Nat,
   r: Room,
-  -k: Nat -> Maybe<&2, Hashes.Hash> -> List<&2, Item> -> Maybe<&2, List<&2, U32>> -> Maybe<&2, List<&2, U32>> -> Bool,
+  k: Nat -> Maybe<&2, Hashes.Hash> -> List<&2, Item> -> Maybe<&2, List<&2, U32>> -> Maybe<&2, List<&2, U32>> -> Bool,
   -P: Type,
   c: @l: Nat -> @left: Maybe<&2, Hashes.Hash> -> @xs: List<&2, Item> -> @up: Nat -> @lo: Maybe<&2, List<&2, U32>> -> @hi: Maybe<&2, List<&2, U32>> -> {
     m == Some{Node{l, left, xs}}: Maybe<&2, Node>
   } -> {r == Room{up, lo, hi}: Room} -> {Nat.is_lt(l, u) == True{}: Bool} -> {k(l)(left)(xs)(lo)(hi) == True{}: Bool} -> P
 ) -> {Mst.wf.node(m, u, r, k) == True{}: Bool} -> P:
-  ?TODO
+  match m r:
+    case None{} x:
+      e => Empty.absurd(P, Shared.Bool.false_ne_true(e))
+    case Some{Node{+l, +left, +xs}} Room{+up, +lo, +hi}:
+      +e =>
+        +kv = k(l)(left)(xs)(lo)(hi)
+        c(l)(left)(xs)(up)(lo)(hi)({==})({==})(Shared.Bool.and_true_left(Nat.is_lt(l, u), kv)(e))(Shared.Bool.and_true_right(Nat.is_lt(l, u), kv)(e))
 
 # items whose first is of their level, with no subtree before the empty key,
 # a whole subtree before it, and whole items after it, are whole
@@ -26647,7 +26653,13 @@ def Cmp.elim(
   eq: {c == EQ{}: Cmp} -> P(EQ{}),
   gt: {c == GT{}: Cmp} -> P(GT{})
 ) -> P(c):
-  ?TODO
+  match c:
+    case LT{}:
+      lt({==})
+    case EQ{}:
+      eq({==})
+    case GT{}:
+      gt({==})
 
 # the edge of a whole tree, with fuel for its levels, sits in its rooms
 def Mst.edge_some(
