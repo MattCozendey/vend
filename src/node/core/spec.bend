@@ -17840,6 +17840,755 @@ def Stable.holds(
         )
       )
 
+# a ledger that holds the resource of a binding holds it as it grows
+def Stable.res_held(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  x: Trees.Binding,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Res.held(~d, a, x) == True{}: Bool} -> {Res.held(~d, b, x) == True{}: Bool}:
+  match x:
+    case Trees.Binding{Nil{}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WNil{}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}, r}, +v}:
+      Stable.res_kept(
+        ~d,
+        a,
+        b,
+        Codes.Code.whole.read(~Requests.Res, ~Requests.Res.code, ~Requests.Res.code.read, v),
+        g
+      )
+    case Trees.Binding{Con{U32{WCon{True{}, t}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{True{}, t}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{True{}, t}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+    case Trees.Binding{Con{U32{WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{False{}, WCon{True{}, t}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}, r}, v}:
+      e => e
+
+# a ledger that holds the resources of some bindings holds them as it grows
+def Stable.all_held(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  xs: List<&2, Trees.Binding>,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Res.all_held(~d, a, xs) == True{}: Bool} -> {Res.all_held(~d, b, xs) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      e => e
+    case Con{+x, +rest}:
+      +e => Shared.List.all.if_both(Res.held(~d, b, x), u => Res.all_held(~d, b, rest))(
+        Stable.res_held(~d, a, b, x, g)(Shared.List.all.if_hit(Res.held(~d, a, x), u => Res.all_held(~d, a, rest))(e))
+      )(Stable.all_held(~d, a, b, rest, g)(Shared.List.all.if_rest(Res.held(~d, a, x), u => Res.all_held(~d, a, rest))(e)))
+
+# Stable.tree_kept, once the listing m is known
+def Stable.kept_of(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  m: Maybe<&2, List<&2, Trees.Binding>>,
+  -m2: Maybe<&2, List<&2, Trees.Binding>>,
+  hm: @v: List<&2, Trees.Binding> -> {m == Some{v}: Maybe<&2, List<&2, Trees.Binding>>}
+    -> {m2 == Some{v}: Maybe<&2, List<&2, Trees.Binding>>},
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {
+  Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, m, bs => Some{Res.all_held(~d, a, bs)}), False{}) == True{}: Bool
+} -> {
+  Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, m2, bs => Some{Res.all_held(~d, b, bs)}), False{}) == True{}: Bool
+}:
+  match m:
+    case None{}:
+      e => Empty.absurd(
+        {
+          Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, m2, bs => Some{Res.all_held(~d, b, bs)}), False{})
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(e)
+      )
+    case Some{+v}:
+      e =>
+        %Equal.sym(Maybe<&2, List<&2, Trees.Binding>>, m2, Some{v}, hm(v)({==})): {
+          Maybe.default(&2, Bool, Maybe.bind(&2, List<&2, Trees.Binding>, Bool, _, bs => Some{Res.all_held(~d, b, bs)}), False{})
+            == True{}: Bool
+        }
+        Stable.all_held(~d, a, b, v, g)(e)
+
+# a ledger that holds a whole tree holds it as it grows
+def Stable.tree_kept(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Tree.kept(~d, a, h) == True{}: Bool} -> {Tree.kept(~d, b, h) == True{}: Bool}:
+  Stable.kept_of(
+    ~d,
+    a,
+    b,
+    Tree.range(~d, a, h, []),
+    Tree.range(~d, b, h, []),
+    +v => e => Stable.range_grows(~d, a, b, h, [], v, g)(e),
+    g
+  )
+
+# a ledger that holds each node of a tree holds them as it grows
+def Stable.tree_whole(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Tree.whole(~d, a, h) == True{}: Bool} -> {Tree.whole(~d, b, h) == True{}: Bool}:
+  Stable.is_some_kept(
+    List<&2, Trees.Binding>,
+    Tree.range(~d, a, h, []),
+    Tree.range(~d, b, h, []),
+    +v => e => Stable.range_grows(~d, a, b, h, [], v, g)(e)
+  )
+
+# the groups of a tree stay as the ledger grows
+def Stable.groups_in(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +gs: List<&2, Group>,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Groups.in(~d, a, h) == Some{gs}: Maybe<&2, List<&2, Group>>} -> {Groups.in(~d, b, h) == Some{gs}: Maybe<&2, List<&2, Group>>}:
+  Stable.map_kept(
+    List<&2, Trees.Binding>,
+    List<&2, Group>,
+    Groups.of,
+    Tree.range(~d, a, h, [2]),
+    Tree.range(~d, b, h, [2]),
+    gs,
+    +v => e => Stable.range_grows(~d, a, b, h, [2], v, g)(e)
+  )
+
+# the nodes of a group stay as the ledger grows
+def Stable.group_nodes(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +gn: String,
+  +ns: List<&2, String>,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Group.nodes(~d, a, h, gn) == Some{ns}: Maybe<&2, List<&2, String>>}
+  -> {Group.nodes(~d, b, h, gn) == Some{ns}: Maybe<&2, List<&2, String>>}:
+  Stable.map_kept(
+    List<&2, Group>,
+    List<&2, String>,
+    gs => Group.nodes.of(gs, gn),
+    Groups.in(~d, a, h),
+    Groups.in(~d, b, h),
+    ns,
+    +v => e => Stable.groups_in(~d, a, b, h, v, g)(e)
+  )
+
+# the clashes that are open after a merge stay as the ledger grows
+def Stable.clash_names(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +k: Ledgers.Id,
+  +ns: List<&2, Resources.Name>,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Clash.names(~d, a, h, k) == Some{ns}: Maybe<&2, List<&2, Resources.Name>>}
+  -> {Clash.names(~d, b, h, k) == Some{ns}: Maybe<&2, List<&2, Resources.Name>>}:
+  Stable.map_kept(
+    Maybe<&2, List<&2, Resources.Name>>,
+    List<&2, Resources.Name>,
+    m => Maybe.default(&2, List<&2, Resources.Name>, m, []),
+    Replicas.Tip.known(
+      ~List<&2, Resources.Name>,
+      ~(ns2 => r => Codes.Code.list(~Resources.Name, ~Resources.Name.code, ns2, r)),
+      ~(ws => Codes.Code.list.read(~Resources.Name, ~Resources.Name.code.read, ws)),
+      Replicas.Tree.find(~Requests.Ask.machine(), ~d, a, h, Key.clashes(k))
+    ),
+    Replicas.Tip.known(
+      ~List<&2, Resources.Name>,
+      ~(ns2 => r => Codes.Code.list(~Resources.Name, ~Resources.Name.code, ns2, r)),
+      ~(ws => Codes.Code.list.read(~Resources.Name, ~Resources.Name.code.read, ws)),
+      Replicas.Tree.find(~Requests.Ask.machine(), ~d, b, h, Key.clashes(k))
+    ),
+    ns,
+    +v => e => Stable.known_kept(
+      ~List<&2, Resources.Name>,
+      ~(ns2 => r => Codes.Code.list(~Resources.Name, ~Resources.Name.code, ns2, r)),
+      ~(ws => Codes.Code.list.read(~Resources.Name, ~Resources.Name.code.read, ws)),
+      Replicas.Tree.find(~Requests.Ask.machine(), ~d, a, h, Key.clashes(k)),
+      Replicas.Tree.find(~Requests.Ask.machine(), ~d, b, h, Key.clashes(k)),
+      v,
+      +w => ew => Replicas.Hist.find(~Requests.Ask.machine(), ~d, a, b, h, Key.clashes(k), w, g)(ew)
+    )(e)
+  )
+
+# the resource that a content gives stays as the ledger grows
+def Stable.content(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +n: Resources.Name,
+  +x: Requests.Content,
+  +r: Maybe<&2, Requests.Res>,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Content.find(~d, a, t, n, x) == Some{r}: Maybe<&2, Maybe<&2, Requests.Res>>}
+  -> {Content.find(~d, b, t, n, x) == Some{r}: Maybe<&2, Maybe<&2, Requests.Res>>}:
+  match x:
+    case Requests.Content.New{y}:
+      e => e
+    case Requests.Content.Of{+i}:
+      Shared.Maybe.bind_kept(
+        Maybe<&2, Hashes.Hash>,
+        Maybe<&2, Requests.Res>,
+        Replicas.Tip.version(~Requests.Ask.machine(), ~d, a, t, i),
+        Replicas.Tip.version(~Requests.Ask.machine(), ~d, b, t, i),
+        h => Res.find(~d, a, h, n),
+        h => Res.find(~d, b, h, n),
+        r,
+        +h => e => Stable.version(~d, a, b, t, i, h, g)(e),
+        +h => e => Stable.res_find(~d, a, b, h, n, r, g)(e)
+      )
+
+# the tree of the base of a write stays as the ledger grows
+def Stable.base_root(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +m: Maybe<&2, Ledgers.Id>,
+  +h: Maybe<&2, Hashes.Hash>,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Base.root(~d, a, t, m) == Some{h}: Maybe<&2, Maybe<&2, Hashes.Hash>>}
+  -> {Base.root(~d, b, t, m) == Some{h}: Maybe<&2, Maybe<&2, Hashes.Hash>>}:
+  match m:
+    case None{}:
+      e => e
+    case Some{+i}:
+      Stable.version(~d, a, b, t, i, h, g)
+
+# what Res.set does stays as the ledger grows
+def Stable.res_set(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +n: Resources.Name,
+  +new: Maybe<&2, Requests.Res>,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Res.set(~d, a, t, n, new) == Some{x}: Maybe<&2, Replicas.Act>} -> {Res.set(~d, b, t, n, new) == Some{x}: Maybe<&2, Replicas.Act>}:
+  Stable.when_test(
+    Maybe<&2, Replicas.Act>,
+    Res.kept(~d, a, new),
+    Res.kept(~d, b, new),
+    u => Act.put(
+      None{},
+      [],
+      Replicas.Tree.put(~Requests.Ask.machine(), ~d, a, Replicas.Tip.content(t), Key.res(n), Res.value(new))
+    ),
+    u => None{},
+    u => Act.put(
+      None{},
+      [],
+      Replicas.Tree.put(~Requests.Ask.machine(), ~d, b, Replicas.Tip.content(t), Key.res(n), Res.value(new))
+    ),
+    u => None{},
+    Some{x},
+    hc => Stable.res_kept(~d, a, b, new, g)(hc),
+    Stable.act_put_kept(
+      None{},
+      [],
+      Replicas.Tree.put(~Requests.Ask.machine(), ~d, a, Replicas.Tip.content(t), Key.res(n), Res.value(new)),
+      Replicas.Tree.put(~Requests.Ask.machine(), ~d, b, Replicas.Tip.content(t), Key.res(n), Res.value(new)),
+      x,
+      +v => e => Replicas.Hist.put(~Requests.Ask.machine(), ~d, a, b, Replicas.Tip.content(t), Key.res(n), Res.value(new), v, g)(e)
+    ),
+    e => Shared.Maybe.none_ne_some(Replicas.Act, x, e)
+  )
+
+# what a write does stays as the ledger grows
+def Stable.write(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +n: Resources.Name,
+  +base: Maybe<&2, Ledgers.Id>,
+  +c: Requests.Content,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Write.act(~d, a, t, n, base, c) == Some{x}: Maybe<&2, Replicas.Act>}
+  -> {Write.act(~d, b, t, n, base, c) == Some{x}: Maybe<&2, Replicas.Act>}:
+  Shared.Maybe.bind_kept(
+    Maybe<&2, Requests.Res>,
+    Replicas.Act,
+    Res.find(~d, a, Replicas.Tip.content(t), n),
+    Res.find(~d, b, Replicas.Tip.content(t), n),
+    ours => Maybe.bind(
+      &2,
+      Maybe<&2, Hashes.Hash>,
+      Replicas.Act,
+      Base.root(~d, a, t, base),
+      h => Maybe.bind(
+        &2,
+        Maybe<&2, Requests.Res>,
+        Replicas.Act,
+        Res.find(~d, a, h, n),
+        held => Maybe.bind(
+          &2,
+          Maybe<&2, Requests.Res>,
+          Replicas.Act,
+          Content.find(~d, a, t, n, c),
+          new => Write.act.of(~d, a, t, n, ours, held, new)
+        )
+      )
+    ),
+    ours => Maybe.bind(
+      &2,
+      Maybe<&2, Hashes.Hash>,
+      Replicas.Act,
+      Base.root(~d, b, t, base),
+      h => Maybe.bind(
+        &2,
+        Maybe<&2, Requests.Res>,
+        Replicas.Act,
+        Res.find(~d, b, h, n),
+        held => Maybe.bind(
+          &2,
+          Maybe<&2, Requests.Res>,
+          Replicas.Act,
+          Content.find(~d, b, t, n, c),
+          new => Write.act.of(~d, b, t, n, ours, held, new)
+        )
+      )
+    ),
+    x,
+    +ours => e => Stable.res_find(~d, a, b, Replicas.Tip.content(t), n, ours, g)(e),
+    +ours => Shared.Maybe.bind_kept(
+      Maybe<&2, Hashes.Hash>,
+      Replicas.Act,
+      Base.root(~d, a, t, base),
+      Base.root(~d, b, t, base),
+      h => Maybe.bind(
+        &2,
+        Maybe<&2, Requests.Res>,
+        Replicas.Act,
+        Res.find(~d, a, h, n),
+        held => Maybe.bind(
+          &2,
+          Maybe<&2, Requests.Res>,
+          Replicas.Act,
+          Content.find(~d, a, t, n, c),
+          new => Write.act.of(~d, a, t, n, ours, held, new)
+        )
+      ),
+      h => Maybe.bind(
+        &2,
+        Maybe<&2, Requests.Res>,
+        Replicas.Act,
+        Res.find(~d, b, h, n),
+        held => Maybe.bind(
+          &2,
+          Maybe<&2, Requests.Res>,
+          Replicas.Act,
+          Content.find(~d, b, t, n, c),
+          new => Write.act.of(~d, b, t, n, ours, held, new)
+        )
+      ),
+      x,
+      +h => e => Stable.base_root(~d, a, b, t, base, h, g)(e),
+      +h => Shared.Maybe.bind_kept(
+        Maybe<&2, Requests.Res>,
+        Replicas.Act,
+        Res.find(~d, a, h, n),
+        Res.find(~d, b, h, n),
+        held => Maybe.bind(
+          &2,
+          Maybe<&2, Requests.Res>,
+          Replicas.Act,
+          Content.find(~d, a, t, n, c),
+          new => Write.act.of(~d, a, t, n, ours, held, new)
+        ),
+        held => Maybe.bind(
+          &2,
+          Maybe<&2, Requests.Res>,
+          Replicas.Act,
+          Content.find(~d, b, t, n, c),
+          new => Write.act.of(~d, b, t, n, ours, held, new)
+        ),
+        x,
+        +held => e => Stable.res_find(~d, a, b, h, n, held, g)(e),
+        +held => Shared.Maybe.bind_kept(
+          Maybe<&2, Requests.Res>,
+          Replicas.Act,
+          Content.find(~d, a, t, n, c),
+          Content.find(~d, b, t, n, c),
+          new => Write.act.of(~d, a, t, n, ours, held, new),
+          new => Write.act.of(~d, b, t, n, ours, held, new),
+          x,
+          +new => e => Stable.content(~d, a, b, t, n, c, new, g)(e),
+          +new => Stable.when_same(
+            Maybe<&2, Replicas.Act>,
+            Res.same(ours, held),
+            u => Res.set(~d, a, t, n, new),
+            u => Some{Replicas.Act.Stale{}},
+            u => Res.set(~d, b, t, n, new),
+            u => Some{Replicas.Act.Stale{}},
+            Some{x},
+            c1 => e => Stable.res_set(~d, a, b, t, n, new, x, g)(e),
+            c1 => e => e
+          )
+        )
+      )
+    )
+  )
+
+# what a move does stays as the ledger grows
+def Stable.move(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +s: Requests.Source,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Move.act(~d, a, s) == Some{x}: Maybe<&2, Replicas.Act>} -> {Move.act(~d, b, s) == Some{x}: Maybe<&2, Replicas.Act>}:
+  match s:
+    case Requests.Source{v, +h}:
+      Stable.when_test(
+        Maybe<&2, Replicas.Act>,
+        Tree.kept(~d, a, h),
+        Tree.kept(~d, b, h),
+        u => Some{Replicas.Act.Taken{None{}, h, []}},
+        u => None{},
+        u => Some{Replicas.Act.Taken{None{}, h, []}},
+        u => None{},
+        Some{x},
+        hc => Stable.tree_kept(~d, a, b, h, g)(hc),
+        e => e,
+        e => Shared.Maybe.none_ne_some(Replicas.Act, x, e)
+      )
+
+# what a new branch does stays as the ledger grows
+def Stable.branch(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +n: String,
+  +m: Maybe<&2, Requests.Source>,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Branch.act(~d, a, t, n, m) == Some{x}: Maybe<&2, Replicas.Act>} -> {Branch.act(~d, b, t, n, m) == Some{x}: Maybe<&2, Replicas.Act>}:
+  match m:
+    case None{}:
+      e => e
+    case Some{Requests.Source{v, +h}}:
+      Stable.when_test(
+        Maybe<&2, Replicas.Act>,
+        Tree.kept(~d, a, h),
+        Tree.kept(~d, b, h),
+        u => Some{Replicas.Act.Opens{n, Branch.tip(t, h), []}},
+        u => None{},
+        u => Some{Replicas.Act.Opens{n, Branch.tip(t, h), []}},
+        u => None{},
+        Some{x},
+        hc => Stable.tree_kept(~d, a, b, h, g)(hc),
+        e => e,
+        e => Shared.Maybe.none_ne_some(Replicas.Act, x, e)
+      )
+
+# what a first key does stays as the ledger grows
+def Stable.key(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +n: String,
+  +k: Hashes.Hash,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Key.act(~d, a, t, n, k) == Some{x}: Maybe<&2, Replicas.Act>} -> {Key.act(~d, b, t, n, k) == Some{x}: Maybe<&2, Replicas.Act>}:
+  Stable.act_put_kept(
+    None{},
+    [],
+    Replicas.Tree.put(~Requests.Ask.machine(), ~d, a, Replicas.Tip.content(t), Requests.Key.seal(n), Some{Hashes.Hash.code(k, [])}),
+    Replicas.Tree.put(~Requests.Ask.machine(), ~d, b, Replicas.Tip.content(t), Requests.Key.seal(n), Some{Hashes.Hash.code(k, [])}),
+    x,
+    +v => e => Replicas.Hist.put(
+      ~Requests.Ask.machine(),
+      ~d,
+      a,
+      b,
+      Replicas.Tip.content(t),
+      Requests.Key.seal(n),
+      Some{Hashes.Hash.code(k, [])},
+      v,
+      g
+    )(e)
+  )
+
+# what Group.act.of does stays as the ledger grows
+def Stable.group_of(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +h: Maybe<&2, Hashes.Hash>,
+  +gn: String,
+  +ms: List<&2, Requests.Member>,
+  +gs: List<&2, Group>,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Group.act.of(~d, a, h, gn, ms, gs) == Some{x}: Maybe<&2, Replicas.Act>}
+  -> {Group.act.of(~d, b, h, gn, ms, gs) == Some{x}: Maybe<&2, Replicas.Act>}:
+  Stable.when_same(
+    Maybe<&2, Replicas.Act>,
+    Crits.Dict.has(Unit, Group.reach(Groups.set(gs, gn, ms), gn), Group.key(gn)),
+    u => Some{Replicas.Act.Stale{}},
+    u => Act.put(None{}, [], Replicas.Tree.put(~Requests.Ask.machine(), ~d, a, h, Key.group(gn), Some{Requests.Members.code(ms, [])})),
+    u => Some{Replicas.Act.Stale{}},
+    u => Act.put(None{}, [], Replicas.Tree.put(~Requests.Ask.machine(), ~d, b, h, Key.group(gn), Some{Requests.Members.code(ms, [])})),
+    Some{x},
+    c => e => e,
+    c => Stable.act_put_kept(
+      None{},
+      [],
+      Replicas.Tree.put(~Requests.Ask.machine(), ~d, a, h, Key.group(gn), Some{Requests.Members.code(ms, [])}),
+      Replicas.Tree.put(~Requests.Ask.machine(), ~d, b, h, Key.group(gn), Some{Requests.Members.code(ms, [])}),
+      x,
+      +v => e => Replicas.Hist.put(
+        ~Requests.Ask.machine(),
+        ~d,
+        a,
+        b,
+        h,
+        Key.group(gn),
+        Some{Requests.Members.code(ms, [])},
+        v,
+        g
+      )(e)
+    )
+  )
+
+# what a group does stays as the ledger grows
+def Stable.group(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +gn: String,
+  +ms: List<&2, Requests.Member>,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Group.act(~d, a, t, gn, ms) == Some{x}: Maybe<&2, Replicas.Act>} -> {Group.act(~d, b, t, gn, ms) == Some{x}: Maybe<&2, Replicas.Act>}:
+  +h = Replicas.Tip.content(t)
+  Stable.when_test(
+    Maybe<&2, Replicas.Act>,
+    Tree.whole(~d, a, h),
+    Tree.whole(~d, b, h),
+    u => Maybe.bind(&2, List<&2, Group>, Replicas.Act, Groups.in(~d, a, h), gs => Group.act.of(~d, a, h, gn, ms, gs)),
+    u => None{},
+    u => Maybe.bind(&2, List<&2, Group>, Replicas.Act, Groups.in(~d, b, h), gs => Group.act.of(~d, b, h, gn, ms, gs)),
+    u => None{},
+    Some{x},
+    hc => Stable.tree_whole(~d, a, b, h, g)(hc),
+    Shared.Maybe.bind_kept(
+      List<&2, Group>,
+      Replicas.Act,
+      Groups.in(~d, a, h),
+      Groups.in(~d, b, h),
+      gs => Group.act.of(~d, a, h, gn, ms, gs),
+      gs => Group.act.of(~d, b, h, gn, ms, gs),
+      x,
+      +gs => e => Stable.groups_in(~d, a, b, h, gs, g)(e),
+      +gs => e => Stable.group_of(~d, a, b, h, gn, ms, gs, x, g)(e)
+    ),
+    e => Shared.Maybe.none_ne_some(Replicas.Act, x, e)
+  )
+
+# what an Own does stays as the ledger grows
+def Stable.own(
+  ~d: Led(),
+  +a: L(d),
+  +b: L(d),
+  +t: Replicas.Tip,
+  +gn: String,
+  +at: Maybe<&2, Requests.Source>,
+  +os: List<&2, String>,
+  +x: Replicas.Act,
+  +g: Replicas.Led.Grows(Requests.Ask.machine(), d, a, b)
+) -> {Own.act(~d, a, t, gn, at, os) == Some{x}: Maybe<&2, Replicas.Act>}
+  -> {Own.act(~d, b, t, gn, at, os) == Some{x}: Maybe<&2, Replicas.Act>}:
+  +h = Own.tree(t, at)
+  Stable.when_test(
+    Maybe<&2, Replicas.Act>,
+    Tree.whole(~d, a, h),
+    Tree.whole(~d, b, h),
+    u => Maybe.bind(
+      &2,
+      List<&2, String>,
+      Replicas.Act,
+      Group.nodes(~d, a, h, gn),
+      +ns => Shared.Bool.when(
+        Maybe<&2, Replicas.Act>,
+        List.all.if(v => Shared.List.same_set(~String, ~String.eq, os, ns), Bool.not(List.is_empty(&2, String, os))),
+        v => Act.put(
+          Some{os},
+          [],
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, a, Replicas.Tip.content(t), Key.owner(), Some{Codes.Code.text(gn, [])})
+        ),
+        v => Some{Replicas.Act.Stale{}}
+      )
+    ),
+    u => None{},
+    u => Maybe.bind(
+      &2,
+      List<&2, String>,
+      Replicas.Act,
+      Group.nodes(~d, b, h, gn),
+      +ns => Shared.Bool.when(
+        Maybe<&2, Replicas.Act>,
+        List.all.if(v => Shared.List.same_set(~String, ~String.eq, os, ns), Bool.not(List.is_empty(&2, String, os))),
+        v => Act.put(
+          Some{os},
+          [],
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, b, Replicas.Tip.content(t), Key.owner(), Some{Codes.Code.text(gn, [])})
+        ),
+        v => Some{Replicas.Act.Stale{}}
+      )
+    ),
+    u => None{},
+    Some{x},
+    hc => Stable.tree_whole(~d, a, b, h, g)(hc),
+    Shared.Maybe.bind_kept(
+      List<&2, String>,
+      Replicas.Act,
+      Group.nodes(~d, a, h, gn),
+      Group.nodes(~d, b, h, gn),
+      +ns => Shared.Bool.when(
+        Maybe<&2, Replicas.Act>,
+        List.all.if(v => Shared.List.same_set(~String, ~String.eq, os, ns), Bool.not(List.is_empty(&2, String, os))),
+        v => Act.put(
+          Some{os},
+          [],
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, a, Replicas.Tip.content(t), Key.owner(), Some{Codes.Code.text(gn, [])})
+        ),
+        v => Some{Replicas.Act.Stale{}}
+      ),
+      +ns => Shared.Bool.when(
+        Maybe<&2, Replicas.Act>,
+        List.all.if(v => Shared.List.same_set(~String, ~String.eq, os, ns), Bool.not(List.is_empty(&2, String, os))),
+        v => Act.put(
+          Some{os},
+          [],
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, b, Replicas.Tip.content(t), Key.owner(), Some{Codes.Code.text(gn, [])})
+        ),
+        v => Some{Replicas.Act.Stale{}}
+      ),
+      x,
+      +ns => e => Stable.group_nodes(~d, a, b, h, gn, ns, g)(e),
+      +ns => Stable.when_same(
+        Maybe<&2, Replicas.Act>,
+        List.all.if(v => Shared.List.same_set(~String, ~String.eq, os, ns), Bool.not(List.is_empty(&2, String, os))),
+        v => Act.put(
+          Some{os},
+          [],
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, a, Replicas.Tip.content(t), Key.owner(), Some{Codes.Code.text(gn, [])})
+        ),
+        v => Some{Replicas.Act.Stale{}},
+        v => Act.put(
+          Some{os},
+          [],
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, b, Replicas.Tip.content(t), Key.owner(), Some{Codes.Code.text(gn, [])})
+        ),
+        v => Some{Replicas.Act.Stale{}},
+        Some{x},
+        c => Stable.act_put_kept(
+          Some{os},
+          [],
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, a, Replicas.Tip.content(t), Key.owner(), Some{Codes.Code.text(gn, [])}),
+          Replicas.Tree.put(~Requests.Ask.machine(), ~d, b, Replicas.Tip.content(t), Key.owner(), Some{Codes.Code.text(gn, [])}),
+          x,
+          +v => e => Replicas.Hist.put(
+            ~Requests.Ask.machine(),
+            ~d,
+            a,
+            b,
+            Replicas.Tip.content(t),
+            Key.owner(),
+            Some{Codes.Code.text(gn, [])},
+            v,
+            g
+          )(e)
+        ),
+        c => e => e
+      )
+    ),
+    e => Shared.Maybe.none_ne_some(Replicas.Act, x, e)
+  )
+
 # writers are told only about changes to what their work uses: each touch
 # that Node.affects gives for a branch holds (Touch.holds)
 law Node.affects_holds:
