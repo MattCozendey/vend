@@ -18603,6 +18603,347 @@ def Tops.under_has.at(+ts: Tops(), +c: Ledgers.Line, mv: Maybe<&2, Top>) -> {Top
 } -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Tops.under(ts, Ledgers.Line.root(c)), c) == True{}: Bool}:
   ?TODO
 
+# Settling lines
+
+# a replica, and whether its top of a line moved
+type Rep.Moved<-L: Data> is Data:
+  Rep.Moved{rep: Rep<L>, moved: Bool}
+
+# a replica, whether its top of a line moved, and whether it cast there
+type Rep.Did<-L: Data> is Data:
+  Rep.Did{rep: Rep<L>, moved: Bool, cast: Bool}
+
+# a replica, the lines whose tops moved, and the lines left busy
+type Rep.Settled<-L: Data> is Data:
+  Rep.Settled{rep: Rep<L>, moved: List<&2, Ledgers.Line>, busy: List<&2, Ledgers.Line>}
+
+# the top m is at the height h
+def Top.at(m: Maybe<&2, Top>, h: U32) -> Bool:
+  match m:
+    case Some{Top{h0, t}}:
+      U32.is_eq(h0, h)
+    case None{}:
+      False{}
+
+# the step decided at the top x of the line c does not land in l: it lacks
+# data to run
+def Line.stuck(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), x: Top, +l: Led.L(mach, d), +c: Ledgers.Line) -> Bool:
+  match x:
+    case Top{+h, +t}:
+      Bool.and(
+        Maybe.is_some(
+          &2,
+          Ledgers.Step,
+          Height.decide(~mach, ~d, l, c, h, Tip.voters(t), Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(l)(c)(h))
+        ),
+        Bool.not(Maybe.is_some(&2, Tip, Line.next(~mach, ~d, ~kern, l, c, h, t)))
+      )
+
+# s after its top of the line c climbs to x (none: the line has no start),
+# from the top m it held: whether it moved, and whether it waits for data
+def Rep.climb.of(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), m: Maybe<&2, Top>, x: Maybe<&2, Climb<Led.L(mach, d)>>, s: Rep<Led.L(mach, d)>, +c: Ledgers.Line) -> Rep.Moved<Led.L(mach, d)>:
+  match x:
+    case None{}:
+      Rep.Moved{s, False{}}
+    case Some{Climb{+l, Top{+h, +t}}}:
+      Rep.Moved{
+        Rep.wait(
+          ~Led.L(mach, d),
+          Rep.set_top(~Led.L(mach, d), Rep.with_ledger(Led.L(mach, d), s, l), c, Top{h, t}),
+          c,
+          Line.stuck(~mach, ~d, ~kern, Top{h, t}, l, c)
+        ),
+        Bool.not(Top.at(m, h))
+      }
+
+# s with its top of the line c current: only the steps after the top it held
+# run
+def Rep.climb(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +s: Rep<Led.L(mach, d)>, +c: Ledgers.Line) -> Rep.Moved<Led.L(mach, d)>:
+  +m = Tops.get(Rep.tops(Led.L(mach, d), s), c)
+  Rep.climb.of(~mach, ~d, ~kern, m, Line.top(~mach, ~d, ~kern, m, Rep.ledger(Led.L(mach, d), s), c), s, c)
+
+# a replica that cast or not (x), and whether the top moved (mv)
+def Rep.did(~L: Data, x: Rep.Cast<L>, mv: Bool) -> Rep.Did<L>:
+  match x:
+    case Rep.Cast{s, k}:
+      Rep.Did{s, mv, k}
+
+# s after it acts at its top m of the line c, if it has one
+def Rep.settle.act(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), m: Maybe<&2, Top>, s: Rep<Led.L(mach, d)>, c: Ledgers.Line, mv: Bool) -> Rep.Did<Led.L(mach, d)>:
+  match m:
+    case None{}:
+      Rep.Did{s, mv, False{}}
+    case Some{Top{h, t}}:
+      Rep.did(~Led.L(mach, d), Rep.act(~mach, ~d, ~kern, s, c, h, t), mv)
+
+# the replica of x after it acts at its new top of the line c
+def Rep.settle.at(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +c: Ledgers.Line, x: Rep.Moved<Led.L(mach, d)>) -> Rep.Did<Led.L(mach, d)>:
+  match x:
+    case Rep.Moved{+s, mv}:
+      Rep.settle.act(~mach, ~d, ~kern, Tops.get(Rep.tops(Led.L(mach, d), s), c), s, c, mv)
+
+# x after the line c is settled, as y says
+def Rep.settled.add(~L: Data, +c: Ledgers.Line, y: Rep.Did<L>, +mv: List<&2, Ledgers.Line>, +bz: List<&2, Ledgers.Line>) -> Rep.Settled<L>:
+  match y:
+    case Rep.Did{s, m, k}:
+      Rep.Settled{
+        s,
+        Shared.Bool.when(List<&2, Ledgers.Line>, m, u => c <> mv, u => mv),
+        Shared.Bool.when(List<&2, Ledgers.Line>, k, u => c <> bz, u => bz)
+      }
+
+# x after it settles the line c once: its top climbs, then it acts there. A
+# line where it cast is left busy: its ballot may decide
+def Rep.settled.put(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +c: Ledgers.Line, x: Rep.Settled<Led.L(mach, d)>) -> Rep.Settled<Led.L(mach, d)>:
+  match x:
+    case Rep.Settled{s, mv, bz}:
+      Rep.settled.add(~Led.L(mach, d), c, Rep.settle.at(~mach, ~d, ~kern, c, Rep.climb(~mach, ~d, ~kern, s, c)), mv, bz)
+
+# x after it settles each of the lines cs once
+def Rep.settle(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), cs: List<&2, Ledgers.Line>, x: Rep.Settled<Led.L(mach, d)>) -> Rep.Settled<Led.L(mach, d)>:
+  match cs:
+    case Nil{}:
+      x
+    case Con{+c, rest}:
+      Rep.settle(~mach, ~d, ~kern, rest, Rep.settled.put(~mach, ~d, ~kern, c, x))
+
+# What a replica asks by itself
+
+# x after the kernel says f for the line w: the request it asks waits on its
+# line, which is left busy; a line where the kernel cannot tell yet waits for
+# data
+def Rep.ask.of(~mach: Machine(), ~d: Led(mach), f: Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>, x: Rep.Settled<Led.L(mach, d)>, +w: Ledgers.Line) -> Rep.Settled<Led.L(mach, d)>:
+  match f x:
+    case None{} Rep.Settled{s, mv, bz}:
+      Rep.Settled{Rep.wait(~Led.L(mach, d), s, w, True{}), mv, bz}
+    case Some{None{}} Rep.Settled{s, mv, bz}:
+      Rep.Settled{Rep.wait(~Led.L(mach, d), s, w, False{}), mv, bz}
+    case Some{Some{Request{+i, +time, +q}}} Rep.Settled{+s, mv, bz}:
+      +a = Entry.hash(~mach, Ledgers.Entry.Ask{i, time, q})
+      +c = Ask.line(~mach, a, q)
+      Rep.Settled{
+        Rep.pend(
+          ~Led.L(mach, d),
+          Rep.with_ledger(
+            Led.L(mach, d),
+            Rep.wait(~Led.L(mach, d), s, w, False{}),
+            Led.add(~mach, ~d, Rep.ledger(Led.L(mach, d), s), Ledgers.Entry.Ask{i, time, q})
+          ),
+          c,
+          a
+        ),
+        mv,
+        c <> bz
+      }
+
+# x after the kernel says what to ask for the line w
+def Rep.asks.one(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), x: Rep.Settled<Led.L(mach, d)>, +w: Ledgers.Line) -> Rep.Settled<Led.L(mach, d)>:
+  match x:
+    case Rep.Settled{+s, mv, bz}:
+      Rep.ask.of(
+        ~mach,
+        ~d,
+        Kernel.follow(mach, d, kern)(Rep.tops(Led.L(mach, d), s))(Rep.ledger(Led.L(mach, d), s))(w),
+        Rep.Settled{s, mv, bz},
+        w
+      )
+
+# x after the kernel says what to ask for each of the lines ws, from the tops
+# of the replica
+def Rep.asks(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), ws: List<&2, Ledgers.Line>, +x: Rep.Settled<Led.L(mach, d)>) -> Rep.Settled<Led.L(mach, d)>:
+  match ws:
+    case Nil{}:
+      x
+    case Con{+w, rest}:
+      Rep.asks(~mach, ~d, ~kern, rest, Rep.asks.one(~mach, ~d, ~kern, x, w))
+
+# every line that has a top among ts
+def Tops.all(ts: Tops()) -> List<&2, Ledgers.Line>:
+  Binds.lines(Crits.Crit.entries(Top, Crits.Dict.crit(Top, ts)))
+
+# A deed
+
+# the replica of x, with the lines it left busy, and the lines that wait for
+# data too when a top moved or it cast: the data it kept may land them
+def Rep.finish(~L: Data, x: Rep.Settled<L>, any: Bool) -> Rep<L>:
+  match x:
+    case Rep.Settled{+s, mv, bz}:
+      Rep.add_busy(
+        ~L,
+        s,
+        List.append(&2, Ledgers.Line, bz, Shared.Bool.when(List<&2, Ledgers.Line>, any, u => Rep.waits(L, s), u => []))
+      )
+
+# the replica of x after it asks what the kernel says for the lines that read
+# a line that moved (watch: when it cannot tell, every line with a top) and
+# for the lines extra
+def Rep.after(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~watch: Tops() -> Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>,
+  x: Rep.Settled<Led.L(mach, d)>,
+  extra: List<&2, Ledgers.Line>
+) -> Rep<Led.L(mach, d)>:
+  match x:
+    case Rep.Settled{+s, +mv, +bz}:
+      +ts = Rep.tops(Led.L(mach, d), s)
+      Rep.finish(
+        ~Led.L(mach, d),
+        Rep.asks(
+          ~mach,
+          ~d,
+          ~kern,
+          List.append(
+            &2,
+            Ledgers.Line,
+            Maybe.default(&2, List<&2, Ledgers.Line>, watch(ts)(Rep.ledger(Led.L(mach, d), s))(mv), Tops.all(ts)),
+            extra
+          ),
+          Rep.Settled{s, mv, bz}
+        ),
+        Bool.not(Bool.and(List.is_empty(&2, Ledgers.Line, mv), List.is_empty(&2, Ledgers.Line, bz)))
+      )
+
+# s after it settles each of the lines cs once, and asks what the kernel says
+def Rep.run(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~watch: Tops() -> Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>,
+  cs: List<&2, Ledgers.Line>,
+  extra: List<&2, Ledgers.Line>,
+  s: Rep<Led.L(mach, d)>
+) -> Rep<Led.L(mach, d)>:
+  Rep.after(~mach, ~d, ~kern, ~watch, Rep.settle(~mach, ~d, ~kern, cs, Rep.Settled{s, [], []}), extra)
+
+# the line where the request of the hash a waits, when m is its entry
+def Ask.lines(~mach: Machine(), +a: Hashes.Hash, m: Maybe<&2, Entry(mach)>) -> List<&2, Ledgers.Line>:
+  match m:
+    case Some{Ledgers.Entry.Ask{i, t, q}}:
+      [Ask.line(~mach, a, q)]
+    case _:
+      []
+
+# the replica of x
+def Rep.Cast.rep(~L: Data, x: Rep.Cast<L>) -> Rep<L>:
+  match x:
+    case Rep.Cast{s, k}:
+      s
+
+# s after it passes to the next round at its top m of the line c
+def Rep.pass.at(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), m: Maybe<&2, Top>, +s: Rep<Led.L(mach, d)>, +c: Ledgers.Line) -> Rep<Led.L(mach, d)>:
+  match m:
+    case None{}:
+      s
+    case Some{Top{+h, t}}:
+      +l = Rep.ledger(Led.L(mach, d), s)
+      +me = Rep.name(Led.L(mach, d), s)
+      +r = {1n+Round.now(~mach, ~d, l, c, h, me): Nat}
+      Rep.Cast.rep(
+        ~Led.L(mach, d),
+        Rep.cast(~mach, ~d, ~kern, s, l, Ledgers.Place{c, h, r}, Ledgers.Cast.Pass{Last.below(~mach, ~d, me, l, c, h, r)})
+      )
+
+# the replica of x after it settles the lines that a deed left busy
+def Rep.work(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~watch: Tops() -> Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>,
+  x: Rep.Work<Led.L(mach, d)>
+) -> Rep<Led.L(mach, d)>:
+  match x:
+    case Rep.Work{s, cs}:
+      Rep.run(~mach, ~d, ~kern, ~watch, cs, [], s)
+
+# s after the deed x: it takes in what x brings, then settles each line that
+# x touches once, and asks what the kernel says. What is left goes to a later
+# deed (Deed.Work)
+def Rep.does(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~watch: Tops() -> Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>,
+  +s: Rep<Led.L(mach, d)>,
+  x: Deed<Machine.Q(mach)>
+) -> Rep<Led.L(mach, d)>:
+  match x:
+    case Deed.Ask{+i, +t, +q}:
+      +es = {[Ledgers.Entry.Ask{i, t, q}]: List<&2, Entry(mach)>}
+      Rep.run(
+        ~mach,
+        ~d,
+        ~kern,
+        ~watch,
+        Entries.lines(~mach, es),
+        [],
+        Rep.pend_all(~mach, ~d, es, Rep.with_ledger(Led.L(mach, d), s, Led.adds(~mach, ~d, es, Rep.ledger(Led.L(mach, d), s))))
+      )
+    case Deed.Take{+es}:
+      +ws = Shared.Bool.when(List<&2, Ledgers.Line>, Entries.data(Machine.Q(mach), es), u => Rep.waits(Led.L(mach, d), s), u => [])
+      Rep.run(
+        ~mach,
+        ~d,
+        ~kern,
+        ~watch,
+        List.append(&2, Ledgers.Line, Entries.lines(~mach, es), ws),
+        ws,
+        Rep.pend_all(~mach, ~d, es, Rep.with_ledger(Led.L(mach, d), s, Led.take(~mach, ~d, ~kern, es, Rep.ledger(Led.L(mach, d), s))))
+      )
+    case Deed.Keep{wss}:
+      +ws = Rep.waits(Led.L(mach, d), s)
+      Rep.run(~mach, ~d, ~kern, ~watch, ws, ws, Rep.with_ledger(Led.L(mach, d), s, Led.keep(~mach, ~d, wss, Rep.ledger(Led.L(mach, d), s))))
+    case Deed.Consent{+a}:
+      Rep.run(
+        ~mach,
+        ~d,
+        ~kern,
+        ~watch,
+        Ask.lines(~mach, a, Led.get(~mach, ~d, Rep.ledger(Led.L(mach, d), s), Ledgers.Name.Ask{a})),
+        [],
+        Rep.consent(~Led.L(mach, d), s, a)
+      )
+    case Deed.Pass{+c}:
+      Rep.run(~mach, ~d, ~kern, ~watch, [c], [], Rep.pass.at(~mach, ~d, ~kern, Tops.get(Rep.tops(Led.L(mach, d), s), c), s, c))
+    case Deed.Drop{ns}:
+      s
+    case Deed.Work{}:
+      Rep.work(~mach, ~d, ~kern, ~watch, Rep.take_busy(~Led.L(mach, d), s))
+
+# The replica, as a kind
+
+# the replica of a machine whose kernel kern asks again only where watch
+# says: Rep, and its operations
+def Rep.kind(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ~watch: Tops() -> Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>
+) -> Replica.Kind(mach, d):
+  (
+    Rep<Led.L(mach, d)>,
+    (
+      n => sd => Rep.empty(~mach, ~d, n, sd),
+      (
+        s => Rep.name(Led.L(mach, d), s),
+        (
+          s => Rep.ledger(Led.L(mach, d), s),
+          (
+            s => x => Rep.does(~mach, ~d, ~kern, ~watch, s, x),
+            (
+              s => a => Rep.consented(Led.L(mach, d), s, a),
+              (
+                s => Rep.seed(Led.L(mach, d), s),
+                (s => r => Rep.count(Led.L(mach, d), s, r), (s => Rep.tops(Led.L(mach, d), s), s => Rep.busy(Led.L(mach, d), s)))
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+
 # a line that has a top among ts is among the lines under its root
 law Tops.under_has:
   for ts: Tops()
