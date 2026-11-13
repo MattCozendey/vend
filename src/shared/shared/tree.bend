@@ -27080,17 +27080,44 @@ def Mst.wf_level(
   ~S: Data,
   ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>,
   f: Nat,
-  -s: S,
+  +s: S,
   +k: List<&2, U32>,
-  -v: List<&2, U32>,
-  -r: Maybe<&2, Hashes.Hash>,
-  -rest: List<&2, Item>,
+  +v: List<&2, U32>,
+  +r: Maybe<&2, Hashes.Hash>,
+  +rest: List<&2, Item>,
   +l: Nat,
   prev: Maybe<&2, Hashes.Hash>,
-  -lo: Maybe<&2, List<&2, U32>>,
-  -hi: Maybe<&2, List<&2, U32>>
+  +lo: Maybe<&2, List<&2, U32>>,
+  +hi: Maybe<&2, List<&2, U32>>
 ) -> {Mst.wf.items(~S, ~fetch, f, s, Item{k, v, r} <> rest, l, prev, lo, hi) == True{}: Bool} -> {Key.level(k) == l: Nat}:
-  ?TODO
+  match f prev:
+    case 0n None{}:
+      e => Shared.Nat.is_eq_sound(
+        Key.level(k),
+        l
+      )(Shared.Bool.and_true_left(Nat.is_eq(Key.level(k), l), Mst.wf.items(~S, ~fetch, 0n, s, rest, l, r, Some{k}, hi))(e))
+    case 0n Some{h}:
+      e => Empty.absurd({Key.level(k) == l: Nat}, Shared.Bool.false_ne_true(e))
+    case 1n+p None{}:
+      e => Shared.Nat.is_eq_sound(
+        Key.level(k),
+        l
+      )(Shared.Bool.and_true_left(Nat.is_eq(Key.level(k), l), Mst.wf.items(~S, ~fetch, 1n+p, s, rest, l, r, Some{k}, hi))(e))
+    case 1n+p Some{h}:
+      e => Shared.Nat.is_eq_sound(
+        Key.level(k),
+        l
+      )(
+        Shared.Bool.and_true_left(
+          Nat.is_eq(Key.level(k), l),
+          Bool.not(List.is_empty(&2, U32, k))
+        )(
+          Shared.Bool.and_true_left(
+            Bool.and(Nat.is_eq(Key.level(k), l), Bool.not(List.is_empty(&2, U32, k))),
+            Mst.wf(~S, ~fetch, 1n+p, s, l, Room{l, lo, Some{k}}, Some{h})
+          )(Shared.Bool.and_true_left(Bool.and(Bool.and(Nat.is_eq(Key.level(k), l), Bool.not(List.is_empty(&2, U32, k))), Mst.wf(~S, ~fetch, 1n+p, s, l, Room{l, lo, Some{k}}, Some{h})), Mst.wf.items(~S, ~fetch, 1n+p, s, rest, l, r, Some{k}, hi))(e))
+        )
+      )
 
 # a test of equality that holds is EQ
 def Cmp.eq_true(c: Cmp) -> {Cmp.is_eq(c) == True{}: Bool} -> {c == EQ{}: Cmp}:
