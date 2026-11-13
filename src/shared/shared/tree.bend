@@ -26767,7 +26767,27 @@ def Mst.wf_part(
   )
     == True{}: Bool
 }:
-  ?TODO
+  match xs:
+    case Nil{}:
+      e => ea =>
+        %Equal.sym(Maybe<&2, List<&2, U32>>, Items.head_key(acc, lo0), lo, ea): {Mst.wf.items(~S, ~fetch, f, s, [], l, prev, _, hi) == True{}: Bool}
+        e
+    case Con{Item{+ik, +iv, +r}, +rest}:
+      +e => ea => Shared.Bool.when_cases(
+        Part,
+        x => {
+          Mst.wf.items(~S, ~fetch, f, s, Part.after(x), l, Part.gap(x), Items.head_key(Part.before(x), lo0), hi) == True{}: Bool
+        },
+        Cmp.is_lt(Key.cmp(ik, k)),
+        u => Mst.part(rest, r, k, Item{ik, iv, r} <> acc),
+        u => Part{acc, prev, Item{ik, iv, r} <> rest},
+        h => Mst.wf_part(~S, ~fetch, f, s, rest, l, r, lo0, Some{ik}, hi, k, Item{ik, iv, r} <> acc)(Mst.wf_rest(~S, ~fetch, f, s, ik, iv, r, rest, l, prev, lo, hi)(e))({==}),
+        h =>
+          %Equal.sym(Maybe<&2, List<&2, U32>>, Items.head_key(acc, lo0), lo, ea): {
+            Mst.wf.items(~S, ~fetch, f, s, Item{ik, iv, r} <> rest, l, prev, _, hi) == True{}: Bool
+          }
+          e
+      )
 
 # a node of another level than k's does not hold k where its part cuts it
 def Mst.hits_false(
