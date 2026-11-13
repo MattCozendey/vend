@@ -52,11 +52,7 @@ def Group.read(x: Trees.Binding) -> Maybe<&2, Group>:
 
 # the groups among the bindings xs
 def Groups.of(xs: List<&2, Trees.Binding>) -> List<&2, Group>:
-  match xs:
-    case Nil{}:
-      []
-    case Con{x, rest}:
-      Shared.Maybe.cons(Group, Group.read(x), Groups.of(rest))
+  Shared.List.filter_map(~Trees.Binding, ~Group, ~Group.read, xs)
 
 # the key of the node n in the graph of members
 def Node.key(n: String) -> List<&2, U32>:

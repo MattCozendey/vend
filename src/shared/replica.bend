@@ -1355,17 +1355,15 @@ def Tops.get(ts: Tops(), c: Ledgers.Line) -> Maybe<&2, Top>:
 def Tops.tip(ts: Tops(), c: Ledgers.Line) -> Maybe<&2, Tip>:
   Maybe.map(&2, Top, Tip, Top.tip, Tops.get(ts, c))
 
+# the line whose key is the key of the entry e
+def Bind.line(e: Crits.Bind<Top>) -> Maybe<&2, Ledgers.Line>:
+  match e:
+    case Crits.Bind{k, v}:
+      Codes.Code.whole.read(~Ledgers.Line, ~Ledgers.Line.code, ~Ledgers.Line.code.read, k)
+
 # the lines whose keys are among the entries es, each once, in order
 def Binds.lines(es: List<&2, Crits.Bind<Top>>) -> List<&2, Ledgers.Line>:
-  match es:
-    case Nil{}:
-      []
-    case Con{Crits.Bind{k, v}, rest}:
-      Shared.Maybe.cons(
-        Ledgers.Line,
-        Codes.Code.whole.read(~Ledgers.Line, ~Ledgers.Line.code, ~Ledgers.Line.code.read, k),
-        Binds.lines(rest)
-      )
+  Shared.List.filter_map(~Crits.Bind<Top>, ~Ledgers.Line, ~Bind.line, es)
 
 # the lines under the root r that have a top among ts: one read of the part of
 # ts whose keys start with the code of r
