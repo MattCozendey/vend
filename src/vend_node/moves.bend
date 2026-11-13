@@ -11,6 +11,7 @@ import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
 import ./types.bend as Types
 
+import ./versions.bend as Versions
 
 # What one more fact does
 # -----------------------
@@ -2769,3 +2770,227 @@ def Alone.run(
         )(hl1)
       )(e)(hl)
 
+# a store is not a branch of it
+def Line.root_ne(+h: Hashes.Hash, +b: String) -> {
+  Ledgers.Line.is_eq(Ledgers.Line{h, None{}}, Ledgers.Line{h, Some{b}}) == False{}: Bool
+}:
+  Lists.Bool.by(
+    x => {x == False{}: Bool},
+    Ledgers.Line.is_eq(Ledgers.Line{h, None{}}, Ledgers.Line{h, Some{b}}),
+    et => Equal.cong(
+      Ledgers.Line,
+      Bool,
+      l => Lines.Line.is_root(l),
+      Ledgers.Line{h, None{}},
+      Ledgers.Line{h, Some{b}},
+      Ledgers.Line.is_eq_sound(Ledgers.Line{h, None{}}, Ledgers.Line{h, Some{b}})(et)
+    ),
+    ef => {==}
+  )
+
+# after the vote, a read of the line may go one slot beyond the slot k
+def Alone.fuel(+s: Facts.Facts(), +name: String, +c: Ledgers.Line, +k: Nat, +pk: Types.Pick) -> {
+  Nat.is_lt(k, Nat.add(Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c), 1n)) == True{}: Bool
+}:
+  Shared.Nat.lt_le(
+    k,
+    Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c),
+    Nat.add(Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c), 1n)
+  )(
+    Shared.Nat.lt_le(k, 1n+k, Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c))(
+      Shared.Nat.lt_succ(k)
+    )(
+      Bound.ge(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c, name, k, pk)(
+        Equal.trans(
+          Bool,
+          List.contains(
+            ~Types.Fact,
+            ~Coded.Fact.is_eq,
+            Facts.Facts.list(Alone.to(s, name, c, k, pk)),
+            Types.Fact.Vote{name, Types.Step.At{c, k}, pk}
+          ),
+          Facts.Facts.has(Alone.to(s, name, c, k, pk), Types.Fact.Vote{name, Types.Step.At{c, k}, pk}),
+          True{},
+          Equal.sym(
+            Bool,
+            Facts.Facts.has(Alone.to(s, name, c, k, pk), Types.Fact.Vote{name, Types.Step.At{c, k}, pk}),
+            List.contains(
+              ~Types.Fact,
+              ~Coded.Fact.is_eq,
+              Facts.Facts.list(Alone.to(s, name, c, k, pk)),
+              Types.Fact.Vote{name, Types.Step.At{c, k}, pk}
+            ),
+            Facts.Facts.has_list(Alone.to(s, name, c, k, pk), Types.Fact.Vote{name, Types.Step.At{c, k}, pk})
+          ),
+          Added.has(s, Types.Fact.Vote{name, Types.Step.At{c, k}, pk})
+        )
+      )
+    )
+  )(Shared.Nat.le_add_first(Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c), 1n))
+
+# the state x has versions, and the version after the versions vs is the
+# pick pk of the slot k
+def Alone.Made(vs: List<&2, Types.Entry>, k: Nat, pk: Types.Pick, x: Maybe<&2, Lines.State>) -> Type:
+  Exists(
+    List<&2, Types.Entry>,
+    vs2 => {
+      Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, x) == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
+    }
+      & {
+        List.get(&2, Types.Entry, vs2, List.length(&2, Types.Entry, vs)) == Some{Types.Entry{pk, k}}: Maybe<&2, Types.Entry>
+      }
+  )
+
+# Line.voted_alone, for a line that goes from the version 0 m, with the
+# versions R of its store
+def Alone.from(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +k: Nat,
+  +g: Maybe<&2, String>,
+  +pk: Types.Pick,
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  m: Maybe<&2, Types.Entry>
+) -> {Lines.Line.rule(R, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>} -> {
+  Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)) == False{}: Bool
+} -> {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool} -> {
+  Lines.Line.from(s, R, c, m) == Some{Lines.State{vs, k}}: Maybe<&2, Lines.State>
+} -> Alone.Made(vs, k, pk, Lines.Line.from(Alone.to(s, name, c, k, pk), R, c, m)):
+  match m:
+    case None{}:
+      er => ed => nc => e => Empty.absurd(
+        Alone.Made(vs, k, pk, None{}),
+        Shared.Maybe.none_ne_some(Lines.State, Lines.State{vs, k}, e)
+      )
+    case Some{+e0}:
+      er => ed => nc => e => (
+        Lines.State.versions(Lines.Line.start(Alone.to(s, name, c, k, pk), R, c, Lines.State{[e0], 1n})),
+        (
+          {==},
+          Alone.run(
+            Lines.Line.bound(Facts.Facts.list(s), c),
+            Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c),
+            s,
+            name,
+            c,
+            vs,
+            k,
+            g,
+            pk,
+            R,
+            Lines.State{[e0], 1n}
+          )(er)(ed)(nc)(
+            Shared.Maybe.some_inj(
+              Lines.State,
+              Lines.Line.start(s, R, c, Lines.State{[e0], 1n}),
+              Lines.State{vs, k},
+              e
+            )
+          )(Alone.fuel(s, name, c, k, pk))
+        )
+      )
+
+# Line.voted_alone, for a branch, once the versions m of its store are known
+def Alone.branch(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +k: Nat,
+  +g: Maybe<&2, String>,
+  +pk: Types.Pick,
+  m: Maybe<&2, List<&2, Types.Entry>>
+) -> {Lines.Rule.after.of(c, vs, m) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>} -> {
+  Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)) == False{}: Bool
+} -> {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool} -> {
+  Lines.Branch.state(s, c, m) == Some{Lines.State{vs, k}}: Maybe<&2, Lines.State>
+} -> Alone.Made(vs, k, pk, Lines.Branch.state(Alone.to(s, name, c, k, pk), c, m)):
+  match m:
+    case None{}:
+      er => ed => nc => e => Empty.absurd(
+        Alone.Made(vs, k, pk, None{}),
+        Shared.Maybe.none_ne_some(Lines.State, Lines.State{vs, k}, e)
+      )
+    case Some{+R}:
+      er => ed => nc => e => Alone.from(s, name, c, vs, k, g, pk, Some{R}, Lines.Branch.first(R, c))(er)(ed)(nc)(e)
+
+# a node that alone decides the next slot of a line, and votes there for a
+# pick whose id made no version of the line, makes the next version: that
+# pick, when it held no vote of its own for the slot
+def Line.voted_alone(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +k: Nat,
+  +g: Maybe<&2, String>,
+  +pk: Types.Pick
+) -> {Lines.Line.state(s, c) == Some{Lines.State{vs, k}}: Maybe<&2, Lines.State>} -> {
+  Lines.Rule.after(s, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>
+} -> {
+  Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)) == False{}: Bool
+} -> {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool} -> Exists(
+  List<&2, Types.Entry>,
+  vs2 => {
+    Lines.Line.versions(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k}, pk}), c)
+      == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
+  }
+    & {
+      List.get(&2, Types.Entry, vs2, List.length(&2, Types.Entry, vs)) == Some{Types.Entry{pk, k}}: Maybe<&2, Types.Entry>
+    }
+):
+  match c:
+    case Ledgers.Line{+h, None{}}:
+      es => er => ed => nc => (
+        %Equal.sym(
+          Maybe<&2, Types.Entry>,
+          Lines.Store.first(Facts.Facts.list(Alone.to(s, name, Ledgers.Line{h, None{}}, k, pk)), h),
+          Lines.Store.first(Facts.Facts.list(s), h),
+          First.same(Delta.Vote{name, Ledgers.Line{h, None{}}, k, pk}, s, h)({==})
+        ): Alone.Made(
+          vs,
+          k,
+          pk,
+          Lines.Line.from(Alone.to(s, name, Ledgers.Line{h, None{}}, k, pk), None{}, Ledgers.Line{h, None{}}, _)
+        )
+        Alone.from(
+          s,
+          name,
+          Ledgers.Line{h, None{}},
+          vs,
+          k,
+          g,
+          pk,
+          None{},
+          Lines.Store.first(Facts.Facts.list(s), h)
+        )(er)(ed)(nc)(es)
+      )
+    case Ledgers.Line{+h, Some{+b}}:
+      es => er => ed => nc => (
+        %Equal.sym(
+          Maybe<&2, Lines.State>,
+          Lines.Store.state(Alone.to(s, name, Ledgers.Line{h, Some{b}}, k, pk), h),
+          Lines.Store.state(s, h),
+          Store.same(Delta.Vote{name, Ledgers.Line{h, Some{b}}, k, pk}, s, h)({==})(
+            %Equal.sym(
+              Bool,
+              Ledgers.Line.is_eq(Ledgers.Line{h, None{}}, Ledgers.Line{h, Some{b}}),
+              False{},
+              Line.root_ne(h, b)
+            ): {Bool.not(_) == True{}: Bool}
+            {==}
+          )
+        ): Alone.Made(
+          vs,
+          k,
+          pk,
+          Lines.Branch.state(
+            Alone.to(s, name, Ledgers.Line{h, Some{b}}, k, pk),
+            Ledgers.Line{h, Some{b}},
+            Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, _)
+          )
+        )
+        Alone.branch(s, name, Ledgers.Line{h, Some{b}}, vs, k, g, pk, Lines.Store.versions(s, h))(er)(ed)(nc)(es)
+      )
