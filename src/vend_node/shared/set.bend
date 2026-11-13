@@ -1,6 +1,7 @@
 import Base
 import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/shared/shared.bend as Shared
+import ../run/set.bend as Checks
 
 # Sets of values
 # --------------
@@ -10,34 +11,13 @@ import ../../shared/shared/shared/shared/shared.bend as Shared
 # entries are a function of the values it holds, so two sets that hold the
 # same values are the same set (ValSet.ext).
 
-# the end e of a fork with rep r, if any, sits under its own key
-def ValSet.ok.end(~A: Data, ~key: A -> List<&2, U32>, r: List<&2, U32>, e: Maybe<&2, A>) -> Bool:
-  match e:
-    case None{}:
-      True{}
-    case Some{v}:
-      Crits.Key.is_eq(r, key(v))
-
-# each value of the map m sits under its own key
-def ValSet.ok(~A: Data, ~key: A -> List<&2, U32>, m: Crits.Crit<A>) -> Bool:
-  match m:
-    case Crits.Crit.Tip{}:
-      True{}
-    case Crits.Crit.Leaf{k, v}:
-      Crits.Key.is_eq(k, key(v))
-    case Crits.Crit.Fork{r, p, e, z, o}:
-      Bool.and(
-        ValSet.ok.end(~A, ~key, r, e),
-        Bool.and(ValSet.ok(~A, ~key, z), ValSet.ok(~A, ~key, o))
-      )
-
 # the proofs that the map m is well formed and checked
 def ValSet.Checked(~A: Data, ~key: A -> List<&2, U32>, m: Crits.Crit<A>) -> Data:
   Sigma<
     &2,
     &2,
     {Crits.Crit.wf(~A, m, 0n) == True{}: Bool},
-    _ => {ValSet.ok(~A, ~key, m) == True{}: Bool}>
+    _ => {Checks.ValSet.ok(~A, ~key, m) == True{}: Bool}>
 
 # a set of values of A, each under its key
 def ValSet(~A: Data, ~key: A -> List<&2, U32>) -> Data:
@@ -69,7 +49,7 @@ def ValSet.checked(
   ~A: Data,
   ~key: A -> List<&2, U32>,
   s: ValSet(~A, ~key)
-) -> {ValSet.ok(~A, ~key, ValSet.crit(~A, ~key, s)) == True{}: Bool}:
+) -> {Checks.ValSet.ok(~A, ~key, ValSet.crit(~A, ~key, s)) == True{}: Bool}:
   match s:
     case Tuple{m, p}:
       (w, hk) = p
@@ -168,7 +148,7 @@ def ValSet.ok_get.end(
   k: List<&2, U32>,
   -v: A
 ) -> {
-  ValSet.ok.end(~A, ~key, r, e) == True{}: Bool
+  Checks.ValSet.ok.end(~A, ~key, r, e) == True{}: Bool
 } -> {
   Crits.Crit.ended(A, r, e, k) == Some{v}: Maybe<&2, A>
 } -> {Crits.Key.is_eq(k, key(v)) == True{}: Bool}:
@@ -191,7 +171,7 @@ def ValSet.ok_get(
   +k: List<&2, U32>,
   -v: A
 ) -> {
-  ValSet.ok(~A, ~key, m) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, m) == True{}: Bool
 } -> {
   Crits.Crit.lookup(A, m, k) == Some{v}: Maybe<&2, A>
 } -> {Crits.Key.is_eq(k, key(v)) == True{}: Bool}:
@@ -221,8 +201,8 @@ def ValSet.ok_get(
           v
         )(
           ValSet.and_fst(
-            ValSet.ok.end(~A, ~key, r, e),
-            Bool.and(ValSet.ok(~A, ~key, z), ValSet.ok(~A, ~key, o))
+            Checks.ValSet.ok.end(~A, ~key, r, e),
+            Bool.and(Checks.ValSet.ok(~A, ~key, z), Checks.ValSet.ok(~A, ~key, o))
           )(hk)
         )(h)
       )(
@@ -234,9 +214,9 @@ def ValSet.ok_get(
           v
         )(
           Shared.Bool.and_second(
-            ValSet.ok.end(~A, ~key, r, e),
-            ValSet.ok(~A, ~key, z),
-            ValSet.ok(~A, ~key, o)
+            Checks.ValSet.ok.end(~A, ~key, r, e),
+            Checks.ValSet.ok(~A, ~key, z),
+            Checks.ValSet.ok(~A, ~key, o)
           )(hk)
         )(h)
       )(
@@ -248,9 +228,9 @@ def ValSet.ok_get(
           v
         )(
           Shared.Bool.and_third(
-            ValSet.ok.end(~A, ~key, r, e),
-            ValSet.ok(~A, ~key, z),
-            ValSet.ok(~A, ~key, o)
+            Checks.ValSet.ok.end(~A, ~key, r, e),
+            Checks.ValSet.ok(~A, ~key, z),
+            Checks.ValSet.ok(~A, ~key, o)
           )(hk)
         )(h)
       )
@@ -265,7 +245,7 @@ def ValSet.add_get.at(
   -v: A,
   b: Bool
 ) -> {
-  ValSet.ok(~A, ~key, m) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, m) == True{}: Bool
 } -> {
   Crits.Key.is_eq(k, key(x)) == b: Bool
 } -> {
@@ -290,7 +270,7 @@ def ValSet.add_get(
 ) -> {
   Crits.Crit.wf(~A, m, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, m) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, m) == True{}: Bool
 } -> {
   Crits.Crit.lookup(A, Crits.Crit.set(~A, m, key(x), x), k) == Some{v}: Maybe<&2, A>
 } -> {Crits.Key.is_eq(k, key(v)) == True{}: Bool}:
@@ -310,13 +290,13 @@ def ValSet.add_ok.end(
 ) -> {
   Crits.Crit.wf(~A, m, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, m) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, m) == True{}: Bool
 } -> Crits.Crit.sub_end(
   A,
   r,
   e,
   Crits.Crit.set(~A, m, key(x), x)
-) -> {ValSet.ok.end(~A, ~key, r, e) == True{}: Bool}:
+) -> {Checks.ValSet.ok.end(~A, ~key, r, e) == True{}: Bool}:
   match e:
     case None{}:
       w => hk => c => {==}
@@ -334,12 +314,12 @@ def ValSet.add_ok.go(
 ) -> {
   Crits.Crit.wf(~A, m, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, m) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, m) == True{}: Bool
 } -> Crits.Crit.sub(
   A,
   n,
   Crits.Crit.set(~A, m, key(x), x)
-) -> {ValSet.ok(~A, ~key, n) == True{}: Bool}:
+) -> {Checks.ValSet.ok(~A, ~key, n) == True{}: Bool}:
   match n:
     case Crits.Crit.Tip{}:
       w => hk => c => {==}
@@ -347,8 +327,8 @@ def ValSet.add_ok.go(
       w => hk => c => ValSet.add_get(~A, ~key, m, x, k, v)(w)(hk)(c)
     case Crits.Crit.Fork{+r, p, +e, +z, +o}:
       +w => +hk => +c => Shared.Bool.and_both(
-        ValSet.ok.end(~A, ~key, r, e),
-        Bool.and(ValSet.ok(~A, ~key, z), ValSet.ok(~A, ~key, o))
+        Checks.ValSet.ok.end(~A, ~key, r, e),
+        Bool.and(Checks.ValSet.ok(~A, ~key, z), Checks.ValSet.ok(~A, ~key, o))
       )(
         ValSet.add_ok.end(
           ~A,
@@ -360,8 +340,8 @@ def ValSet.add_ok.go(
         )(w)(hk)(Crits.Crit.sub.e(A, r, p, e, z, o, Crits.Crit.set(~A, m, key(x), x), c))
       )(
         Shared.Bool.and_both(
-          ValSet.ok(~A, ~key, z),
-          ValSet.ok(~A, ~key, o)
+          Checks.ValSet.ok(~A, ~key, z),
+          Checks.ValSet.ok(~A, ~key, o)
         )(
           ValSet.add_ok.go(
             ~A,
@@ -393,8 +373,8 @@ def ValSet.add_ok(
 ) -> {
   Crits.Crit.wf(~A, m, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, m) == True{}: Bool
-} -> {ValSet.ok(~A, ~key, Crits.Crit.set(~A, m, key(x), x)) == True{}: Bool}:
+  Checks.ValSet.ok(~A, ~key, m) == True{}: Bool
+} -> {Checks.ValSet.ok(~A, ~key, Crits.Crit.set(~A, m, key(x), x)) == True{}: Bool}:
   +w => hk => ValSet.add_ok.go(
     ~A,
     ~key,
@@ -694,7 +674,7 @@ def ValSet.list_go(
   +rest: List<&2, Crits.Bind<A>>,
   +x: A
 ) -> {
-  ValSet.ok(~A, ~key, n) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, n) == True{}: Bool
 } -> {
   List.contains(
     ~A,
@@ -757,9 +737,9 @@ def ValSet.list_go(
           x
         )(
           Shared.Bool.and_third(
-            ValSet.ok.end(~A, ~key, r, None{}),
-            ValSet.ok(~A, ~key, z),
-            ValSet.ok(~A, ~key, o)
+            Checks.ValSet.ok.end(~A, ~key, r, None{}),
+            Checks.ValSet.ok(~A, ~key, z),
+            Checks.ValSet.ok(~A, ~key, o)
           )(hk)
         ): {
           List.contains(
@@ -780,9 +760,9 @@ def ValSet.list_go(
           x
         )(
           Shared.Bool.and_second(
-            ValSet.ok.end(~A, ~key, r, None{}),
-            ValSet.ok(~A, ~key, z),
-            ValSet.ok(~A, ~key, o)
+            Checks.ValSet.ok.end(~A, ~key, r, None{}),
+            Checks.ValSet.ok(~A, ~key, z),
+            Checks.ValSet.ok(~A, ~key, o)
           )(hk)
         )
     case Crits.Crit.Fork{+r, +p, Some{+v}, +z, +o}:
@@ -815,9 +795,9 @@ def ValSet.list_go(
           x
         )(
           Shared.Bool.and_third(
-            ValSet.ok.end(~A, ~key, r, Some{v}),
-            ValSet.ok(~A, ~key, z),
-            ValSet.ok(~A, ~key, o)
+            Checks.ValSet.ok.end(~A, ~key, r, Some{v}),
+            Checks.ValSet.ok(~A, ~key, z),
+            Checks.ValSet.ok(~A, ~key, o)
           )(hk)
         ): {
           List.any.if(
@@ -844,9 +824,9 @@ def ValSet.list_go(
           x
         )(
           Shared.Bool.and_second(
-            ValSet.ok.end(~A, ~key, r, Some{v}),
-            ValSet.ok(~A, ~key, z),
-            ValSet.ok(~A, ~key, o)
+            Checks.ValSet.ok.end(~A, ~key, r, Some{v}),
+            Checks.ValSet.ok(~A, ~key, z),
+            Checks.ValSet.ok(~A, ~key, o)
           )(hk)
         ): {
           List.any.if(
@@ -873,8 +853,8 @@ def ValSet.list_go(
           x
         )(
           ValSet.and_fst(
-            ValSet.ok.end(~A, ~key, r, Some{v}),
-            Bool.and(ValSet.ok(~A, ~key, z), ValSet.ok(~A, ~key, o))
+            Checks.ValSet.ok.end(~A, ~key, r, Some{v}),
+            Bool.and(Checks.ValSet.ok(~A, ~key, z), Checks.ValSet.ok(~A, ~key, o))
           )(hk)
         ): {
           List.any.if(
@@ -1208,7 +1188,7 @@ def ValSet.found(
   +v: A,
   mv: Maybe<&2, A>
 ) -> {
-  ValSet.ok(~A, ~key, q) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, q) == True{}: Bool
 } -> {
   Crits.Crit.lookup(A, q, key(v)) == mv: Maybe<&2, A>
 } -> {
@@ -1260,11 +1240,11 @@ def ValSet.move(
 ) -> {
   Crits.Crit.wf(~A, p, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, p) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, p) == True{}: Bool
 } -> {
   Crits.Crit.wf(~A, q, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, q) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, q) == True{}: Bool
 } -> {
   Shared.Bool.is_eq(ValSet.in(~A, ~key, p, v), ValSet.in(~A, ~key, q, v)) == True{}: Bool
 } -> {
@@ -1295,11 +1275,11 @@ def ValSet.sub_move.end(
 ) -> {
   Crits.Crit.wf(~A, p, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, p) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, p) == True{}: Bool
 } -> {
   Crits.Crit.wf(~A, q, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, q) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, q) == True{}: Bool
 } -> {
   ValSet.fits.end(~A, ~key, e, p, q) == True{}: Bool
 } -> Crits.Crit.sub_end(A, r, e, p) -> Crits.Crit.sub_end(A, r, e, q):
@@ -1336,11 +1316,11 @@ def ValSet.sub_move(
 ) -> {
   Crits.Crit.wf(~A, p, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, p) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, p) == True{}: Bool
 } -> {
   Crits.Crit.wf(~A, q, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, q) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, q) == True{}: Bool
 } -> {
   ValSet.fits(~A, ~key, n, p, q) == True{}: Bool
 } -> Crits.Crit.sub(A, n, p) -> Crits.Crit.sub(A, n, q):
@@ -1453,11 +1433,11 @@ def ValSet.sub_of(
 ) -> {
   Crits.Crit.wf(~A, p, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, p) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, p) == True{}: Bool
 } -> {
   Crits.Crit.wf(~A, q, 0n) == True{}: Bool
 } -> {
-  ValSet.ok(~A, ~key, q) == True{}: Bool
+  Checks.ValSet.ok(~A, ~key, q) == True{}: Bool
 } -> {ValSet.fits(~A, ~key, p, p, q) == True{}: Bool} -> Crits.Crit.sub(A, p, q):
   +wp => hp => wq => hq => f => ValSet.sub_move(
     ~A,
@@ -1487,7 +1467,7 @@ def ValSet.of_eq.same(
         wb
       ): {Tuple{m, Tuple{wa, ha}} == Tuple{m, Tuple{_, hb}}: ValSet(~A, ~key)}
       %Crits.Bool.eq_one(
-        ValSet.ok(~A, ~key, m),
+        Checks.ValSet.ok(~A, ~key, m),
         True{},
         ha,
         hb

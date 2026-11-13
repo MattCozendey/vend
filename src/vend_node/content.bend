@@ -3,7 +3,11 @@ import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/shared.bend as Shared
 import ./facts.bend as Facts
 import ./lines.bend as Lines
-import ./shared/files.bend as Files
+import ./run/content.bend as RContents
+import ./run/facts.bend as RFacts
+import ./run/files.bend as Files
+import ./run/lines.bend as RLines
+import ./shared/files.bend as FileLaws
 import ./shared/format.bend as Formats
 import ./spec.bend as Spec
 import ./types.bend as Types
@@ -14,56 +18,11 @@ import ./types.bend as Types
 # version before held, changed by the request of the version. A move and a
 # merge read a version of another line, so a read goes from line to line, at
 # most as many times as the node holds facts (Facts.fuel).
-
-# Parents
-# -------
-
-# the version that the request r takes from another line, with the pinned
-# version from: where a move points, or what a merge merges
-def Request.takes(r: Spec.Request, from: Nat) -> Maybe<&2, Spec.Point>:
-  match r:
-    case Spec.Request.Move{b, t, v}:
-      Some{Spec.Point{t, v}}
-    case Spec.Request.Merge{f, x}:
-      Some{Spec.Point{f, from}}
-    case _:
-      None{}
-
-# the version that the entry e takes from another line
-def Entry.takes(e: Types.Entry) -> Maybe<&2, Spec.Point>:
-  match e:
-    case Types.Entry{Types.Pick{Types.Ask{i, n, r}, Types.Pins{era, from, base, ours, theirs}}, k}:
-      Request.takes(r, from)
-
-# the versions that version k of the line c, the entry e, comes from
-def Entry.parents(c: Ledgers.Line, k: Nat, e: Types.Entry) -> List<&2, Spec.Point>:
-  match k:
-    case 0n:
-      []
-    case 1n+j:
-      Spec.Point{c, j} <> Shared.Maybe.cons(Spec.Point, Entry.takes(e), [])
-
-# the point m, or version 0 of the line c
-def Point.or(c: Ledgers.Line, m: Maybe<&2, Spec.Point>) -> Spec.Point:
-  match m:
-    case None{}:
-      Spec.Point{c, 0n}
-    case Some{x}:
-      x
-
-# the request r is a merge
-def Request.is_merge(r: Spec.Request) -> Bool:
-  match r:
-    case Spec.Request.Merge{f, x}:
-      True{}
-    case _:
-      False{}
-
-# the base that the entry e pins, when e is a merge
-def Entry.base(e: Types.Entry) -> Maybe<&2, Spec.Point>:
-  match e:
-    case Types.Entry{Types.Pick{Types.Ask{i, n, r}, Types.Pins{era, from, base, ours, theirs}}, k}:
-      Shared.Maybe.when(Spec.Point, Request.is_merge(r), u => base)
+#
+# The code that runs is in run/content.bend: it reads the plain map of the facts
+# and builds no proof. Here each def that reads the facts is that code on the
+# map of a set of facts (Facts.crit), so the laws said of the set are laws of
+# the code that runs.
 
 # Ways
 # ----
@@ -71,22 +30,9 @@ def Entry.base(e: Types.Entry) -> Maybe<&2, Spec.Point>:
 # reached from the one before by going down its line, or by the version that
 # it takes from another line. A node checks the ways; it does not search.
 
-# the point w is reached in one hop from version k of the line c, the entry m
-# if the node holds it: w is that version or an older one of c, or the version
-# that the entry takes
-def Way.hop.of(c: Ledgers.Line, k: Nat, +w: Spec.Point, m: Maybe<&2, Types.Entry>) -> Bool:
-  match m:
-    case None{}:
-      False{}
-    case Some{e}:
-      Bool.or(
-        Bool.and(Ledgers.Line.is_eq(Spec.Point.line(w), c), Nat.is_le(Spec.Point.n(w), k)),
-        Shared.Maybe.is_eq(~Spec.Point, ~Spec.Point.is_eq, Entry.takes(e), Some{w})
-      )
-
 # the point w is reached in one hop from version k of the line c
 def Way.hop(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, w: Spec.Point) -> Bool:
-  Way.hop.of(c, k, w, Lines.Line.at(s, c, k))
+  RContents.Way.hop(Facts.Facts.crit(s), c, k, w)
 
 # ws is a way from version k of the line c back to the point a
 def Way.ok(
@@ -96,11 +42,7 @@ def Way.ok(
   +c: Ledgers.Line,
   +k: Nat
 ) -> Bool:
-  match ws:
-    case Nil{}:
-      Spec.Point.is_eq(a, Spec.Point{c, k})
-    case Con{+w, rest}:
-      Bool.and(Way.hop(s, c, k, w), Way.ok(s, a, rest, Spec.Point.line(w), Spec.Point.n(w)))
+  RContents.Way.ok(Facts.Facts.crit(s), a, ws, c, k)
 
 # the ways ours and theirs lead to the base m, if any, from version j of the
 # line c and from the point t
@@ -113,201 +55,19 @@ def Merge.fits.of(
   theirs: List<&2, Spec.Point>,
   t: Spec.Point
 ) -> Bool:
-  match m:
-    case None{}:
-      True{}
-    case Some{+a}:
-      +t = t
-      Bool.and(Way.ok(s, a, ours, c, j), Way.ok(s, a, theirs, Spec.Point.line(t), Spec.Point.n(t)))
-
-# the ways that the entry e pins to its base
-def Entry.ours(e: Types.Entry) -> List<&2, Spec.Point>:
-  match e:
-    case Types.Entry{Types.Pick{a, Types.Pins{era, from, base, ours, theirs}}, k}:
-      ours
-
-# the ways that the entry e pins from the version that it takes to its base
-def Entry.theirs(e: Types.Entry) -> List<&2, Spec.Point>:
-  match e:
-    case Types.Entry{Types.Pick{a, Types.Pins{era, from, base, ours, theirs}}, k}:
-      theirs
+  RContents.Merge.fits.of(Facts.Facts.crit(s), c, j, m, ours, theirs, t)
 
 # the entry e, version 1+j of the line c, pins a base that both merged
 # versions come from, or none
 def Merge.fits(+s: Facts.Facts(), +c: Ledgers.Line, +j: Nat, +e: Types.Entry) -> Bool:
-  Merge.fits.of(s, c, j, Entry.base(e), Entry.ours(e), Entry.theirs(e), Point.or(c, Entry.takes(e)))
-
-# Merges
-# ------
-
-# acc with the merge m of the path p, when it does not clash
-def Merge.put(
-  acc: Files.Files(),
-  +p: String,
-  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
-) -> Files.Files():
-  match m:
-    case None{}:
-      acc
-    case Some{x}:
-      Files.Files.set(acc, p, x)
-
-# the merge of the path p, from the base b, ours o and theirs t
-def Merge.at(
-  +b: Files.Files(),
-  +o: Files.Files(),
-  +t: Files.Files(),
-  +p: String
-) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  Formats.Format.merge(p, Files.Files.get(b, p), Files.Files.get(o, p), Files.Files.get(t, p))
-
-# acc with the merge of each of the paths ps that does not clash
-def Merge.fold(
-  +b: Files.Files(),
-  +o: Files.Files(),
-  +t: Files.Files(),
-  ps: List<&2, String>,
-  acc: Files.Files()
-) -> Files.Files():
-  match ps:
-    case Nil{}:
-      acc
-    case Con{+p, rest}:
-      Merge.fold(b, o, t, rest, Merge.put(acc, p, Merge.at(b, o, t, p)))
-
-# the paths that b, o or t hold
-def Merge.paths(b: Files.Files(), o: Files.Files(), t: Files.Files()) -> List<&2, String>:
-  List.append(
-    &2,
-    String,
-    Files.Files.paths(b),
-    List.append(&2, String, Files.Files.paths(o), Files.Files.paths(t))
-  )
-
-# the merge of ours o and theirs t, two changes of the base b: each path
-# merged in its format; a path that clashes stays as ours
-def Merge.files(+b: Files.Files(), +o: Files.Files(), +t: Files.Files()) -> Files.Files():
-  Merge.fold(b, o, t, Merge.paths(b, o, t), o)
-
-# the paths among ps that clash
-def Merge.clashes.go(
-  +b: Files.Files(),
-  +o: Files.Files(),
-  +t: Files.Files(),
-  ps: List<&2, String>
-) -> List<&2, String>:
-  match ps:
-    case Nil{}:
-      []
-    case Con{+p, rest}:
-      List.filter.put(
-        String,
-        p,
-        Merge.clashes.go(b, o, t, rest),
-        Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, Merge.at(b, o, t, p))
-      )
-
-# the paths that clash in the merge of o and t from b
-def Merge.clashes(+b: Files.Files(), +o: Files.Files(), +t: Files.Files()) -> List<&2, String>:
-  Merge.clashes.go(b, o, t, Merge.paths(b, o, t))
+  RContents.Merge.fits(Facts.Facts.crit(s), c, j, e)
 
 # The content of a version
 # ------------------------
 
-# the merge of ours and theirs from base, when the merge fits and the node
-# holds the three
-def Merge.of(
-  fits: Bool,
-  ours: Maybe<&2, Files.Files()>,
-  theirs: Maybe<&2, Files.Files()>,
-  base: Maybe<&2, Files.Files()>
-) -> Maybe<&2, Files.Files()>:
-  match fits ours theirs base:
-    case True{} Some{o} Some{t} Some{b}:
-      Some{Merge.files(b, o, t)}
-    case _ _ _ _:
-      None{}
-
-# the content t with the words w at the path p
-def Content.write(
-  +p: String,
-  w: Maybe<&2, List<&2, U32>>,
-  m: Maybe<&2, Files.Files()>
-) -> Maybe<&2, Files.Files()>:
-  match m:
-    case None{}:
-      None{}
-    case Some{t}:
-      Some{Files.Files.set(t, p, w)}
-
-# the content after the request r: prev is the content before, other the
-# content that r takes from another line, base the content of the base of a
-# merge, and fits says that the merge fits
-def Content.apply(
-  r: Spec.Request,
-  fits: Bool,
-  prev: Maybe<&2, Files.Files()>,
-  other: Maybe<&2, Files.Files()>,
-  base: Maybe<&2, Files.Files()>
-) -> Maybe<&2, Files.Files()>:
-  match r:
-    case Spec.Request.Write{b, p, w}:
-      Content.write(p, w, prev)
-    case Spec.Request.Resolve{m, p, w}:
-      Content.write(p, w, prev)
-    case Spec.Request.Move{b, t, v}:
-      other
-    case Spec.Request.Merge{f, x}:
-      Merge.of(fits, prev, other, base)
-    case _:
-      prev
-
-# the content of a version, the entry m if the node holds it
-def Content.next(
-  m: Maybe<&2, Types.Entry>,
-  fits: Bool,
-  prev: Maybe<&2, Files.Files()>,
-  other: Maybe<&2, Files.Files()>,
-  base: Maybe<&2, Files.Files()>
-) -> Maybe<&2, Files.Files()>:
-  match m:
-    case None{}:
-      None{}
-    case Some{e}:
-      Content.apply(Lines.Ask.request(Lines.Entry.ask(e)), fits, prev, other, base)
-
-# the content of version 0, the entry m if the node holds it: nothing yet
-def Content.first(m: Maybe<&2, Types.Entry>) -> Maybe<&2, Files.Files()>:
-  match m:
-    case None{}:
-      None{}
-    case Some{e}:
-      Some{Files.Files.new()}
-
-# the point that the entry m, if any, takes; else version 0 of the line c
-def Entry.taken(c: Ledgers.Line, m: Maybe<&2, Types.Entry>) -> Spec.Point:
-  match m:
-    case None{}:
-      Spec.Point{c, 0n}
-    case Some{e}:
-      Point.or(c, Entry.takes(e))
-
-# the base that the entry m, if any, pins; else version 0 of the line c, which
-# holds nothing
-def Entry.based(c: Ledgers.Line, m: Maybe<&2, Types.Entry>) -> Spec.Point:
-  match m:
-    case None{}:
-      Spec.Point{c, 0n}
-    case Some{e}:
-      Point.or(c, Entry.base(e))
-
 # the merge that the entry m, if any, is fits
 def Entry.fits(+s: Facts.Facts(), +c: Ledgers.Line, +j: Nat, m: Maybe<&2, Types.Entry>) -> Bool:
-  match m:
-    case None{}:
-      False{}
-    case Some{e}:
-      Merge.fits(s, c, j, e)
+  RContents.Entry.fits(Facts.Facts.crit(s), c, j, m)
 
 # the content of version k of the line c in the facts s, read through at most
 # fuel versions (nothing while the node does not hold enough)
@@ -317,34 +77,11 @@ def Content.at(
   +c: Ledgers.Line,
   +k: Nat
 ) -> Maybe<&2, Files.Files()>:
-  match fuel k:
-    case 0n _:
-      None{}
-    case 1n+f 0n:
-      Content.first(Lines.Line.at(s, c, 0n))
-    case 1n+f 1n+j:
-      +e = Lines.Line.at(s, c, 1n+j)
-      +t = Entry.taken(c, e)
-      +a = Entry.based(c, e)
-      Content.next(
-        e,
-        Entry.fits(s, c, j, e),
-        Content.at(f, s, c, j),
-        Content.at(f, s, Spec.Point.line(t), Spec.Point.n(t)),
-        Content.at(f, s, Spec.Point.line(a), Spec.Point.n(a))
-      )
+  RContents.Content.at(fuel, Facts.Facts.crit(s), c, k)
 
 # the content of version k of the line c in the facts s
 def Content.of(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Files.Files()>:
-  Content.at(Facts.Facts.fuel(s), s, c, k)
-
-# the words at the path p of the content m
-def Content.get(m: Maybe<&2, Files.Files()>, +p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  match m:
-    case None{}:
-      None{}
-    case Some{t}:
-      Some{Files.Files.get(t, p)}
+  RContents.Content.of(Facts.Facts.crit(s), c, k)
 
 # the words of the resource at the path p in version k of the line c
 def Content.read(
@@ -353,4 +90,241 @@ def Content.read(
   +k: Nat,
   +p: String
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  Content.get(Content.of(s, c, k), p)
+  RContents.Content.read(Facts.Facts.crit(s), c, k, p)
+
+# Laws of well-formed content
+# ---------------------------
+# The files of a version are a plain map, and the code that runs builds no
+# proof that it is well formed. It is: the content of a version is made from
+# no file by writes, and each write keeps the map well formed. The laws of
+# files (FileLaws) ask for this.
+
+# the content m, if the node holds it, is well formed
+def Content.sound(m: Maybe<&2, Files.Files>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{t}:
+      FileLaws.Files.wf(t)
+
+# a content that is well formed, when it is the files t, gives t well formed
+def Content.sound_some(
+  -m: Maybe<&2, Files.Files>,
+  -t: Files.Files,
+  e: {m == Some{t}: Maybe<&2, Files.Files>}
+) -> {Content.sound(m) == True{}: Bool} -> {FileLaws.Files.wf(t) == True{}: Bool}:
+  %e: {Content.sound(m) == True{}: Bool} -> {Content.sound(_) == True{}: Bool}
+  h => h
+
+# a merge put keeps the files well formed
+def Merge.put_wf(
+  acc: Files.Files,
+  +p: String,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> {
+  FileLaws.Files.wf(acc) == True{}: Bool
+} -> {FileLaws.Files.wf(RContents.Merge.put(acc, p, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => h
+    case Some{x}:
+      h => FileLaws.Files.set_wf(acc, p, x)(h)
+
+# the merge of each of the paths ps keeps the files well formed
+def Merge.fold_wf(
+  +b: Files.Files,
+  +o: Files.Files,
+  +t: Files.Files,
+  ps: List<&2, String>,
+  +acc: Files.Files
+) -> {
+  FileLaws.Files.wf(acc) == True{}: Bool
+} -> {FileLaws.Files.wf(RContents.Merge.fold(b, o, t, ps, acc)) == True{}: Bool}:
+  match ps:
+    case Nil{}:
+      h => h
+    case Con{+p, rest}:
+      h => Merge.fold_wf(
+        b,
+        o,
+        t,
+        rest,
+        RContents.Merge.put(acc, p, RContents.Merge.at(b, o, t, p))
+      )(Merge.put_wf(acc, p, RContents.Merge.at(b, o, t, p))(h))
+
+# the merge of well formed files is well formed
+def Merge.files_wf(
+  +b: Files.Files,
+  +o: Files.Files,
+  +t: Files.Files
+) -> {
+  FileLaws.Files.wf(o) == True{}: Bool
+} -> {FileLaws.Files.wf(RContents.Merge.files(b, o, t)) == True{}: Bool}:
+  h => Merge.fold_wf(b, o, t, RContents.Merge.paths(b, o, t), o)(h)
+
+# the merge of a well formed content is well formed
+def Merge.of_sound(
+  fits: Bool,
+  ours: Maybe<&2, Files.Files>,
+  theirs: Maybe<&2, Files.Files>,
+  base: Maybe<&2, Files.Files>
+) -> {
+  Content.sound(ours) == True{}: Bool
+} -> {Content.sound(RContents.Merge.of(fits, ours, theirs, base)) == True{}: Bool}:
+  match fits ours theirs base:
+    case True{} Some{+o} Some{+t} Some{+b}:
+      h => Merge.files_wf(b, o, t)(h)
+    case True{} Some{o} Some{t} None{}:
+      h => {==}
+    case True{} Some{o} None{} base:
+      h => {==}
+    case True{} None{} theirs base:
+      h => {==}
+    case False{} ours theirs base:
+      h => {==}
+
+# a write keeps a content well formed
+def Content.write_sound(
+  +p: String,
+  w: Maybe<&2, List<&2, U32>>,
+  m: Maybe<&2, Files.Files>
+) -> {
+  Content.sound(m) == True{}: Bool
+} -> {Content.sound(RContents.Content.write(p, w, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => {==}
+    case Some{t}:
+      h => FileLaws.Files.set_wf(t, p, w)(h)
+
+# a request keeps a content well formed
+def Content.apply_sound(
+  r: Spec.Request,
+  fits: Bool,
+  prev: Maybe<&2, Files.Files>,
+  other: Maybe<&2, Files.Files>,
+  base: Maybe<&2, Files.Files>
+) -> {
+  Content.sound(prev) == True{}: Bool
+} -> {
+  Content.sound(other) == True{}: Bool
+} -> {Content.sound(RContents.Content.apply(r, fits, prev, other, base)) == True{}: Bool}:
+  match r:
+    case Spec.Request.Start{os}:
+      hp => ho => hp
+    case Spec.Request.Write{b, p, w}:
+      hp => ho => Content.write_sound(p, w, prev)(hp)
+    case Spec.Request.Merge{f, x}:
+      hp => ho => Merge.of_sound(fits, prev, other, base)(hp)
+    case Spec.Request.Resolve{m, p, w}:
+      hp => ho => Content.write_sound(p, w, prev)(hp)
+    case Spec.Request.Mark{b, m, v}:
+      hp => ho => hp
+    case Spec.Request.Move{b, t, v}:
+      hp => ho => ho
+    case Spec.Request.Group{h, g, ms}:
+      hp => ho => hp
+    case Spec.Request.Own{c, g}:
+      hp => ho => hp
+
+# a version keeps a content well formed
+def Content.next_sound(
+  m: Maybe<&2, Types.Entry>,
+  fits: Bool,
+  prev: Maybe<&2, Files.Files>,
+  other: Maybe<&2, Files.Files>,
+  base: Maybe<&2, Files.Files>
+) -> {
+  Content.sound(prev) == True{}: Bool
+} -> {
+  Content.sound(other) == True{}: Bool
+} -> {Content.sound(RContents.Content.next(m, fits, prev, other, base)) == True{}: Bool}:
+  match m:
+    case None{}:
+      hp => ho => {==}
+    case Some{e}:
+      hp => ho => Content.apply_sound(
+        RLines.Ask.request(RLines.Entry.ask(e)),
+        fits,
+        prev,
+        other,
+        base
+      )(hp)(ho)
+
+# the content of version 0 is well formed
+def Content.first_sound(
+  m: Maybe<&2, Types.Entry>
+) -> {Content.sound(RContents.Content.first(m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{e}:
+      FileLaws.Files.new_wf()
+
+# the content of a version, as the code that runs reads it from a map of
+# facts, is well formed
+def Content.at_sound(
+  +fuel: Nat,
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat
+) -> {Content.sound(RContents.Content.at(fuel, s, c, k)) == True{}: Bool}:
+  match fuel k:
+    case 0n k:
+      {==}
+    case 1n+f 0n:
+      Content.first_sound(RLines.Line.at(s, c, 0n))
+    case 1n+f 1n+j:
+      Content.next_sound(
+        RLines.Line.at(s, c, 1n+j),
+        RContents.Entry.fits(s, c, j, RLines.Line.at(s, c, 1n+j)),
+        RContents.Content.at(f, s, c, j),
+        RContents.Content.at(
+          f,
+          s,
+          Spec.Point.line(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j))),
+          Spec.Point.n(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)))
+        ),
+        RContents.Content.at(
+          f,
+          s,
+          Spec.Point.line(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))),
+          Spec.Point.n(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j)))
+        )
+      )(
+        Content.at_sound(f, s, c, j)
+      )(
+        Content.at_sound(
+          f,
+          s,
+          Spec.Point.line(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j))),
+          Spec.Point.n(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)))
+        )
+      )
+
+# the files that are the content of a version are well formed
+def Content.at_wf(
+  +fuel: Nat,
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  -t: Files.Files
+) -> {
+  Content.at(fuel, s, c, k) == Some{t}: Maybe<&2, Files.Files>
+} -> {FileLaws.Files.wf(t) == True{}: Bool}:
+  e => Content.sound_some(
+    Content.at(fuel, s, c, k),
+    t,
+    e
+  )(Content.at_sound(fuel, Facts.Facts.crit(s), c, k))
+
+# the files that are the content of a version are well formed
+def Content.of_wf(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  -t: Files.Files
+) -> {
+  Content.of(s, c, k) == Some{t}: Maybe<&2, Files.Files>
+} -> {FileLaws.Files.wf(t) == True{}: Bool}:
+  e => Content.at_wf(Facts.Facts.fuel(s), s, c, k, t)(e)

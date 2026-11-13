@@ -7,6 +7,8 @@ import ./facts.bend as Facts
 import ./groups.bend as Groups
 import ./lines.bend as Lines
 import ./mirror.bend as Mirror
+import ./run/answers.bend as RAnswers
+import ./run/lines.bend as RLines
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
 import ./types.bend as Types
@@ -78,7 +80,7 @@ def Reply.names_some(
   m: Maybe<&2, List<&2, String>>,
   -ns: List<&2, String>
 ) -> {
-  Answers.Reply.names(m) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+  RAnswers.Reply.names(m) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
 } -> {m == Some{ns}: Maybe<&2, List<&2, String>>}:
   match m:
     case None{}:
@@ -101,7 +103,7 @@ def Reply.yes_some(
   m: Maybe<&2, Bool>,
   -y: Bool
 ) -> {
-  Answers.Reply.yes(m) == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>
+  RAnswers.Reply.yes(m) == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>
 } -> {m == Some{y}: Maybe<&2, Bool>}:
   match m:
     case None{}:
@@ -124,7 +126,7 @@ def Reply.number_some(
   m: Maybe<&2, Nat>,
   -k: Nat
 ) -> {
-  Answers.Reply.number(m) == Some{Spec.Reply.Number{k}}: Maybe<&2, Spec.Reply>
+  RAnswers.Reply.number(m) == Some{Spec.Reply.Number{k}}: Maybe<&2, Spec.Reply>
 } -> {m == Some{k}: Maybe<&2, Nat>}:
   match m:
     case None{}:
@@ -172,7 +174,7 @@ def Read.some(
   v: Maybe<&2, List<&2, Types.Entry>>,
   -x: A
 ) -> {
-  Answers.Store.read.of(A, m, f, v) == Some{x}: Maybe<&2, A>
+  RAnswers.Store.read.of(A, m, f, v) == Some{x}: Maybe<&2, A>
 } -> Exists(
   List<&2, Types.Entry>,
   R => {
@@ -215,7 +217,7 @@ def Read.at(
   +r: List<&2, Types.Entry>,
   -x: A,
   ev: {v == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
-  e: {Answers.Store.read.of(A, m, f, v) == Some{x}: Maybe<&2, A>}
+  e: {RAnswers.Store.read.of(A, m, f, v) == Some{x}: Maybe<&2, A>}
 ) -> {
   Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool
 }
@@ -227,7 +229,7 @@ def Read.at(
     x,
     Own.cast(
       Maybe<&2, List<&2, Types.Entry>>,
-      w => {Answers.Store.read.of(A, m, f, w) == Some{x}: Maybe<&2, A>},
+      w => {RAnswers.Store.read.of(A, m, f, w) == Some{x}: Maybe<&2, A>},
       v,
       Some{r},
       ev,
@@ -247,13 +249,13 @@ def Read.make(
   ev: {v == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
   lt: {Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool},
   ef: {f(r) == Some{x}: Maybe<&2, A>}
-) -> {Answers.Store.read.of(A, m, f, v) == Some{x}: Maybe<&2, A>}:
+) -> {RAnswers.Store.read.of(A, m, f, v) == Some{x}: Maybe<&2, A>}:
   %Equal.sym(
     Maybe<&2, List<&2, Types.Entry>>,
     v,
     Some{r},
     ev
-  ): {Answers.Store.read.of(A, m, f, _) == Some{x}: Maybe<&2, A>}
+  ): {RAnswers.Store.read.of(A, m, f, _) == Some{x}: Maybe<&2, A>}
   %Equal.sym(
     Bool,
     Nat.is_lt(m, List.length(&2, Types.Entry, r)),
@@ -287,8 +289,8 @@ def Nodes.make(
   Equal.cong(
     Maybe<&2, List<&2, String>>,
     Maybe<&2, Spec.Reply>,
-    Answers.Reply.names,
-    Answers.Store.read.of(
+    RAnswers.Reply.names,
+    RAnswers.Store.read.of(
       List<&2, String>,
       m,
       R2 => Groups.Groups.nodes(R2, h, g, m),
@@ -330,8 +332,8 @@ def Members.make(
   Equal.cong(
     Maybe<&2, List<&2, String>>,
     Maybe<&2, Spec.Reply>,
-    Answers.Reply.names,
-    Answers.Store.read.of(
+    RAnswers.Reply.names,
+    RAnswers.Store.read.of(
       List<&2, String>,
       m,
       R2 => Groups.Groups.members(R2, h, g, m),
@@ -373,8 +375,8 @@ def IsGroup.make(
   Equal.cong(
     Maybe<&2, Bool>,
     Maybe<&2, Spec.Reply>,
-    Answers.Reply.yes,
-    Answers.Store.read.of(
+    RAnswers.Reply.yes,
+    RAnswers.Store.read.of(
       Bool,
       m,
       R2 => Groups.Groups.is_group(R2, h, g, m),
@@ -424,7 +426,7 @@ def Nodes.at(
       ns,
       ev,
       Reply.names_some(
-        Answers.Store.read.of(
+        RAnswers.Store.read.of(
           List<&2, String>,
           m,
           R2 => Groups.Groups.nodes(R2, h, g, m),
@@ -465,7 +467,7 @@ def Members.at(
       ms,
       ev,
       Reply.names_some(
-        Answers.Store.read.of(
+        RAnswers.Store.read.of(
           List<&2, String>,
           m,
           R2 => Groups.Groups.members(R2, h, g, m),
@@ -506,7 +508,7 @@ def IsGroup.at(
       y,
       ev,
       Reply.yes_some(
-        Answers.Store.read.of(
+        RAnswers.Store.read.of(
           Bool,
           m,
           R2 => Groups.Groups.is_group(R2, h, g, m),
@@ -552,7 +554,7 @@ def Members.some(
     ms
   )(
     Reply.names_some(
-      Answers.Store.read.of(
+      RAnswers.Store.read.of(
         List<&2, String>,
         m,
         R2 => Groups.Groups.members(R2, h, g, m),
@@ -597,7 +599,7 @@ def Nodes.some(
     ns
   )(
     Reply.names_some(
-      Answers.Store.read.of(
+      RAnswers.Store.read.of(
         List<&2, String>,
         m,
         R2 => Groups.Groups.nodes(R2, h, g, m),
@@ -642,7 +644,7 @@ def IsGroup.some(
     y
   )(
     Reply.yes_some(
-      Answers.Store.read.of(
+      RAnswers.Store.read.of(
         Bool,
         m,
         R2 => Groups.Groups.is_group(R2, h, g, m),
@@ -1320,7 +1322,7 @@ def Core.group_nodes_only(
 # the two readings of the request of an entry agree
 def Entry.request_same(
   e: Types.Entry
-) -> {Answers.Entry.request(e) == Groups.Entry.request(e): Spec.Request}:
+) -> {RAnswers.Entry.request(e) == Groups.Entry.request(e): Spec.Request}:
   match e:
     case Types.Entry{Types.Pick{Types.Ask{i, q, r}, pins}, k}:
       {==}
@@ -1330,17 +1332,17 @@ def Reply.id_some(
   m: Maybe<&2, Types.Entry>,
   -i: Ledgers.Id
 ) -> {
-  Answers.Reply.id(m) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
+  RAnswers.Reply.id(m) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
 } -> Exists(
   Types.Entry,
-  e => {m == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}
+  e => {m == Some{e}: Maybe<&2, Types.Entry>} & {RLines.Entry.id(e) == i: Ledgers.Id}
 ):
   match m:
     case None{}:
       h => Empty.absurd(
         Exists(
           Types.Entry,
-          e => {None{} == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}
+          e => {None{} == Some{e}: Maybe<&2, Types.Entry>} & {RLines.Entry.id(e) == i: Ledgers.Id}
         ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Id{i}, h)
       )
@@ -1351,13 +1353,13 @@ def Reply.id_some(
           {==},
           Shared.Maybe.some_inj(
             Ledgers.Id,
-            Lines.Entry.id(x),
+            RLines.Entry.id(x),
             i,
             Equal.cong(
               Maybe<&2, Spec.Reply>,
               Maybe<&2, Ledgers.Id>,
               Reply.id_of,
-              Some{Spec.Reply.Id{Lines.Entry.id(x)}},
+              Some{Spec.Reply.Id{RLines.Entry.id(x)}},
               Some{Spec.Reply.Id{i}},
               h
             )
@@ -1380,7 +1382,7 @@ def Version.make(
     s,
     Spec.Question.Version{Ledgers.Line{h, None{}}, j}
   )
-    == Some{Spec.Reply.Id{Lines.Entry.id(e)}}: Maybe<&2, Spec.Reply>
+    == Some{Spec.Reply.Id{RLines.Entry.id(e)}}: Maybe<&2, Spec.Reply>
 }:
   %Equal.sym(
     Maybe<&2, List<&2, Types.Entry>>,
@@ -1388,17 +1390,17 @@ def Version.make(
     Some{r},
     ev
   ): {
-    Answers.Reply.id(
-      Lines.Line.at.of(_, j)
+    RAnswers.Reply.id(
+      RLines.Line.at.of(_, j)
     )
-      == Some{Spec.Reply.Id{Lines.Entry.id(e)}}: Maybe<&2, Spec.Reply>
+      == Some{Spec.Reply.Id{RLines.Entry.id(e)}}: Maybe<&2, Spec.Reply>
   }
   %Equal.sym(
     Maybe<&2, Types.Entry>,
     List.get(&2, Types.Entry, r, j),
     Some{e},
     eg
-  ): {Answers.Reply.id(_) == Some{Spec.Reply.Id{Lines.Entry.id(e)}}: Maybe<&2, Spec.Reply>}
+  ): {RAnswers.Reply.id(_) == Some{Spec.Reply.Id{RLines.Entry.id(e)}}: Maybe<&2, Spec.Reply>}
   {==}
 
 # the reply of the request of the id of entry j of the versions of a store:
@@ -1415,18 +1417,18 @@ def Request.make(
     Lists.List.index(
       ~Types.Entry,
       ~Ledgers.Id,
-      ~Lines.Entry.is_of,
+      ~RLines.Entry.is_of,
       r,
-      Lines.Entry.id(e)
+      RLines.Entry.id(e)
     )
       == Some{j}: Maybe<&2, Nat>
   }
 ) -> {
   Answers.Answer.of(
     s,
-    Spec.Question.Request{Ledgers.Line{h, None{}}, Lines.Entry.id(e)}
+    Spec.Question.Request{Ledgers.Line{h, None{}}, RLines.Entry.id(e)}
   )
-    == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
+    == Some{Spec.Reply.Ask{RAnswers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
 }:
   %Equal.sym(
     Maybe<&2, List<&2, Types.Entry>>,
@@ -1434,21 +1436,21 @@ def Request.make(
     Some{r},
     ev
   ): {
-    Answers.Reply.ask(
-      Answers.Line.find.of(Lines.Entry.id(e), _)
+    RAnswers.Reply.ask(
+      RAnswers.Line.find.of(RLines.Entry.id(e), _)
     )
-      == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
+      == Some{Spec.Reply.Ask{RAnswers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
   }
   %Equal.sym(
     Maybe<&2, Nat>,
-    Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, r, Lines.Entry.id(e)),
+    Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, r, RLines.Entry.id(e)),
     Some{j},
     ei
   ): {
-    Answers.Reply.ask(
-      Answers.Versions.find.at(r, _)
+    RAnswers.Reply.ask(
+      RAnswers.Versions.find.at(r, _)
     )
-      == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
+      == Some{Spec.Reply.Ask{RAnswers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
   }
   %Equal.sym(
     Maybe<&2, Types.Entry>,
@@ -1456,10 +1458,10 @@ def Request.make(
     Some{e},
     eg
   ): {
-    Answers.Reply.ask(
-      Maybe.map(&2, Types.Entry, Answers.Found, e2 => Answers.Found{j, e2}, _)
+    RAnswers.Reply.ask(
+      Maybe.map(&2, Types.Entry, RAnswers.Found, e2 => RAnswers.Found{j, e2}, _)
     )
-      == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
+      == Some{Spec.Reply.Ask{RAnswers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
   }
   {==}
 
@@ -1474,7 +1476,7 @@ def Made.of_at.of(
   +ev: {Lines.Store.versions(s, h) == Some{store}: Maybe<&2, List<&2, Types.Entry>>},
   +eg: {List.get(&2, Types.Entry, store, j) == Some{e}: Maybe<&2, Types.Entry>},
   er: {Groups.Entry.request(e) == r: Spec.Request}
-) -> Mirror.Made(s, Ledgers.Line{h, None{}}, j, Lines.Entry.id(e), r):
+) -> Mirror.Made(s, Ledgers.Line{h, None{}}, j, RLines.Entry.id(e), r):
   (
     Version.make(s, h, store, j, e, ev, eg),
     Own.cast(
@@ -1482,15 +1484,15 @@ def Made.of_at.of(
       w => {
         Answers.Answer.of(
           s,
-          Spec.Question.Request{Ledgers.Line{h, None{}}, Lines.Entry.id(e)}
+          Spec.Question.Request{Ledgers.Line{h, None{}}, RLines.Entry.id(e)}
         )
           == Some{Spec.Reply.Ask{w}}: Maybe<&2, Spec.Reply>
       },
-      Answers.Entry.request(e),
+      RAnswers.Entry.request(e),
       r,
       Equal.trans(
         Spec.Request,
-        Answers.Entry.request(e),
+        RAnswers.Entry.request(e),
         Groups.Entry.request(e),
         r,
         Entry.request_same(e),
@@ -1522,7 +1524,7 @@ def Made.of_at(
 ) -> Exists(Ledgers.Id, i => Mirror.Made(s, Ledgers.Line{h, None{}}, j, i, r)):
   (+e, p) = a
   (eg, er) = p
-  (Lines.Entry.id(e), Made.of_at.of(s, h, store, j, r, e, ev, eg, er))
+  (RLines.Entry.id(e), Made.of_at.of(s, h, store, j, r, e, ev, eg, er))
 
 # At.of_made, for the entry e of the version
 def At.of_made.of(
@@ -1535,7 +1537,7 @@ def At.of_made.of(
   +e: Types.Entry,
   +ev: {Lines.Store.versions(s, h) == Some{store}: Maybe<&2, List<&2, Types.Entry>>},
   +eg: {List.get(&2, Types.Entry, store, j) == Some{e}: Maybe<&2, Types.Entry>},
-  ei: {Lines.Entry.id(e) == i: Ledgers.Id},
+  ei: {RLines.Entry.id(e) == i: Ledgers.Id},
   e2: {
     Answers.Answer.of(
       s,
@@ -1547,29 +1549,29 @@ def At.of_made.of(
   Equal.trans(
     Spec.Request,
     Groups.Entry.request(e),
-    Answers.Entry.request(e),
+    RAnswers.Entry.request(e),
     r,
     Equal.sym(
       Spec.Request,
-      Answers.Entry.request(e),
+      RAnswers.Entry.request(e),
       Groups.Entry.request(e),
       Entry.request_same(e)
     ),
     Shared.Maybe.some_inj(
       Spec.Request,
-      Answers.Entry.request(e),
+      RAnswers.Entry.request(e),
       r,
       Equal.cong(
         Maybe<&2, Spec.Reply>,
         Maybe<&2, Spec.Request>,
         Reply.ask_of,
-        Some{Spec.Reply.Ask{Answers.Entry.request(e)}},
+        Some{Spec.Reply.Ask{RAnswers.Entry.request(e)}},
         Some{Spec.Reply.Ask{r}},
         Own.cast(
           Maybe<&2, Types.Entry>,
           w => {
-            Answers.Reply.ask(
-              Maybe.map(&2, Types.Entry, Answers.Found, e3 => Answers.Found{j, e3}, w)
+            RAnswers.Reply.ask(
+              Maybe.map(&2, Types.Entry, RAnswers.Found, e3 => RAnswers.Found{j, e3}, w)
             )
               == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
           },
@@ -1579,25 +1581,25 @@ def At.of_made.of(
           Own.cast(
             Maybe<&2, Nat>,
             w => {
-              Answers.Reply.ask(
-                Answers.Versions.find.at(store, w)
+              RAnswers.Reply.ask(
+                RAnswers.Versions.find.at(store, w)
               )
                 == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
             },
             Lists.List.index(
               ~Types.Entry,
               ~Ledgers.Id,
-              ~Lines.Entry.is_of,
+              ~RLines.Entry.is_of,
               store,
-              Lines.Entry.id(e)
+              RLines.Entry.id(e)
             ),
             Some{j},
             Versions.Line.versions_index(s, Ledgers.Line{h, None{}}, store, j, e)(ev)(eg),
             Own.cast(
               Maybe<&2, List<&2, Types.Entry>>,
               w => {
-                Answers.Reply.ask(
-                  Answers.Line.find.of(Lines.Entry.id(e), w)
+                RAnswers.Reply.ask(
+                  RAnswers.Line.find.of(RLines.Entry.id(e), w)
                 )
                   == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
               },
@@ -1607,14 +1609,14 @@ def At.of_made.of(
               Own.cast(
                 Ledgers.Id,
                 w => {
-                  Answers.Reply.ask(
-                    Answers.Line.find.of(w, Lines.Store.versions(s, h))
+                  RAnswers.Reply.ask(
+                    RAnswers.Line.find.of(w, Lines.Store.versions(s, h))
                   )
                     == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
                 },
                 i,
-                Lines.Entry.id(e),
-                Equal.sym(Ledgers.Id, Lines.Entry.id(e), i, ei),
+                RLines.Entry.id(e),
+                Equal.sym(Ledgers.Id, RLines.Entry.id(e), i, ei),
                 e2
               )
             )
@@ -1638,7 +1640,7 @@ def At.of_made.open(
     e => {
       List.get(&2, Types.Entry, store, j) == Some{e}: Maybe<&2, Types.Entry>
     }
-      & {Lines.Entry.id(e) == i: Ledgers.Id}
+      & {RLines.Entry.id(e) == i: Ledgers.Id}
   ),
   e2: {
     Answers.Answer.of(
@@ -1680,7 +1682,7 @@ def At.of_made(
       Own.cast(
         Maybe<&2, List<&2, Types.Entry>>,
         w => {
-          Answers.Reply.id(Lines.Line.at.of(w, j)) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
+          RAnswers.Reply.id(RLines.Line.at.of(w, j)) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
         },
         Lines.Store.versions(s, h),
         Some{store},
@@ -2068,17 +2070,17 @@ def Core.groups_decided(
 # ---------------------
 
 # the name of the owner group of a rule, if the rule has one
-def Rule.name_of(m: Maybe<&2, Lines.Rule>) -> Maybe<&2, String>:
+def Rule.name_of(m: Maybe<&2, RLines.Rule>) -> Maybe<&2, String>:
   match m:
-    case Some{Lines.Rule{Some{g}, ns}}:
+    case Some{RLines.Rule{Some{g}, ns}}:
       Some{g}
     case _:
       None{}
 
 # the nodes of a rule
-def Rule.nodes_of(m: Maybe<&2, Lines.Rule>) -> Maybe<&2, List<&2, String>>:
+def Rule.nodes_of(m: Maybe<&2, RLines.Rule>) -> Maybe<&2, List<&2, String>>:
   match m:
-    case Some{Lines.Rule{g, ns}}:
+    case Some{RLines.Rule{g, ns}}:
       Some{ns}
     case _:
       None{}
@@ -2094,18 +2096,18 @@ def Rule.named_some(
   Maybe.map(
     &2,
     List<&2, String>,
-    Lines.Rule,
-    ns2 => Lines.Rule{Some{name}, ns2},
+    RLines.Rule,
+    ns2 => RLines.Rule{Some{name}, ns2},
     n
   )
-    == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+    == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
 } -> {name == g: String}
   & {n == Some{ns}: Maybe<&2, List<&2, String>>}:
   match n:
     case None{}:
       h => Empty.absurd(
         {name == g: String} & {None{} == Some{ns}: Maybe<&2, List<&2, String>>},
-        Shared.Maybe.none_ne_some(Lines.Rule, Lines.Rule{Some{g}, ns}, h)
+        Shared.Maybe.none_ne_some(RLines.Rule, RLines.Rule{Some{g}, ns}, h)
       )
     case Some{x}:
       +h => (
@@ -2114,20 +2116,20 @@ def Rule.named_some(
           name,
           g,
           Equal.cong(
-            Maybe<&2, Lines.Rule>,
+            Maybe<&2, RLines.Rule>,
             Maybe<&2, String>,
             Rule.name_of,
-            Some{Lines.Rule{Some{name}, x}},
-            Some{Lines.Rule{Some{g}, ns}},
+            Some{RLines.Rule{Some{name}, x}},
+            Some{RLines.Rule{Some{g}, ns}},
             h
           )
         ),
         Equal.cong(
-          Maybe<&2, Lines.Rule>,
+          Maybe<&2, RLines.Rule>,
           Maybe<&2, List<&2, String>>,
           Rule.nodes_of,
-          Some{Lines.Rule{Some{name}, x}},
-          Some{Lines.Rule{Some{g}, ns}},
+          Some{RLines.Rule{Some{name}, x}},
+          Some{RLines.Rule{Some{g}, ns}},
           h
         )
       )
@@ -2140,11 +2142,11 @@ def Rule.plain_none(
   -ns: List<&2, String>
 ) -> {
   Shared.Maybe.when(
-    Lines.Rule,
+    RLines.Rule,
     b,
-    u => Some{Lines.Rule{None{}, os}}
+    u => Some{RLines.Rule{None{}, os}}
   )
-    == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+    == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
 } -> Empty:
   match b:
     case True{}:
@@ -2152,16 +2154,16 @@ def Rule.plain_none(
         String,
         g,
         Equal.cong(
-          Maybe<&2, Lines.Rule>,
+          Maybe<&2, RLines.Rule>,
           Maybe<&2, String>,
           Rule.name_of,
-          Some{Lines.Rule{None{}, os}},
-          Some{Lines.Rule{Some{g}, ns}},
+          Some{RLines.Rule{None{}, os}},
+          Some{RLines.Rule{Some{g}, ns}},
           h
         )
       )
     case False{}:
-      h => Shared.Maybe.none_ne_some(Lines.Rule, Lines.Rule{Some{g}, ns}, h)
+      h => Shared.Maybe.none_ne_some(RLines.Rule, RLines.Rule{Some{g}, ns}, h)
 
 # Rule.of_some, for the owner group name
 def Rule.of_some.at(
@@ -2174,18 +2176,18 @@ def Rule.of_some.at(
   p: {
     name == g: String
   }
-    & {Groups.Groups.nodes(r, Lines.Line.root(c), name, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+    & {Groups.Groups.nodes(r, RLines.Line.root(c), name, m) == Some{ns}: Maybe<&2, List<&2, String>>}
 ) -> {
   Some{name} == Some{g}: Maybe<&2, String>
 }
-  & {Groups.Groups.nodes(r, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
+  & {Groups.Groups.nodes(r, RLines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
   (+en, e_n) = p
   (
     Equal.cong(String, Maybe<&2, String>, w => Some{w}, name, g, en),
     Own.cast(
       String,
       w => {
-        Groups.Groups.nodes(r, Lines.Line.root(c), w, m) == Some{ns}: Maybe<&2, List<&2, String>>
+        Groups.Groups.nodes(r, RLines.Line.root(c), w, m) == Some{ns}: Maybe<&2, List<&2, String>>
       },
       name,
       g,
@@ -2204,11 +2206,11 @@ def Rule.of_some(
   -g: String,
   -ns: List<&2, String>
 ) -> {
-  Lines.Rule.of(r, c, m, og) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+  RLines.Rule.of(r, c, m, og) == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
 } -> {
   og == Some{g}: Maybe<&2, String>
 }
-  & {Groups.Groups.nodes(r, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
+  & {Groups.Groups.nodes(r, RLines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
   match og:
     case None{}:
       h => Empty.absurd(
@@ -2218,13 +2220,13 @@ def Rule.of_some(
           & {
             Groups.Groups.nodes(
               r,
-              Lines.Line.root(c),
+              RLines.Line.root(c),
               g,
               m
             )
               == Some{ns}: Maybe<&2, List<&2, String>>
           },
-        Rule.plain_none(Lines.Line.is_root(c), Lines.Store.owners(r), g, ns)(h)
+        Rule.plain_none(RLines.Line.is_root(c), RLines.Store.owners(r), g, ns)(h)
       )
     case Some{+name}:
       h => Rule.of_some.at(
@@ -2234,7 +2236,7 @@ def Rule.of_some(
         name,
         g,
         ns,
-        Rule.named_some(name, Groups.Groups.nodes(r, Lines.Line.root(c), name, m), g, ns)(h)
+        Rule.named_some(name, Groups.Groups.nodes(r, RLines.Line.root(c), name, m), g, ns)(h)
       )
 
 # Rule.at_some, once the era is known to be a version of the store
@@ -2248,13 +2250,13 @@ def Rule.at_some.of(
     Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool
   }
     & {
-      Lines.Rule.of(
+      RLines.Rule.of(
         r,
         c,
         m,
         Groups.Groups.owner(r, c, m)
       )
-        == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+        == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
     }
 ) -> {
   Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool
@@ -2263,7 +2265,7 @@ def Rule.at_some.of(
     {
       Groups.Groups.owner(r, c, m) == Some{g}: Maybe<&2, String>
     }
-      & {Groups.Groups.nodes(r, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+      & {Groups.Groups.nodes(r, RLines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
   ):
   (lt, hr) = p
   (lt, Rule.of_some(r, c, m, Groups.Groups.owner(r, c, m), g, ns)(hr))
@@ -2277,7 +2279,7 @@ def Rule.at_some(
   +m: Nat,
   -g: String,
   -ns: List<&2, String>,
-  h: {Lines.Rule.at(r, c, m) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+  h: {RLines.Rule.at(r, c, m) == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>}
 ) -> {
   Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool
 }
@@ -2285,7 +2287,7 @@ def Rule.at_some(
     {
       Groups.Groups.owner(r, c, m) == Some{g}: Maybe<&2, String>
     }
-      & {Groups.Groups.nodes(r, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+      & {Groups.Groups.nodes(r, RLines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
   ):
   Rule.at_some.of(
     r,
@@ -2294,10 +2296,10 @@ def Rule.at_some(
     g,
     ns,
     When.some(
-      Lines.Rule,
+      RLines.Rule,
       Nat.is_lt(m, List.length(&2, Types.Entry, r)),
-      Lines.Rule.of(r, c, m, Groups.Groups.owner(r, c, m)),
-      Lines.Rule{Some{g}, ns},
+      RLines.Rule.of(r, c, m, Groups.Groups.owner(r, c, m)),
+      RLines.Rule{Some{g}, ns},
       h
     )
   )
@@ -2340,7 +2342,7 @@ def Rule.at_take.of(
         & {
           Groups.Groups.nodes(
             List.take(&2, Types.Entry, vs, 1n+j),
-            Lines.Line.root(c),
+            RLines.Line.root(c),
             g,
             m
           )
@@ -2354,7 +2356,7 @@ def Rule.at_take.of(
     {
       Groups.Groups.owner(vs, c, m) == Some{g}: Maybe<&2, String>
     }
-      & {Groups.Groups.nodes(vs, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+      & {Groups.Groups.nodes(vs, RLines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
   ):
   (+lt, q) = p
   (eo, en) = q
@@ -2401,13 +2403,13 @@ def Rule.at_take.of(
       ),
       Equal.trans(
         Maybe<&2, List<&2, String>>,
-        Groups.Groups.nodes(vs, Lines.Line.root(c), g, m),
-        Groups.Groups.nodes(List.take(&2, Types.Entry, vs, 1n+j), Lines.Line.root(c), g, m),
+        Groups.Groups.nodes(vs, RLines.Line.root(c), g, m),
+        Groups.Groups.nodes(List.take(&2, Types.Entry, vs, 1n+j), RLines.Line.root(c), g, m),
         Some{ns},
         Groups.Groups.nodes_take(
           vs,
           List.take(&2, Types.Entry, vs, 1n+j),
-          Lines.Line.root(c),
+          RLines.Line.root(c),
           g,
           m,
           Lists.List.ext_take(
@@ -2439,12 +2441,12 @@ def Rule.at_take(
   -g: String,
   -ns: List<&2, String>,
   h: {
-    Lines.Rule.at(
+    RLines.Rule.at(
       List.take(&2, Types.Entry, vs, 1n+j),
       c,
       m
     )
-      == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+      == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
   }
 ) -> {
   Nat.is_lt(m, List.length(&2, Types.Entry, vs)) == True{}: Bool
@@ -2453,7 +2455,7 @@ def Rule.at_take(
     {
       Groups.Groups.owner(vs, c, m) == Some{g}: Maybe<&2, String>
     }
-      & {Groups.Groups.nodes(vs, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+      & {Groups.Groups.nodes(vs, RLines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
   ):
   Rule.at_take.of(
     vs,
@@ -2533,7 +2535,7 @@ def Before.some(
   mv: Maybe<&2, List<&2, Types.Entry>>,
   -p: List<&2, Types.Entry>
 ) -> {
-  Answers.Line.before.of(j, mv) == Some{p}: Maybe<&2, List<&2, Types.Entry>>
+  RAnswers.Line.before.of(j, mv) == Some{p}: Maybe<&2, List<&2, Types.Entry>>
 } -> Exists(
   List<&2, Types.Entry>,
   ws => {
@@ -2583,15 +2585,15 @@ def Rule.after.of_some(
   +c: Ledgers.Line,
   +p: List<&2, Types.Entry>,
   mv: Maybe<&2, List<&2, Types.Entry>>,
-  -u: Lines.Rule
+  -u: RLines.Rule
 ) -> {
-  Lines.Rule.after.of(c, p, mv) == Some{u}: Maybe<&2, Lines.Rule>
+  RLines.Rule.after.of(c, p, mv) == Some{u}: Maybe<&2, RLines.Rule>
 } -> Exists(
   List<&2, Types.Entry>,
   R => {
     mv == Some{R}: Maybe<&2, List<&2, Types.Entry>>
   }
-    & {Lines.Rule.at(R, c, Lines.Line.era(c, p)) == Some{u}: Maybe<&2, Lines.Rule>}
+    & {RLines.Rule.at(R, c, RLines.Line.era(c, p)) == Some{u}: Maybe<&2, RLines.Rule>}
 ):
   match mv:
     case None{}:
@@ -2601,9 +2603,9 @@ def Rule.after.of_some(
           R => {
             None{} == Some{R}: Maybe<&2, List<&2, Types.Entry>>
           }
-            & {Lines.Rule.at(R, c, Lines.Line.era(c, p)) == Some{u}: Maybe<&2, Lines.Rule>}
+            & {RLines.Rule.at(R, c, RLines.Line.era(c, p)) == Some{u}: Maybe<&2, RLines.Rule>}
         ),
-        Shared.Maybe.none_ne_some(Lines.Rule, u, h)
+        Shared.Maybe.none_ne_some(RLines.Rule, u, h)
       )
     case Some{+R}:
       h => (R, ({==}, h))
@@ -2617,19 +2619,19 @@ def Rule.after_some.branch(
   -g: String,
   -ns: List<&2, String>,
   +m: Nat,
-  em: {Lines.Line.era(Ledgers.Line{h, Some{b}}, prev) == m: Nat},
+  em: {RLines.Line.era(Ledgers.Line{h, Some{b}}, prev) == m: Nat},
   p: Exists(
     List<&2, Types.Entry>,
     R => {
       Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>
     }
       & {
-        Lines.Rule.at(
+        RLines.Rule.at(
           R,
           Ledgers.Line{h, Some{b}},
-          Lines.Line.era(Ledgers.Line{h, Some{b}}, prev)
+          RLines.Line.era(Ledgers.Line{h, Some{b}}, prev)
         )
-          == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+          == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
       }
   )
 ) -> Owned(s, Ledgers.Line{h, Some{b}}, g, ns, m):
@@ -2648,14 +2650,14 @@ def Rule.after_some.branch(
         Own.cast(
           Nat,
           w => {
-            Lines.Rule.at(
+            RLines.Rule.at(
               R,
               Ledgers.Line{h, Some{b}},
               w
             )
-              == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+              == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
           },
-          Lines.Line.era(Ledgers.Line{h, Some{b}}, prev),
+          RLines.Line.era(Ledgers.Line{h, Some{b}}, prev),
           m,
           em,
           ea
@@ -2676,9 +2678,9 @@ def Rule.after_some(
   +vs: List<&2, Types.Entry>,
   +j: Nat
 ) -> {
-  Lines.Rule.after(s, c, p) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+  Lines.Rule.after(s, c, p) == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
 } -> {
-  Lines.Line.era(c, p) == m: Nat
+  RLines.Line.era(c, p) == m: Nat
 } -> {
   Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
 } -> {List.take(&2, Types.Entry, vs, 1n+j) == p: List<&2, Types.Entry>} -> Owned(s, c, g, ns, m):
@@ -2698,12 +2700,12 @@ def Rule.after_some(
             Own.cast(
               List<&2, Types.Entry>,
               w => {
-                Lines.Rule.at(
+                RLines.Rule.at(
                   w,
                   Ledgers.Line{h, None{}},
                   m
                 )
-                  == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+                  == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
               },
               p,
               List.take(&2, Types.Entry, vs, 1n+j),
@@ -2711,14 +2713,14 @@ def Rule.after_some(
               Own.cast(
                 Nat,
                 w => {
-                  Lines.Rule.at(
+                  RLines.Rule.at(
                     p,
                     Ledgers.Line{h, None{}},
                     w
                   )
-                    == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+                    == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
                 },
-                Lines.Line.era(Ledgers.Line{h, None{}}, p),
+                RLines.Line.era(Ledgers.Line{h, None{}}, p),
                 m,
                 em,
                 ea
@@ -2741,7 +2743,7 @@ def Rule.after_some(
           Ledgers.Line{h, Some{b}},
           p,
           Lines.Store.versions(s, h),
-          Lines.Rule{Some{g}, ns}
+          RLines.Rule{Some{g}, ns}
         )(ea)
       )
 
@@ -2755,8 +2757,8 @@ def Rule.for_some.of(
   -ns: List<&2, String>,
   +m: Nat,
   +prev: List<&2, Types.Entry>,
-  ea: {Lines.Rule.after(s, c, prev) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>},
-  em: {Lines.Line.era(c, prev) == m: Nat},
+  ea: {Lines.Rule.after(s, c, prev) == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>},
+  em: {RLines.Line.era(c, prev) == m: Nat},
   p: Exists(
     List<&2, Types.Entry>,
     ws => {
@@ -2786,7 +2788,7 @@ def Rule.for_some(
   -ns: List<&2, String>,
   +m: Nat
 ) -> {
-  Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+  Answers.Rule.for(s, c, k) == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
 } -> {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>} -> Owned(s, c, g, ns, m):
   match k:
     case 0n:
@@ -2796,13 +2798,13 @@ def Rule.for_some(
       Lists.Maybe.by(
         List<&2, Types.Entry>,
         mb => {
-          Answers.Rule.for.of(s, c, mb) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+          Answers.Rule.for.of(s, c, mb) == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
         } -> {
           Maybe.map(
             &2,
             List<&2, Types.Entry>,
             Nat,
-            vs => Lines.Line.era(c, vs),
+            vs => RLines.Line.era(c, vs),
             mb
           )
             == Some{m}: Maybe<&2, Nat>
@@ -2821,7 +2823,7 @@ def Rule.for_some(
           m,
           P,
           h1,
-          Shared.Maybe.some_inj(Nat, Lines.Line.era(c, P), m, h2),
+          Shared.Maybe.some_inj(Nat, RLines.Line.era(c, P), m, h2),
           Before.some(j, Lines.Line.versions(s, c), P)(eb)
         )
       )
@@ -2832,44 +2834,44 @@ def Rule.for_some(
 # a reply of the name g of the owner group of a rule comes from a rule of the
 # owner group g
 def Owner.some(
-  u: Maybe<&2, Lines.Rule>,
+  u: Maybe<&2, RLines.Rule>,
   -g: String
 ) -> {
   Maybe.bind(
     &2,
-    Lines.Rule,
+    RLines.Rule,
     Spec.Reply,
     u,
-    Answers.Rule.owner
+    RAnswers.Rule.owner
   )
     == Some{Spec.Reply.Name{g}}: Maybe<&2, Spec.Reply>
-} -> Exists(List<&2, String>, ns => {u == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}):
+} -> Exists(List<&2, String>, ns => {u == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>}):
   match u:
     case None{}:
       h => Empty.absurd(
         Exists(
           List<&2, String>,
-          ns => {None{} == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+          ns => {None{} == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>}
         ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Name{g}, h)
       )
-    case Some{Lines.Rule{None{}, ns}}:
+    case Some{RLines.Rule{None{}, ns}}:
       h => Empty.absurd(
         Exists(
           List<&2, String>,
           ns2 => {
-            Some{Lines.Rule{None{}, ns}} == Some{Lines.Rule{Some{g}, ns2}}: Maybe<&2, Lines.Rule>
+            Some{RLines.Rule{None{}, ns}} == Some{RLines.Rule{Some{g}, ns2}}: Maybe<&2, RLines.Rule>
           }
         ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Name{g}, h)
       )
-    case Some{Lines.Rule{Some{g2}, +ns}}:
+    case Some{RLines.Rule{Some{g2}, +ns}}:
       h => (
         ns,
         Equal.cong(
           String,
-          Maybe<&2, Lines.Rule>,
-          w => Some{Lines.Rule{Some{w}, ns}},
+          Maybe<&2, RLines.Rule>,
+          w => Some{RLines.Rule{Some{w}, ns}},
           g2,
           g,
           Shared.Maybe.some_inj(
@@ -2891,41 +2893,41 @@ def Owner.some(
 # a reply of the names gs of the nodes of a rule comes from a rule of a named
 # owner group and the nodes gs
 def Group.some(
-  u: Maybe<&2, Lines.Rule>,
+  u: Maybe<&2, RLines.Rule>,
   -gs: List<&2, String>
 ) -> {
   Maybe.bind(
     &2,
-    Lines.Rule,
+    RLines.Rule,
     Spec.Reply,
     u,
-    Answers.Rule.group
+    RAnswers.Rule.group
   )
     == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
-} -> Exists(String, g => {u == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}):
+} -> Exists(String, g => {u == Some{RLines.Rule{Some{g}, gs}}: Maybe<&2, RLines.Rule>}):
   match u:
     case None{}:
       h => Empty.absurd(
-        Exists(String, g => {None{} == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}),
+        Exists(String, g => {None{} == Some{RLines.Rule{Some{g}, gs}}: Maybe<&2, RLines.Rule>}),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{gs}, h)
       )
-    case Some{Lines.Rule{None{}, ns}}:
+    case Some{RLines.Rule{None{}, ns}}:
       h => Empty.absurd(
         Exists(
           String,
           g => {
-            Some{Lines.Rule{None{}, ns}} == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>
+            Some{RLines.Rule{None{}, ns}} == Some{RLines.Rule{Some{g}, gs}}: Maybe<&2, RLines.Rule>
           }
         ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{gs}, h)
       )
-    case Some{Lines.Rule{Some{+g2}, ns}}:
+    case Some{RLines.Rule{Some{+g2}, ns}}:
       h => (
         g2,
         Equal.cong(
           List<&2, String>,
-          Maybe<&2, Lines.Rule>,
-          w => Some{Lines.Rule{Some{g2}, w}},
+          Maybe<&2, RLines.Rule>,
+          w => Some{RLines.Rule{Some{g2}, w}},
           ns,
           gs,
           Shared.Maybe.some_inj(
@@ -3049,7 +3051,7 @@ def Core.owner_decided.rule(
   },
   p: Exists(
     List<&2, String>,
-    ns => {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+    ns => {Answers.Rule.for(s, c, k) == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>}
   )
 ) -> Exists(
   Nat,
@@ -3129,22 +3131,22 @@ def Era.some(
   +s: Facts.Facts(),
   +c: Ledgers.Line,
   k: Nat,
-  -u: Lines.Rule
+  -u: RLines.Rule
 ) -> {
-  Answers.Rule.for(s, c, k) == Some{u}: Maybe<&2, Lines.Rule>
+  Answers.Rule.for(s, c, k) == Some{u}: Maybe<&2, RLines.Rule>
 } -> Exists(Nat, m => {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>}):
   match k:
     case 0n:
       h => Empty.absurd(
         Exists(Nat, m => {None{} == Some{m}: Maybe<&2, Nat>}),
-        Shared.Maybe.none_ne_some(Lines.Rule, u, h)
+        Shared.Maybe.none_ne_some(RLines.Rule, u, h)
       )
     case 1n+j:
       +j = j
       Lists.Maybe.by(
         List<&2, Types.Entry>,
         mb => {
-          Answers.Rule.for.of(s, c, mb) == Some{u}: Maybe<&2, Lines.Rule>
+          Answers.Rule.for.of(s, c, mb) == Some{u}: Maybe<&2, RLines.Rule>
         } -> Exists(
           Nat,
           m => {
@@ -3152,7 +3154,7 @@ def Era.some(
               &2,
               List<&2, Types.Entry>,
               Nat,
-              vs => Lines.Line.era(c, vs),
+              vs => RLines.Line.era(c, vs),
               mb
             )
               == Some{m}: Maybe<&2, Nat>
@@ -3161,9 +3163,9 @@ def Era.some(
         Answers.Line.before(s, c, j),
         eb => h => Empty.absurd(
           Exists(Nat, m => {None{} == Some{m}: Maybe<&2, Nat>}),
-          Shared.Maybe.none_ne_some(Lines.Rule, u, h)
+          Shared.Maybe.none_ne_some(RLines.Rule, u, h)
         ),
-        +P => eb => h => (Lines.Line.era(c, P), {==})
+        +P => eb => h => (RLines.Line.era(c, P), {==})
       )
 
 # Core.group_of_era, from what the store of the line gives at the era
@@ -3174,7 +3176,7 @@ def Core.group_of_era.of(
   +gs: List<&2, String>,
   +g: String,
   +m: Nat,
-  er: {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>},
+  er: {Answers.Rule.for(s, c, k) == Some{RLines.Rule{Some{g}, gs}}: Maybe<&2, RLines.Rule>},
   em: {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>},
   p: Owned(s, c, g, gs, m)
 ) -> Exists(
@@ -3216,18 +3218,18 @@ def Core.group_of_era.of(
       m,
       (
         Equal.cong(
-          Maybe<&2, Lines.Rule>,
+          Maybe<&2, RLines.Rule>,
           Maybe<&2, Spec.Reply>,
-          w => Maybe.bind(&2, Lines.Rule, Spec.Reply, w, Answers.Rule.owner),
+          w => Maybe.bind(&2, RLines.Rule, Spec.Reply, w, RAnswers.Rule.owner),
           Answers.Rule.for(s, c, k),
-          Some{Lines.Rule{Some{g}, gs}},
+          Some{RLines.Rule{Some{g}, gs}},
           er
         ),
         (
           Equal.cong(
             Maybe<&2, Nat>,
             Maybe<&2, Spec.Reply>,
-            Answers.Reply.number,
+            RAnswers.Reply.number,
             Answers.Era.for(s, c, k),
             Some{m},
             em
@@ -3246,7 +3248,7 @@ def Core.group_of_era.at(
   +gs: List<&2, String>,
   +g: String,
   +m: Nat,
-  +er: {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>},
+  +er: {Answers.Rule.for(s, c, k) == Some{RLines.Rule{Some{g}, gs}}: Maybe<&2, RLines.Rule>},
   +em: {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>}
 ) -> Exists(
   String,
@@ -3286,7 +3288,7 @@ def Core.group_of_era.era(
   +k: Nat,
   +gs: List<&2, String>,
   +g: String,
-  +er: {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>},
+  +er: {Answers.Rule.for(s, c, k) == Some{RLines.Rule{Some{g}, gs}}: Maybe<&2, RLines.Rule>},
   p: Exists(Nat, m => {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>})
 ) -> Exists(
   String,
@@ -3327,7 +3329,7 @@ def Core.group_of_era.named(
   +k: Nat,
   +gs: List<&2, String>,
   +g: String,
-  +er: {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}
+  +er: {Answers.Rule.for(s, c, k) == Some{RLines.Rule{Some{g}, gs}}: Maybe<&2, RLines.Rule>}
 ) -> Exists(
   String,
   g2 => Exists(
@@ -3357,7 +3359,7 @@ def Core.group_of_era.named(
       )
   )
 ):
-  Core.group_of_era.era(s, c, k, gs, g, er, Era.some(s, c, k, Lines.Rule{Some{g}, gs})(er))
+  Core.group_of_era.era(s, c, k, gs, g, er, Era.some(s, c, k, RLines.Rule{Some{g}, gs})(er))
 
 # Core.group_of_era, once the rule of the version is known
 def Core.group_of_era.rule(
@@ -3367,7 +3369,7 @@ def Core.group_of_era.rule(
   +gs: List<&2, String>,
   p: Exists(
     String,
-    g => {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}
+    g => {Answers.Rule.for(s, c, k) == Some{RLines.Rule{Some{g}, gs}}: Maybe<&2, RLines.Rule>}
   )
 ) -> Exists(
   String,
@@ -3530,8 +3532,8 @@ def Take.peak_le(
   Nat.is_le(a, b) == True{}: Bool
 } -> {
   Nat.is_le(
-    Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, vs, a)),
-    Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, vs, b))
+    Lists.List.peak(~Types.Entry, ~RLines.Entry.era, List.take(&2, Types.Entry, vs, a)),
+    Lists.List.peak(~Types.Entry, ~RLines.Entry.era, List.take(&2, Types.Entry, vs, b))
   )
     == True{}: Bool
 }:
@@ -3540,15 +3542,15 @@ def Take.peak_le(
       h => {==}
     case Con{x, t} 0n q:
       h => Shared.Nat.le_zero(
-        Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, x <> t, q))
+        Lists.List.peak(~Types.Entry, ~RLines.Entry.era, List.take(&2, Types.Entry, x <> t, q))
       )
     case Con{x, t} 1n+p 0n:
       h => Empty.absurd(
         {
           Nat.is_le(
             Nat.max(
-              Lines.Entry.era(x),
-              Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, t, p))
+              RLines.Entry.era(x),
+              Lists.List.peak(~Types.Entry, ~RLines.Entry.era, List.take(&2, Types.Entry, t, p))
             ),
             0n
           )
@@ -3558,9 +3560,9 @@ def Take.peak_le(
       )
     case Con{x, t} 1n+p 1n+q:
       h => Nat.max_le_right(
-        Lines.Entry.era(x),
-        Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, t, p)),
-        Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, t, q))
+        RLines.Entry.era(x),
+        Lists.List.peak(~Types.Entry, ~RLines.Entry.era, List.take(&2, Types.Entry, t, p)),
+        Lists.List.peak(~Types.Entry, ~RLines.Entry.era, List.take(&2, Types.Entry, t, q))
       )(Take.peak_le(t, p, q)(h))
 
 # the era after the first a versions of a line is at most that after its
@@ -3574,8 +3576,8 @@ def Era.take_le(
   Nat.is_le(a, b) == True{}: Bool
 } -> {
   Nat.is_le(
-    Lines.Line.era(c, List.take(&2, Types.Entry, vs, a)),
-    Lines.Line.era(c, List.take(&2, Types.Entry, vs, b))
+    RLines.Line.era(c, List.take(&2, Types.Entry, vs, a)),
+    RLines.Line.era(c, List.take(&2, Types.Entry, vs, b))
   )
     == True{}: Bool
 }:
@@ -3599,16 +3601,16 @@ def Era.at.if(
     &2,
     List<&2, Types.Entry>,
     Nat,
-    vs => Lines.Line.era(c, vs),
+    vs => RLines.Line.era(c, vs),
     Shared.Maybe.when(List<&2, Types.Entry>, b, u => Some{p})
   )
     == Some{x}: Maybe<&2, Nat>
-} -> {Lines.Line.era(c, p) == x: Nat}:
+} -> {RLines.Line.era(c, p) == x: Nat}:
   match b:
     case True{}:
-      h => Shared.Maybe.some_inj(Nat, Lines.Line.era(c, p), x, h)
+      h => Shared.Maybe.some_inj(Nat, RLines.Line.era(c, p), x, h)
     case False{}:
-      h => Empty.absurd({Lines.Line.era(c, p) == x: Nat}, Shared.Maybe.none_ne_some(Nat, x, h))
+      h => Empty.absurd({RLines.Line.era(c, p) == x: Nat}, Shared.Maybe.none_ne_some(Nat, x, h))
 
 # the era of version 1+i of a line: the line has versions, and it is the era
 # after the first 1+i of them
@@ -3622,8 +3624,8 @@ def Era.at(
     &2,
     List<&2, Types.Entry>,
     Nat,
-    vs => Lines.Line.era(c, vs),
-    Answers.Line.before.of(i, mv)
+    vs => RLines.Line.era(c, vs),
+    RAnswers.Line.before.of(i, mv)
   )
     == Some{x}: Maybe<&2, Nat>
 } -> Exists(
@@ -3631,7 +3633,7 @@ def Era.at(
   ws => {
     mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
   }
-    & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
+    & {RLines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
 ):
   match mv:
     case None{}:
@@ -3641,7 +3643,7 @@ def Era.at(
           ws => {
             None{} == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
           }
-            & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
+            & {RLines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
         ),
         Shared.Maybe.none_ne_some(Nat, x, h)
       )
@@ -3673,14 +3675,14 @@ def Era.grow.of(
     ws => {
       mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
     }
-      & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
+      & {RLines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
   ),
   q: Exists(
     List<&2, Types.Entry>,
     ws => {
       mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
     }
-      & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+j)) == y: Nat}
+      & {RLines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+j)) == y: Nat}
   )
 ) -> {Nat.is_le(x, y) == True{}: Bool}:
   (+vs, p2) = p
@@ -3688,7 +3690,7 @@ def Era.grow.of(
   (ws, q2) = q
   (ew, ey) = q2
   %ex: {Nat.is_le(_, y) == True{}: Bool}
-  %ey: {Nat.is_le(Lines.Line.era(c, List.take(&2, Types.Entry, vs, 1n+i)), _) == True{}: Bool}
+  %ey: {Nat.is_le(RLines.Line.era(c, List.take(&2, Types.Entry, vs, 1n+i)), _) == True{}: Bool}
   %Shared.Maybe.some_inj(
     List<&2, Types.Entry>,
     vs,
@@ -3703,8 +3705,8 @@ def Era.grow.of(
     )
   ): {
     Nat.is_le(
-      Lines.Line.era(c, List.take(&2, Types.Entry, vs, 1n+i)),
-      Lines.Line.era(c, List.take(&2, Types.Entry, _, 1n+j))
+      RLines.Line.era(c, List.take(&2, Types.Entry, vs, 1n+i)),
+      RLines.Line.era(c, List.take(&2, Types.Entry, _, 1n+j))
     )
       == True{}: Bool
   }

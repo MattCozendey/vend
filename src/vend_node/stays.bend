@@ -7,6 +7,8 @@ import ./codes.bend as Coded
 import ./facts.bend as Facts
 import ./groups.bend as Groups
 import ./lines.bend as Lines
+import ./run/facts.bend as RFacts
+import ./run/lines.bend as RLines
 import ./shared/lists.bend as Lists
 import ./types.bend as Types
 import ./versions.bend as Versions
@@ -29,9 +31,9 @@ def Votes.picks_cons(
   +st: Types.Step,
   +pk: Types.Pick
 ) -> {
-  List.contains(~Types.Pick, ~Coded.Pick.is_eq, Lines.Votes.picks(r, st), pk) == True{}: Bool
+  List.contains(~Types.Pick, ~Coded.Pick.is_eq, RLines.Votes.picks(r, st), pk) == True{}: Bool
 } -> {
-  List.contains(~Types.Pick, ~Coded.Pick.is_eq, Lines.Votes.picks(g <> r, st), pk) == True{}: Bool
+  List.contains(~Types.Pick, ~Coded.Pick.is_eq, RLines.Votes.picks(g <> r, st), pk) == True{}: Bool
 }:
   match g:
     case Types.Fact.Ask{a}:
@@ -42,7 +44,7 @@ def Votes.picks_cons(
           List.contains(
             ~Types.Pick,
             ~Coded.Pick.is_eq,
-            List.filter.put(Types.Pick, q, Lines.Votes.picks(r, st), k),
+            List.filter.put(Types.Pick, q, RLines.Votes.picks(r, st), k),
             pk
           )
             == True{}: Bool
@@ -52,7 +54,7 @@ def Votes.picks_cons(
           ~Types.Pick,
           ~Coded.Pick.is_eq,
           q,
-          Lines.Votes.picks(r, st),
+          RLines.Votes.picks(r, st),
           pk
         )(h),
         ef => h
@@ -66,7 +68,7 @@ def Votes.picks_in(
   +pk: Types.Pick
 ) -> {
   List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Vote{v, st, pk}) == True{}: Bool
-} -> {List.contains(~Types.Pick, ~Coded.Pick.is_eq, Lines.Votes.picks(fs, st), pk) == True{}: Bool}:
+} -> {List.contains(~Types.Pick, ~Coded.Pick.is_eq, RLines.Votes.picks(fs, st), pk) == True{}: Bool}:
   match fs:
     case Nil{}:
       h => h
@@ -79,7 +81,7 @@ def Votes.picks_in(
           List.contains(
             ~Types.Pick,
             ~Coded.Pick.is_eq,
-            Lines.Votes.picks(g <> r, st),
+            RLines.Votes.picks(g <> r, st),
             pk
           )
             == True{}: Bool
@@ -89,9 +91,9 @@ def Votes.picks_in(
         Types.Fact.Vote{v, st, pk},
         hin,
         eg => (
-          %Equal.sym(Types.Fact, g, Types.Fact.Vote{v, st, pk}, eg): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, Lines.Votes.picks(_ <> r, st), pk) == True{}: Bool}
-          %Equal.sym(Bool, Coded.Step.is_eq(st, st), True{}, Coded.Step.is_eq_refl(st)): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, List.filter.put(Types.Pick, pk, Lines.Votes.picks(r, st), _), pk) == True{}: Bool}
-          Lists.List.contains_head(~Types.Pick, ~Coded.Pick.is_eq, ~Coded.Pick.laws(), pk, Lines.Votes.picks(r, st))),
+          %Equal.sym(Types.Fact, g, Types.Fact.Vote{v, st, pk}, eg): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, RLines.Votes.picks(_ <> r, st), pk) == True{}: Bool}
+          %Equal.sym(Bool, Coded.Step.is_eq(st, st), True{}, Coded.Step.is_eq_refl(st)): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, List.filter.put(Types.Pick, pk, RLines.Votes.picks(r, st), _), pk) == True{}: Bool}
+          Lists.List.contains_head(~Types.Pick, ~Coded.Pick.is_eq, ~Coded.Pick.laws(), pk, RLines.Votes.picks(r, st))),
         c => Votes.picks_cons(g, r, st, pk)(Votes.picks_in(r, st, v, pk)(c))
       )
 
@@ -110,9 +112,9 @@ def Votes.most_one.of(
     }
       & (
         {
-          Lines.Voting.voted(Lines.Voting{s, st, p})(x) == True{}: Bool
+          RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s), st, p})(x) == True{}: Bool
         }
-          & {Lines.Voting.voted(Lines.Voting{s, st, q})(x) == True{}: Bool}
+          & {RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s), st, q})(x) == True{}: Bool}
       )
   )
 ) -> {p == q: Types.Pick}:
@@ -132,8 +134,8 @@ def Votes.most_one(
 ) -> {
   Facts.Facts.liars(s) == []: List<&2, String>
 } -> {
-  Lines.Voting.most(ds, Lines.Voting{s, st, p}) == True{}: Bool
-} -> {Lines.Voting.most(ds, Lines.Voting{s, st, q}) == True{}: Bool} -> {p == q: Types.Pick}:
+  RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, p}) == True{}: Bool
+} -> {RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, q}) == True{}: Bool} -> {p == q: Types.Pick}:
   hn => mp => mq => Votes.most_one.of(
     s,
     st,
@@ -143,57 +145,79 @@ def Votes.most_one(
     hn,
     Lists.List.most_meet(
       ~String,
-      ~Lines.Voting,
-      ~Lines.Voting,
-      ~Lines.Voting.voted,
-      ~Lines.Voting.voted,
+      ~RLines.Voting,
+      ~RLines.Voting,
+      ~RLines.Voting.voted,
+      ~RLines.Voting.voted,
       ~String.eq,
       ~Texts.String.laws(),
       ds,
-      Lines.Voting{s, st, p},
-      Lines.Voting{s, st, q}
+      RLines.Voting{Facts.Facts.crit(s), st, p},
+      RLines.Voting{Facts.Facts.crit(s), st, q}
     )(mp)(mq)
   )
 
-# the poll g2 is the poll g1 in a wider set
-def Voting.Grown(g1: Lines.Voting, g2: Lines.Voting) -> Data:
+# the poll g2 is the poll g1 in a wider set: the maps of the two polls are
+# the maps of two sets a and b, and b is wider than a
+def Voting.Grown(g1: RLines.Voting, g2: RLines.Voting) -> Data:
   match g1 g2:
-    case Lines.Voting{s, st, pk} Lines.Voting{s2, st2, pk2}:
+    case RLines.Voting{s, st, pk} RLines.Voting{s2, st2, pk2}:
       Sigma<
         &2,
         &2,
-        {Facts.Facts.wider(s, s2) == True{}: Bool},
-        _ => Sigma<&2, &2, {st == st2: Types.Step}, _ => {pk == pk2: Types.Pick}>>
+        Facts.Facts(),
+        a => Sigma<
+          &2,
+          &2,
+          Facts.Facts(),
+          b => Sigma<
+            &2,
+            &2,
+            {Facts.Facts.crit(a) == s: RFacts.Plain()},
+            _ => Sigma<
+              &2,
+              &2,
+              {Facts.Facts.crit(b) == s2: RFacts.Plain()},
+              _ => Sigma<
+                &2,
+                &2,
+                {Facts.Facts.wider(a, b) == True{}: Bool},
+                _ => Sigma<&2, &2, {st == st2: Types.Step}, _ => {pk == pk2: Types.Pick}>>>>>>
 
 # Voting.grown, with the two polls in parts
 def Voting.grown.of(
-  +s: Facts.Facts(),
+  -s: RFacts.Plain(),
   +st: Types.Step,
   +pk: Types.Pick,
-  +s2: Facts.Facts(),
+  -s2: RFacts.Plain(),
   -st2: Types.Step,
   -pk2: Types.Pick,
   +x: String,
-  h: Sigma<
-    &2,
-    &2,
-    {Facts.Facts.wider(s, s2) == True{}: Bool},
-    _ => Sigma<&2, &2, {st == st2: Types.Step}, _ => {pk == pk2: Types.Pick}>>,
-  hv: {Facts.Facts.has(s, Types.Fact.Vote{x, st, pk}) == True{}: Bool}
-) -> {Facts.Facts.has(s2, Types.Fact.Vote{x, st2, pk2}) == True{}: Bool}:
-  (w, es) = h
+  h: Voting.Grown(RLines.Voting{s, st, pk}, RLines.Voting{s2, st2, pk2}),
+  hv: {RFacts.Facts.has(s, Types.Fact.Vote{x, st, pk}) == True{}: Bool}
+) -> {RFacts.Facts.has(s2, Types.Fact.Vote{x, st2, pk2}) == True{}: Bool}:
+  (+a, h1) = h
+  (+b, h2) = h1
+  (ea, h3) = h2
+  (eb, h4) = h3
+  (w, es) = h4
   (e1, e2) = es
-  %e1: {Facts.Facts.has(s2, Types.Fact.Vote{x, _, pk2}) == True{}: Bool}
-  %e2: {Facts.Facts.has(s2, Types.Fact.Vote{x, st, _}) == True{}: Bool}
-  Facts.Facts.wider_has(s, s2, Types.Fact.Vote{x, st, pk})(w)(hv)
+  %e1: {RFacts.Facts.has(s2, Types.Fact.Vote{x, _, pk2}) == True{}: Bool}
+  %e2: {RFacts.Facts.has(s2, Types.Fact.Vote{x, st, _}) == True{}: Bool}
+  %eb: {RFacts.Facts.has(_, Types.Fact.Vote{x, st, pk}) == True{}: Bool}
+  Facts.Facts.wider_has(a, b, Types.Fact.Vote{x, st, pk})(w)((
+      %Equal.sym(RFacts.Plain(), Facts.Facts.crit(a), s, ea): {
+        RFacts.Facts.has(_, Types.Fact.Vote{x, st, pk}) == True{}: Bool
+      }
+      hv))
 
 # a vote that a poll counts, the poll in a wider set counts
-def Voting.grown(g1: Lines.Voting, g2: Lines.Voting) -> Voting.Grown(g1, g2) -> @x:
+def Voting.grown(g1: RLines.Voting, g2: RLines.Voting) -> Voting.Grown(g1, g2) -> @x:
   String -> {
-    Lines.Voting.voted(g1)(x) == True{}: Bool
-  } -> {Lines.Voting.voted(g2)(x) == True{}: Bool}:
+    RLines.Voting.voted(g1)(x) == True{}: Bool
+  } -> {RLines.Voting.voted(g2)(x) == True{}: Bool}:
   match g1 g2:
-    case Lines.Voting{+s, +st, +pk} Lines.Voting{+s2, +st2, +pk2}:
+    case RLines.Voting{s, +st, +pk} RLines.Voting{s2, st2, pk2}:
       h => +x => hv => Voting.grown.of(s, st, pk, s2, st2, pk2, x, h, hv)
 
 # more than half of the nodes voted for a pick in a wider set, when they did in the set
@@ -206,25 +230,25 @@ def Voting.most_stays(
 ) -> {
   Facts.Facts.wider(s, s2) == True{}: Bool
 } -> {
-  Lines.Voting.most(ds, Lines.Voting{s, st, pk}) == True{}: Bool
-} -> {Lines.Voting.most(ds, Lines.Voting{s2, st, pk}) == True{}: Bool}:
+  RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, pk}) == True{}: Bool
+} -> {RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s2), st, pk}) == True{}: Bool}:
   w => m => Lists.Nat.most_mono(
     List.length(&2, String, ds),
-    Lists.List.count(~String, ~Lines.Voting, ~Lines.Voting.voted, ds, Lines.Voting{s, st, pk}),
-    Lists.List.count(~String, ~Lines.Voting, ~Lines.Voting.voted, ds, Lines.Voting{s2, st, pk})
+    Lists.List.count(~String, ~RLines.Voting, ~RLines.Voting.voted, ds, RLines.Voting{Facts.Facts.crit(s), st, pk}),
+    Lists.List.count(~String, ~RLines.Voting, ~RLines.Voting.voted, ds, RLines.Voting{Facts.Facts.crit(s2), st, pk})
   )(
     Lists.List.count_mono(
       ~String,
-      ~Lines.Voting,
-      ~Lines.Voting,
-      ~Lines.Voting.voted,
-      ~Lines.Voting.voted,
+      ~RLines.Voting,
+      ~RLines.Voting,
+      ~RLines.Voting.voted,
+      ~RLines.Voting.voted,
       ~Voting.Grown,
       ~Voting.grown,
       ds,
-      Lines.Voting{s, st, pk},
-      Lines.Voting{s2, st, pk},
-      (w, ({==}, {==}))
+      RLines.Voting{Facts.Facts.crit(s), st, pk},
+      RLines.Voting{Facts.Facts.crit(s2), st, pk},
+      (s, (s2, ({==}, ({==}, (w, ({==}, {==}))))))
     )
   )(m)
 
@@ -240,11 +264,11 @@ def Rival.beats_all(
 ) -> {
   Facts.Facts.liars(s) == []: List<&2, String>
 } -> {
-  Lines.Voting.most(ds, Lines.Voting{s, st, pk}) == True{}: Bool
-} -> {Lines.Rival.beats(Lines.Rival{Lines.Tally{s, st, ds, pks}, pk}, q) == True{}: Bool}:
+  RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, pk}) == True{}: Bool
+} -> {RLines.Rival.beats(RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, ds, pks}, pk}, q) == True{}: Bool}:
   hn => m => Lists.Bool.by(
     b => {Bool.or(Coded.Pick.is_eq(q, pk), Bool.not(b)) == True{}: Bool},
-    Lines.Voting.most(ds, Lines.Voting{s, st, q}),
+    RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, q}),
     et => Facts.Case.or_left(Coded.Pick.is_eq(q, pk), Bool.not(True{}))((
         %Votes.most_one(s, st, ds, q, pk)(hn)(et)(m): {Coded.Pick.is_eq(q, _) == True{}: Bool}
         Coded.Pick.is_eq_refl(q))),
@@ -263,14 +287,14 @@ def Rival.holds_all(
 ) -> {
   Facts.Facts.liars(s) == []: List<&2, String>
 } -> {
-  Lines.Voting.most(ds, Lines.Voting{s, st, pk}) == True{}: Bool
+  RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, pk}) == True{}: Bool
 } -> {
   Shared.List.holds(
     ~Types.Pick,
-    ~Lines.Rival,
-    ~Lines.Rival.beats,
+    ~RLines.Rival,
+    ~RLines.Rival.beats,
     qs,
-    Lines.Rival{Lines.Tally{s, st, ds, pks}, pk}
+    RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, ds, pks}, pk}
   )
     == True{}: Bool
 }:
@@ -279,7 +303,7 @@ def Rival.holds_all(
       hn => m => {==}
     case Con{+q, +r}:
       +hn => +m => (
-        %Equal.sym(Bool, Lines.Rival.beats(Lines.Rival{Lines.Tally{s, st, ds, pks}, pk}, q), True{}, Rival.beats_all(s, st, ds, pks, pk, q)(hn)(m)): {List.all.if(u => Shared.List.holds(~Types.Pick, ~Lines.Rival, ~Lines.Rival.beats, r, Lines.Rival{Lines.Tally{s, st, ds, pks}, pk}), _) == True{}: Bool}
+        %Equal.sym(Bool, RLines.Rival.beats(RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, ds, pks}, pk}, q), True{}, Rival.beats_all(s, st, ds, pks, pk, q)(hn)(m)): {List.all.if(u => Shared.List.holds(~Types.Pick, ~RLines.Rival, ~RLines.Rival.beats, r, RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, ds, pks}, pk}), _) == True{}: Bool}
         Rival.holds_all(r, s, st, ds, pks, pk)(hn)(m))
 
 # Votes.decided_stays.at, with a node that voted for the pick
@@ -291,25 +315,25 @@ def Votes.decided_stays.of(
   +pk: Types.Pick,
   w: {Facts.Facts.wider(s, s2) == True{}: Bool},
   +h: {Facts.Facts.liars(s2) == []: List<&2, String>},
-  +m2: {Lines.Voting.most(ds, Lines.Voting{s2, st, pk}) == True{}: Bool},
+  +m2: {RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s2), st, pk}) == True{}: Bool},
   r: Exists(
     String,
     x => {
       List.contains(~String, ~String.eq, ds, x) == True{}: Bool
     }
-      & {Lines.Voting.voted(Lines.Voting{s, st, pk})(x) == True{}: Bool}
+      & {RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s), st, pk})(x) == True{}: Bool}
   )
 ) -> {Lines.Votes.decided(s2, st, ds) == Some{pk}: Maybe<&2, Types.Pick>}:
   (+x, w1) = r
   (c, hv) = w1
   Lists.List.pick_one(
     ~Types.Pick,
-    ~Lines.Tally,
-    ~Lines.Tally.wins,
+    ~RLines.Tally,
+    ~RLines.Tally.wins,
     ~Coded.Pick.is_eq,
     ~Coded.Pick.laws(),
-    Lines.Votes.picks(Facts.Facts.list(s2), st),
-    Lines.Tally{s2, st, ds, Lines.Votes.picks(Facts.Facts.list(s2), st)},
+    RLines.Votes.picks(Facts.Facts.list(s2), st),
+    RLines.Tally{Facts.Facts.crit(s2), st, ds, RLines.Votes.picks(Facts.Facts.list(s2), st)},
     pk
   )(
     Votes.picks_in(
@@ -325,23 +349,23 @@ def Votes.decided_stays.of(
     )
   )(
     Shared.Bool.and_both(
-      Lines.Voting.most(ds, Lines.Voting{s2, st, pk}),
+      RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s2), st, pk}),
       Shared.List.holds(
         ~Types.Pick,
-        ~Lines.Rival,
-        ~Lines.Rival.beats,
-        Lines.Votes.picks(Facts.Facts.list(s2), st),
-        Lines.Rival{Lines.Tally{s2, st, ds, Lines.Votes.picks(Facts.Facts.list(s2), st)}, pk}
+        ~RLines.Rival,
+        ~RLines.Rival.beats,
+        RLines.Votes.picks(Facts.Facts.list(s2), st),
+        RLines.Rival{RLines.Tally{Facts.Facts.crit(s2), st, ds, RLines.Votes.picks(Facts.Facts.list(s2), st)}, pk}
       )
     )(
       m2
     )(
       Rival.holds_all(
-        Lines.Votes.picks(Facts.Facts.list(s2), st),
+        RLines.Votes.picks(Facts.Facts.list(s2), st),
         s2,
         st,
         ds,
-        Lines.Votes.picks(Facts.Facts.list(s2), st),
+        RLines.Votes.picks(Facts.Facts.list(s2), st),
         pk
       )(h)(m2)
     )
@@ -356,13 +380,13 @@ def Votes.decided_stays.of(
       h
     )(
       Shared.Bool.and_true_left(
-        Lines.Voting.most(ds, Lines.Voting{s2, st, y}),
+        RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s2), st, y}),
         Shared.List.holds(
           ~Types.Pick,
-          ~Lines.Rival,
-          ~Lines.Rival.beats,
-          Lines.Votes.picks(Facts.Facts.list(s2), st),
-          Lines.Rival{Lines.Tally{s2, st, ds, Lines.Votes.picks(Facts.Facts.list(s2), st)}, y}
+          ~RLines.Rival,
+          ~RLines.Rival.beats,
+          RLines.Votes.picks(Facts.Facts.list(s2), st),
+          RLines.Rival{RLines.Tally{Facts.Facts.crit(s2), st, ds, RLines.Votes.picks(Facts.Facts.list(s2), st)}, y}
         )
       )(ty)
     )(m2)
@@ -377,7 +401,7 @@ def Votes.decided_stays.at(
   +pk: Types.Pick,
   +w: {Facts.Facts.wider(s, s2) == True{}: Bool},
   h: {Facts.Facts.liars(s2) == []: List<&2, String>},
-  +m: {Lines.Voting.most(ds, Lines.Voting{s, st, pk}) == True{}: Bool}
+  +m: {RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, pk}) == True{}: Bool}
 ) -> {Lines.Votes.decided(s2, st, ds) == Some{pk}: Maybe<&2, Types.Pick>}:
   Votes.decided_stays.of(
     s,
@@ -390,16 +414,16 @@ def Votes.decided_stays.at(
     Voting.most_stays(s, s2, st, ds, pk)(w)(m),
     Lists.List.count_pos(
       ~String,
-      ~Lines.Voting,
-      ~Lines.Voting.voted,
+      ~RLines.Voting,
+      ~RLines.Voting.voted,
       ~String.eq,
       ~Texts.String.laws(),
       ds,
-      Lines.Voting{s, st, pk}
+      RLines.Voting{Facts.Facts.crit(s), st, pk}
     )(
       Lists.Nat.most_pos(
         List.length(&2, String, ds),
-        Lists.List.count(~String, ~Lines.Voting, ~Lines.Voting.voted, ds, Lines.Voting{s, st, pk})
+        Lists.List.count(~String, ~RLines.Voting, ~RLines.Voting.voted, ds, RLines.Voting{Facts.Facts.crit(s), st, pk})
       )(m)
     )
   )
@@ -427,21 +451,21 @@ def Votes.decided_stays(
     w,
     h,
     Shared.Bool.and_true_left(
-      Lines.Voting.most(ds, Lines.Voting{s, st, pk}),
+      RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, pk}),
       Shared.List.holds(
         ~Types.Pick,
-        ~Lines.Rival,
-        ~Lines.Rival.beats,
-        Lines.Votes.picks(Facts.Facts.list(s), st),
-        Lines.Rival{Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)}, pk}
+        ~RLines.Rival,
+        ~RLines.Rival.beats,
+        RLines.Votes.picks(Facts.Facts.list(s), st),
+        RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)}, pk}
       )
     )(
       Lists.List.pick_hit(
         ~Types.Pick,
-        ~Lines.Tally,
-        ~Lines.Tally.wins,
-        Lines.Votes.picks(Facts.Facts.list(s), st),
-        Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)},
+        ~RLines.Tally,
+        ~RLines.Tally.wins,
+        RLines.Votes.picks(Facts.Facts.list(s), st),
+        RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)},
         pk
       )(e)
     )
@@ -484,19 +508,19 @@ def Store.owners_append(
 ) -> {
   Nat.is_lt(m, List.length(&2, Types.Entry, store)) == True{}: Bool
 } -> {
-  Lines.Store.owners(
+  RLines.Store.owners(
     store
   )
-    == Lines.Store.owners(List.append(&2, Types.Entry, store, zs)): List<&2, String>
+    == RLines.Store.owners(List.append(&2, Types.Entry, store, zs)): List<&2, String>
 }:
   match store:
     case Nil{}:
       h => Lists.Bool.clash(
         {
-          Lines.Store.owners(
+          RLines.Store.owners(
             []
           )
-            == Lines.Store.owners(List.append(&2, Types.Entry, [], zs)): List<&2, String>
+            == RLines.Store.owners(List.append(&2, Types.Entry, [], zs)): List<&2, String>
         },
         Nat.is_lt(m, 0n),
         Shared.Nat.le_nlt(0n, m)(Shared.Nat.le_zero(m)),
@@ -516,16 +540,16 @@ def Rule.of_append(
 ) -> {
   List.take(&2, Types.Entry, r, 1n+m) == List.take(&2, Types.Entry, a, 1n+m): List<&2, Types.Entry>
 } -> {
-  Lines.Store.owners(r) == Lines.Store.owners(a): List<&2, String>
-} -> {Lines.Rule.of(r, c, m, g) == Lines.Rule.of(a, c, m, g): Maybe<&2, Lines.Rule>}:
+  RLines.Store.owners(r) == RLines.Store.owners(a): List<&2, String>
+} -> {RLines.Rule.of(r, c, m, g) == RLines.Rule.of(a, c, m, g): Maybe<&2, RLines.Rule>}:
   match g:
     case Some{+name}:
       et => eo => (
-        %Groups.Groups.nodes_take(r, a, Lines.Line.root(c), name, m, et): {Maybe.map(&2, List<&2, String>, Lines.Rule, ns => Lines.Rule{Some{name}, ns}, Groups.Groups.nodes(r, Lines.Line.root(c), name, m)) == Maybe.map(&2, List<&2, String>, Lines.Rule, ns => Lines.Rule{Some{name}, ns}, _): Maybe<&2, Lines.Rule>}
+        %Groups.Groups.nodes_take(r, a, RLines.Line.root(c), name, m, et): {Maybe.map(&2, List<&2, String>, RLines.Rule, ns => RLines.Rule{Some{name}, ns}, Groups.Groups.nodes(r, RLines.Line.root(c), name, m)) == Maybe.map(&2, List<&2, String>, RLines.Rule, ns => RLines.Rule{Some{name}, ns}, _): Maybe<&2, RLines.Rule>}
         {==})
     case None{}:
       et => eo => (
-        %eo: {Shared.Maybe.when(Lines.Rule, Lines.Line.is_root(c), u => Some{Lines.Rule{None{}, Lines.Store.owners(r)}}) == Shared.Maybe.when(Lines.Rule, Lines.Line.is_root(c), u => Some{Lines.Rule{None{}, _}}): Maybe<&2, Lines.Rule>}
+        %eo: {Shared.Maybe.when(RLines.Rule, RLines.Line.is_root(c), u => Some{RLines.Rule{None{}, RLines.Store.owners(r)}}) == Shared.Maybe.when(RLines.Rule, RLines.Line.is_root(c), u => Some{RLines.Rule{None{}, _}}): Maybe<&2, RLines.Rule>}
         {==})
 
 # Rule.at_append, with what the first versions and the owners are
@@ -534,7 +558,7 @@ def Rule.at_append.of(
   +zs: List<&2, Types.Entry>,
   +c: Ledgers.Line,
   +m: Nat,
-  -u: Lines.Rule,
+  -u: RLines.Rule,
   el: {
     Nat.is_lt(m, List.length(&2, Types.Entry, List.append(&2, Types.Entry, r, zs))) == True{}: Bool
   },
@@ -553,13 +577,13 @@ def Rule.at_append.of(
       ): List<&2, Types.Entry>
   },
   eo: {
-    Lines.Store.owners(
+    RLines.Store.owners(
       r
     )
-      == Lines.Store.owners(List.append(&2, Types.Entry, r, zs)): List<&2, String>
+      == RLines.Store.owners(List.append(&2, Types.Entry, r, zs)): List<&2, String>
   },
-  e: {Lines.Rule.of(r, c, m, Groups.Groups.owner(r, c, m)) == Some{u}: Maybe<&2, Lines.Rule>}
-) -> {Lines.Rule.at(List.append(&2, Types.Entry, r, zs), c, m) == Some{u}: Maybe<&2, Lines.Rule>}:
+  e: {RLines.Rule.of(r, c, m, Groups.Groups.owner(r, c, m)) == Some{u}: Maybe<&2, RLines.Rule>}
+) -> {RLines.Rule.at(List.append(&2, Types.Entry, r, zs), c, m) == Some{u}: Maybe<&2, RLines.Rule>}:
   %Equal.sym(
     Bool,
     Nat.is_lt(m, List.length(&2, Types.Entry, List.append(&2, Types.Entry, r, zs))),
@@ -567,16 +591,16 @@ def Rule.at_append.of(
     el
   ): {
     Shared.Maybe.when(
-      Lines.Rule,
+      RLines.Rule,
       _,
-      x => Lines.Rule.of(
+      x => RLines.Rule.of(
         List.append(&2, Types.Entry, r, zs),
         c,
         m,
         Groups.Groups.owner(List.append(&2, Types.Entry, r, zs), c, m)
       )
     )
-      == Some{u}: Maybe<&2, Lines.Rule>
+      == Some{u}: Maybe<&2, RLines.Rule>
   }
   %Groups.Groups.owner_take(
     r,
@@ -584,14 +608,14 @@ def Rule.at_append.of(
     c,
     m,
     et
-  ): {Lines.Rule.of(List.append(&2, Types.Entry, r, zs), c, m, _) == Some{u}: Maybe<&2, Lines.Rule>}
+  ): {RLines.Rule.of(List.append(&2, Types.Entry, r, zs), c, m, _) == Some{u}: Maybe<&2, RLines.Rule>}
   %Rule.of_append(
     r,
     List.append(&2, Types.Entry, r, zs),
     c,
     m,
     Groups.Groups.owner(r, c, m)
-  )(et)(eo): {_ == Some{u}: Maybe<&2, Lines.Rule>}
+  )(et)(eo): {_ == Some{u}: Maybe<&2, RLines.Rule>}
   e
 
 # the rule that an era decides stays as the store grows
@@ -600,20 +624,20 @@ def Rule.at_append(
   +zs: List<&2, Types.Entry>,
   +c: Ledgers.Line,
   +m: Nat,
-  -u: Lines.Rule
+  -u: RLines.Rule
 ) -> {
-  Lines.Rule.at(r, c, m) == Some{u}: Maybe<&2, Lines.Rule>
-} -> {Lines.Rule.at(List.append(&2, Types.Entry, r, zs), c, m) == Some{u}: Maybe<&2, Lines.Rule>}:
+  RLines.Rule.at(r, c, m) == Some{u}: Maybe<&2, RLines.Rule>
+} -> {RLines.Rule.at(List.append(&2, Types.Entry, r, zs), c, m) == Some{u}: Maybe<&2, RLines.Rule>}:
   Lists.Bool.by(
     b => {
       Shared.Maybe.when(
-        Lines.Rule,
+        RLines.Rule,
         b,
-        x => Lines.Rule.of(r, c, m, Groups.Groups.owner(r, c, m))
+        x => RLines.Rule.of(r, c, m, Groups.Groups.owner(r, c, m))
       )
-        == Some{u}: Maybe<&2, Lines.Rule>
+        == Some{u}: Maybe<&2, RLines.Rule>
     } -> {
-      Lines.Rule.at(List.append(&2, Types.Entry, r, zs), c, m) == Some{u}: Maybe<&2, Lines.Rule>
+      RLines.Rule.at(List.append(&2, Types.Entry, r, zs), c, m) == Some{u}: Maybe<&2, RLines.Rule>
     },
     Nat.is_lt(m, List.length(&2, Types.Entry, r)),
     +el => e => Rule.at_append.of(
@@ -642,8 +666,8 @@ def Rule.at_append(
       e
     ),
     ef => e => Empty.absurd(
-      {Lines.Rule.at(List.append(&2, Types.Entry, r, zs), c, m) == Some{u}: Maybe<&2, Lines.Rule>},
-      Shared.Maybe.none_ne_some(Lines.Rule, u, e)
+      {RLines.Rule.at(List.append(&2, Types.Entry, r, zs), c, m) == Some{u}: Maybe<&2, RLines.Rule>},
+      Shared.Maybe.none_ne_some(RLines.Rule, u, e)
     )
   )
 
@@ -653,15 +677,15 @@ def Rule.grows(
   +zs: List<&2, Types.Entry>,
   +c: Ledgers.Line,
   +vs: List<&2, Types.Entry>,
-  -u: Lines.Rule
+  -u: RLines.Rule
 ) -> {
-  Lines.Line.rule(m, c, vs) == Some{u}: Maybe<&2, Lines.Rule>
-} -> {Lines.Line.rule(Store.grow(m, zs), c, vs) == Some{u}: Maybe<&2, Lines.Rule>}:
+  RLines.Line.rule(m, c, vs) == Some{u}: Maybe<&2, RLines.Rule>
+} -> {RLines.Line.rule(Store.grow(m, zs), c, vs) == Some{u}: Maybe<&2, RLines.Rule>}:
   match m:
     case None{}:
       e => e
     case Some{+R}:
-      e => Rule.at_append(R, zs, c, Lines.Line.era(c, vs), u)(e)
+      e => Rule.at_append(R, zs, c, RLines.Line.era(c, vs), u)(e)
 
 # The run
 # -------
@@ -674,37 +698,37 @@ def Step.stays(
   +r: Maybe<&2, List<&2, Types.Entry>>,
   +zs: List<&2, Types.Entry>,
   +c: Ledgers.Line,
-  st: Lines.State,
-  -st1: Lines.State
+  st: RLines.State,
+  -st1: RLines.State
 ) -> {
   Facts.Facts.wider(s, s2) == True{}: Bool
 } -> {
   Facts.Facts.liars(s2) == []: List<&2, String>
 } -> {
-  Lines.Line.step(s, r, c, st) == Some{st1}: Maybe<&2, Lines.State>
-} -> {Lines.Line.step(s2, Store.grow(r, zs), c, st) == Some{st1}: Maybe<&2, Lines.State>}:
+  Lines.Line.step(s, r, c, st) == Some{st1}: Maybe<&2, RLines.State>
+} -> {Lines.Line.step(s2, Store.grow(r, zs), c, st) == Some{st1}: Maybe<&2, RLines.State>}:
   match st:
-    case Lines.State{+vs, +k}:
+    case RLines.State{+vs, +k}:
       w => h => e => Versions.Step.at_by(
         {
           Lines.Line.step(
             s2,
             Store.grow(r, zs),
             c,
-            Lines.State{vs, k}
+            RLines.State{vs, k}
           )
-            == Some{st1}: Maybe<&2, Lines.State>
+            == Some{st1}: Maybe<&2, RLines.State>
         },
         s,
         c,
-        Lines.State{vs, k},
+        RLines.State{vs, k},
         st1,
-        Lines.Line.rule(r, c, vs),
-        Versions.Step.at_inv(s, c, Lines.State{vs, k}, st1, Lines.Line.rule(r, c, vs))(e),
+        RLines.Line.rule(r, c, vs),
+        Versions.Step.at_inv(s, c, RLines.State{vs, k}, st1, RLines.Line.rule(r, c, vs))(e),
         +u => +pk => eu => ed => eb => (
-          %Equal.sym(Maybe<&2, Lines.Rule>, Lines.Line.rule(Store.grow(r, zs), c, vs), Some{u}, Rule.grows(r, zs, c, vs, u)(eu)): {Lines.Line.step.at(s2, c, Lines.State{vs, k}, _) == Some{st1}: Maybe<&2, Lines.State>}
-          %Equal.sym(Maybe<&2, Types.Pick>, Lines.Votes.decided(s2, Types.Step.At{c, k}, Lines.Rule.nodes(u)), Some{pk}, Votes.decided_stays(s, s2, Types.Step.At{c, k}, Lines.Rule.nodes(u), pk)(w)(h)(ed)): {Lines.Line.step.of(Lines.State{vs, k}, _) == Some{st1}: Maybe<&2, Lines.State>}
-          %eb: {Some{Lines.State.put(vs, k, pk)} == Some{_}: Maybe<&2, Lines.State>}
+          %Equal.sym(Maybe<&2, RLines.Rule>, RLines.Line.rule(Store.grow(r, zs), c, vs), Some{u}, Rule.grows(r, zs, c, vs, u)(eu)): {Lines.Line.step.at(s2, c, RLines.State{vs, k}, _) == Some{st1}: Maybe<&2, RLines.State>}
+          %Equal.sym(Maybe<&2, Types.Pick>, Lines.Votes.decided(s2, Types.Step.At{c, k}, RLines.Rule.nodes(u)), Some{pk}, Votes.decided_stays(s, s2, Types.Step.At{c, k}, RLines.Rule.nodes(u), pk)(w)(h)(ed)): {RLines.Line.step.of(RLines.State{vs, k}, _) == Some{st1}: Maybe<&2, RLines.State>}
+          %eb: {Some{RLines.State.put(vs, k, pk)} == Some{_}: Maybe<&2, RLines.State>}
           {==})
       )
 
@@ -714,23 +738,23 @@ def Run.grows(
   +s: Facts.Facts(),
   +r: Maybe<&2, List<&2, Types.Entry>>,
   +c: Ledgers.Line,
-  +st: Lines.State
+  +st: RLines.State
 ) -> Lists.List.Ext(
   Types.Entry,
-  Lines.State.versions(st),
-  Lines.State.versions(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st)))
+  RLines.State.versions(st),
+  RLines.State.versions(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st)))
 ):
   Versions.Run.keeps(
     ~List<&2, Types.Entry>,
     ~Versions.Run.Ext,
     ~Versions.Run.ext_step,
     f,
-    Lines.State.versions(st),
+    RLines.State.versions(st),
     s,
     r,
     c,
     st,
-    Lists.List.ext_refl(Types.Entry, Lines.State.versions(st))
+    Lists.List.ext_refl(Types.Entry, RLines.State.versions(st))
   )
 
 # the versions after a run in a wider set that names no liar, with a store
@@ -743,7 +767,7 @@ def Run.stays(
   +r: Maybe<&2, List<&2, Types.Entry>>,
   +zs: List<&2, Types.Entry>,
   +c: Ledgers.Line,
-  +st: Lines.State
+  +st: RLines.State
 ) -> {
   Facts.Facts.wider(s, s2) == True{}: Bool
 } -> {
@@ -752,8 +776,8 @@ def Run.stays(
   Nat.is_le(f, f2) == True{}: Bool
 } -> Lists.List.Ext(
   Types.Entry,
-  Lines.State.versions(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st))),
-  Lines.State.versions(
+  RLines.State.versions(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st))),
+  RLines.State.versions(
     Lines.Line.run(f2, s2, Store.grow(r, zs), c, st, Lines.Line.step(s2, Store.grow(r, zs), c, st))
   )
 ):
@@ -764,18 +788,18 @@ def Run.stays(
       w => h => l => Empty.absurd(
         Lists.List.Ext(
           Types.Entry,
-          Lines.State.versions(Lines.Line.run(1n+p, s, r, c, st, Lines.Line.step(s, r, c, st))),
-          Lines.State.versions(st)
+          RLines.State.versions(Lines.Line.run(1n+p, s, r, c, st, Lines.Line.step(s, r, c, st))),
+          RLines.State.versions(st)
         ),
         Shared.Bool.false_ne_true(l)
       )
     case 1n+(+p) 1n+(+p2):
       +w => +h => l => Lists.Maybe.by(
-        Lines.State,
+        RLines.State,
         m => Lists.List.Ext(
           Types.Entry,
-          Lines.State.versions(Lines.Line.run(1n+p, s, r, c, st, m)),
-          Lines.State.versions(
+          RLines.State.versions(Lines.Line.run(1n+p, s, r, c, st, m)),
+          RLines.State.versions(
             Lines.Line.run(
               1n+p2,
               s2,
@@ -789,7 +813,7 @@ def Run.stays(
         Lines.Line.step(s, r, c, st),
         en => Run.grows(1n+p2, s2, Store.grow(r, zs), c, st),
         +st1 => e1 => (
-          %Equal.sym(Maybe<&2, Lines.State>, Lines.Line.step(s2, Store.grow(r, zs), c, st), Some{st1}, Step.stays(s, s2, r, zs, c, st, st1)(w)(h)(e1)): Lists.List.Ext(Types.Entry, Lines.State.versions(Lines.Line.run(p, s, r, c, st1, Lines.Line.step(s, r, c, st1))), Lines.State.versions(Lines.Line.run(1n+p2, s2, Store.grow(r, zs), c, st, _)))
+          %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.step(s2, Store.grow(r, zs), c, st), Some{st1}, Step.stays(s, s2, r, zs, c, st, st1)(w)(h)(e1)): Lists.List.Ext(Types.Entry, RLines.State.versions(Lines.Line.run(p, s, r, c, st1, Lines.Line.step(s, r, c, st1))), RLines.State.versions(Lines.Line.run(1n+p2, s2, Store.grow(r, zs), c, st, _)))
           Run.stays(p, p2, s, s2, r, zs, c, st1)(w)(h)(l))
       )
 
@@ -840,7 +864,7 @@ def All.tail(
 def Line.bound_pos(
   fs: List<&2, Types.Fact>,
   +c: Ledgers.Line
-) -> {Nat.is_le(1n, Lines.Line.bound(fs, c)) == True{}: Bool}:
+) -> {Nat.is_le(1n, RLines.Line.bound(fs, c)) == True{}: Bool}:
   match fs:
     case Nil{}:
       {==}
@@ -851,14 +875,14 @@ def Line.bound_pos(
     case Con{Types.Fact.Vote{v, Types.Step.At{+c2, +k}, pk}, +rest}:
       Shared.Nat.le_trans(
         1n,
-        Lines.Line.bound(rest, c),
-        Nat.max(Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), Lines.Line.bound(rest, c))
+        RLines.Line.bound(rest, c),
+        Nat.max(RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), RLines.Line.bound(rest, c))
       )(
         Line.bound_pos(rest, c)
       )(
         Lists.Nat.le_max_right(
-          Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
-          Lines.Line.bound(rest, c)
+          RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
+          RLines.Line.bound(rest, c)
         )
       )
 
@@ -867,16 +891,16 @@ def Line.bound_cons(
   g: Types.Fact,
   +rest: List<&2, Types.Fact>,
   +c: Ledgers.Line
-) -> {Nat.is_le(Lines.Line.bound(rest, c), Lines.Line.bound(g <> rest, c)) == True{}: Bool}:
+) -> {Nat.is_le(RLines.Line.bound(rest, c), RLines.Line.bound(g <> rest, c)) == True{}: Bool}:
   match g:
     case Types.Fact.Ask{a}:
-      Shared.Nat.le_refl(Lines.Line.bound(rest, c))
+      Shared.Nat.le_refl(RLines.Line.bound(rest, c))
     case Types.Fact.Vote{v, Types.Step.Broken{}, pk}:
-      Shared.Nat.le_refl(Lines.Line.bound(rest, c))
+      Shared.Nat.le_refl(RLines.Line.bound(rest, c))
     case Types.Fact.Vote{v, Types.Step.At{+c2, +k}, pk}:
       Lists.Nat.le_max_right(
-        Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
-        Lines.Line.bound(rest, c)
+        RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
+        RLines.Line.bound(rest, c)
       )
 
 # the bound of the slots of a line is above each slot that a vote among fs is for
@@ -894,7 +918,7 @@ def Line.bound_ge(
     Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
   )
     == True{}: Bool
-} -> {Nat.is_le(1n+k, Lines.Line.bound(fs, c)) == True{}: Bool}:
+} -> {Nat.is_le(1n+k, RLines.Line.bound(fs, c)) == True{}: Bool}:
   match fs:
     case Nil{}:
       h => Empty.absurd({Nat.is_le(1n+k, 1n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
@@ -903,19 +927,19 @@ def Line.bound_ge(
         ~Types.Fact,
         ~Coded.Fact.is_eq,
         ~Coded.Fact.laws(),
-        {Nat.is_le(1n+k, Lines.Line.bound(g <> r, c)) == True{}: Bool},
+        {Nat.is_le(1n+k, RLines.Line.bound(g <> r, c)) == True{}: Bool},
         g,
         r,
         Types.Fact.Vote{v, Types.Step.At{c, k}, pk},
         hin,
         eg => (
-          %Equal.sym(Types.Fact, g, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}, eg): {Nat.is_le(1n+k, Lines.Line.bound(_ <> r, c)) == True{}: Bool}
-          %Equal.sym(Bool, Ledgers.Line.is_eq(c, c), True{}, Ledgers.Line.is_eq_refl(c)): {Nat.is_le(1n+k, Nat.max(Lines.Line.bound.at(_, k), Lines.Line.bound(r, c))) == True{}: Bool}
-          Lists.Nat.le_max_left(1n+k, Lines.Line.bound(r, c))),
+          %Equal.sym(Types.Fact, g, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}, eg): {Nat.is_le(1n+k, RLines.Line.bound(_ <> r, c)) == True{}: Bool}
+          %Equal.sym(Bool, Ledgers.Line.is_eq(c, c), True{}, Ledgers.Line.is_eq_refl(c)): {Nat.is_le(1n+k, Nat.max(RLines.Line.bound.at(_, k), RLines.Line.bound(r, c))) == True{}: Bool}
+          Lists.Nat.le_max_left(1n+k, RLines.Line.bound(r, c))),
         cin => Shared.Nat.le_trans(
           1n+k,
-          Lines.Line.bound(r, c),
-          Lines.Line.bound(g <> r, c)
+          RLines.Line.bound(r, c),
+          RLines.Line.bound(g <> r, c)
         )(Line.bound_ge(r, c, v, k, pk)(cin))(Line.bound_cons(g, r, c))
       )
 
@@ -926,9 +950,9 @@ def Line.bound_mono(
   +s2: Facts.Facts(),
   +c: Ledgers.Line
 ) -> {
-  Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, fs, s2) == True{}: Bool
+  Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, fs, Facts.Facts.crit(s2)) == True{}: Bool
 } -> {
-  Nat.is_le(Lines.Line.bound(fs, c), Lines.Line.bound(Facts.Facts.list(s2), c)) == True{}: Bool
+  Nat.is_le(RLines.Line.bound(fs, c), RLines.Line.bound(Facts.Facts.list(s2), c)) == True{}: Bool
 }:
   match fs:
     case Nil{}:
@@ -941,7 +965,7 @@ def Line.bound_mono(
       )(
         All.tail(
           Facts.Facts.has(s2, Types.Fact.Ask{a}),
-          u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s2)
+          u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s2))
         )(h)
       )
     case Con{Types.Fact.Vote{+v, Types.Step.Broken{}, +pk}, +rest}:
@@ -952,20 +976,20 @@ def Line.bound_mono(
       )(
         All.tail(
           Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.Broken{}, pk}),
-          u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s2)
+          u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s2))
         )(h)
       )
     case Con{Types.Fact.Vote{+v, Types.Step.At{+c2, +k}, +pk}, +rest}:
       +h => Nat.max_le(
-        Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
-        Lines.Line.bound(rest, c),
-        Lines.Line.bound(Facts.Facts.list(s2), c)
+        RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
+        RLines.Line.bound(rest, c),
+        RLines.Line.bound(Facts.Facts.list(s2), c)
       )(
         Lists.Bool.by(
           b => {
             Nat.is_le(
-              Lines.Line.bound.at(b, k),
-              Lines.Line.bound(Facts.Facts.list(s2), c)
+              RLines.Line.bound.at(b, k),
+              RLines.Line.bound(Facts.Facts.list(s2), c)
             )
               == True{}: Bool
           },
@@ -978,8 +1002,8 @@ def Line.bound_mono(
             pk
           )(Facts.Facts.has_in(s2, Types.Fact.Vote{v, Types.Step.At{c, k}, pk})((
                 %Ledgers.Line.is_eq_sound(c2, c)(et): {Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.At{_, k}, pk}) == True{}: Bool}
-                All.head(Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.At{c2, k}, pk}), u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s2))(h)))),
-          ef => Shared.Nat.le_zero(Lines.Line.bound(Facts.Facts.list(s2), c))
+                All.head(Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.At{c2, k}, pk}), u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s2)))(h)))),
+          ef => Shared.Nat.le_zero(RLines.Line.bound(Facts.Facts.list(s2), c))
         )
       )(
         Line.bound_mono(
@@ -989,7 +1013,7 @@ def Line.bound_mono(
         )(
           All.tail(
             Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.At{c2, k}, pk}),
-            u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s2)
+            u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s2))
           )(h)
         )
       )
@@ -1011,9 +1035,9 @@ def From.stays(
 } -> {
   Maybe.map(
     &2,
-    Lines.State,
+    RLines.State,
     List<&2, Types.Entry>,
-    Lines.State.versions,
+    RLines.State.versions,
     Lines.Line.from(s, r, c, Some{e0})
   )
     == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
@@ -1022,9 +1046,9 @@ def From.stays(
   vs2 => {
     Maybe.map(
       &2,
-      Lines.State,
+      RLines.State,
       List<&2, Types.Entry>,
-      Lines.State.versions,
+      RLines.State.versions,
       Lines.Line.from(s2, Store.grow(r, zs), c, Some{e0})
     )
       == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
@@ -1032,10 +1056,10 @@ def From.stays(
     & Lists.List.Ext(Types.Entry, vs, vs2)
 ):
   +w => hn => e => (
-    Lines.State.versions(Lines.Line.start(s2, Store.grow(r, zs), c, Lines.State{[e0], 1n})),
+    RLines.State.versions(Lines.Line.start(s2, Store.grow(r, zs), c, RLines.State{[e0], 1n})),
     ({==}, (
-        %Shared.Maybe.some_inj(List<&2, Types.Entry>, Lines.State.versions(Lines.Line.start(s, r, c, Lines.State{[e0], 1n})), vs, e): Lists.List.Ext(Types.Entry, _, Lines.State.versions(Lines.Line.start(s2, Store.grow(r, zs), c, Lines.State{[e0], 1n})))
-        Run.stays(Lines.Line.bound(Facts.Facts.list(s), c), Lines.Line.bound(Facts.Facts.list(s2), c), s, s2, r, zs, c, Lines.State{[e0], 1n})(w)(hn)(Line.bound_mono(Facts.Facts.list(s), s2, c)(Shared.Bool.and_true_left(Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, Facts.Facts.list(s), s2), Nat.is_le(Facts.Facts.fuel(s), Facts.Facts.fuel(s2)))(w)))))
+        %Shared.Maybe.some_inj(List<&2, Types.Entry>, RLines.State.versions(Lines.Line.start(s, r, c, RLines.State{[e0], 1n})), vs, e): Lists.List.Ext(Types.Entry, _, RLines.State.versions(Lines.Line.start(s2, Store.grow(r, zs), c, RLines.State{[e0], 1n})))
+        Run.stays(RLines.Line.bound(Facts.Facts.list(s), c), RLines.Line.bound(Facts.Facts.list(s2), c), s, s2, r, zs, c, RLines.State{[e0], 1n})(w)(hn)(Line.bound_mono(Facts.Facts.list(s), s2, c)(Shared.Bool.and_true_left(Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, Facts.Facts.list(s), Facts.Facts.crit(s2)), Nat.is_le(Facts.Facts.fuel(s), Facts.Facts.fuel(s2)))(w)))))
   )
 
 # Version 0
@@ -1110,8 +1134,8 @@ def Starts.cons(
   +h: Hashes.Hash,
   +a: Types.Ask
 ) -> {
-  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(r, h), a) == True{}: Bool
-} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(g <> r, h), a) == True{}: Bool}:
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(r, h), a) == True{}: Bool
+} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(g <> r, h), a) == True{}: Bool}:
   match g:
     case Types.Fact.Vote{v, st, pk}:
       e => e
@@ -1121,17 +1145,17 @@ def Starts.cons(
           List.contains(
             ~Types.Ask,
             ~Coded.Ask.is_eq,
-            List.filter.put(Types.Ask, b, Lines.Starts.of(r, h), k),
+            List.filter.put(Types.Ask, b, RLines.Starts.of(r, h), k),
             a
           )
             == True{}: Bool
         },
-        Facts.Ask.starts(h, b),
+        RFacts.Ask.starts(h, b),
         et => Shared.List.contains_cons(
           ~Types.Ask,
           ~Coded.Ask.is_eq,
           b,
-          Lines.Starts.of(r, h),
+          RLines.Starts.of(r, h),
           a
         )(e),
         ef => e
@@ -1145,8 +1169,8 @@ def Starts.in(
 ) -> {
   List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Ask{a}) == True{}: Bool
 } -> {
-  Facts.Ask.starts(h, a) == True{}: Bool
-} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(fs, h), a) == True{}: Bool}:
+  RFacts.Ask.starts(h, a) == True{}: Bool
+} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(fs, h), a) == True{}: Bool}:
   match fs:
     case Nil{}:
       hin => t => hin
@@ -1156,16 +1180,16 @@ def Starts.in(
         ~Coded.Fact.is_eq,
         ~Coded.Fact.laws(),
         {
-          List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(g <> r, h), a) == True{}: Bool
+          List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(g <> r, h), a) == True{}: Bool
         },
         g,
         r,
         Types.Fact.Ask{a},
         hin,
         eg => (
-          %Equal.sym(Types.Fact, g, Types.Fact.Ask{a}, eg): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(_ <> r, h), a) == True{}: Bool}
-          %Equal.sym(Bool, Facts.Ask.starts(h, a), True{}, t): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, a, Lines.Starts.of(r, h), _), a) == True{}: Bool}
-          Lists.List.contains_head(~Types.Ask, ~Coded.Ask.is_eq, ~Coded.Ask.laws(), a, Lines.Starts.of(r, h))),
+          %Equal.sym(Types.Fact, g, Types.Fact.Ask{a}, eg): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(_ <> r, h), a) == True{}: Bool}
+          %Equal.sym(Bool, RFacts.Ask.starts(h, a), True{}, t): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, a, RLines.Starts.of(r, h), _), a) == True{}: Bool}
+          Lists.List.contains_head(~Types.Ask, ~Coded.Ask.is_eq, ~Coded.Ask.laws(), a, RLines.Starts.of(r, h))),
         cin => Starts.cons(g, r, h, a)(Starts.in(r, h, a)(cin)(t))
       )
 
@@ -1175,7 +1199,7 @@ def Starts.of_held(
   +h: Hashes.Hash,
   +a: Types.Ask
 ) -> {
-  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(fs, h), a) == True{}: Bool
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(fs, h), a) == True{}: Bool
 } -> {List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Ask{a}) == True{}: Bool}:
   match fs:
     case Nil{}:
@@ -1194,7 +1218,7 @@ def Starts.of_held(
           List.contains(
             ~Types.Ask,
             ~Coded.Ask.is_eq,
-            List.filter.put(Types.Ask, b, Lines.Starts.of(r, h), k),
+            List.filter.put(Types.Ask, b, RLines.Starts.of(r, h), k),
             a
           )
             == True{}: Bool
@@ -1207,7 +1231,7 @@ def Starts.of_held(
           )
             == True{}: Bool
         },
-        Facts.Ask.starts(h, b),
+        RFacts.Ask.starts(h, b),
         et => hin => Lists.List.contains_cons_by(
           ~Types.Ask,
           ~Coded.Ask.is_eq,
@@ -1222,7 +1246,7 @@ def Starts.of_held(
               == True{}: Bool
           },
           b,
-          Lines.Starts.of(r, h),
+          RLines.Starts.of(r, h),
           a,
           hin,
           eb => (
@@ -1251,38 +1275,38 @@ def Starts.of_starts(
   +h: Hashes.Hash,
   +a: Types.Ask
 ) -> {
-  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(fs, h), a) == True{}: Bool
-} -> {Facts.Ask.starts(h, a) == True{}: Bool}:
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(fs, h), a) == True{}: Bool
+} -> {RFacts.Ask.starts(h, a) == True{}: Bool}:
   match fs:
     case Nil{}:
-      hin => Empty.absurd({Facts.Ask.starts(h, a) == True{}: Bool}, Shared.Bool.false_ne_true(hin))
+      hin => Empty.absurd({RFacts.Ask.starts(h, a) == True{}: Bool}, Shared.Bool.false_ne_true(hin))
     case Con{Types.Fact.Vote{v, st, pk}, +r}:
       hin => Starts.of_starts(r, h, a)(hin)
     case Con{Types.Fact.Ask{+b}, +r}:
       Lists.Bool.by(
         k => {
-          Facts.Ask.starts(h, b) == k: Bool
+          RFacts.Ask.starts(h, b) == k: Bool
         } -> {
           List.contains(
             ~Types.Ask,
             ~Coded.Ask.is_eq,
-            List.filter.put(Types.Ask, b, Lines.Starts.of(r, h), k),
+            List.filter.put(Types.Ask, b, RLines.Starts.of(r, h), k),
             a
           )
             == True{}: Bool
-        } -> {Facts.Ask.starts(h, a) == True{}: Bool},
-        Facts.Ask.starts(h, b),
+        } -> {RFacts.Ask.starts(h, a) == True{}: Bool},
+        RFacts.Ask.starts(h, b),
         et => tb => hin => Lists.List.contains_cons_by(
           ~Types.Ask,
           ~Coded.Ask.is_eq,
           ~Coded.Ask.laws(),
-          {Facts.Ask.starts(h, a) == True{}: Bool},
+          {RFacts.Ask.starts(h, a) == True{}: Bool},
           b,
-          Lines.Starts.of(r, h),
+          RLines.Starts.of(r, h),
           a,
           hin,
           eb => (
-            %eb: {Facts.Ask.starts(h, _) == True{}: Bool}
+            %eb: {RFacts.Ask.starts(h, _) == True{}: Bool}
             tb),
           cin => Starts.of_starts(r, h, a)(cin)
         ),
@@ -1304,10 +1328,10 @@ def Starts.led(
 } -> {
   Facts.Facts.has(s, Types.Fact.Ask{a}) == True{}: Bool
 } -> {
-  Facts.Ask.starts(h, a) == True{}: Bool
+  RFacts.Ask.starts(h, a) == True{}: Bool
 } -> {
-  Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, fs, s) == True{}: Bool
-} -> {Lines.Ask.leads(Lines.Starts.of(fs, h), a) == True{}: Bool}:
+  Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, fs, Facts.Facts.crit(s)) == True{}: Bool
+} -> {RLines.Ask.leads(RLines.Starts.of(fs, h), a) == True{}: Bool}:
   match fs:
     case Nil{}:
       hn => o => ha => ta => hh => {==}
@@ -1329,27 +1353,27 @@ def Starts.led(
       )(
         All.tail(
           Facts.Facts.has(s, Types.Fact.Vote{v, st, pk}),
-          u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s)
+          u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s))
         )(hh)
       )
     case Con{Types.Fact.Ask{+b}, +rest}:
       +hn => +o => +ha => +ta => +hh => Lists.Bool.by(
         k => {
-          Facts.Ask.starts(h, b) == k: Bool
+          RFacts.Ask.starts(h, b) == k: Bool
         } -> {
           Shared.List.holds(
             ~Types.Ask,
             ~Types.Ask,
-            ~Lines.Ask.led,
-            List.filter.put(Types.Ask, b, Lines.Starts.of(rest, h), k),
+            ~RLines.Ask.led,
+            List.filter.put(Types.Ask, b, RLines.Starts.of(rest, h), k),
             a
           )
             == True{}: Bool
         },
-        Facts.Ask.starts(h, b),
+        RFacts.Ask.starts(h, b),
         et => tb => (
-          %Equal.sym(Bool, Lines.Ask.led(a, b), True{}, Facts.Case.or_left(Facts.Ask.alike(a, b), Nat.is_lt(Facts.Ask.seq(b), Facts.Ask.seq(a)))(Facts.Facts.honest_starts(name, s, h, a, b)(o)(hn)(ha)(All.head(Facts.Facts.has(s, Types.Fact.Ask{b}), u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s))(hh))(ta)(tb))): {List.all.if(u => Shared.List.holds(~Types.Ask, ~Types.Ask, ~Lines.Ask.led, Lines.Starts.of(rest, h), a), _) == True{}: Bool}
-          Starts.led(rest, name, s, h, a)(hn)(o)(ha)(ta)(All.tail(Facts.Facts.has(s, Types.Fact.Ask{b}), u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s))(hh))),
+          %Equal.sym(Bool, RLines.Ask.led(a, b), True{}, Facts.Case.or_left(RFacts.Ask.alike(a, b), Nat.is_lt(RFacts.Ask.seq(b), RFacts.Ask.seq(a)))(Facts.Facts.honest_starts(name, s, h, a, b)(o)(hn)(ha)(All.head(Facts.Facts.has(s, Types.Fact.Ask{b}), u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s)))(hh))(ta)(tb))): {List.all.if(u => Shared.List.holds(~Types.Ask, ~Types.Ask, ~RLines.Ask.led, RLines.Starts.of(rest, h), a), _) == True{}: Bool}
+          Starts.led(rest, name, s, h, a)(hn)(o)(ha)(ta)(All.tail(Facts.Facts.has(s, Types.Fact.Ask{b}), u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s)))(hh))),
         ef => tb => Starts.led(
           rest,
           name,
@@ -1367,7 +1391,7 @@ def Starts.led(
         )(
           All.tail(
             Facts.Facts.has(s, Types.Fact.Ask{b}),
-            u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s)
+            u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s))
           )(hh)
         )
       )({==})
@@ -1377,13 +1401,13 @@ def Store.first.alike(
   a: Types.Ask,
   x: Types.Ask
 ) -> {
-  Facts.Ask.alike(a, x) == True{}: Bool
-} -> {Lines.Store.first.of(Some{a}) == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>}:
+  RFacts.Ask.alike(a, x) == True{}: Bool
+} -> {RLines.Store.first.of(Some{a}) == RLines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>}:
   match a x:
     case Types.Ask{+i, k, +r} Types.Ask{+j, l, +q}:
       +al => (
-        %Ledgers.Id.is_eq_sound(i, j)(Shared.Bool.and_true_left(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))(al)): {Some{Lines.Entry.first(i, r, 0n)} == Some{Lines.Entry.first(_, q, 0n)}: Maybe<&2, Types.Entry>}
-        %Coded.Request.is_eq_sound(r, q)(Shared.Bool.and_true_right(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))(al)): {Some{Lines.Entry.first(i, r, 0n)} == Some{Lines.Entry.first(i, _, 0n)}: Maybe<&2, Types.Entry>}
+        %Ledgers.Id.is_eq_sound(i, j)(Shared.Bool.and_true_left(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))(al)): {Some{RLines.Entry.first(i, r, 0n)} == Some{RLines.Entry.first(_, q, 0n)}: Maybe<&2, Types.Entry>}
+        %Coded.Request.is_eq_sound(r, q)(Shared.Bool.and_true_right(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))(al)): {Some{RLines.Entry.first(i, r, 0n)} == Some{RLines.Entry.first(i, _, 0n)}: Maybe<&2, Types.Entry>}
         {==})
 
 # Store.first_stays, with the ask x that the wider set picks
@@ -1397,31 +1421,31 @@ def Store.first_stays.fin(
   hn: {Facts.Facts.liars(s2) == []: List<&2, String>},
   o: {Facts.Facts.ok(name, s2) == True{}: Bool},
   ha: {Facts.Facts.has(s2, Types.Fact.Ask{a}) == True{}: Bool},
-  ta: {Facts.Ask.starts(h, a) == True{}: Bool},
-  e: {Lines.Store.first.of(Some{a}) == Some{e0}: Maybe<&2, Types.Entry>},
+  ta: {RFacts.Ask.starts(h, a) == True{}: Bool},
+  e: {RLines.Store.first.of(Some{a}) == Some{e0}: Maybe<&2, Types.Entry>},
   +ex: {
     Lists.List.pick(
       ~Types.Ask,
       ~List<&2, Types.Ask>,
-      ~Lines.Ask.leads,
-      Lines.Starts.of(Facts.Facts.list(s2), h),
-      Lines.Starts.of(Facts.Facts.list(s2), h)
+      ~RLines.Ask.leads,
+      RLines.Starts.of(Facts.Facts.list(s2), h),
+      RLines.Starts.of(Facts.Facts.list(s2), h)
     )
       == Some{x}: Maybe<&2, Types.Ask>
   }
-) -> {Lines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>}:
+) -> {RLines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>}:
   %Equal.sym(
     Maybe<&2, Types.Ask>,
     Lists.List.pick(
       ~Types.Ask,
       ~List<&2, Types.Ask>,
-      ~Lines.Ask.leads,
-      Lines.Starts.of(Facts.Facts.list(s2), h),
-      Lines.Starts.of(Facts.Facts.list(s2), h)
+      ~RLines.Ask.leads,
+      RLines.Starts.of(Facts.Facts.list(s2), h),
+      RLines.Starts.of(Facts.Facts.list(s2), h)
     ),
     Some{x},
     ex
-  ): {Lines.Store.first.of(_) == Some{e0}: Maybe<&2, Types.Entry>}
+  ): {RLines.Store.first.of(_) == Some{e0}: Maybe<&2, Types.Entry>}
   %Store.first.alike(
     a,
     x
@@ -1451,11 +1475,11 @@ def Store.first_stays.fin(
           Lists.List.pick_in(
             ~Types.Ask,
             ~List<&2, Types.Ask>,
-            ~Lines.Ask.leads,
+            ~RLines.Ask.leads,
             ~Coded.Ask.is_eq,
             ~Coded.Ask.laws(),
-            Lines.Starts.of(Facts.Facts.list(s2), h),
-            Lines.Starts.of(Facts.Facts.list(s2), h),
+            RLines.Starts.of(Facts.Facts.list(s2), h),
+            RLines.Starts.of(Facts.Facts.list(s2), h),
             x
           )(ex)
         )
@@ -1471,11 +1495,11 @@ def Store.first_stays.fin(
         Lists.List.pick_in(
           ~Types.Ask,
           ~List<&2, Types.Ask>,
-          ~Lines.Ask.leads,
+          ~RLines.Ask.leads,
           ~Coded.Ask.is_eq,
           ~Coded.Ask.laws(),
-          Lines.Starts.of(Facts.Facts.list(s2), h),
-          Lines.Starts.of(Facts.Facts.list(s2), h),
+          RLines.Starts.of(Facts.Facts.list(s2), h),
+          RLines.Starts.of(Facts.Facts.list(s2), h),
           x
         )(ex)
       )
@@ -1493,22 +1517,22 @@ def Store.first_stays.of(
   hn: {Facts.Facts.liars(s2) == []: List<&2, String>},
   o: {Facts.Facts.ok(name, s2) == True{}: Bool},
   ha: {Facts.Facts.has(s2, Types.Fact.Ask{a}) == True{}: Bool},
-  ta: {Facts.Ask.starts(h, a) == True{}: Bool},
-  e: {Lines.Store.first.of(Some{a}) == Some{e0}: Maybe<&2, Types.Entry>},
+  ta: {RFacts.Ask.starts(h, a) == True{}: Bool},
+  e: {RLines.Store.first.of(Some{a}) == Some{e0}: Maybe<&2, Types.Entry>},
   r: Exists(
     Types.Ask,
     x => {
       Lists.List.pick(
         ~Types.Ask,
         ~List<&2, Types.Ask>,
-        ~Lines.Ask.leads,
-        Lines.Starts.of(Facts.Facts.list(s2), h),
-        Lines.Starts.of(Facts.Facts.list(s2), h)
+        ~RLines.Ask.leads,
+        RLines.Starts.of(Facts.Facts.list(s2), h),
+        RLines.Starts.of(Facts.Facts.list(s2), h)
       )
         == Some{x}: Maybe<&2, Types.Ask>
     }
   )
-) -> {Lines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>}:
+) -> {RLines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>}:
   (+x, ex) = r
   Store.first_stays.fin(name, s2, h, e0, a, x, hn, o, ha, ta, e, ex)
 
@@ -1522,9 +1546,9 @@ def Store.first_stays.at(
   +hn: {Facts.Facts.liars(s2) == []: List<&2, String>},
   +o: {Facts.Facts.ok(name, s2) == True{}: Bool},
   +ha: {Facts.Facts.has(s2, Types.Fact.Ask{a}) == True{}: Bool},
-  +ta: {Facts.Ask.starts(h, a) == True{}: Bool},
-  e: {Lines.Store.first.of(Some{a}) == Some{e0}: Maybe<&2, Types.Entry>}
-) -> {Lines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>}:
+  +ta: {RFacts.Ask.starts(h, a) == True{}: Bool},
+  e: {RLines.Store.first.of(Some{a}) == Some{e0}: Maybe<&2, Types.Entry>}
+) -> {RLines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>}:
   Store.first_stays.of(
     name,
     s2,
@@ -1539,11 +1563,11 @@ def Store.first_stays.at(
     List.pick_some(
       ~Types.Ask,
       ~List<&2, Types.Ask>,
-      ~Lines.Ask.leads,
+      ~RLines.Ask.leads,
       ~Coded.Ask.is_eq,
       ~Coded.Ask.laws(),
-      Lines.Starts.of(Facts.Facts.list(s2), h),
-      Lines.Starts.of(Facts.Facts.list(s2), h),
+      RLines.Starts.of(Facts.Facts.list(s2), h),
+      RLines.Starts.of(Facts.Facts.list(s2), h),
       a
     )(
       Starts.in(Facts.Facts.list(s2), h, a)(Facts.Facts.has_in(s2, Types.Fact.Ask{a})(ha))(ta)
@@ -1566,10 +1590,10 @@ def Store.first_stays.at(
         Shared.Bool.and_true_left(
           Shared.List.holds(
             ~Types.Fact,
-            ~Facts.Facts(),
-            ~Facts.Fact.held,
+            ~RFacts.Plain(),
+            ~RFacts.Fact.held,
             Facts.Facts.list(s2),
-            s2
+            Facts.Facts.crit(s2)
           ),
           Nat.is_le(Facts.Facts.fuel(s2), Facts.Facts.fuel(s2))
         )(Facts.Facts.wider_refl(s2))
@@ -1591,22 +1615,22 @@ def Store.first_stays(
 } -> {
   Facts.Facts.ok(name, s2) == True{}: Bool
 } -> {
-  Lines.Store.first(Facts.Facts.list(s), h) == Some{e0}: Maybe<&2, Types.Entry>
-} -> {Lines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>}:
+  RLines.Store.first(Facts.Facts.list(s), h) == Some{e0}: Maybe<&2, Types.Entry>
+} -> {RLines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>}:
   w => hn => o => e => Lists.Maybe.by(
     Types.Ask,
     m => {
-      Lines.Store.first.of(m) == Some{e0}: Maybe<&2, Types.Entry>
-    } -> {Lines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>},
+      RLines.Store.first.of(m) == Some{e0}: Maybe<&2, Types.Entry>
+    } -> {RLines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>},
     Lists.List.pick(
       ~Types.Ask,
       ~List<&2, Types.Ask>,
-      ~Lines.Ask.leads,
-      Lines.Starts.of(Facts.Facts.list(s), h),
-      Lines.Starts.of(Facts.Facts.list(s), h)
+      ~RLines.Ask.leads,
+      RLines.Starts.of(Facts.Facts.list(s), h),
+      RLines.Starts.of(Facts.Facts.list(s), h)
     ),
     en => x => Empty.absurd(
-      {Lines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>},
+      {RLines.Store.first(Facts.Facts.list(s2), h) == Some{e0}: Maybe<&2, Types.Entry>},
       Shared.Maybe.none_ne_some(Types.Entry, e0, x)
     ),
     +a => +ea => x => Store.first_stays.at(
@@ -1636,11 +1660,11 @@ def Store.first_stays(
             Lists.List.pick_in(
               ~Types.Ask,
               ~List<&2, Types.Ask>,
-              ~Lines.Ask.leads,
+              ~RLines.Ask.leads,
               ~Coded.Ask.is_eq,
               ~Coded.Ask.laws(),
-              Lines.Starts.of(Facts.Facts.list(s), h),
-              Lines.Starts.of(Facts.Facts.list(s), h),
+              RLines.Starts.of(Facts.Facts.list(s), h),
+              RLines.Starts.of(Facts.Facts.list(s), h),
               a
             )(ea)
           )
@@ -1654,11 +1678,11 @@ def Store.first_stays(
         Lists.List.pick_in(
           ~Types.Ask,
           ~List<&2, Types.Ask>,
-          ~Lines.Ask.leads,
+          ~RLines.Ask.leads,
           ~Coded.Ask.is_eq,
           ~Coded.Ask.laws(),
-          Lines.Starts.of(Facts.Facts.list(s), h),
-          Lines.Starts.of(Facts.Facts.list(s), h),
+          RLines.Starts.of(Facts.Facts.list(s), h),
+          RLines.Starts.of(Facts.Facts.list(s), h),
           a
         )(ea)
       ),
@@ -1673,21 +1697,21 @@ def Branch.first_append(
   +c: Ledgers.Line,
   -e0: Types.Entry
 ) -> {
-  Lines.Branch.first(r, c) == Some{e0}: Maybe<&2, Types.Entry>
+  RLines.Branch.first(r, c) == Some{e0}: Maybe<&2, Types.Entry>
 } -> {
-  Lines.Branch.first(List.append(&2, Types.Entry, r, zs), c) == Some{e0}: Maybe<&2, Types.Entry>
+  RLines.Branch.first(List.append(&2, Types.Entry, r, zs), c) == Some{e0}: Maybe<&2, Types.Entry>
 }:
   e => Lists.Maybe.by(
     Nat,
     j => {
-      Lines.Branch.first.at(r, j) == Some{e0}: Maybe<&2, Types.Entry>
+      RLines.Branch.first.at(r, j) == Some{e0}: Maybe<&2, Types.Entry>
     } -> {
-      Lines.Branch.first(List.append(&2, Types.Entry, r, zs), c) == Some{e0}: Maybe<&2, Types.Entry>
+      RLines.Branch.first(List.append(&2, Types.Entry, r, zs), c) == Some{e0}: Maybe<&2, Types.Entry>
     },
-    Lists.List.index(~Types.Entry, ~Ledgers.Line, ~Lines.Entry.owns, r, c),
+    Lists.List.index(~Types.Entry, ~Ledgers.Line, ~RLines.Entry.owns, r, c),
     en => x => Empty.absurd(
       {
-        Lines.Branch.first(
+        RLines.Branch.first(
           List.append(&2, Types.Entry, r, zs),
           c
         )
@@ -1698,9 +1722,9 @@ def Branch.first_append(
     +n => ej => x => Lists.Maybe.by(
       Types.Entry,
       m => {
-        Lines.Branch.first.of(n, m) == Some{e0}: Maybe<&2, Types.Entry>
+        RLines.Branch.first.of(n, m) == Some{e0}: Maybe<&2, Types.Entry>
       } -> {
-        Lines.Branch.first(
+        RLines.Branch.first(
           List.append(&2, Types.Entry, r, zs),
           c
         )
@@ -1709,7 +1733,7 @@ def Branch.first_append(
       List.get(&2, Types.Entry, r, n),
       en => y => Empty.absurd(
         {
-          Lines.Branch.first(
+          RLines.Branch.first(
             List.append(&2, Types.Entry, r, zs),
             c
           )
@@ -1718,8 +1742,8 @@ def Branch.first_append(
         Shared.Maybe.none_ne_some(Types.Entry, e0, y)
       ),
       +v => ev => y => (
-        %Equal.sym(Maybe<&2, Nat>, Lists.List.index(~Types.Entry, ~Ledgers.Line, ~Lines.Entry.owns, List.append(&2, Types.Entry, r, zs), c), Some{n}, Lists.List.index_append(~Types.Entry, ~Ledgers.Line, ~Lines.Entry.owns, r, zs, c, n)(ej)): {Lines.Branch.first.at(List.append(&2, Types.Entry, r, zs), _) == Some{e0}: Maybe<&2, Types.Entry>}
-        %Equal.sym(Maybe<&2, Types.Entry>, List.get(&2, Types.Entry, List.append(&2, Types.Entry, r, zs), n), Some{v}, Lists.List.get_append(Types.Entry, r, zs, n, v)(ev)): {Lines.Branch.first.of(n, _) == Some{e0}: Maybe<&2, Types.Entry>}
+        %Equal.sym(Maybe<&2, Nat>, Lists.List.index(~Types.Entry, ~Ledgers.Line, ~RLines.Entry.owns, List.append(&2, Types.Entry, r, zs), c), Some{n}, Lists.List.index_append(~Types.Entry, ~Ledgers.Line, ~RLines.Entry.owns, r, zs, c, n)(ej)): {RLines.Branch.first.at(List.append(&2, Types.Entry, r, zs), _) == Some{e0}: Maybe<&2, Types.Entry>}
+        %Equal.sym(Maybe<&2, Types.Entry>, List.get(&2, Types.Entry, List.append(&2, Types.Entry, r, zs), n), Some{v}, Lists.List.get_append(Types.Entry, r, zs, n, v)(ev)): {RLines.Branch.first.of(n, _) == Some{e0}: Maybe<&2, Types.Entry>}
         y)
     )(x)
   )(e)
@@ -1754,9 +1778,9 @@ def Store.stays(
     m => {
       Maybe.map(
         &2,
-        Lines.State,
+        RLines.State,
         List<&2, Types.Entry>,
-        Lines.State.versions,
+        RLines.State.versions,
         Lines.Line.from(s, None{}, Ledgers.Line{h, None{}}, m)
       )
         == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
@@ -1767,7 +1791,7 @@ def Store.stays(
       }
         & Lists.List.Ext(Types.Entry, vs, vs2)
     ),
-    Lines.Store.first(Facts.Facts.list(s), h),
+    RLines.Store.first(Facts.Facts.list(s), h),
     en => x => Empty.absurd(
       Exists(
         List<&2, Types.Entry>,
@@ -1779,7 +1803,7 @@ def Store.stays(
       Shared.Maybe.none_ne_some(List<&2, Types.Entry>, vs, x)
     ),
     +e0 => e1 => x => (
-      %Equal.sym(Maybe<&2, Types.Entry>, Lines.Store.first(Facts.Facts.list(s2), h), Some{e0}, Store.first_stays(name, s, s2, h, e0)(w)(hn)(o)(e1)): Exists(List<&2, Types.Entry>, vs2 => {Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, Lines.Line.from(s2, None{}, Ledgers.Line{h, None{}}, _)) == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>} & Lists.List.Ext(Types.Entry, vs, vs2))
+      %Equal.sym(Maybe<&2, Types.Entry>, RLines.Store.first(Facts.Facts.list(s2), h), Some{e0}, Store.first_stays(name, s, s2, h, e0)(w)(hn)(o)(e1)): Exists(List<&2, Types.Entry>, vs2 => {Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, Lines.Line.from(s2, None{}, Ledgers.Line{h, None{}}, _)) == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>} & Lists.List.Ext(Types.Entry, vs, vs2))
       From.stays(s, s2, None{}, [], Ledgers.Line{h, None{}}, e0, vs)(w)(hn)(x))
   )(e)
 
@@ -1797,14 +1821,14 @@ def Branch.stays.at(
   e: {
     Maybe.map(
       &2,
-      Lines.State,
+      RLines.State,
       List<&2, Types.Entry>,
-      Lines.State.versions,
+      RLines.State.versions,
       Lines.Line.from(
         s,
         Some{r},
         Ledgers.Line{h, Some{b}},
-        Lines.Branch.first(r, Ledgers.Line{h, Some{b}})
+        RLines.Branch.first(r, Ledgers.Line{h, Some{b}})
       )
     )
       == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
@@ -1814,14 +1838,14 @@ def Branch.stays.at(
   vs2 => {
     Maybe.map(
       &2,
-      Lines.State,
+      RLines.State,
       List<&2, Types.Entry>,
-      Lines.State.versions,
+      RLines.State.versions,
       Lines.Line.from(
         s2,
         Some{List.append(&2, Types.Entry, r, zs)},
         Ledgers.Line{h, Some{b}},
-        Lines.Branch.first(List.append(&2, Types.Entry, r, zs), Ledgers.Line{h, Some{b}})
+        RLines.Branch.first(List.append(&2, Types.Entry, r, zs), Ledgers.Line{h, Some{b}})
       )
     )
       == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
@@ -1833,9 +1857,9 @@ def Branch.stays.at(
     m => {
       Maybe.map(
         &2,
-        Lines.State,
+        RLines.State,
         List<&2, Types.Entry>,
-        Lines.State.versions,
+        RLines.State.versions,
         Lines.Line.from(s, Some{r}, Ledgers.Line{h, Some{b}}, m)
       )
         == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
@@ -1844,35 +1868,35 @@ def Branch.stays.at(
       vs2 => {
         Maybe.map(
           &2,
-          Lines.State,
+          RLines.State,
           List<&2, Types.Entry>,
-          Lines.State.versions,
+          RLines.State.versions,
           Lines.Line.from(
             s2,
             Some{List.append(&2, Types.Entry, r, zs)},
             Ledgers.Line{h, Some{b}},
-            Lines.Branch.first(List.append(&2, Types.Entry, r, zs), Ledgers.Line{h, Some{b}})
+            RLines.Branch.first(List.append(&2, Types.Entry, r, zs), Ledgers.Line{h, Some{b}})
           )
         )
           == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
       }
         & Lists.List.Ext(Types.Entry, vs, vs2)
     ),
-    Lines.Branch.first(r, Ledgers.Line{h, Some{b}}),
+    RLines.Branch.first(r, Ledgers.Line{h, Some{b}}),
     en => x => Empty.absurd(
       Exists(
         List<&2, Types.Entry>,
         vs2 => {
           Maybe.map(
             &2,
-            Lines.State,
+            RLines.State,
             List<&2, Types.Entry>,
-            Lines.State.versions,
+            RLines.State.versions,
             Lines.Line.from(
               s2,
               Some{List.append(&2, Types.Entry, r, zs)},
               Ledgers.Line{h, Some{b}},
-              Lines.Branch.first(List.append(&2, Types.Entry, r, zs), Ledgers.Line{h, Some{b}})
+              RLines.Branch.first(List.append(&2, Types.Entry, r, zs), Ledgers.Line{h, Some{b}})
             )
           )
             == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
@@ -1882,7 +1906,7 @@ def Branch.stays.at(
       Shared.Maybe.none_ne_some(List<&2, Types.Entry>, vs, x)
     ),
     +e0 => e1 => x => (
-      %Equal.sym(Maybe<&2, Types.Entry>, Lines.Branch.first(List.append(&2, Types.Entry, r, zs), Ledgers.Line{h, Some{b}}), Some{e0}, Branch.first_append(r, zs, Ledgers.Line{h, Some{b}}, e0)(e1)): Exists(List<&2, Types.Entry>, vs2 => {Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, Lines.Line.from(s2, Some{List.append(&2, Types.Entry, r, zs)}, Ledgers.Line{h, Some{b}}, _)) == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>} & Lists.List.Ext(Types.Entry, vs, vs2))
+      %Equal.sym(Maybe<&2, Types.Entry>, RLines.Branch.first(List.append(&2, Types.Entry, r, zs), Ledgers.Line{h, Some{b}}), Some{e0}, Branch.first_append(r, zs, Ledgers.Line{h, Some{b}}, e0)(e1)): Exists(List<&2, Types.Entry>, vs2 => {Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, Lines.Line.from(s2, Some{List.append(&2, Types.Entry, r, zs)}, Ledgers.Line{h, Some{b}}, _)) == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>} & Lists.List.Ext(Types.Entry, vs, vs2))
       From.stays(s, s2, Some{r}, zs, Ledgers.Line{h, Some{b}}, e0, vs)(w)(hn)(x))
   )(e)
 
@@ -1906,14 +1930,14 @@ def Branch.stays(
   e: {
     Maybe.map(
       &2,
-      Lines.State,
+      RLines.State,
       List<&2, Types.Entry>,
-      Lines.State.versions,
+      RLines.State.versions,
       Lines.Line.from(
         s,
         Some{store},
         Ledgers.Line{h, Some{b}},
-        Lines.Branch.first(store, Ledgers.Line{h, Some{b}})
+        RLines.Branch.first(store, Ledgers.Line{h, Some{b}})
       )
     )
       == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
@@ -1938,9 +1962,9 @@ def Branch.stays(
     vs2 => {
       Maybe.map(
         &2,
-        Lines.State,
+        RLines.State,
         List<&2, Types.Entry>,
-        Lines.State.versions,
+        RLines.State.versions,
         Lines.Branch.state(s2, Ledgers.Line{h, Some{b}}, _)
       )
         == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
@@ -1957,14 +1981,14 @@ def Branch.stays(
     vs2 => {
       Maybe.map(
         &2,
-        Lines.State,
+        RLines.State,
         List<&2, Types.Entry>,
-        Lines.State.versions,
+        RLines.State.versions,
         Lines.Line.from(
           s2,
           Some{_},
           Ledgers.Line{h, Some{b}},
-          Lines.Branch.first(_, Ledgers.Line{h, Some{b}})
+          RLines.Branch.first(_, Ledgers.Line{h, Some{b}})
         )
       )
         == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
@@ -2005,9 +2029,9 @@ def Line.versions_stay(
         m => {
           Maybe.map(
             &2,
-            Lines.State,
+            RLines.State,
             List<&2, Types.Entry>,
-            Lines.State.versions,
+            RLines.State.versions,
             Lines.Branch.state(s, Ledgers.Line{h, Some{b}}, m)
           )
             == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
@@ -2074,7 +2098,7 @@ def Line.at_stays.of(
     Lines.Line.versions(s2, c),
     Some{vs2},
     e2
-  ): {Lines.Line.at.of(_, k) == Some{e}: Maybe<&2, Types.Entry>}
+  ): {RLines.Line.at.of(_, k) == Some{e}: Maybe<&2, Types.Entry>}
   Lists.List.ext_get(Types.Entry, vs, vs2, k, e)(x)(eg)
 
 # a version of a line stays
@@ -2097,7 +2121,7 @@ def Line.at_stays(
   w => hn => o => eg => Lists.Maybe.by(
     List<&2, Types.Entry>,
     m => {
-      Lines.Line.at.of(m, k) == Some{e}: Maybe<&2, Types.Entry>
+      RLines.Line.at.of(m, k) == Some{e}: Maybe<&2, Types.Entry>
     } -> {Lines.Line.at(s2, c, k) == Some{e}: Maybe<&2, Types.Entry>},
     Lines.Line.versions(s, c),
     en => x => Empty.absurd(
@@ -2121,7 +2145,7 @@ def Rule.after_stays.of(
   +h: Hashes.Hash,
   +b: String,
   +vs: List<&2, Types.Entry>,
-  -u: Lines.Rule,
+  -u: RLines.Rule,
   +store: List<&2, Types.Entry>,
   r: Exists(
     List<&2, Types.Entry>,
@@ -2130,8 +2154,8 @@ def Rule.after_stays.of(
     }
       & Lists.List.Ext(Types.Entry, store, R2)
   ),
-  e: {Lines.Line.rule(Some{store}, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, Lines.Rule>}
-) -> {Lines.Rule.after(s2, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, Lines.Rule>}:
+  e: {RLines.Line.rule(Some{store}, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>}
+) -> {Lines.Rule.after(s2, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>}:
   (+R2, p) = r
   (e2, x) = p
   (+zs, ez) = x
@@ -2140,13 +2164,13 @@ def Rule.after_stays.of(
     Lines.Store.versions(s2, h),
     Some{R2},
     e2
-  ): {Lines.Rule.after.of(Ledgers.Line{h, Some{b}}, vs, _) == Some{u}: Maybe<&2, Lines.Rule>}
+  ): {RLines.Rule.after.of(Ledgers.Line{h, Some{b}}, vs, _) == Some{u}: Maybe<&2, RLines.Rule>}
   %Equal.sym(
     List<&2, Types.Entry>,
     R2,
     List.append(&2, Types.Entry, store, zs),
     ez
-  ): {Lines.Line.rule(Some{_}, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, Lines.Rule>}
+  ): {RLines.Line.rule(Some{_}, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>}
   Rule.grows(Some{store}, zs, Ledgers.Line{h, Some{b}}, vs, u)(e)
 
 # the rule of the version after some versions stays
@@ -2156,7 +2180,7 @@ def Rule.after_stays(
   +s2: Facts.Facts(),
   +c: Ledgers.Line,
   +vs: List<&2, Types.Entry>,
-  +u: Lines.Rule
+  +u: RLines.Rule
 ) -> {
   Facts.Facts.wider(s, s2) == True{}: Bool
 } -> {
@@ -2164,8 +2188,8 @@ def Rule.after_stays(
 } -> {
   Facts.Facts.ok(name, s2) == True{}: Bool
 } -> {
-  Lines.Rule.after(s, c, vs) == Some{u}: Maybe<&2, Lines.Rule>
-} -> {Lines.Rule.after(s2, c, vs) == Some{u}: Maybe<&2, Lines.Rule>}:
+  Lines.Rule.after(s, c, vs) == Some{u}: Maybe<&2, RLines.Rule>
+} -> {Lines.Rule.after(s2, c, vs) == Some{u}: Maybe<&2, RLines.Rule>}:
   match c:
     case Ledgers.Line{+h, None{}}:
       w => hn => o => e => e
@@ -2173,12 +2197,12 @@ def Rule.after_stays(
       w => hn => o => e => Lists.Maybe.by(
         List<&2, Types.Entry>,
         m => {
-          Lines.Rule.after.of(Ledgers.Line{h, Some{b}}, vs, m) == Some{u}: Maybe<&2, Lines.Rule>
-        } -> {Lines.Rule.after(s2, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, Lines.Rule>},
+          RLines.Rule.after.of(Ledgers.Line{h, Some{b}}, vs, m) == Some{u}: Maybe<&2, RLines.Rule>
+        } -> {Lines.Rule.after(s2, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>},
         Lines.Store.versions(s, h),
         en => x => Empty.absurd(
-          {Lines.Rule.after(s2, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, Lines.Rule>},
-          Shared.Maybe.none_ne_some(Lines.Rule, u, x)
+          {Lines.Rule.after(s2, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>},
+          Shared.Maybe.none_ne_some(RLines.Rule, u, x)
         ),
         +R => e_r => x => Rule.after_stays.of(
           s2,

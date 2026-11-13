@@ -8,7 +8,12 @@ import ./content.bend as Contents
 import ./facts.bend as Facts
 import ./lines.bend as Lines
 import ./mirror.bend as Mirror
-import ./shared/files.bend as Files
+import ./run/answers.bend as RAnswers
+import ./run/content.bend as RContents
+import ./run/facts.bend as RFacts
+import ./run/files.bend as Files
+import ./run/lines.bend as RLines
+import ./shared/files.bend as FileLaws
 import ./shared/format.bend as Formats
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
@@ -101,7 +106,7 @@ def Content.get_some(
   +p: String,
   -x: Maybe<&2, List<&2, U32>>
 ) -> {
-  Contents.Content.get(m, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  RContents.Content.get(m, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 } -> Exists(
   Files.Files(),
   t => {
@@ -131,7 +136,7 @@ def Content.write_some(
   m: Maybe<&2, Files.Files()>,
   -t: Files.Files()
 ) -> {
-  Contents.Content.write(p, w, m) == Some{t}: Maybe<&2, Files.Files()>
+  RContents.Content.write(p, w, m) == Some{t}: Maybe<&2, Files.Files()>
 } -> Exists(
   Files.Files(),
   prev => {
@@ -169,18 +174,18 @@ def Content.write_le(
   m,
   m2
 ) -> {
-  Contents.Content.write(p, w, m) == Some{t}: Maybe<&2, Files.Files()>
-} -> {Contents.Content.write(p, w, m2) == Some{t}: Maybe<&2, Files.Files()>}:
+  RContents.Content.write(p, w, m) == Some{t}: Maybe<&2, Files.Files()>
+} -> {RContents.Content.write(p, w, m2) == Some{t}: Maybe<&2, Files.Files()>}:
   match m:
     case None{}:
       le => h => Empty.absurd(
-        {Contents.Content.write(p, w, m2) == Some{t}: Maybe<&2, Files.Files()>},
+        {RContents.Content.write(p, w, m2) == Some{t}: Maybe<&2, Files.Files()>},
         Shared.Maybe.none_ne_some(Files.Files(), t, h)
       )
     case Some{x}:
       le => h => Eq.back(
         Maybe<&2, Files.Files()>,
-        y => {Contents.Content.write(p, w, y) == Some{t}: Maybe<&2, Files.Files()>},
+        y => {RContents.Content.write(p, w, y) == Some{t}: Maybe<&2, Files.Files()>},
         m2,
         Some{x},
         le(x)({==}),
@@ -213,32 +218,32 @@ def Merge.of_le(
   b,
   b2
 ) -> {
-  Contents.Merge.of(fits, o, t, b) == Some{x}: Maybe<&2, Files.Files()>
-} -> {Contents.Merge.of(fits2, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>}:
+  RContents.Merge.of(fits, o, t, b) == Some{x}: Maybe<&2, Files.Files()>
+} -> {RContents.Merge.of(fits2, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>}:
   match fits o t b:
     case True{} Some{ov} Some{tv} Some{bv}:
       lf => lo => lt => lb => h => Eq.back(
         Bool,
-        y => {Contents.Merge.of(y, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
+        y => {RContents.Merge.of(y, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
         fits2,
         True{},
         lf({==}),
         Eq.back(
           Maybe<&2, Files.Files()>,
-          y => {Contents.Merge.of(True{}, y, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
+          y => {RContents.Merge.of(True{}, y, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
           o2,
           Some{ov},
           lo(ov)({==}),
           Eq.back(
             Maybe<&2, Files.Files()>,
-            y => {Contents.Merge.of(True{}, Some{ov}, y, b2) == Some{x}: Maybe<&2, Files.Files()>},
+            y => {RContents.Merge.of(True{}, Some{ov}, y, b2) == Some{x}: Maybe<&2, Files.Files()>},
             t2,
             Some{tv},
             lt(tv)({==}),
             Eq.back(
               Maybe<&2, Files.Files()>,
               y => {
-                Contents.Merge.of(
+                RContents.Merge.of(
                   True{},
                   Some{ov},
                   Some{tv},
@@ -256,22 +261,22 @@ def Merge.of_le(
       )
     case True{} Some{ov} Some{tv} None{}:
       lf => lo => lt => lb => h => Empty.absurd(
-        {Contents.Merge.of(fits2, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
+        {RContents.Merge.of(fits2, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
         Shared.Maybe.none_ne_some(Files.Files(), x, h)
       )
     case True{} Some{ov} None{} b:
       lf => lo => lt => lb => h => Empty.absurd(
-        {Contents.Merge.of(fits2, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
+        {RContents.Merge.of(fits2, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
         Shared.Maybe.none_ne_some(Files.Files(), x, h)
       )
     case True{} None{} t b:
       lf => lo => lt => lb => h => Empty.absurd(
-        {Contents.Merge.of(fits2, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
+        {RContents.Merge.of(fits2, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
         Shared.Maybe.none_ne_some(Files.Files(), x, h)
       )
     case False{} o t b:
       lf => lo => lt => lb => h => Empty.absurd(
-        {Contents.Merge.of(fits2, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
+        {RContents.Merge.of(fits2, o2, t2, b2) == Some{x}: Maybe<&2, Files.Files()>},
         Shared.Maybe.none_ne_some(Files.Files(), x, h)
       )
 
@@ -303,8 +308,8 @@ def Content.apply_le(
   base,
   base2
 ) -> {
-  Contents.Content.apply(r, fits, prev, other, base) == Some{x}: Maybe<&2, Files.Files()>
-} -> {Contents.Content.apply(r, fits2, prev2, other2, base2) == Some{x}: Maybe<&2, Files.Files()>}:
+  RContents.Content.apply(r, fits, prev, other, base) == Some{x}: Maybe<&2, Files.Files()>
+} -> {RContents.Content.apply(r, fits2, prev2, other2, base2) == Some{x}: Maybe<&2, Files.Files()>}:
   match r:
     case Spec.Request.Write{b, +p, +w}:
       lf => lp => lo => lb => h => Content.write_le(p, w, prev, prev2, x)(lp)(h)
@@ -360,8 +365,8 @@ def Content.next_le(
   base,
   base2
 ) -> {
-  Contents.Content.next(m, fits, prev, other, base) == Some{x}: Maybe<&2, Files.Files()>
-} -> {Contents.Content.next(m, fits2, prev2, other2, base2) == Some{x}: Maybe<&2, Files.Files()>}:
+  RContents.Content.next(m, fits, prev, other, base) == Some{x}: Maybe<&2, Files.Files()>
+} -> {RContents.Content.next(m, fits2, prev2, other2, base2) == Some{x}: Maybe<&2, Files.Files()>}:
   match m:
     case None{}:
       lf => lp => lo => lb => h => Empty.absurd(
@@ -370,7 +375,7 @@ def Content.next_le(
       )
     case Some{e}:
       Content.apply_le(
-        Lines.Ask.request(Lines.Entry.ask(e)),
+        RLines.Ask.request(RLines.Entry.ask(e)),
         fits,
         prev,
         other,
@@ -393,8 +398,8 @@ def Sub.taken(
   Contents.Content.at(
     f,
     s,
-    Spec.Point.line(Contents.Entry.taken(c, m)),
-    Spec.Point.n(Contents.Entry.taken(c, m))
+    Spec.Point.line(RContents.Entry.taken(c, m)),
+    Spec.Point.n(RContents.Entry.taken(c, m))
   )
 
 # the content, read with the fuel f, of the base of the entry m of the line c
@@ -407,8 +412,8 @@ def Sub.based(
   Contents.Content.at(
     f,
     s,
-    Spec.Point.line(Contents.Entry.based(c, m)),
-    Spec.Point.n(Contents.Entry.based(c, m))
+    Spec.Point.line(RContents.Entry.based(c, m)),
+    Spec.Point.n(RContents.Entry.based(c, m))
   )
 
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
@@ -450,15 +455,15 @@ def Content.at_more(
         Content.at_more(
           g,
           s,
-          Spec.Point.line(Contents.Entry.taken(c, Lines.Line.at(s, c, 1n+j))),
-          Spec.Point.n(Contents.Entry.taken(c, Lines.Line.at(s, c, 1n+j)))
+          Spec.Point.line(RContents.Entry.taken(c, Lines.Line.at(s, c, 1n+j))),
+          Spec.Point.n(RContents.Entry.taken(c, Lines.Line.at(s, c, 1n+j)))
         )
       )(
         Content.at_more(
           g,
           s,
-          Spec.Point.line(Contents.Entry.based(c, Lines.Line.at(s, c, 1n+j))),
-          Spec.Point.n(Contents.Entry.based(c, Lines.Line.at(s, c, 1n+j)))
+          Spec.Point.line(RContents.Entry.based(c, Lines.Line.at(s, c, 1n+j))),
+          Spec.Point.n(RContents.Entry.based(c, Lines.Line.at(s, c, 1n+j)))
         )
       )(h)
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
@@ -471,17 +476,17 @@ def Reply.id_some(
   m: Maybe<&2, Types.Entry>,
   -i: Ledgers.Id
 ) -> {
-  Answers.Reply.id(m) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
+  RAnswers.Reply.id(m) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
 } -> Exists(
   Types.Entry,
-  e => {m == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}
+  e => {m == Some{e}: Maybe<&2, Types.Entry>} & {RLines.Entry.id(e) == i: Ledgers.Id}
 ):
   match m:
     case None{}:
       h => Empty.absurd(
         Exists(
           Types.Entry,
-          e => {None{} == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}
+          e => {None{} == Some{e}: Maybe<&2, Types.Entry>} & {RLines.Entry.id(e) == i: Ledgers.Id}
         ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Id{i}, h)
       )
@@ -494,7 +499,7 @@ def Reply.id_some(
             Maybe<&2, Spec.Reply>,
             Ledgers.Id,
             x => Reply.to_id(x, i),
-            Some{Spec.Reply.Id{Lines.Entry.id(e)}},
+            Some{Spec.Reply.Id{RLines.Entry.id(e)}},
             Some{Spec.Reply.Id{i}},
             h
           )
@@ -507,7 +512,7 @@ def Line.at.of_some(
   -k: Nat,
   -e: Types.Entry
 ) -> {
-  Lines.Line.at.of(m, k) == Some{e}: Maybe<&2, Types.Entry>
+  RLines.Line.at.of(m, k) == Some{e}: Maybe<&2, Types.Entry>
 } -> Exists(
   List<&2, Types.Entry>,
   vs => {
@@ -561,7 +566,7 @@ def Line.at_of(
 } -> {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>}:
   hv => hg => Eq.back(
     Maybe<&2, List<&2, Types.Entry>>,
-    y => {Lines.Line.at.of(y, k) == Some{e}: Maybe<&2, Types.Entry>},
+    y => {RLines.Line.at.of(y, k) == Some{e}: Maybe<&2, Types.Entry>},
     Lines.Line.versions(s, c),
     Some{vs},
     hv,
@@ -580,7 +585,7 @@ def Line.find_at(
 } -> {
   List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>
 } -> {
-  Answers.Line.find(s, c, Lines.Entry.id(e)) == Some{Answers.Found{k, e}}: Maybe<&2, Answers.Found>
+  Answers.Line.find(s, c, RLines.Entry.id(e)) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
 }:
   +hv => +hg =>
     %Equal.sym(
@@ -589,18 +594,18 @@ def Line.find_at(
       Some{vs},
       hv
     ): {
-      Answers.Line.find.of(
-        Lines.Entry.id(e),
+      RAnswers.Line.find.of(
+        RLines.Entry.id(e),
         _
       )
-        == Some{Answers.Found{k, e}}: Maybe<&2, Answers.Found>
+        == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
     }
     %Equal.sym(
       Maybe<&2, Nat>,
-      Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Entry.id(e)),
+      Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, RLines.Entry.id(e)),
       Some{k},
       Versions.Line.versions_index(s, c, vs, k, e)(hv)(hg)
-    ): {Answers.Versions.find.at(vs, _) == Some{Answers.Found{k, e}}: Maybe<&2, Answers.Found>}
+    ): {RAnswers.Versions.find.at(vs, _) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>}
     %Equal.sym(
       Maybe<&2, Types.Entry>,
       List.get(&2, Types.Entry, vs, k),
@@ -610,11 +615,11 @@ def Line.find_at(
       Maybe.map(
         &2,
         Types.Entry,
-        Answers.Found,
-        e2 => Answers.Found{k, e2},
+        RAnswers.Found,
+        e2 => RAnswers.Found{k, e2},
         _
       )
-        == Some{Answers.Found{k, e}}: Maybe<&2, Answers.Found>
+        == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
     }
     {==}
 
@@ -633,9 +638,9 @@ def Made.At(
   }
     & (
       {
-        Answers.Line.find(s, c, i) == Some{Answers.Found{k, e}}: Maybe<&2, Answers.Found>
+        Answers.Line.find(s, c, i) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
       }
-        & {Answers.Entry.request(e) == r: Spec.Request}
+        & {RAnswers.Entry.request(e) == r: Spec.Request}
     )
 
 # Made.at, once the entry e of the version and its place in the versions vs are known
@@ -647,7 +652,7 @@ def Made.at.fin(
   +r: Spec.Request,
   +e: Types.Entry,
   ha: {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>},
-  +hf: {Answers.Line.find(s, c, i) == Some{Answers.Found{k, e}}: Maybe<&2, Answers.Found>},
+  +hf: {Answers.Line.find(s, c, i) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>},
   hr: {
     Answers.Answer.of(
       s,
@@ -664,13 +669,13 @@ def Made.at.fin(
         Maybe<&2, Spec.Reply>,
         Spec.Request,
         x => Reply.to_ask(x, r),
-        Some{Spec.Reply.Ask{Answers.Entry.request(e)}},
+        Some{Spec.Reply.Ask{RAnswers.Entry.request(e)}},
         Some{Spec.Reply.Ask{r}},
         Eq.to(
-          Maybe<&2, Answers.Found>,
-          y => {Answers.Reply.ask(y) == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>},
+          Maybe<&2, RAnswers.Found>,
+          y => {RAnswers.Reply.ask(y) == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>},
           Answers.Line.find(s, c, i),
-          Some{Answers.Found{k, e}},
+          Some{RAnswers.Found{k, e}},
           hf,
           hr
         )
@@ -687,7 +692,7 @@ def Made.at.of(
   +r: Spec.Request,
   +e: Types.Entry,
   +ha: {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>},
-  hi: {Lines.Entry.id(e) == i: Ledgers.Id},
+  hi: {RLines.Entry.id(e) == i: Ledgers.Id},
   hr: {
     Answers.Answer.of(
       s,
@@ -719,8 +724,8 @@ def Made.at.of(
         ha,
         Eq.to(
           Ledgers.Id,
-          y => {Answers.Line.find(s, c, y) == Some{Answers.Found{k, e}}: Maybe<&2, Answers.Found>},
-          Lines.Entry.id(e),
+          y => {Answers.Line.find(s, c, y) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>},
+          RLines.Entry.id(e),
           i,
           hi,
           Line.find_at(s, c, vs, k, e)(hv)(hg)
@@ -761,12 +766,12 @@ def Made.at(
       e => {
         Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>
       }
-        & {Lines.Entry.id(e) == i: Ledgers.Id},
+        & {RLines.Entry.id(e) == i: Ledgers.Id},
       Exists(Types.Entry, e => Made.At(s, c, k, i, r, e)),
       Reply.id_some(Lines.Line.at(s, c, k), i)(hv),
       +e => w => And.by(
         {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>},
-        {Lines.Entry.id(e) == i: Ledgers.Id},
+        {RLines.Entry.id(e) == i: Ledgers.Id},
         Exists(Types.Entry, e2 => Made.At(s, c, k, i, r, e2)),
         w,
         ha => hi => (e, Made.at.of(s, c, k, i, r, e, ha, hi, hr))
@@ -786,8 +791,8 @@ def Made.by(
   f: @e: Types.Entry -> {
     Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>
   } -> {
-    Answers.Line.find(s, c, i) == Some{Answers.Found{k, e}}: Maybe<&2, Answers.Found>
-  } -> {Answers.Entry.request(e) == r: Spec.Request} -> Q
+    Answers.Line.find(s, c, i) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+  } -> {RAnswers.Entry.request(e) == r: Spec.Request} -> Q
 ) -> Q:
   Ex.by(
     Types.Entry,
@@ -797,14 +802,14 @@ def Made.by(
     e => w => And.by(
       {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>},
       {
-        Answers.Line.find(s, c, i) == Some{Answers.Found{k, e}}: Maybe<&2, Answers.Found>
+        Answers.Line.find(s, c, i) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
       }
-        & {Answers.Entry.request(e) == r: Spec.Request},
+        & {RAnswers.Entry.request(e) == r: Spec.Request},
       Q,
       w,
       ha => w2 => And.by(
-        {Answers.Line.find(s, c, i) == Some{Answers.Found{k, e}}: Maybe<&2, Answers.Found>},
-        {Answers.Entry.request(e) == r: Spec.Request},
+        {Answers.Line.find(s, c, i) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>},
+        {RAnswers.Entry.request(e) == r: Spec.Request},
         Q,
         w2,
         hf => hr => f(e)(ha)(hf)(hr)
@@ -826,7 +831,7 @@ def Content.at_step(
 ) -> {
   Contents.Content.at(g, s, c, 1n+k) == Some{t}: Maybe<&2, Files.Files()>
 } -> {
-  Contents.Content.next(
+  RContents.Content.next(
     Lines.Line.at(s, c, 1n+k),
     Contents.Entry.fits(s, c, k, Lines.Line.at(s, c, 1n+k)),
     Contents.Content.at(g, s, c, k),
@@ -839,7 +844,7 @@ def Content.at_step(
     case 0n:
       h => Empty.absurd(
         {
-          Contents.Content.next(
+          RContents.Content.next(
             Lines.Line.at(s, c, 1n+k),
             Contents.Entry.fits(s, c, k, Lines.Line.at(s, c, 1n+k)),
             Contents.Content.at(0n, s, c, k),
@@ -870,15 +875,15 @@ def Content.at_step(
         Content.at_more(
           f,
           s,
-          Spec.Point.line(Contents.Entry.taken(c, Lines.Line.at(s, c, 1n+k))),
-          Spec.Point.n(Contents.Entry.taken(c, Lines.Line.at(s, c, 1n+k)))
+          Spec.Point.line(RContents.Entry.taken(c, Lines.Line.at(s, c, 1n+k))),
+          Spec.Point.n(RContents.Entry.taken(c, Lines.Line.at(s, c, 1n+k)))
         )
       )(
         Content.at_more(
           f,
           s,
-          Spec.Point.line(Contents.Entry.based(c, Lines.Line.at(s, c, 1n+k))),
-          Spec.Point.n(Contents.Entry.based(c, Lines.Line.at(s, c, 1n+k)))
+          Spec.Point.line(RContents.Entry.based(c, Lines.Line.at(s, c, 1n+k))),
+          Spec.Point.n(RContents.Entry.based(c, Lines.Line.at(s, c, 1n+k)))
         )
       )(h)
 
@@ -896,19 +901,19 @@ def Content.of_step(
 } -> {
   Contents.Content.of(s, c, 1n+k) == Some{t}: Maybe<&2, Files.Files()>
 } -> {
-  Contents.Content.apply(
-    Answers.Entry.request(e),
+  RContents.Content.apply(
+    RAnswers.Entry.request(e),
     Contents.Merge.fits(s, c, k, e),
     Contents.Content.of(s, c, k),
     Contents.Content.of(
       s,
-      Spec.Point.line(Contents.Point.or(c, Contents.Entry.takes(e))),
-      Spec.Point.n(Contents.Point.or(c, Contents.Entry.takes(e)))
+      Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
+      Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e)))
     ),
     Contents.Content.of(
       s,
-      Spec.Point.line(Contents.Point.or(c, Contents.Entry.base(e))),
-      Spec.Point.n(Contents.Point.or(c, Contents.Entry.base(e)))
+      Spec.Point.line(RContents.Point.or(c, RContents.Entry.base(e))),
+      Spec.Point.n(RContents.Point.or(c, RContents.Entry.base(e)))
     )
   )
     == Some{t}: Maybe<&2, Files.Files()>
@@ -916,7 +921,7 @@ def Content.of_step(
   ha => h => Eq.to(
     Maybe<&2, Types.Entry>,
     m => {
-      Contents.Content.next(
+      RContents.Content.next(
         m,
         Contents.Entry.fits(s, c, k, m),
         Contents.Content.at(Facts.Facts.fuel(s), s, c, k),
@@ -948,7 +953,7 @@ def Write.prev(
 ) -> {
   Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>
 } -> {
-  Answers.Entry.request(e) == Spec.Request.Write{b, p, ws}: Spec.Request
+  RAnswers.Entry.request(e) == Spec.Request.Write{b, p, ws}: Spec.Request
 } -> {
   Contents.Content.of(s, c, 1n+k) == Some{t}: Maybe<&2, Files.Files()>
 } -> Exists(
@@ -967,24 +972,24 @@ def Write.prev(
     Eq.to(
       Spec.Request,
       r => {
-        Contents.Content.apply(
+        RContents.Content.apply(
           r,
           Contents.Merge.fits(s, c, k, e),
           Contents.Content.of(s, c, k),
           Contents.Content.of(
             s,
-            Spec.Point.line(Contents.Point.or(c, Contents.Entry.takes(e))),
-            Spec.Point.n(Contents.Point.or(c, Contents.Entry.takes(e)))
+            Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
+            Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e)))
           ),
           Contents.Content.of(
             s,
-            Spec.Point.line(Contents.Point.or(c, Contents.Entry.base(e))),
-            Spec.Point.n(Contents.Point.or(c, Contents.Entry.base(e)))
+            Spec.Point.line(RContents.Point.or(c, RContents.Entry.base(e))),
+            Spec.Point.n(RContents.Point.or(c, RContents.Entry.base(e)))
           )
         )
           == Some{t}: Maybe<&2, Files.Files()>
       },
-      Answers.Entry.request(e),
+      RAnswers.Entry.request(e),
       Spec.Request.Write{b, p, ws},
       hr,
       Content.of_step(s, c, k, e, t)(ha)(h)
@@ -1004,7 +1009,7 @@ def Write.same(
 ) -> {
   Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>
 } -> {
-  Answers.Entry.request(e) == Spec.Request.Write{b, p, ws}: Spec.Request
+  RAnswers.Entry.request(e) == Spec.Request.Write{b, p, ws}: Spec.Request
 } -> {
   Contents.Content.read(s, c, 1n+k, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 } -> {x == ws: Maybe<&2, List<&2, U32>>}:
@@ -1034,7 +1039,7 @@ def Write.same(
           {Files.Files.set(prev, p, ws) == t: Files.Files()},
           {x == ws: Maybe<&2, List<&2, U32>>},
           w2,
-          hp => hs => Eq.to(
+          +hp => hs => Eq.to(
             Maybe<&2, List<&2, U32>>,
             y => {y == ws: Maybe<&2, List<&2, U32>>},
             Files.Files.get(t, p),
@@ -1046,7 +1051,7 @@ def Write.same(
               Files.Files.set(prev, p, ws),
               t,
               hs,
-              Files.Files.get_set_same(prev, p, ws)
+              FileLaws.Files.get_set_same(prev, p, ws)(Contents.Content.of_wf(s, c, k, prev)(hp))
             )
           )
         )
@@ -1069,7 +1074,7 @@ def Write.other(
 ) -> {
   Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>
 } -> {
-  Answers.Entry.request(e) == Spec.Request.Write{b, p, ws}: Spec.Request
+  RAnswers.Entry.request(e) == Spec.Request.Write{b, p, ws}: Spec.Request
 } -> {
   String.eq(p, q) == False{}: Bool
 } -> {
@@ -1103,7 +1108,7 @@ def Write.other(
           {Files.Files.set(prev, p, ws) == t: Files.Files()},
           {x == y: Maybe<&2, List<&2, U32>>},
           w2,
-          hp => hs => Eq.to(
+          +hp => hs => Eq.to(
             Maybe<&2, List<&2, U32>>,
             z => {x == z: Maybe<&2, List<&2, U32>>},
             Files.Files.get(prev, q),
@@ -1114,7 +1119,7 @@ def Write.other(
               y,
               Eq.to(
                 Maybe<&2, Files.Files()>,
-                m => {Contents.Content.get(m, q) == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+                m => {RContents.Content.get(m, q) == Some{y}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
                 Contents.Content.of(s, c, k),
                 Some{prev},
                 hp,
@@ -1133,7 +1138,7 @@ def Write.other(
                 Files.Files.set(prev, p, ws),
                 t,
                 hs,
-                Files.Files.get_set_other(prev, p, ws, q)(hne)
+                FileLaws.Files.get_set_other(prev, p, ws, q)(hne)(Contents.Content.of_wf(s, c, k, prev)(hp))
               )
             )
           )
@@ -1154,7 +1159,7 @@ def Core.write_writes.of(
   -x: Maybe<&2, List<&2, U32>>,
   -y: Maybe<&2, List<&2, U32>>,
   +ha: {Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>},
-  +hr: {Answers.Entry.request(e) == Spec.Request.Write{c, p, ws}: Spec.Request}
+  +hr: {RAnswers.Entry.request(e) == Spec.Request.Write{c, p, ws}: Spec.Request}
 ) -> (
   {
     Contents.Content.read(s, c, 1n+k, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
@@ -1241,19 +1246,19 @@ def Step.apply(
   +mt: Maybe<&2, Spec.Point>,
   +mb: Maybe<&2, Spec.Point>
 ) -> Maybe<&2, Files.Files()>:
-  Contents.Content.apply(
+  RContents.Content.apply(
     r,
     Contents.Merge.fits(s, c, k, e),
     Contents.Content.of(s, c, k),
     Contents.Content.of(
       s,
-      Spec.Point.line(Contents.Point.or(c, mt)),
-      Spec.Point.n(Contents.Point.or(c, mt))
+      Spec.Point.line(RContents.Point.or(c, mt)),
+      Spec.Point.n(RContents.Point.or(c, mt))
     ),
     Contents.Content.of(
       s,
-      Spec.Point.line(Contents.Point.or(c, mb)),
-      Spec.Point.n(Contents.Point.or(c, mb))
+      Spec.Point.line(RContents.Point.or(c, mb)),
+      Spec.Point.n(RContents.Point.or(c, mb))
     )
   )
 
@@ -1262,7 +1267,7 @@ def Reply.hash_some(
   m: Maybe<&2, Files.Files()>,
   -h: Hashes.Hash
 ) -> {
-  Answers.Reply.hash(m) == Some{Spec.Reply.Hash{h}}: Maybe<&2, Spec.Reply>
+  RAnswers.Reply.hash(m) == Some{Spec.Reply.Hash{h}}: Maybe<&2, Spec.Reply>
 } -> Exists(
   Files.Files(),
   t => {m == Some{t}: Maybe<&2, Files.Files()>} & {Files.Files.hash(t) == h: Hashes.Hash}
@@ -1302,13 +1307,13 @@ def Entry.takes_move(
   -t: Ledgers.Line,
   -v: Nat
 ) -> {
-  Answers.Entry.request(e) == Spec.Request.Move{b, t, v}: Spec.Request
-} -> {Contents.Entry.takes(e) == Some{Spec.Point{t, v}}: Maybe<&2, Spec.Point>}:
+  RAnswers.Entry.request(e) == Spec.Request.Move{b, t, v}: Spec.Request
+} -> {RContents.Entry.takes(e) == Some{Spec.Point{t, v}}: Maybe<&2, Spec.Point>}:
   match e:
     case Types.Entry{Types.Pick{Types.Ask{i, n, r}, Types.Pins{era, from, base, ours, theirs}}, k}:
       h => Eq.back(
         Spec.Request,
-        y => {Contents.Request.takes(y, from) == Some{Spec.Point{t, v}}: Maybe<&2, Spec.Point>},
+        y => {RContents.Request.takes(y, from) == Some{Spec.Point{t, v}}: Maybe<&2, Spec.Point>},
         r,
         Spec.Request.Move{b, t, v},
         h,
@@ -1322,23 +1327,23 @@ def Zero.opens(
   +e: Types.Entry
 ) -> {
   Lines.Line.at(s, c, 0n) == Some{e}: Maybe<&2, Types.Entry>
-} -> {Lines.Request.opens(Answers.Entry.request(e)) == True{}: Bool}:
+} -> {RLines.Request.opens(RAnswers.Entry.request(e)) == True{}: Bool}:
   ha => Ex.by(
     List<&2, Types.Entry>,
     vs => {
       Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
     }
       & {List.get(&2, Types.Entry, vs, 0n) == Some{e}: Maybe<&2, Types.Entry>},
-    {Lines.Request.opens(Answers.Entry.request(e)) == True{}: Bool},
+    {RLines.Request.opens(RAnswers.Entry.request(e)) == True{}: Bool},
     Line.at_some(s, c, 0n, e)(ha),
     +vs => w => And.by(
       {Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>},
       {List.get(&2, Types.Entry, vs, 0n) == Some{e}: Maybe<&2, Types.Entry>},
-      {Lines.Request.opens(Answers.Entry.request(e)) == True{}: Bool},
+      {RLines.Request.opens(RAnswers.Entry.request(e)) == True{}: Bool},
       w,
       hv => hg => Pair.snd(
-        {Facts.Ask.seq(Lines.Entry.ask(e)) == 0n: Nat},
-        {Lines.Request.opens(Lines.Ask.request(Lines.Entry.ask(e))) == True{}: Bool},
+        {RFacts.Ask.seq(RLines.Entry.ask(e)) == 0n: Nat},
+        {RLines.Request.opens(RLines.Ask.request(RLines.Entry.ask(e))) == True{}: Bool},
         Versions.Line.versions_zero(s, c, vs, e)(hv)(hg)
       )
     )
@@ -1357,7 +1362,7 @@ def Move.content(
 ) -> {
   Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>
 } -> {
-  Answers.Entry.request(e) == Spec.Request.Move{b, t, v}: Spec.Request
+  RAnswers.Entry.request(e) == Spec.Request.Move{b, t, v}: Spec.Request
 } -> {
   Contents.Content.of(s, c, 1n+k) == Some{x}: Maybe<&2, Files.Files()>
 } -> {Contents.Content.of(s, t, v) == Some{x}: Maybe<&2, Files.Files()>}:
@@ -1371,11 +1376,11 @@ def Move.content(
         e,
         Spec.Request.Move{b, t, v},
         m,
-        Contents.Entry.base(e)
+        RContents.Entry.base(e)
       )
         == Some{x}: Maybe<&2, Files.Files()>
     },
-    Contents.Entry.takes(e),
+    RContents.Entry.takes(e),
     Some{Spec.Point{t, v}},
     Entry.takes_move(e, b, t, v)(hr),
     Eq.to(
@@ -1387,12 +1392,12 @@ def Move.content(
           k,
           e,
           r,
-          Contents.Entry.takes(e),
-          Contents.Entry.base(e)
+          RContents.Entry.takes(e),
+          RContents.Entry.base(e)
         )
           == Some{x}: Maybe<&2, Files.Files()>
       },
-      Answers.Entry.request(e),
+      RAnswers.Entry.request(e),
       Spec.Request.Move{b, t, v},
       hr,
       Content.of_step(s, c, k, e, x)(ha)(h)
@@ -1411,15 +1416,15 @@ def Move.fin(
   -h: Hashes.Hash,
   -h2: Hashes.Hash,
   ha: {Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>},
-  hr: {Answers.Entry.request(e) == Spec.Request.Move{b, t, v}: Spec.Request},
+  hr: {RAnswers.Entry.request(e) == Spec.Request.Move{b, t, v}: Spec.Request},
   e1: {
-    Answers.Reply.hash(
+    RAnswers.Reply.hash(
       Contents.Content.of(s, c, 1n+k)
     )
       == Some{Spec.Reply.Hash{h}}: Maybe<&2, Spec.Reply>
   },
   e2: {
-    Answers.Reply.hash(
+    RAnswers.Reply.hash(
       Contents.Content.of(s, t, v)
     )
       == Some{Spec.Reply.Hash{h2}}: Maybe<&2, Spec.Reply>
@@ -1452,7 +1457,7 @@ def Move.fin(
           Some{Spec.Reply.Hash{h2}},
           Eq.to(
             Maybe<&2, Files.Files()>,
-            m => {Answers.Reply.hash(m) == Some{Spec.Reply.Hash{h2}}: Maybe<&2, Spec.Reply>},
+            m => {RAnswers.Reply.hash(m) == Some{Spec.Reply.Hash{h2}}: Maybe<&2, Spec.Reply>},
             Contents.Content.of(s, t, v),
             Some{x},
             Move.content(s, c, k, e, b, t, v, x)(ha)(hr)(hx),
@@ -1507,8 +1512,8 @@ def Core.move_equals(
           Shared.Bool.false_ne_true(
             Eq.to(
               Spec.Request,
-              r => {Lines.Request.opens(r) == True{}: Bool},
-              Answers.Entry.request(e),
+              r => {RLines.Request.opens(r) == True{}: Bool},
+              RAnswers.Entry.request(e),
               Spec.Request.Move{c, t, v},
               hr,
               Zero.opens(s, c, e)(ha)
@@ -1551,7 +1556,7 @@ def Hop.stays(
   hw => hl => ho => Lists.Maybe.by(
     Types.Entry,
     m => {
-      Contents.Way.hop.of(c, k, w, m) == True{}: Bool
+      RContents.Way.hop.of(c, k, w, m) == True{}: Bool
     } -> {Contents.Way.hop(s2, c, k, w) == True{}: Bool},
     Lines.Line.at(s, c, k),
     en => h => Empty.absurd(
@@ -1560,7 +1565,7 @@ def Hop.stays(
     ),
     +e => ee => h => Eq.back(
       Maybe<&2, Types.Entry>,
-      m => {Contents.Way.hop.of(c, k, w, m) == True{}: Bool},
+      m => {RContents.Way.hop.of(c, k, w, m) == True{}: Bool},
       Lines.Line.at(s2, c, k),
       Some{e},
       Stays.Line.at_stays(name, s, s2, c, k, e)(hw)(hl)(ho)(ee),
@@ -1730,10 +1735,10 @@ def Merge.fits_stays(
     s2,
     c,
     j,
-    Contents.Entry.base(e),
-    Contents.Entry.ours(e),
-    Contents.Entry.theirs(e),
-    Contents.Point.or(c, Contents.Entry.takes(e))
+    RContents.Entry.base(e),
+    RContents.Entry.ours(e),
+    RContents.Entry.theirs(e),
+    RContents.Point.or(c, RContents.Entry.takes(e))
   )
 
 # the content of version 0, the entry m if the node holds it, stays
@@ -1750,21 +1755,21 @@ def First.stays(
 } -> {
   Facts.Facts.ok(name, s2) == True{}: Bool
 } -> {
-  Contents.Content.first(Lines.Line.at(s, c, 0n)) == Some{t}: Maybe<&2, Files.Files()>
-} -> {Contents.Content.first(Lines.Line.at(s2, c, 0n)) == Some{t}: Maybe<&2, Files.Files()>}:
+  RContents.Content.first(Lines.Line.at(s, c, 0n)) == Some{t}: Maybe<&2, Files.Files()>
+} -> {RContents.Content.first(Lines.Line.at(s2, c, 0n)) == Some{t}: Maybe<&2, Files.Files()>}:
   hw => hl => ho => Lists.Maybe.by(
     Types.Entry,
     m => {
-      Contents.Content.first(m) == Some{t}: Maybe<&2, Files.Files()>
-    } -> {Contents.Content.first(Lines.Line.at(s2, c, 0n)) == Some{t}: Maybe<&2, Files.Files()>},
+      RContents.Content.first(m) == Some{t}: Maybe<&2, Files.Files()>
+    } -> {RContents.Content.first(Lines.Line.at(s2, c, 0n)) == Some{t}: Maybe<&2, Files.Files()>},
     Lines.Line.at(s, c, 0n),
     en => h => Empty.absurd(
-      {Contents.Content.first(Lines.Line.at(s2, c, 0n)) == Some{t}: Maybe<&2, Files.Files()>},
+      {RContents.Content.first(Lines.Line.at(s2, c, 0n)) == Some{t}: Maybe<&2, Files.Files()>},
       Shared.Maybe.none_ne_some(Files.Files(), t, h)
     ),
     +e => ee => h => Eq.back(
       Maybe<&2, Types.Entry>,
-      m => {Contents.Content.first(m) == Some{t}: Maybe<&2, Files.Files()>},
+      m => {RContents.Content.first(m) == Some{t}: Maybe<&2, Files.Files()>},
       Lines.Line.at(s2, c, 0n),
       Some{e},
       Stays.Line.at_stays(name, s, s2, c, 0n, e)(hw)(hl)(ho)(ee),
@@ -1800,7 +1805,7 @@ def Content.at_stays(
       Lists.Maybe.by(
         Types.Entry,
         m => {
-          Contents.Content.next(
+          RContents.Content.next(
             m,
             Contents.Entry.fits(s, c, j, m),
             Contents.Content.at(g, s, c, j),
@@ -1817,7 +1822,7 @@ def Content.at_stays(
         +e => ee => h => Eq.back(
           Maybe<&2, Types.Entry>,
           m => {
-            Contents.Content.next(
+            RContents.Content.next(
               m,
               Contents.Entry.fits(s2, c, j, m),
               Contents.Content.at(g, s2, c, j),
@@ -1830,7 +1835,7 @@ def Content.at_stays(
           Some{e},
           Stays.Line.at_stays(name, s, s2, c, 1n+j, e)(hw)(hl)(ho)(ee),
           Content.apply_le(
-            Answers.Entry.request(e),
+            RAnswers.Entry.request(e),
             Contents.Merge.fits(s, c, j, e),
             Contents.Content.at(g, s, c, j),
             Sub.taken(g, s, c, Some{e}),
@@ -1853,8 +1858,8 @@ def Content.at_stays(
               hw,
               hl,
               ho,
-              Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-              Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+              Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+              Spec.Point.n(RContents.Entry.taken(c, Some{e}))
             )
           )(
             Content.at_stays(
@@ -1865,8 +1870,8 @@ def Content.at_stays(
               hw,
               hl,
               ho,
-              Spec.Point.line(Contents.Entry.based(c, Some{e})),
-              Spec.Point.n(Contents.Entry.based(c, Some{e}))
+              Spec.Point.line(RContents.Entry.based(c, Some{e})),
+              Spec.Point.n(RContents.Entry.based(c, Some{e}))
             )
           )(h)
         )
@@ -1978,7 +1983,7 @@ def Core.read_stays(
         w,
         ht => hx => Eq.back(
           Maybe<&2, Files.Files()>,
-          m => {Contents.Content.get(m, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+          m => {RContents.Content.get(m, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
           Contents.Content.of(s2, c, k),
           Some{t},
           Content.of_stays(name, s, s2, c, k, t)(hw)(hl)(ho)(ht),
@@ -2003,7 +2008,7 @@ def Reply.names_some(
   m: Maybe<&2, List<&2, String>>,
   -cs: List<&2, String>
 ) -> {
-  Answers.Reply.names(m) == Some{Spec.Reply.Names{cs}}: Maybe<&2, Spec.Reply>
+  RAnswers.Reply.names(m) == Some{Spec.Reply.Names{cs}}: Maybe<&2, Spec.Reply>
 } -> {m == Some{cs}: Maybe<&2, List<&2, String>>}:
   match m:
     case None{}:
@@ -2026,7 +2031,7 @@ def Reply.point_some(
   m: Maybe<&2, Spec.Point>,
   -a: Spec.Point
 ) -> {
-  Answers.Reply.point(m) == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>
+  RAnswers.Reply.point(m) == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>
 } -> {m == Some{a}: Maybe<&2, Spec.Point>}:
   match m:
     case None{}:
@@ -2097,9 +2102,9 @@ def Parents.takes(
     Spec.Question.Parents{c, 1n+k}
   )
     == Some{Spec.Reply.Points{[Spec.Point{c, k}, Spec.Point{f, v}]}}: Maybe<&2, Spec.Reply>
-} -> {Contents.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>}:
+} -> {RContents.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>}:
   ha => hp => Entry.takes_second(
-    Contents.Entry.takes(e),
+    RContents.Entry.takes(e),
     Spec.Point{c, k},
     Spec.Point{c, k},
     Spec.Point{f, v}
@@ -2108,12 +2113,12 @@ def Parents.takes(
       Maybe<&2, Spec.Reply>,
       List<&2, Spec.Point>,
       x => Reply.to_points(x, []),
-      Some{Spec.Reply.Points{Contents.Entry.parents(c, 1n+k, e)}},
+      Some{Spec.Reply.Points{RContents.Entry.parents(c, 1n+k, e)}},
       Some{Spec.Reply.Points{[Spec.Point{c, k}, Spec.Point{f, v}]}},
       Eq.to(
         Maybe<&2, Types.Entry>,
         m => {
-          Answers.Reply.parents(
+          RAnswers.Reply.parents(
             c,
             1n+k,
             m
@@ -2134,7 +2139,7 @@ def When.point(
   m: Maybe<&2, Spec.Point>,
   -a: Spec.Point
 ) -> {
-  Answers.Reply.point(
+  RAnswers.Reply.point(
     Shared.Maybe.when(Spec.Point, b, u => m)
   )
     == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>
@@ -2158,28 +2163,28 @@ def Base.fits(
   +e: Types.Entry,
   -a: Spec.Point
 ) -> {
-  Answers.Line.find(s, c, i) == Some{Answers.Found{1n+k, e}}: Maybe<&2, Answers.Found>
+  Answers.Line.find(s, c, i) == Some{RAnswers.Found{1n+k, e}}: Maybe<&2, RAnswers.Found>
 } -> {
   Answers.Answer.of(s, Spec.Question.Base{c, i}) == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>
 } -> {
   Contents.Merge.fits(s, c, k, e) == True{}: Bool
 }
-  & {Contents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>}:
+  & {RContents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>}:
   hf => hb => When.point(
     Contents.Merge.fits(s, c, k, e),
-    Contents.Entry.base(e),
+    RContents.Entry.base(e),
     a
   )(
     Eq.to(
-      Maybe<&2, Answers.Found>,
+      Maybe<&2, RAnswers.Found>,
       m => {
-        Answers.Reply.point(
-          Answers.Found.then(Spec.Point, m, k2 => e2 => Answers.Base.of(s, c, k2, e2))
+        RAnswers.Reply.point(
+          RAnswers.Found.then(Spec.Point, m, k2 => e2 => Answers.Base.of(s, c, k2, e2))
         )
           == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>
       },
       Answers.Line.find(s, c, i),
-      Some{Answers.Found{1n+k, e}},
+      Some{RAnswers.Found{1n+k, e}},
       hf,
       hb
     )
@@ -2194,7 +2199,7 @@ def Clashes.reply(
   +e: Types.Entry,
   -cs: List<&2, String>
 ) -> {
-  Answers.Line.find(s, c, i) == Some{Answers.Found{1n+k, e}}: Maybe<&2, Answers.Found>
+  Answers.Line.find(s, c, i) == Some{RAnswers.Found{1n+k, e}}: Maybe<&2, RAnswers.Found>
 } -> {
   Answers.Answer.of(
     s,
@@ -2207,15 +2212,15 @@ def Clashes.reply(
     cs
   )(
     Eq.to(
-      Maybe<&2, Answers.Found>,
+      Maybe<&2, RAnswers.Found>,
       m => {
-        Answers.Reply.names(
-          Answers.Found.then(List<&2, String>, m, k2 => e2 => Answers.Clashes.of(s, c, k2, e2))
+        RAnswers.Reply.names(
+          RAnswers.Found.then(List<&2, String>, m, k2 => e2 => Answers.Clashes.of(s, c, k2, e2))
         )
           == Some{Spec.Reply.Names{cs}}: Maybe<&2, Spec.Reply>
       },
       Answers.Line.find(s, c, i),
-      Some{Answers.Found{1n+k, e}},
+      Some{RAnswers.Found{1n+k, e}},
       hf,
       hc
     )
@@ -2245,40 +2250,40 @@ def Merge.of_all(
 } -> {
   base == Some{b}: Maybe<&2, Files.Files()>
 } -> {
-  Contents.Content.apply(r, fits, prev, other, base) == Some{m}: Maybe<&2, Files.Files()>
-} -> {Contents.Merge.files(b, o, t) == m: Files.Files()}:
+  RContents.Content.apply(r, fits, prev, other, base) == Some{m}: Maybe<&2, Files.Files()>
+} -> {RContents.Merge.files(b, o, t) == m: Files.Files()}:
   hr => hf => hp => ho => hb => h => Shared.Maybe.some_inj(
     Files.Files(),
-    Contents.Merge.files(b, o, t),
+    RContents.Merge.files(b, o, t),
     m,
     Eq.to(
       Maybe<&2, Files.Files()>,
-      y => {Contents.Merge.of(True{}, Some{o}, Some{t}, y) == Some{m}: Maybe<&2, Files.Files()>},
+      y => {RContents.Merge.of(True{}, Some{o}, Some{t}, y) == Some{m}: Maybe<&2, Files.Files()>},
       base,
       Some{b},
       hb,
       Eq.to(
         Maybe<&2, Files.Files()>,
-        y => {Contents.Merge.of(True{}, Some{o}, y, base) == Some{m}: Maybe<&2, Files.Files()>},
+        y => {RContents.Merge.of(True{}, Some{o}, y, base) == Some{m}: Maybe<&2, Files.Files()>},
         other,
         Some{t},
         ho,
         Eq.to(
           Maybe<&2, Files.Files()>,
-          y => {Contents.Merge.of(True{}, y, other, base) == Some{m}: Maybe<&2, Files.Files()>},
+          y => {RContents.Merge.of(True{}, y, other, base) == Some{m}: Maybe<&2, Files.Files()>},
           prev,
           Some{o},
           hp,
           Eq.to(
             Bool,
-            y => {Contents.Merge.of(y, prev, other, base) == Some{m}: Maybe<&2, Files.Files()>},
+            y => {RContents.Merge.of(y, prev, other, base) == Some{m}: Maybe<&2, Files.Files()>},
             fits,
             True{},
             hf,
             Eq.to(
               Spec.Request,
               y => {
-                Contents.Content.apply(
+                RContents.Content.apply(
                   y,
                   fits,
                   prev,
@@ -2323,22 +2328,22 @@ def Clashes.at_all(
 } -> {
   theirs == Some{t}: Maybe<&2, Files.Files()>
 } -> {
-  Answers.Clashes.at(
-    Bool.and(Contents.Request.is_merge(r), fits),
+  RAnswers.Clashes.at(
+    Bool.and(RContents.Request.is_merge(r), fits),
     base,
     ours,
     theirs
   )
     == Some{cs}: Maybe<&2, List<&2, String>>
-} -> {Contents.Merge.clashes(b, o, t) == cs: List<&2, String>}:
+} -> {RContents.Merge.clashes(b, o, t) == cs: List<&2, String>}:
   hr => hf => hb => ho => ht => h => Shared.Maybe.some_inj(
     List<&2, String>,
-    Contents.Merge.clashes(b, o, t),
+    RContents.Merge.clashes(b, o, t),
     cs,
     Eq.to(
       Maybe<&2, Files.Files()>,
       y => {
-        Answers.Clashes.at(True{}, Some{b}, Some{o}, y) == Some{cs}: Maybe<&2, List<&2, String>>
+        RAnswers.Clashes.at(True{}, Some{b}, Some{o}, y) == Some{cs}: Maybe<&2, List<&2, String>>
       },
       theirs,
       Some{t},
@@ -2346,7 +2351,7 @@ def Clashes.at_all(
       Eq.to(
         Maybe<&2, Files.Files()>,
         y => {
-          Answers.Clashes.at(True{}, Some{b}, y, theirs) == Some{cs}: Maybe<&2, List<&2, String>>
+          RAnswers.Clashes.at(True{}, Some{b}, y, theirs) == Some{cs}: Maybe<&2, List<&2, String>>
         },
         ours,
         Some{o},
@@ -2354,7 +2359,7 @@ def Clashes.at_all(
         Eq.to(
           Maybe<&2, Files.Files()>,
           y => {
-            Answers.Clashes.at(True{}, y, ours, theirs) == Some{cs}: Maybe<&2, List<&2, String>>
+            RAnswers.Clashes.at(True{}, y, ours, theirs) == Some{cs}: Maybe<&2, List<&2, String>>
           },
           base,
           Some{b},
@@ -2362,7 +2367,7 @@ def Clashes.at_all(
           Eq.to(
             Bool,
             y => {
-              Answers.Clashes.at(
+              RAnswers.Clashes.at(
                 Bool.and(True{}, y),
                 base,
                 ours,
@@ -2376,8 +2381,8 @@ def Clashes.at_all(
             Eq.to(
               Spec.Request,
               y => {
-                Answers.Clashes.at(
-                  Bool.and(Contents.Request.is_merge(y), fits),
+                RAnswers.Clashes.at(
+                  Bool.and(RContents.Request.is_merge(y), fits),
                   base,
                   ours,
                   theirs
@@ -2402,19 +2407,21 @@ def Merge.put_other(
   m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
   +p: String
 ) -> {
+  FileLaws.Files.wf(acc) == True{}: Bool
+} -> {
   String.eq(q, p) == False{}: Bool
 } -> {
   Files.Files.get(
-    Contents.Merge.put(acc, q, m),
+    RContents.Merge.put(acc, q, m),
     p
   )
     == Files.Files.get(acc, p): Maybe<&2, List<&2, U32>>
 }:
   match m:
     case None{}:
-      h => {==}
+      wa => h => {==}
     case Some{x}:
-      h => Files.Files.get_set_other(acc, q, x, p)(h)
+      wa => h => FileLaws.Files.get_set_other(acc, q, x, p)(h)(wa)
 
 # a merge put at p that does not clash is read there
 def Merge.put_same(
@@ -2423,22 +2430,24 @@ def Merge.put_same(
   m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
   -x: Maybe<&2, List<&2, U32>>
 ) -> {
+  FileLaws.Files.wf(acc) == True{}: Bool
+} -> {
   m == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
-} -> {Files.Files.get(Contents.Merge.put(acc, p, m), p) == x: Maybe<&2, List<&2, U32>>}:
+} -> {Files.Files.get(RContents.Merge.put(acc, p, m), p) == x: Maybe<&2, List<&2, U32>>}:
   match m:
     case None{}:
-      h => Empty.absurd(
+      wa => h => Empty.absurd(
         {Files.Files.get(acc, p) == x: Maybe<&2, List<&2, U32>>},
         Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, x, h)
       )
     case Some{+y}:
-      h => Eq.to(
+      wa => h => Eq.to(
         Maybe<&2, List<&2, U32>>,
         z => {Files.Files.get(Files.Files.set(acc, p, y), p) == z: Maybe<&2, List<&2, U32>>},
         y,
         x,
         Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, y, x, h),
-        Files.Files.get_set_same(acc, p, y)
+        FileLaws.Files.get_set_same(acc, p, y)(wa)
       )
 
 # the merge of the path q, put where q is p, is read at p
@@ -2451,21 +2460,23 @@ def Merge.put_hit(
   +p: String,
   -x: Maybe<&2, List<&2, U32>>
 ) -> {
-  Contents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  FileLaws.Files.wf(acc) == True{}: Bool
+} -> {
+  RContents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 } -> {
   String.eq(q, p) == True{}: Bool
 } -> {
   Files.Files.get(
-    Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)),
+    RContents.Merge.put(acc, q, RContents.Merge.at(b, o, t, q)),
     p
   )
     == x: Maybe<&2, List<&2, U32>>
 }:
-  hm => et => Eq.back(
+  wa => hm => et => Eq.back(
     String,
     y => {
       Files.Files.get(
-        Contents.Merge.put(acc, y, Contents.Merge.at(b, o, t, y)),
+        RContents.Merge.put(acc, y, RContents.Merge.at(b, o, t, y)),
         p
       )
         == x: Maybe<&2, List<&2, U32>>
@@ -2473,7 +2484,7 @@ def Merge.put_hit(
     q,
     p,
     Texts.String.eq_sound(q, p)(et),
-    Merge.put_same(acc, p, Contents.Merge.at(b, o, t, p), x)(hm)
+    Merge.put_same(acc, p, RContents.Merge.at(b, o, t, p), x)(wa)(hm)
   )
 
 # after the merge of the path q is put, p still reads its merge x, if it did
@@ -2486,32 +2497,34 @@ def Merge.put_keep(
   +p: String,
   -x: Maybe<&2, List<&2, U32>>
 ) -> {
-  Contents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  FileLaws.Files.wf(acc) == True{}: Bool
+} -> {
+  RContents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 } -> {
   Files.Files.get(acc, p) == x: Maybe<&2, List<&2, U32>>
 } -> {
   Files.Files.get(
-    Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)),
+    RContents.Merge.put(acc, q, RContents.Merge.at(b, o, t, q)),
     p
   )
     == x: Maybe<&2, List<&2, U32>>
 }:
-  hm => ha => Lists.Bool.by(
+  +wa => hm => ha => Lists.Bool.by(
     d => {
       Files.Files.get(
-        Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)),
+        RContents.Merge.put(acc, q, RContents.Merge.at(b, o, t, q)),
         p
       )
         == x: Maybe<&2, List<&2, U32>>
     },
     String.eq(q, p),
-    et => Merge.put_hit(b, o, t, acc, q, p, x)(hm)(et),
+    et => Merge.put_hit(b, o, t, acc, q, p, x)(wa)(hm)(et),
     ef => Equal.trans(
       Maybe<&2, List<&2, U32>>,
-      Files.Files.get(Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)), p),
+      Files.Files.get(RContents.Merge.put(acc, q, RContents.Merge.at(b, o, t, q)), p),
       Files.Files.get(acc, p),
       x,
-      Merge.put_other(acc, q, Contents.Merge.at(b, o, t, q), p)(ef),
+      Merge.put_other(acc, q, RContents.Merge.at(b, o, t, q), p)(wa)(ef),
       ha
     )
   )
@@ -2526,23 +2539,25 @@ def Merge.fold_keep(
   +p: String,
   -x: Maybe<&2, List<&2, U32>>
 ) -> {
-  Contents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  FileLaws.Files.wf(acc) == True{}: Bool
+} -> {
+  RContents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 } -> {
   Files.Files.get(acc, p) == x: Maybe<&2, List<&2, U32>>
-} -> {Files.Files.get(Contents.Merge.fold(b, o, t, ps, acc), p) == x: Maybe<&2, List<&2, U32>>}:
+} -> {Files.Files.get(RContents.Merge.fold(b, o, t, ps, acc), p) == x: Maybe<&2, List<&2, U32>>}:
   match ps:
     case Nil{}:
-      hm => ha => ha
+      wa => hm => ha => ha
     case Con{+q, +rest}:
-      +hm => ha => Merge.fold_keep(
+      +wa => +hm => ha => Merge.fold_keep(
         b,
         o,
         t,
         rest,
-        Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)),
+        RContents.Merge.put(acc, q, RContents.Merge.at(b, o, t, q)),
         p,
         x
-      )(hm)(Merge.put_keep(b, o, t, acc, q, p, x)(hm)(ha))
+      )(Contents.Merge.put_wf(acc, q, RContents.Merge.at(b, o, t, q))(wa))(hm)(Merge.put_keep(b, o, t, acc, q, p, x)(wa)(hm)(ha))
 
 # after the merges of the paths ps, one of them reads its merge
 def Merge.fold_in(
@@ -2554,28 +2569,30 @@ def Merge.fold_in(
   +p: String,
   -x: Maybe<&2, List<&2, U32>>
 ) -> {
-  Contents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  FileLaws.Files.wf(acc) == True{}: Bool
+} -> {
+  RContents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 } -> {
   List.contains(~String, ~String.eq, ps, p) == True{}: Bool
-} -> {Files.Files.get(Contents.Merge.fold(b, o, t, ps, acc), p) == x: Maybe<&2, List<&2, U32>>}:
+} -> {Files.Files.get(RContents.Merge.fold(b, o, t, ps, acc), p) == x: Maybe<&2, List<&2, U32>>}:
   match ps:
     case Nil{}:
-      hm => hc => Empty.absurd(
+      wa => hm => hc => Empty.absurd(
         {Files.Files.get(acc, p) == x: Maybe<&2, List<&2, U32>>},
         Shared.Bool.false_ne_true(hc)
       )
     case Con{+q, +rest}:
-      +hm => hc => Lists.Bool.by(
+      +wa => +hm => hc => Lists.Bool.by(
         d => {
           List.any.if(u => List.contains(~String, ~String.eq, rest, p), d) == True{}: Bool
         } -> {
           Files.Files.get(
-            Contents.Merge.fold(
+            RContents.Merge.fold(
               b,
               o,
               t,
               rest,
-              Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q))
+              RContents.Merge.put(acc, q, RContents.Merge.at(b, o, t, q))
             ),
             p
           )
@@ -2587,19 +2604,19 @@ def Merge.fold_in(
           o,
           t,
           rest,
-          Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)),
+          RContents.Merge.put(acc, q, RContents.Merge.at(b, o, t, q)),
           p,
           x
-        )(hm)(Merge.put_hit(b, o, t, acc, q, p, x)(hm)(et)),
+        )(Contents.Merge.put_wf(acc, q, RContents.Merge.at(b, o, t, q))(wa))(hm)(Merge.put_hit(b, o, t, acc, q, p, x)(wa)(hm)(et)),
         ef => hc2 => Merge.fold_in(
           b,
           o,
           t,
           rest,
-          Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)),
+          RContents.Merge.put(acc, q, RContents.Merge.at(b, o, t, q)),
           p,
           x
-        )(hm)(hc2)
+        )(Contents.Merge.put_wf(acc, q, RContents.Merge.at(b, o, t, q))(wa))(hm)(hc2)
       )(hc)
 
 # a member of r is a member of r with q, kept or not
@@ -2639,11 +2656,11 @@ def Merge.clashes_in(
   ps: List<&2, String>,
   +p: String
 ) -> {
-  Contents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  RContents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 } -> {
   List.contains(~String, ~String.eq, ps, p) == True{}: Bool
 } -> {
-  List.contains(~String, ~String.eq, Contents.Merge.clashes.go(b, o, t, ps), p) == True{}: Bool
+  List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, t, ps), p) == True{}: Bool
 }:
   match ps:
     case Nil{}:
@@ -2659,8 +2676,8 @@ def Merge.clashes_in(
             List.filter.put(
               String,
               q,
-              Contents.Merge.clashes.go(b, o, t, rest),
-              Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, Contents.Merge.at(b, o, t, q))
+              RContents.Merge.clashes.go(b, o, t, rest),
+              Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, RContents.Merge.at(b, o, t, q))
             ),
             p
           )
@@ -2676,8 +2693,8 @@ def Merge.clashes_in(
               List.filter.put(
                 String,
                 y,
-                Contents.Merge.clashes.go(b, o, t, rest),
-                Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, Contents.Merge.at(b, o, t, y))
+                RContents.Merge.clashes.go(b, o, t, rest),
+                Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, RContents.Merge.at(b, o, t, y))
               ),
               p
             )
@@ -2695,23 +2712,23 @@ def Merge.clashes_in(
                 List.filter.put(
                   String,
                   p,
-                  Contents.Merge.clashes.go(b, o, t, rest),
+                  RContents.Merge.clashes.go(b, o, t, rest),
                   Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, m)
                 ),
                 p
               )
                 == True{}: Bool
             },
-            Contents.Merge.at(b, o, t, p),
+            RContents.Merge.at(b, o, t, p),
             None{},
             hm,
-            Filter.put_head(p, Contents.Merge.clashes.go(b, o, t, rest))
+            Filter.put_head(p, RContents.Merge.clashes.go(b, o, t, rest))
           )
         ),
         ef => hc2 => Filter.put_in(
           q,
-          Contents.Merge.clashes.go(b, o, t, rest),
-          Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, Contents.Merge.at(b, o, t, q)),
+          RContents.Merge.clashes.go(b, o, t, rest),
+          Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, RContents.Merge.at(b, o, t, q)),
           p
         )(Merge.clashes_in(b, o, t, rest, p)(hm)(hc2))
       )(hc)
@@ -2736,17 +2753,18 @@ def Paths.base(
   +o: Files.Files(),
   +t: Files.Files(),
   +p: String,
-  +ws: List<&2, U32>
+  +ws: List<&2, U32>,
+  wb: {FileLaws.Files.wf(b) == True{}: Bool}
 ) -> {
   Files.Files.get(b, p) == Some{ws}: Maybe<&2, List<&2, U32>>
-} -> {List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p) == True{}: Bool}:
+} -> {List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p) == True{}: Bool}:
   h => Shared.List.contains_left(
     ~String,
     ~String.eq,
     Files.Files.paths(b),
     List.append(&2, String, Files.Files.paths(o), Files.Files.paths(t)),
     p,
-    Files.Files.get_paths(b, p, ws)(h)
+    FileLaws.Files.get_paths(b, p, ws)(wb)(h)
   )
 
 # a path that ours holds is among the paths of a merge
@@ -2755,10 +2773,11 @@ def Paths.ours(
   +o: Files.Files(),
   +t: Files.Files(),
   +p: String,
-  +ws: List<&2, U32>
+  +ws: List<&2, U32>,
+  wo: {FileLaws.Files.wf(o) == True{}: Bool}
 ) -> {
   Files.Files.get(o, p) == Some{ws}: Maybe<&2, List<&2, U32>>
-} -> {List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p) == True{}: Bool}:
+} -> {List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p) == True{}: Bool}:
   h => Shared.List.contains_right(
     ~String,
     ~String.eq,
@@ -2771,7 +2790,7 @@ def Paths.ours(
       Files.Files.paths(o),
       Files.Files.paths(t),
       p,
-      Files.Files.get_paths(o, p, ws)(h)
+      FileLaws.Files.get_paths(o, p, ws)(wo)(h)
     )
   )
 
@@ -2781,10 +2800,11 @@ def Paths.theirs(
   +o: Files.Files(),
   +t: Files.Files(),
   +p: String,
-  +ws: List<&2, U32>
+  +ws: List<&2, U32>,
+  wt: {FileLaws.Files.wf(t) == True{}: Bool}
 ) -> {
   Files.Files.get(t, p) == Some{ws}: Maybe<&2, List<&2, U32>>
-} -> {List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p) == True{}: Bool}:
+} -> {List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p) == True{}: Bool}:
   h => Shared.List.contains_right(
     ~String,
     ~String.eq,
@@ -2797,7 +2817,7 @@ def Paths.theirs(
       Files.Files.paths(o),
       Files.Files.paths(t),
       p,
-      Files.Files.get_paths(t, p, ws)(h)
+      FileLaws.Files.get_paths(t, p, ws)(wt)(h)
     )
   )
 
@@ -2817,7 +2837,7 @@ def Merge.at_as(
 } -> {
   Files.Files.get(t, p) == z: Maybe<&2, List<&2, U32>>
 } -> {
-  Contents.Merge.at(
+  RContents.Merge.at(
     b,
     o,
     t,
@@ -2878,17 +2898,20 @@ def Merge.out(
   +b: Files.Files(),
   +o: Files.Files(),
   +t: Files.Files(),
-  +p: String
+  +p: String,
+  +wb: {FileLaws.Files.wf(b) == True{}: Bool},
+  +wo: {FileLaws.Files.wf(o) == True{}: Bool},
+  +wt: {FileLaws.Files.wf(t) == True{}: Bool}
 ) -> {
-  List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p) == False{}: Bool
+  List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p) == False{}: Bool
 } -> {
-  Contents.Merge.at(b, o, t, p) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  RContents.Merge.at(b, o, t, p) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 }
   & {Files.Files.get(o, p) == None{}: Maybe<&2, List<&2, U32>>}:
   +hf => (
     Equal.trans(
       Maybe<&2, Maybe<&2, List<&2, U32>>>,
-      Contents.Merge.at(b, o, t, p),
+      RContents.Merge.at(b, o, t, p),
       Formats.Format.merge(p, None{}, None{}, None{}),
       Some{None{}},
       Merge.at_as(
@@ -2905,9 +2928,9 @@ def Merge.out(
           Files.Files.get(b, p),
           +ws => es => Lists.Bool.clash(
             Empty,
-            List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
+            List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p),
             hf,
-            Paths.base(b, o, t, p, ws)(es)
+            Paths.base(b, o, t, p, ws, wb)(es)
           )
         )
       )(
@@ -2916,9 +2939,9 @@ def Merge.out(
           Files.Files.get(o, p),
           +ws => es => Lists.Bool.clash(
             Empty,
-            List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
+            List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p),
             hf,
-            Paths.ours(b, o, t, p, ws)(es)
+            Paths.ours(b, o, t, p, ws, wo)(es)
           )
         )
       )(
@@ -2927,9 +2950,9 @@ def Merge.out(
           Files.Files.get(t, p),
           +ws => es => Lists.Bool.clash(
             Empty,
-            List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
+            List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p),
             hf,
-            Paths.theirs(b, o, t, p, ws)(es)
+            Paths.theirs(b, o, t, p, ws, wt)(es)
           )
         )
       ),
@@ -2940,9 +2963,9 @@ def Merge.out(
       Files.Files.get(o, p),
       +ws => es => Lists.Bool.clash(
         Empty,
-        List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
+        List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p),
         hf,
-        Paths.ours(b, o, t, p, ws)(es)
+        Paths.ours(b, o, t, p, ws, wo)(es)
       )
     )
   )
@@ -2955,25 +2978,30 @@ def Merge.files_get(
   +t: Files.Files(),
   +p: String,
   -x: Maybe<&2, List<&2, U32>>,
-  +hm: {Contents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
-) -> {Files.Files.get(Contents.Merge.files(b, o, t), p) == x: Maybe<&2, List<&2, U32>>}:
+  +wb: {FileLaws.Files.wf(b) == True{}: Bool},
+  +wo: {FileLaws.Files.wf(o) == True{}: Bool},
+  +wt: {FileLaws.Files.wf(t) == True{}: Bool},
+  +hm: {RContents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> {Files.Files.get(RContents.Merge.files(b, o, t), p) == x: Maybe<&2, List<&2, U32>>}:
   Lists.Bool.by(
-    d => {Files.Files.get(Contents.Merge.files(b, o, t), p) == x: Maybe<&2, List<&2, U32>>},
-    List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
-    et => Merge.fold_in(b, o, t, Contents.Merge.paths(b, o, t), o, p, x)(hm)(et),
+    d => {Files.Files.get(RContents.Merge.files(b, o, t), p) == x: Maybe<&2, List<&2, U32>>},
+    List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p),
+    et => Merge.fold_in(b, o, t, RContents.Merge.paths(b, o, t), o, p, x)(wo)(hm)(et),
     ef => And.by(
-      {Contents.Merge.at(b, o, t, p) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+      {RContents.Merge.at(b, o, t, p) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
       {Files.Files.get(o, p) == None{}: Maybe<&2, List<&2, U32>>},
-      {Files.Files.get(Contents.Merge.files(b, o, t), p) == x: Maybe<&2, List<&2, U32>>},
-      Merge.out(b, o, t, p)(ef),
+      {Files.Files.get(RContents.Merge.files(b, o, t), p) == x: Maybe<&2, List<&2, U32>>},
+      Merge.out(b, o, t, p, wb, wo, wt)(ef),
       hs => hn => Merge.fold_keep(
         b,
         o,
         t,
-        Contents.Merge.paths(b, o, t),
+        RContents.Merge.paths(b, o, t),
         o,
         p,
         x
+      )(
+        wo
       )(
         hm
       )(
@@ -2989,11 +3017,11 @@ def Merge.files_get(
             Equal.trans(
               Maybe<&2, Maybe<&2, List<&2, U32>>>,
               Some{x},
-              Contents.Merge.at(b, o, t, p),
+              RContents.Merge.at(b, o, t, p),
               Some{None{}},
               Equal.sym(
                 Maybe<&2, Maybe<&2, List<&2, U32>>>,
-                Contents.Merge.at(b, o, t, p),
+                RContents.Merge.at(b, o, t, p),
                 Some{x},
                 hm
               ),
@@ -3012,30 +3040,33 @@ def Merge.clashes_get(
   +o: Files.Files(),
   +t: Files.Files(),
   +p: String,
-  +hm: {Contents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
-) -> {List.contains(~String, ~String.eq, Contents.Merge.clashes(b, o, t), p) == True{}: Bool}:
+  +wb: {FileLaws.Files.wf(b) == True{}: Bool},
+  +wo: {FileLaws.Files.wf(o) == True{}: Bool},
+  +wt: {FileLaws.Files.wf(t) == True{}: Bool},
+  +hm: {RContents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> {List.contains(~String, ~String.eq, RContents.Merge.clashes(b, o, t), p) == True{}: Bool}:
   Lists.Bool.by(
-    d => {List.contains(~String, ~String.eq, Contents.Merge.clashes(b, o, t), p) == True{}: Bool},
-    List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
-    et => Merge.clashes_in(b, o, t, Contents.Merge.paths(b, o, t), p)(hm)(et),
+    d => {List.contains(~String, ~String.eq, RContents.Merge.clashes(b, o, t), p) == True{}: Bool},
+    List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p),
+    et => Merge.clashes_in(b, o, t, RContents.Merge.paths(b, o, t), p)(hm)(et),
     ef => And.by(
-      {Contents.Merge.at(b, o, t, p) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+      {RContents.Merge.at(b, o, t, p) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
       {Files.Files.get(o, p) == None{}: Maybe<&2, List<&2, U32>>},
-      {List.contains(~String, ~String.eq, Contents.Merge.clashes(b, o, t), p) == True{}: Bool},
-      Merge.out(b, o, t, p)(ef),
+      {List.contains(~String, ~String.eq, RContents.Merge.clashes(b, o, t), p) == True{}: Bool},
+      Merge.out(b, o, t, p, wb, wo, wt)(ef),
       hs => hn => Empty.absurd(
-        {List.contains(~String, ~String.eq, Contents.Merge.clashes(b, o, t), p) == True{}: Bool},
+        {List.contains(~String, ~String.eq, RContents.Merge.clashes(b, o, t), p) == True{}: Bool},
         Shared.Maybe.none_ne_some(
           Maybe<&2, List<&2, U32>>,
           None{},
           Equal.trans(
             Maybe<&2, Maybe<&2, List<&2, U32>>>,
             None{},
-            Contents.Merge.at(b, o, t, p),
+            RContents.Merge.at(b, o, t, p),
             Some{None{}},
             Equal.sym(
               Maybe<&2, Maybe<&2, List<&2, U32>>>,
-              Contents.Merge.at(b, o, t, p),
+              RContents.Merge.at(b, o, t, p),
               None{},
               hm
             ),
@@ -3100,28 +3131,28 @@ def Merge.fin(
   +ours: Files.Files(),
   +theirs: Files.Files(),
   +ha: {Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>},
-  +hf: {Answers.Line.find(s, c, i) == Some{Answers.Found{1n+k, e}}: Maybe<&2, Answers.Found>},
-  +hr: {Answers.Entry.request(e) == Spec.Request.Merge{f, x2}: Spec.Request},
+  +hf: {Answers.Line.find(s, c, i) == Some{RAnswers.Found{1n+k, e}}: Maybe<&2, RAnswers.Found>},
+  +hr: {RAnswers.Entry.request(e) == Spec.Request.Merge{f, x2}: Spec.Request},
   +hfit: {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
   +h_o: {Contents.Content.of(s, c, k) == Some{ours}: Maybe<&2, Files.Files()>},
   +h_t: {
     Contents.Content.of(
       s,
-      Spec.Point.line(Contents.Point.or(c, Contents.Entry.takes(e))),
-      Spec.Point.n(Contents.Point.or(c, Contents.Entry.takes(e)))
+      Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
+      Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e)))
     )
       == Some{theirs}: Maybe<&2, Files.Files()>
   },
   +h_b: {
     Contents.Content.of(
       s,
-      Spec.Point.line(Contents.Point.or(c, Contents.Entry.base(e))),
-      Spec.Point.n(Contents.Point.or(c, Contents.Entry.base(e)))
+      Spec.Point.line(RContents.Point.or(c, RContents.Entry.base(e))),
+      Spec.Point.n(RContents.Point.or(c, RContents.Entry.base(e)))
     )
       == Some{bs0}: Maybe<&2, Files.Files()>
   },
   +hm: {
-    Contents.Merge.at(
+    RContents.Merge.at(
       bs0,
       ours,
       theirs,
@@ -3134,9 +3165,9 @@ def Merge.fin(
     x => hx => Lists.Maybe.by(
       Files.Files(),
       m => {
-        Contents.Content.get(m, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+        RContents.Content.get(m, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
       }
-        | {Contents.Content.get(m, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        | {RContents.Content.get(m, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
       Contents.Content.of(s, c, 1n+k),
       en => Inr{{==}},
       M => e_m => Inl{
@@ -3149,21 +3180,21 @@ def Merge.fin(
           Eq.to(
             Files.Files(),
             y => {Files.Files.get(y, p) == x: Maybe<&2, List<&2, U32>>},
-            Contents.Merge.files(bs0, ours, theirs),
+            RContents.Merge.files(bs0, ours, theirs),
             M,
             Merge.of_all(
-              Answers.Entry.request(e),
+              RAnswers.Entry.request(e),
               Contents.Merge.fits(s, c, k, e),
               Contents.Content.of(s, c, k),
               Contents.Content.of(
                 s,
-                Spec.Point.line(Contents.Point.or(c, Contents.Entry.takes(e))),
-                Spec.Point.n(Contents.Point.or(c, Contents.Entry.takes(e)))
+                Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
+                Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e)))
               ),
               Contents.Content.of(
                 s,
-                Spec.Point.line(Contents.Point.or(c, Contents.Entry.base(e))),
-                Spec.Point.n(Contents.Point.or(c, Contents.Entry.base(e)))
+                Spec.Point.line(RContents.Point.or(c, RContents.Entry.base(e))),
+                Spec.Point.n(RContents.Point.or(c, RContents.Entry.base(e)))
               ),
               f,
               x2,
@@ -3178,9 +3209,22 @@ def Merge.fin(
               theirs,
               p,
               x,
+              Contents.Content.of_wf(
+                s,
+                Spec.Point.line(RContents.Point.or(c, RContents.Entry.base(e))),
+                Spec.Point.n(RContents.Point.or(c, RContents.Entry.base(e))),
+                bs0
+              )(h_b),
+              Contents.Content.of_wf(s, c, k, ours)(h_o),
+              Contents.Content.of_wf(
+                s,
+                Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
+                Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e))),
+                theirs
+              )(h_t),
               Equal.trans(
                 Maybe<&2, Maybe<&2, List<&2, U32>>>,
-                Contents.Merge.at(bs0, ours, theirs, p),
+                RContents.Merge.at(bs0, ours, theirs, p),
                 Formats.Format.merge(p, b, o, t),
                 Some{x},
                 hm,
@@ -3194,21 +3238,21 @@ def Merge.fin(
     hn => cs => hc => Eq.to(
       List<&2, String>,
       y => {List.contains(~String, ~String.eq, y, p) == True{}: Bool},
-      Contents.Merge.clashes(bs0, ours, theirs),
+      RContents.Merge.clashes(bs0, ours, theirs),
       cs,
       Clashes.at_all(
-        Answers.Entry.request(e),
+        RAnswers.Entry.request(e),
         Contents.Merge.fits(s, c, k, e),
         Contents.Content.of(
           s,
-          Spec.Point.line(Contents.Point.or(c, Contents.Entry.base(e))),
-          Spec.Point.n(Contents.Point.or(c, Contents.Entry.base(e)))
+          Spec.Point.line(RContents.Point.or(c, RContents.Entry.base(e))),
+          Spec.Point.n(RContents.Point.or(c, RContents.Entry.base(e)))
         ),
         Contents.Content.of(s, c, k),
         Contents.Content.of(
           s,
-          Spec.Point.line(Contents.Point.or(c, Contents.Entry.takes(e))),
-          Spec.Point.n(Contents.Point.or(c, Contents.Entry.takes(e)))
+          Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
+          Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e)))
         ),
         f,
         x2,
@@ -3222,9 +3266,22 @@ def Merge.fin(
         ours,
         theirs,
         p,
+        Contents.Content.of_wf(
+                s,
+                Spec.Point.line(RContents.Point.or(c, RContents.Entry.base(e))),
+                Spec.Point.n(RContents.Point.or(c, RContents.Entry.base(e))),
+                bs0
+              )(h_b),
+        Contents.Content.of_wf(s, c, k, ours)(h_o),
+        Contents.Content.of_wf(
+                s,
+                Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
+                Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e))),
+                theirs
+              )(h_t),
         Equal.trans(
           Maybe<&2, Maybe<&2, List<&2, U32>>>,
-          Contents.Merge.at(bs0, ours, theirs, p),
+          RContents.Merge.at(bs0, ours, theirs, p),
           Formats.Format.merge(p, b, o, t),
           None{},
           hm,
@@ -3250,11 +3307,11 @@ def Merge.mid(
   -o: Maybe<&2, List<&2, U32>>,
   -t: Maybe<&2, List<&2, U32>>,
   +ha: {Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>},
-  +hf: {Answers.Line.find(s, c, i) == Some{Answers.Found{1n+k, e}}: Maybe<&2, Answers.Found>},
-  +hr: {Answers.Entry.request(e) == Spec.Request.Merge{f, x2}: Spec.Request},
+  +hf: {Answers.Line.find(s, c, i) == Some{RAnswers.Found{1n+k, e}}: Maybe<&2, RAnswers.Found>},
+  +hr: {RAnswers.Entry.request(e) == Spec.Request.Merge{f, x2}: Spec.Request},
   +hfit: {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
-  +htk: {Contents.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>},
-  +hbs: {Contents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>},
+  +htk: {RContents.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>},
+  +hbs: {RContents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>},
   rb: {
     Contents.Content.read(
       s,
@@ -3343,12 +3400,12 @@ def Merge.mid(
                   m => {
                     Contents.Content.of(
                       s,
-                      Spec.Point.line(Contents.Point.or(c, m)),
-                      Spec.Point.n(Contents.Point.or(c, m))
+                      Spec.Point.line(RContents.Point.or(c, m)),
+                      Spec.Point.n(RContents.Point.or(c, m))
                     )
                       == Some{T}: Maybe<&2, Files.Files()>
                   },
-                  Contents.Entry.takes(e),
+                  RContents.Entry.takes(e),
                   Some{Spec.Point{f, v}},
                   htk,
                   h_t
@@ -3358,12 +3415,12 @@ def Merge.mid(
                   m => {
                     Contents.Content.of(
                       s,
-                      Spec.Point.line(Contents.Point.or(c, m)),
-                      Spec.Point.n(Contents.Point.or(c, m))
+                      Spec.Point.line(RContents.Point.or(c, m)),
+                      Spec.Point.n(RContents.Point.or(c, m))
                     )
                       == Some{B}: Maybe<&2, Files.Files()>
                   },
-                  Contents.Entry.base(e),
+                  RContents.Entry.base(e),
                   Some{a},
                   hbs,
                   h_b
@@ -3452,7 +3509,7 @@ def Core.merge_merges(
     m,
     +e => +ha => +hf => hr => And.by(
       {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
-      {Contents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>},
+      {RContents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>},
       Merge.Merges(s, c, k, i, p, b, o, t),
       Base.fits(s, c, k, i, e, a)(hf)(hb),
       hfit => hbs => Merge.mid(
@@ -3661,7 +3718,7 @@ def Before.step(
 ) -> {
   Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>
 } -> {
-  List.contains(~Spec.Point, ~Spec.Point.is_eq, Contents.Entry.parents(c, k, e), q) == True{}: Bool
+  List.contains(~Spec.Point, ~Spec.Point.is_eq, RContents.Entry.parents(c, k, e), q) == True{}: Bool
 } -> Mirror.Before(s, a, Spec.Point.line(q), Spec.Point.n(q)) -> Mirror.Before(s, a, c, k):
   ha => hc => b => Ex.by(
     List<&2, Spec.Point>,
@@ -3671,12 +3728,12 @@ def Before.step(
     qs => x => (
       q <> qs,
       (
-        Contents.Entry.parents(c, k, e),
+        RContents.Entry.parents(c, k, e),
         (
           Equal.cong(
             Maybe<&2, Types.Entry>,
             Maybe<&2, Spec.Reply>,
-            m => Answers.Reply.parents(c, k, m),
+            m => RAnswers.Reply.parents(c, k, m),
             Lines.Line.at(s, c, k),
             Some{e},
             ha
@@ -3696,7 +3753,7 @@ def Down.head(
   List.contains(
     ~Spec.Point,
     ~Spec.Point.is_eq,
-    Contents.Entry.parents(c, 1n+j, e),
+    RContents.Entry.parents(c, 1n+j, e),
     Spec.Point{c, j}
   )
     == True{}: Bool
@@ -3708,7 +3765,7 @@ def Down.head(
         u => List.contains(
           ~Spec.Point,
           ~Spec.Point.is_eq,
-          Shared.Maybe.cons(Spec.Point, Contents.Entry.takes(e), []),
+          Shared.Maybe.cons(Spec.Point, RContents.Entry.takes(e), []),
           Spec.Point{c, j}
         ),
         d
@@ -3827,8 +3884,8 @@ def Request.opens_takes(
   r: Spec.Request,
   from: Nat
 ) -> {
-  Lines.Request.opens(r) == True{}: Bool
-} -> {Contents.Request.takes(r, from) == None{}: Maybe<&2, Spec.Point>}:
+  RLines.Request.opens(r) == True{}: Bool
+} -> {RContents.Request.takes(r, from) == None{}: Maybe<&2, Spec.Point>}:
   match r:
     case Spec.Request.Start{os}:
       h => {==}
@@ -3857,8 +3914,8 @@ def Request.opens_takes(
 def Entry.opens_takes(
   e: Types.Entry
 ) -> {
-  Lines.Request.opens(Answers.Entry.request(e)) == True{}: Bool
-} -> {Contents.Entry.takes(e) == None{}: Maybe<&2, Spec.Point>}:
+  RLines.Request.opens(RAnswers.Entry.request(e)) == True{}: Bool
+} -> {RContents.Entry.takes(e) == None{}: Maybe<&2, Spec.Point>}:
   match e:
     case Types.Entry{Types.Pick{Types.Ask{i, n, r}, Types.Pins{era, from, base, ours, theirs}}, k}:
       Request.opens_takes(r, from)
@@ -3870,12 +3927,12 @@ def Take.in(
   -e: Types.Entry,
   +w: Spec.Point
 ) -> {
-  Contents.Entry.takes(e) == Some{w}: Maybe<&2, Spec.Point>
+  RContents.Entry.takes(e) == Some{w}: Maybe<&2, Spec.Point>
 } -> {
   List.contains(
     ~Spec.Point,
     ~Spec.Point.is_eq,
-    Contents.Entry.parents(c, 1n+j, e),
+    RContents.Entry.parents(c, 1n+j, e),
     w
   )
     == True{}: Bool
@@ -3891,7 +3948,7 @@ def Take.in(
       )
         == True{}: Bool
     },
-    Contents.Entry.takes(e),
+    RContents.Entry.takes(e),
     Some{w},
     ht,
     Shared.List.contains_cons(
@@ -3923,7 +3980,7 @@ def Take.before(
   +w: Spec.Point
 ) -> {
   Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>
-} -> {Contents.Entry.takes(e) == Some{w}: Maybe<&2, Spec.Point>} -> Mirror.Before(s, w, c, k):
+} -> {RContents.Entry.takes(e) == Some{w}: Maybe<&2, Spec.Point>} -> Mirror.Before(s, w, c, k):
   match k:
     case 0n:
       ha => ht => Empty.absurd(
@@ -3934,9 +3991,9 @@ def Take.before(
           Equal.trans(
             Maybe<&2, Spec.Point>,
             Some{w},
-            Contents.Entry.takes(e),
+            RContents.Entry.takes(e),
             None{},
-            Equal.sym(Maybe<&2, Spec.Point>, Contents.Entry.takes(e), Some{w}, ht),
+            Equal.sym(Maybe<&2, Spec.Point>, RContents.Entry.takes(e), Some{w}, ht),
             Entry.opens_takes(e)(Zero.opens(s, c, e)(ha))
           )
         )
@@ -3984,12 +4041,12 @@ def Hop.before.of(
   +w: Spec.Point,
   +e: Types.Entry,
   +ha: {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>}
-) -> {Contents.Way.hop.of(c, k, w, Some{e}) == True{}: Bool} -> Mirror.Before(s, w, c, k):
+) -> {RContents.Way.hop.of(c, k, w, Some{e}) == True{}: Bool} -> Mirror.Before(s, w, c, k):
   Lists.Bool.by(
     d => {
       Bool.or(
         d,
-        Shared.Maybe.is_eq(~Spec.Point, ~Spec.Point.is_eq, Contents.Entry.takes(e), Some{w})
+        Shared.Maybe.is_eq(~Spec.Point, ~Spec.Point.is_eq, RContents.Entry.takes(e), Some{w})
       )
         == True{}: Bool
     } -> Mirror.Before(s, w, c, k),
@@ -4008,7 +4065,7 @@ def Hop.before.of(
         ~Spec.Point,
         ~Spec.Point.is_eq,
         x => y => Point.is_eq_sound(x, y),
-        Contents.Entry.takes(e),
+        RContents.Entry.takes(e),
         Some{w}
       )(h)
     )
@@ -4023,7 +4080,7 @@ def Hop.before(
 ) -> {Contents.Way.hop(s, c, k, w) == True{}: Bool} -> Mirror.Before(s, w, c, k):
   Lists.Maybe.by(
     Types.Entry,
-    m => {Contents.Way.hop.of(c, k, w, m) == True{}: Bool} -> Mirror.Before(s, w, c, k),
+    m => {RContents.Way.hop.of(c, k, w, m) == True{}: Bool} -> Mirror.Before(s, w, c, k),
     Lines.Line.at(s, c, k),
     en => h => Empty.absurd(Mirror.Before(s, w, c, k), Shared.Bool.false_ne_true(h)),
     +e => +ee => Hop.before.of(s, c, k, w, e, ee)
@@ -4159,7 +4216,7 @@ def Core.base_shared(
     m,
     +e => ha => hf => hr => And.by(
       {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
-      {Contents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>},
+      {RContents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>},
       Mirror.Before(s, a, c, k) & Mirror.Before(s, a, f, v),
       Base.fits(s, c, k, i, e, a)(hf)(hb),
       hfit => hbs => Base.both(
@@ -4169,8 +4226,8 @@ def Core.base_shared(
         f,
         v,
         a,
-        Contents.Entry.ours(e),
-        Contents.Entry.theirs(e),
+        RContents.Entry.ours(e),
+        RContents.Entry.theirs(e),
         Eq.to(
           Maybe<&2, Spec.Point>,
           m2 => {
@@ -4179,13 +4236,13 @@ def Core.base_shared(
               c,
               k,
               Some{a},
-              Contents.Entry.ours(e),
-              Contents.Entry.theirs(e),
-              Contents.Point.or(c, m2)
+              RContents.Entry.ours(e),
+              RContents.Entry.theirs(e),
+              RContents.Point.or(c, m2)
             )
               == True{}: Bool
           },
-          Contents.Entry.takes(e),
+          RContents.Entry.takes(e),
           Some{Spec.Point{f, v}},
           Parents.takes(s, c, k, e, f, v)(ha)(hp),
           Eq.to(
@@ -4196,13 +4253,13 @@ def Core.base_shared(
                 c,
                 k,
                 m2,
-                Contents.Entry.ours(e),
-                Contents.Entry.theirs(e),
-                Contents.Point.or(c, Contents.Entry.takes(e))
+                RContents.Entry.ours(e),
+                RContents.Entry.theirs(e),
+                RContents.Point.or(c, RContents.Entry.takes(e))
               )
                 == True{}: Bool
             },
-            Contents.Entry.base(e),
+            RContents.Entry.base(e),
             Some{a},
             hbs,
             hfit

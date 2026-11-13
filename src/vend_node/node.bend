@@ -1,12 +1,17 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
+import ../shared/shared/shared/shared/crit.bend as Crits
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
-import ./answers.bend as Answers
-import ./facts.bend as Facts
-import ./shared/parts.bend as Parts
+import ./codes.bend as Coded
+import ./run/answers.bend as Answers
+import ./run/content.bend as Contents
+import ./run/facts.bend as Facts
+import ./run/parts.bend as Parts
+import ./run/set.bend as Checks
+import ./run/work.bend as Works
 import ./spec.bend as Spec
-import ./work.bend as Works
+import ./types.bend as Types
 
 # The state of a node
 # -------------------
@@ -15,6 +20,8 @@ import ./work.bend as Works
 # keeps by hash. All that it answers is read from its facts. The name of a
 # node is not reserved (it does not start with '~'): a reserved name is one
 # under which a node says that its trust broke, and never the name of a node.
+# The facts and the parts are plain maps: this file and the files of run/
+# that it imports are the code that runs, and hold no proof.
 
 # a resource mounted to a node: its address, and the path of a branch where
 # it is mounted
@@ -28,22 +35,39 @@ type Raw is Data:
     writers: List<&2, String>,
     mounts: List<&2, Mounted>,
     stopped: Bool,
-    facts: Facts.Facts(),
+    facts: Facts.Plain(),
     parts: Parts.Parts
   }
 
-# the facts fs are sound for the name name, and the name is not reserved
-# (Facts.Trust.reserved): it can be the name of a node that holds fs
-def Raw.sound(+name: String, fs: Facts.Facts()) -> Bool:
-  Bool.and(Facts.Facts.ok(name, fs), Bool.not(Facts.Trust.reserved(name)))
+# the map fs is a set of facts (it is well formed, and each fact sits under
+# its own key), and the map of the parts ps is well formed. The code that runs
+# keeps this and builds no proof of it; impl.bend proves that each deed keeps
+# it (Node.does_sound)
+def Raw.set(+fs: Facts.Plain(), ps: Parts.Parts) -> Bool:
+  Bool.and(
+    Bool.and(
+      Crits.Crit.wf(~Types.Fact, fs, 0n),
+      Checks.ValSet.ok(~Types.Fact, ~Coded.Fact.words, fs)
+    ),
+    Parts.Parts.wf(ps)
+  )
 
-# r can be a node: its facts are sound for its name, and its name is not
-# reserved, so the name under which another node says that its trust broke is
-# never the name of r
+# the facts fs and the parts ps are well formed maps, the facts are sound for
+# the name name, and the name is not reserved (Facts.Trust.reserved): it can
+# be the name of a node that holds fs and ps
+def Raw.sound(+name: String, +fs: Facts.Plain(), ps: Parts.Parts) -> Bool:
+  Bool.and(
+    Raw.set(fs, ps),
+    Bool.and(Facts.Facts.ok(name, fs), Bool.not(Facts.Trust.reserved(name)))
+  )
+
+# r can be a node: its facts are a set and are sound for its name, its parts
+# are a well formed map, and its name is not reserved, so the name under
+# which another node says that its trust broke is never the name of r
 def Raw.ok(r: Raw) -> Bool:
   match r:
     case Raw{name, ws, ms, st, fs, ps}:
-      Raw.sound(name, fs)
+      Raw.sound(name, fs, ps)
 
 # the address of the mounted resource m
 def Mounted.address(m: Mounted) -> String:
@@ -103,7 +127,7 @@ def Needs.put(
 
 # the hashes of the parts that the node name needs: what it reads at each of
 # the mounted resources ms
-def Needs.of(+s: Facts.Facts(), +name: String, ms: List<&2, Mounted>) -> List<&2, Hashes.Hash>:
+def Needs.of(+s: Facts.Plain(), +name: String, ms: List<&2, Mounted>) -> List<&2, Hashes.Hash>:
   match ms:
     case Nil{}:
       []
@@ -148,7 +172,7 @@ def Raw.asks(
   ws: List<&2, String>,
   ms: List<&2, Mounted>,
   st: Bool,
-  fs: Facts.Facts(),
+  fs: Facts.Plain(),
   ps: Parts.Parts,
   i: Ledgers.Id,
   +r: Spec.Request,
@@ -166,7 +190,7 @@ def Raw.works(
   ws: List<&2, String>,
   ms: List<&2, Mounted>,
   st: Bool,
-  fs: Facts.Facts(),
+  fs: Facts.Plain(),
   ps: Parts.Parts
 ) -> Raw:
   match st:
@@ -236,3 +260,48 @@ def Raw.does(r: Raw, a: Act) -> Raw:
         fs,
         ps
       }
+
+# What a node shows
+# -----------------
+# What the code that runs reads from a plain state. impl.bend proves that it
+# is what the spec says of the node (Node.answer_runs, ...).
+
+# the facts of the state r
+def Raw.facts(r: Raw) -> Facts.Plain():
+  match r:
+    case Raw{name, ws, ms, st, fs, ps}:
+      fs
+
+# the state r holds the change c
+def Raw.holds(r: Raw, c: Types.Change) -> Bool:
+  Facts.Facts.holds(Raw.facts(r), c)
+
+# the words of the resource at the path p in version k of the line c, as the
+# state r reads them
+def Raw.read(r: Raw, c: Ledgers.Line, k: Nat, p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+  Contents.Content.read(Raw.facts(r), c, k, p)
+
+# the words of the resource at the path p of the branch b, as the state r
+# shows them to the writer w
+def Raw.view(r: Raw, w: String, b: Ledgers.Line, p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+  Answers.View.at(Raw.facts(r), w, b, p)
+
+# the reply of the state r to the question q
+def Raw.answer(r: Raw, q: Spec.Question) -> Maybe<&2, Spec.Reply>:
+  Answers.Answer.of(Raw.facts(r), q)
+
+# the voters that the state r proves to be liars
+def Raw.liars(r: Raw) -> List<&2, String>:
+  Facts.Facts.liars(Raw.facts(r))
+
+# the hashes of the parts that the state r holds, each once
+def Raw.parts(r: Raw) -> List<&2, Hashes.Hash>:
+  match r:
+    case Raw{name, ws, ms, st, fs, ps}:
+      Parts.Parts.list(ps)
+
+# the words of the hash h, if the state r holds them
+def Raw.part(r: Raw, h: Hashes.Hash) -> Maybe<&2, List<&2, U32>>:
+  match r:
+    case Raw{name, ws, ms, st, fs, ps}:
+      Parts.Parts.get(ps, h)

@@ -9,7 +9,10 @@ import ./facts.bend as Facts
 import ./groups.bend as Groups
 import ./lines.bend as Lines
 import ./reads.bend as Reads
-import ./shared/files.bend as Files
+import ./run/answers.bend as RAnswers
+import ./run/content.bend as RContents
+import ./run/files.bend as Files
+import ./run/lines.bend as RLines
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
 import ./stays.bend as Stays
@@ -523,7 +526,7 @@ def Ext.take(
 # what holds of nothing, and of each version of the id i among vs, holds of
 # what Versions.find gives
 def Find.by(
-  -P: Maybe<&2, Answers.Found> -> Type,
+  -P: Maybe<&2, RAnswers.Found> -> Type,
   +vs: List<&2, Types.Entry>,
   +i: Ledgers.Id,
   n: P(None{}),
@@ -531,23 +534,23 @@ def Find.by(
     Lists.List.index(
       ~Types.Entry,
       ~Ledgers.Id,
-      ~Lines.Entry.is_of,
+      ~RLines.Entry.is_of,
       vs,
       i
     )
       == Some{j}: Maybe<&2, Nat>
   } -> {
     List.get(&2, Types.Entry, vs, j) == Some{x}: Maybe<&2, Types.Entry>
-  } -> P(Some{Answers.Found{j, x}})
-) -> P(Answers.Versions.find(vs, i)):
+  } -> P(Some{RAnswers.Found{j, x}})
+) -> P(RAnswers.Versions.find(vs, i)):
   Lists.Maybe.by(
     Nat,
-    m => P(None{}) -> P(Answers.Versions.find.at(vs, m)),
-    Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, i),
+    m => P(None{}) -> P(RAnswers.Versions.find.at(vs, m)),
+    Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i),
     en => n => n,
     +j => +ej => n => Lists.Maybe.by(
       Types.Entry,
-      g => P(None{}) -> P(Maybe.map(&2, Types.Entry, Answers.Found, e => Answers.Found{j, e}, g)),
+      g => P(None{}) -> P(Maybe.map(&2, Types.Entry, RAnswers.Found, e => RAnswers.Found{j, e}, g)),
       List.get(&2, Types.Entry, vs, j),
       en => n => n,
       +x => +eg => n => f(j)(x)(ej)(eg)
@@ -567,23 +570,23 @@ def Find.ext(
     Lists.List.index(
       ~Types.Entry,
       ~Ledgers.Id,
-      ~Lines.Entry.is_of,
+      ~RLines.Entry.is_of,
       vs,
       i
     )
       == Some{j}: Maybe<&2, Nat>
   },
   eg: {List.get(&2, Types.Entry, vs, j) == Some{x}: Maybe<&2, Types.Entry>}
-) -> {Answers.Versions.find(vs2, i) == Some{Answers.Found{j, x}}: Maybe<&2, Answers.Found>}:
+) -> {RAnswers.Versions.find(vs2, i) == Some{RAnswers.Found{j, x}}: Maybe<&2, RAnswers.Found>}:
   Eq.up(
     Maybe<&2, Nat>,
-    m => {Answers.Versions.find.at(vs2, m) == Some{Answers.Found{j, x}}: Maybe<&2, Answers.Found>},
-    Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs2, i),
+    m => {RAnswers.Versions.find.at(vs2, m) == Some{RAnswers.Found{j, x}}: Maybe<&2, RAnswers.Found>},
+    Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs2, i),
     Some{j},
     Lists.List.index_ext(
       ~Types.Entry,
       ~Ledgers.Id,
-      ~Lines.Entry.is_of,
+      ~RLines.Entry.is_of,
       vs,
       vs2,
       i,
@@ -595,11 +598,11 @@ def Find.ext(
         Maybe.map(
           &2,
           Types.Entry,
-          Answers.Found,
-          e => Answers.Found{j, e},
+          RAnswers.Found,
+          e => RAnswers.Found{j, e},
           g
         )
-          == Some{Answers.Found{j, x}}: Maybe<&2, Answers.Found>
+          == Some{RAnswers.Found{j, x}}: Maybe<&2, RAnswers.Found>
       },
       List.get(&2, Types.Entry, vs2, j),
       Some{x},
@@ -617,8 +620,8 @@ def Before.ext(
   +j: Nat,
   -ws: List<&2, Types.Entry>
 ) -> {
-  Answers.Line.before.of(j, Some{vs}) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
-} -> {Answers.Line.before.of(j, Some{vs2}) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>}:
+  RAnswers.Line.before.of(j, Some{vs}) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
+} -> {RAnswers.Line.before.of(j, Some{vs2}) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>}:
   ha => Lists.Bool.by(
     b => {
       Shared.Maybe.when(
@@ -627,7 +630,7 @@ def Before.ext(
         u => Some{List.take(&2, Types.Entry, vs, 1n+j)}
       )
         == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
-    } -> {Answers.Line.before.of(j, Some{vs2}) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>},
+    } -> {RAnswers.Line.before.of(j, Some{vs2}) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>},
     Nat.is_lt(j, List.length(&2, Types.Entry, vs)),
     +et => +ha => Eq.up(
       Bool,
@@ -653,7 +656,7 @@ def Before.ext(
     ),
     ef => ha => None.elim(
       List<&2, Types.Entry>,
-      {Answers.Line.before.of(j, Some{vs2}) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>},
+      {RAnswers.Line.before.of(j, Some{vs2}) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>},
       ws,
       ha
     )
@@ -676,7 +679,7 @@ def Before.stays(
   ha => Lists.Maybe.by(
     List<&2, Types.Entry>,
     m => {
-      Answers.Line.before.of(j, m) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
+      RAnswers.Line.before.of(j, m) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
     } -> {Answers.Line.before(s2, c, j) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>},
     Lines.Line.versions(s, c),
     en => ha => None.elim(
@@ -698,7 +701,7 @@ def Before.stays(
       ev,
       +vs2 => +zs => +e2 => +ez => Eq.up(
         Maybe<&2, List<&2, Types.Entry>>,
-        m => {Answers.Line.before.of(j, m) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>},
+        m => {RAnswers.Line.before.of(j, m) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>},
         Lines.Line.versions(s2, c),
         Some{vs2},
         e2,
@@ -714,18 +717,18 @@ def Rule.for_stays(
   +s2: Facts.Facts(),
   +c: Ledgers.Line,
   k: Nat,
-  +u: Lines.Rule,
+  +u: RLines.Rule,
   +hw: {Facts.Facts.wider(s, s2) == True{}: Bool},
   +hl: {Facts.Facts.liars(s2) == []: List<&2, String>},
   +ho: {Facts.Facts.ok(name, s2) == True{}: Bool}
 ) -> {
-  Answers.Rule.for(s, c, k) == Some{u}: Maybe<&2, Lines.Rule>
-} -> {Answers.Rule.for(s2, c, k) == Some{u}: Maybe<&2, Lines.Rule>}:
+  Answers.Rule.for(s, c, k) == Some{u}: Maybe<&2, RLines.Rule>
+} -> {Answers.Rule.for(s2, c, k) == Some{u}: Maybe<&2, RLines.Rule>}:
   match k:
     case 0n:
       ha => None.elim(
-        Lines.Rule,
-        {Answers.Rule.for(s2, c, 0n) == Some{u}: Maybe<&2, Lines.Rule>},
+        RLines.Rule,
+        {Answers.Rule.for(s2, c, 0n) == Some{u}: Maybe<&2, RLines.Rule>},
         u,
         ha
       )
@@ -733,18 +736,18 @@ def Rule.for_stays(
       ha => Lists.Maybe.by(
         List<&2, Types.Entry>,
         m => {
-          Answers.Rule.for.of(s, c, m) == Some{u}: Maybe<&2, Lines.Rule>
-        } -> {Answers.Rule.for(s2, c, 1n+j) == Some{u}: Maybe<&2, Lines.Rule>},
+          Answers.Rule.for.of(s, c, m) == Some{u}: Maybe<&2, RLines.Rule>
+        } -> {Answers.Rule.for(s2, c, 1n+j) == Some{u}: Maybe<&2, RLines.Rule>},
         Answers.Line.before(s, c, j),
         en => ha => None.elim(
-          Lines.Rule,
-          {Answers.Rule.for(s2, c, 1n+j) == Some{u}: Maybe<&2, Lines.Rule>},
+          RLines.Rule,
+          {Answers.Rule.for(s2, c, 1n+j) == Some{u}: Maybe<&2, RLines.Rule>},
           u,
           ha
         ),
         +ws => +eb => +ha => Eq.up(
           Maybe<&2, List<&2, Types.Entry>>,
-          m => {Answers.Rule.for.of(s2, c, m) == Some{u}: Maybe<&2, Lines.Rule>},
+          m => {Answers.Rule.for.of(s2, c, m) == Some{u}: Maybe<&2, RLines.Rule>},
           Answers.Line.before(s2, c, j),
           Some{ws},
           Before.stays(name, s, s2, c, j, ws, hw, hl, ho)(eb),
@@ -777,7 +780,7 @@ def Era.for_stays(
             &2,
             List<&2, Types.Entry>,
             Nat,
-            vs => Lines.Line.era(c, vs),
+            vs => RLines.Line.era(c, vs),
             m
           )
             == Some{n}: Maybe<&2, Nat>
@@ -796,7 +799,7 @@ def Era.for_stays(
               &2,
               List<&2, Types.Entry>,
               Nat,
-              vs => Lines.Line.era(c, vs),
+              vs => RLines.Line.era(c, vs),
               m
             )
               == Some{n}: Maybe<&2, Nat>
@@ -819,19 +822,19 @@ def Votes.held_stay(
 ) -> {
   Shared.List.holds(
     ~String,
-    ~Lines.Voting,
-    ~Lines.Voting.voted,
+    ~RLines.Voting,
+    ~RLines.Voting.voted,
     os,
-    Lines.Voting{s, st, pk}
+    RLines.Voting{Facts.Facts.crit(s), st, pk}
   )
     == True{}: Bool
 } -> {
   Shared.List.holds(
     ~String,
-    ~Lines.Voting,
-    ~Lines.Voting.voted,
+    ~RLines.Voting,
+    ~RLines.Voting.voted,
     os,
-    Lines.Voting{s2, st, pk}
+    RLines.Voting{Facts.Facts.crit(s2), st, pk}
   )
     == True{}: Bool
 }:
@@ -840,13 +843,13 @@ def Votes.held_stay(
       h => {==}
     case Con{+o, +r}:
       +h => Shared.List.all.if_both(
-        Lines.Voting.voted(Lines.Voting{s2, st, pk}, o),
+        RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s2), st, pk}, o),
         u => Shared.List.holds(
           ~String,
-          ~Lines.Voting,
-          ~Lines.Voting.voted,
+          ~RLines.Voting,
+          ~RLines.Voting.voted,
           r,
-          Lines.Voting{s2, st, pk}
+          RLines.Voting{Facts.Facts.crit(s2), st, pk}
         )
       )(
         Facts.Facts.wider_has(
@@ -857,13 +860,13 @@ def Votes.held_stay(
           hw
         )(
           Shared.List.all.if_hit(
-            Lines.Voting.voted(Lines.Voting{s, st, pk}, o),
+            RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s), st, pk}, o),
             u => Shared.List.holds(
               ~String,
-              ~Lines.Voting,
-              ~Lines.Voting.voted,
+              ~RLines.Voting,
+              ~RLines.Voting.voted,
               r,
-              Lines.Voting{s, st, pk}
+              RLines.Voting{Facts.Facts.crit(s), st, pk}
             )
           )(h)
         )
@@ -877,13 +880,13 @@ def Votes.held_stay(
           hw
         )(
           Shared.List.all.if_rest(
-            Lines.Voting.voted(Lines.Voting{s, st, pk}, o),
+            RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s), st, pk}, o),
             u => Shared.List.holds(
               ~String,
-              ~Lines.Voting,
-              ~Lines.Voting.voted,
+              ~RLines.Voting,
+              ~RLines.Voting.voted,
               r,
-              Lines.Voting{s, st, pk}
+              RLines.Voting{Facts.Facts.crit(s), st, pk}
             )
           )(h)
         )
@@ -896,14 +899,14 @@ def Rule.voters_stay(
   +s2: Facts.Facts(),
   +c: Ledgers.Line,
   e: Types.Entry,
-  u: Lines.Rule,
+  u: RLines.Rule,
   +a: Spec.Reply,
   +hw: {Facts.Facts.wider(s, s2) == True{}: Bool}
 ) -> {
   Answers.Rule.voters(s, c, e, u) == Some{a}: Maybe<&2, Spec.Reply>
 } -> {Answers.Rule.voters(s2, c, e, u) == Some{a}: Maybe<&2, Spec.Reply>}:
   match e u:
-    case Types.Entry{+pk, +k} Lines.Rule{+g, +ns}:
+    case Types.Entry{+pk, +k} RLines.Rule{+g, +ns}:
       ha => Lists.Bool.by(
         b => {
           Shared.Maybe.when(
@@ -912,10 +915,10 @@ def Rule.voters_stay(
               b,
               Shared.List.holds(
                 ~String,
-                ~Lines.Voting,
-                ~Lines.Voting.voted,
+                ~RLines.Voting,
+                ~RLines.Voting.voted,
                 Lists.List.lead(String, ns),
-                Lines.Voting{s, Types.Step.At{c, k}, pk}
+                RLines.Voting{Facts.Facts.crit(s), Types.Step.At{c, k}, pk}
               )
             ),
             u2 => Some{Spec.Reply.Names{Lists.List.lead(String, ns)}}
@@ -926,7 +929,7 @@ def Rule.voters_stay(
             s2,
             c,
             Types.Entry{pk, k},
-            Lines.Rule{g, ns}
+            RLines.Rule{g, ns}
           )
             == Some{a}: Maybe<&2, Spec.Reply>
         },
@@ -944,16 +947,16 @@ def Rule.voters_stay(
               s2,
               c,
               Types.Entry{pk, k},
-              Lines.Rule{g, ns}
+              RLines.Rule{g, ns}
             )
               == Some{a}: Maybe<&2, Spec.Reply>
           },
           Shared.List.holds(
             ~String,
-            ~Lines.Voting,
-            ~Lines.Voting.voted,
+            ~RLines.Voting,
+            ~RLines.Voting.voted,
             Lists.List.lead(String, ns),
-            Lines.Voting{s, Types.Step.At{c, k}, pk}
+            RLines.Voting{Facts.Facts.crit(s), Types.Step.At{c, k}, pk}
           ),
           +eh => +ha => Eq.up(
             Bool,
@@ -964,10 +967,10 @@ def Rule.voters_stay(
                   b,
                   Shared.List.holds(
                     ~String,
-                    ~Lines.Voting,
-                    ~Lines.Voting.voted,
+                    ~RLines.Voting,
+                    ~RLines.Voting.voted,
                     Lists.List.lead(String, ns),
-                    Lines.Voting{s2, Types.Step.At{c, k}, pk}
+                    RLines.Voting{Facts.Facts.crit(s2), Types.Step.At{c, k}, pk}
                   )
                 ),
                 u2 => Some{Spec.Reply.Names{Lists.List.lead(String, ns)}}
@@ -989,10 +992,10 @@ def Rule.voters_stay(
               },
               Shared.List.holds(
                 ~String,
-                ~Lines.Voting,
-                ~Lines.Voting.voted,
+                ~RLines.Voting,
+                ~RLines.Voting.voted,
                 Lists.List.lead(String, ns),
-                Lines.Voting{s2, Types.Step.At{c, k}, pk}
+                RLines.Voting{Facts.Facts.crit(s2), Types.Step.At{c, k}, pk}
               ),
               True{},
               Votes.held_stay(Lists.List.lead(String, ns), s, s2, Types.Step.At{c, k}, pk, hw)(eh),
@@ -1006,7 +1009,7 @@ def Rule.voters_stay(
                 s2,
                 c,
                 Types.Entry{pk, k},
-                Lines.Rule{g, ns}
+                RLines.Rule{g, ns}
               )
                 == Some{a}: Maybe<&2, Spec.Reply>
             },
@@ -1021,7 +1024,7 @@ def Rule.voters_stay(
               s2,
               c,
               Types.Entry{pk, k},
-              Lines.Rule{g, ns}
+              RLines.Rule{g, ns}
             )
               == Some{a}: Maybe<&2, Spec.Reply>
           },
@@ -1056,37 +1059,37 @@ def Clashes.of_stays(
     case 1n+(+j):
       ha => Lists.Bool.by(
         b => {
-          Answers.Clashes.at(
+          RAnswers.Clashes.at(
             Bool.and(b, Contents.Merge.fits(s, c, j, e)),
             Contents.Content.of(
               s,
-              Spec.Point.line(Contents.Entry.based(c, Some{e})),
-              Spec.Point.n(Contents.Entry.based(c, Some{e}))
+              Spec.Point.line(RContents.Entry.based(c, Some{e})),
+              Spec.Point.n(RContents.Entry.based(c, Some{e}))
             ),
             Contents.Content.of(s, c, j),
             Contents.Content.of(
               s,
-              Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-              Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+              Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+              Spec.Point.n(RContents.Entry.taken(c, Some{e}))
             )
           )
             == Some{ps}: Maybe<&2, List<&2, String>>
         } -> {Answers.Clashes.of(s2, c, 1n+j, e) == Some{ps}: Maybe<&2, List<&2, String>>},
-        Contents.Request.is_merge(Answers.Entry.request(e)),
+        RContents.Request.is_merge(RAnswers.Entry.request(e)),
         +em => +ha => Lists.Bool.by(
           b => {
-            Answers.Clashes.at(
+            RAnswers.Clashes.at(
               b,
               Contents.Content.of(
                 s,
-                Spec.Point.line(Contents.Entry.based(c, Some{e})),
-                Spec.Point.n(Contents.Entry.based(c, Some{e}))
+                Spec.Point.line(RContents.Entry.based(c, Some{e})),
+                Spec.Point.n(RContents.Entry.based(c, Some{e}))
               ),
               Contents.Content.of(s, c, j),
               Contents.Content.of(
                 s,
-                Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-                Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+                Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+                Spec.Point.n(RContents.Entry.taken(c, Some{e}))
               )
             )
               == Some{ps}: Maybe<&2, List<&2, String>>
@@ -1095,22 +1098,22 @@ def Clashes.of_stays(
           +ef => +ha => Lists.Maybe.by(
             Files.Files(),
             m => {
-              Answers.Clashes.at(
+              RAnswers.Clashes.at(
                 True{},
                 m,
                 Contents.Content.of(s, c, j),
                 Contents.Content.of(
                   s,
-                  Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-                  Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+                  Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+                  Spec.Point.n(RContents.Entry.taken(c, Some{e}))
                 )
               )
                 == Some{ps}: Maybe<&2, List<&2, String>>
             } -> {Answers.Clashes.of(s2, c, 1n+j, e) == Some{ps}: Maybe<&2, List<&2, String>>},
             Contents.Content.of(
               s,
-              Spec.Point.line(Contents.Entry.based(c, Some{e})),
-              Spec.Point.n(Contents.Entry.based(c, Some{e}))
+              Spec.Point.line(RContents.Entry.based(c, Some{e})),
+              Spec.Point.n(RContents.Entry.based(c, Some{e}))
             ),
             en => ha => None.elim(
               List<&2, String>,
@@ -1121,14 +1124,14 @@ def Clashes.of_stays(
             +fb => +eb => +ha => Lists.Maybe.by(
               Files.Files(),
               m => {
-                Answers.Clashes.at(
+                RAnswers.Clashes.at(
                   True{},
                   Some{fb},
                   m,
                   Contents.Content.of(
                     s,
-                    Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-                    Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+                    Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+                    Spec.Point.n(RContents.Entry.taken(c, Some{e}))
                   )
                 )
                   == Some{ps}: Maybe<&2, List<&2, String>>
@@ -1143,7 +1146,7 @@ def Clashes.of_stays(
               +fo => +eo => +ha => Lists.Maybe.by(
                 Files.Files(),
                 m => {
-                  Answers.Clashes.at(
+                  RAnswers.Clashes.at(
                     True{},
                     Some{fb},
                     Some{fo},
@@ -1153,8 +1156,8 @@ def Clashes.of_stays(
                 } -> {Answers.Clashes.of(s2, c, 1n+j, e) == Some{ps}: Maybe<&2, List<&2, String>>},
                 Contents.Content.of(
                   s,
-                  Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-                  Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+                  Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+                  Spec.Point.n(RContents.Entry.taken(c, Some{e}))
                 ),
                 en => ha => None.elim(
                   List<&2, String>,
@@ -1165,40 +1168,40 @@ def Clashes.of_stays(
                 +ft => +et => +ha => Eq.up(
                   Bool,
                   b => {
-                    Answers.Clashes.at(
+                    RAnswers.Clashes.at(
                       Bool.and(b, Contents.Merge.fits(s2, c, j, e)),
                       Contents.Content.of(
                         s2,
-                        Spec.Point.line(Contents.Entry.based(c, Some{e})),
-                        Spec.Point.n(Contents.Entry.based(c, Some{e}))
+                        Spec.Point.line(RContents.Entry.based(c, Some{e})),
+                        Spec.Point.n(RContents.Entry.based(c, Some{e}))
                       ),
                       Contents.Content.of(s2, c, j),
                       Contents.Content.of(
                         s2,
-                        Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-                        Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+                        Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+                        Spec.Point.n(RContents.Entry.taken(c, Some{e}))
                       )
                     )
                       == Some{ps}: Maybe<&2, List<&2, String>>
                   },
-                  Contents.Request.is_merge(Answers.Entry.request(e)),
+                  RContents.Request.is_merge(RAnswers.Entry.request(e)),
                   True{},
                   em,
                   Eq.up(
                     Bool,
                     b => {
-                      Answers.Clashes.at(
+                      RAnswers.Clashes.at(
                         b,
                         Contents.Content.of(
                           s2,
-                          Spec.Point.line(Contents.Entry.based(c, Some{e})),
-                          Spec.Point.n(Contents.Entry.based(c, Some{e}))
+                          Spec.Point.line(RContents.Entry.based(c, Some{e})),
+                          Spec.Point.n(RContents.Entry.based(c, Some{e}))
                         ),
                         Contents.Content.of(s2, c, j),
                         Contents.Content.of(
                           s2,
-                          Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-                          Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+                          Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+                          Spec.Point.n(RContents.Entry.taken(c, Some{e}))
                         )
                       )
                         == Some{ps}: Maybe<&2, List<&2, String>>
@@ -1209,43 +1212,43 @@ def Clashes.of_stays(
                     Eq.up(
                       Maybe<&2, Files.Files()>,
                       m => {
-                        Answers.Clashes.at(
+                        RAnswers.Clashes.at(
                           True{},
                           m,
                           Contents.Content.of(s2, c, j),
                           Contents.Content.of(
                             s2,
-                            Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-                            Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+                            Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+                            Spec.Point.n(RContents.Entry.taken(c, Some{e}))
                           )
                         )
                           == Some{ps}: Maybe<&2, List<&2, String>>
                       },
                       Contents.Content.of(
                         s2,
-                        Spec.Point.line(Contents.Entry.based(c, Some{e})),
-                        Spec.Point.n(Contents.Entry.based(c, Some{e}))
+                        Spec.Point.line(RContents.Entry.based(c, Some{e})),
+                        Spec.Point.n(RContents.Entry.based(c, Some{e}))
                       ),
                       Some{fb},
                       Reads.Content.of_stays(
                         name,
                         s,
                         s2,
-                        Spec.Point.line(Contents.Entry.based(c, Some{e})),
-                        Spec.Point.n(Contents.Entry.based(c, Some{e})),
+                        Spec.Point.line(RContents.Entry.based(c, Some{e})),
+                        Spec.Point.n(RContents.Entry.based(c, Some{e})),
                         fb
                       )(hw)(hl)(ho)(eb),
                       Eq.up(
                         Maybe<&2, Files.Files()>,
                         m => {
-                          Answers.Clashes.at(
+                          RAnswers.Clashes.at(
                             True{},
                             Some{fb},
                             m,
                             Contents.Content.of(
                               s2,
-                              Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-                              Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+                              Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+                              Spec.Point.n(RContents.Entry.taken(c, Some{e}))
                             )
                           )
                             == Some{ps}: Maybe<&2, List<&2, String>>
@@ -1256,7 +1259,7 @@ def Clashes.of_stays(
                         Eq.up(
                           Maybe<&2, Files.Files()>,
                           m => {
-                            Answers.Clashes.at(
+                            RAnswers.Clashes.at(
                               True{},
                               Some{fb},
                               Some{fo},
@@ -1266,16 +1269,16 @@ def Clashes.of_stays(
                           },
                           Contents.Content.of(
                             s2,
-                            Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-                            Spec.Point.n(Contents.Entry.taken(c, Some{e}))
+                            Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+                            Spec.Point.n(RContents.Entry.taken(c, Some{e}))
                           ),
                           Some{ft},
                           Reads.Content.of_stays(
                             name,
                             s,
                             s2,
-                            Spec.Point.line(Contents.Entry.taken(c, Some{e})),
-                            Spec.Point.n(Contents.Entry.taken(c, Some{e})),
+                            Spec.Point.line(RContents.Entry.taken(c, Some{e})),
+                            Spec.Point.n(RContents.Entry.taken(c, Some{e})),
                             ft
                           )(hw)(hl)(ho)(et),
                           ha
@@ -1331,7 +1334,7 @@ def Merge.base_stays(
           Shared.Maybe.when(
             Spec.Point,
             b,
-            u => Contents.Entry.base(e)
+            u => RContents.Entry.base(e)
           )
             == Some{pt}: Maybe<&2, Spec.Point>
         } -> {Answers.Base.of(s2, c, 1n+j, e) == Some{pt}: Maybe<&2, Spec.Point>},
@@ -1342,7 +1345,7 @@ def Merge.base_stays(
             Shared.Maybe.when(
               Spec.Point,
               b,
-              u => Contents.Entry.base(e)
+              u => RContents.Entry.base(e)
             )
               == Some{pt}: Maybe<&2, Spec.Point>
           },
@@ -1369,11 +1372,11 @@ def Resolved.has_ext(
   +i: Ledgers.Id,
   +p: String
 ) -> {
-  Answers.Resolved.has(Answers.Resolved{vs, i}, p) == True{}: Bool
-} -> {Answers.Resolved.has(Answers.Resolved{vs2, i}, p) == True{}: Bool}:
+  RAnswers.Resolved.has(RAnswers.Resolved{vs, i}, p) == True{}: Bool
+} -> {RAnswers.Resolved.has(RAnswers.Resolved{vs2, i}, p) == True{}: Bool}:
   h => Eq.up(
     List<&2, Types.Entry>,
-    l => {Answers.Resolved.has(Answers.Resolved{l, i}, p) == True{}: Bool},
+    l => {RAnswers.Resolved.has(RAnswers.Resolved{l, i}, p) == True{}: Bool},
     vs2,
     List.append(&2, Types.Entry, vs, zs),
     ez,
@@ -1382,34 +1385,34 @@ def Resolved.has_ext(
       b => {b == True{}: Bool},
       Shared.List.some(
         ~Types.Entry,
-        ~Answers.Clash,
-        ~Answers.Entry.resolves,
+        ~RAnswers.Clash,
+        ~RAnswers.Entry.resolves,
         List.append(&2, Types.Entry, vs, zs),
-        Answers.Clash{i, p}
+        RAnswers.Clash{i, p}
       ),
       Bool.or(
         Shared.List.some(
           ~Types.Entry,
-          ~Answers.Clash,
-          ~Answers.Entry.resolves,
+          ~RAnswers.Clash,
+          ~RAnswers.Entry.resolves,
           vs,
-          Answers.Clash{i, p}
+          RAnswers.Clash{i, p}
         ),
         Shared.List.some(
           ~Types.Entry,
-          ~Answers.Clash,
-          ~Answers.Entry.resolves,
+          ~RAnswers.Clash,
+          ~RAnswers.Entry.resolves,
           zs,
-          Answers.Clash{i, p}
+          RAnswers.Clash{i, p}
         )
       ),
       Shared.List.some_append(
         ~Types.Entry,
-        ~Answers.Clash,
-        ~Answers.Entry.resolves,
+        ~RAnswers.Clash,
+        ~RAnswers.Entry.resolves,
         vs,
         zs,
-        Answers.Clash{i, p}
+        RAnswers.Clash{i, p}
       ),
       Eq.up(
         Bool,
@@ -1418,20 +1421,20 @@ def Resolved.has_ext(
             b,
             Shared.List.some(
               ~Types.Entry,
-              ~Answers.Clash,
-              ~Answers.Entry.resolves,
+              ~RAnswers.Clash,
+              ~RAnswers.Entry.resolves,
               zs,
-              Answers.Clash{i, p}
+              RAnswers.Clash{i, p}
             )
           )
             == True{}: Bool
         },
         Shared.List.some(
           ~Types.Entry,
-          ~Answers.Clash,
-          ~Answers.Entry.resolves,
+          ~RAnswers.Clash,
+          ~RAnswers.Entry.resolves,
           vs,
-          Answers.Clash{i, p}
+          RAnswers.Clash{i, p}
         ),
         True{},
         h,
@@ -1452,19 +1455,19 @@ def Resolved.holds_ext(
 ) -> {
   Shared.List.holds(
     ~String,
-    ~Answers.Resolved,
-    ~Answers.Resolved.has,
+    ~RAnswers.Resolved,
+    ~RAnswers.Resolved.has,
     ps,
-    Answers.Resolved{vs, i}
+    RAnswers.Resolved{vs, i}
   )
     == True{}: Bool
 } -> {
   Shared.List.holds(
     ~String,
-    ~Answers.Resolved,
-    ~Answers.Resolved.has,
+    ~RAnswers.Resolved,
+    ~RAnswers.Resolved.has,
     ps,
-    Answers.Resolved{vs2, i}
+    RAnswers.Resolved{vs2, i}
   )
     == True{}: Bool
 }:
@@ -1473,13 +1476,13 @@ def Resolved.holds_ext(
       h => {==}
     case Con{+p, +r}:
       +h => Shared.List.all.if_both(
-        Answers.Resolved.has(Answers.Resolved{vs2, i}, p),
+        RAnswers.Resolved.has(RAnswers.Resolved{vs2, i}, p),
         u => Shared.List.holds(
           ~String,
-          ~Answers.Resolved,
-          ~Answers.Resolved.has,
+          ~RAnswers.Resolved,
+          ~RAnswers.Resolved.has,
           r,
-          Answers.Resolved{vs2, i}
+          RAnswers.Resolved{vs2, i}
         )
       )(
         Resolved.has_ext(
@@ -1491,13 +1494,13 @@ def Resolved.holds_ext(
           p
         )(
           Shared.List.all.if_hit(
-            Answers.Resolved.has(Answers.Resolved{vs, i}, p),
+            RAnswers.Resolved.has(RAnswers.Resolved{vs, i}, p),
             u => Shared.List.holds(
               ~String,
-              ~Answers.Resolved,
-              ~Answers.Resolved.has,
+              ~RAnswers.Resolved,
+              ~RAnswers.Resolved.has,
               r,
-              Answers.Resolved{vs, i}
+              RAnswers.Resolved{vs, i}
             )
           )(h)
         )
@@ -1511,13 +1514,13 @@ def Resolved.holds_ext(
           i
         )(
           Shared.List.all.if_rest(
-            Answers.Resolved.has(Answers.Resolved{vs, i}, p),
+            RAnswers.Resolved.has(RAnswers.Resolved{vs, i}, p),
             u => Shared.List.holds(
               ~String,
-              ~Answers.Resolved,
-              ~Answers.Resolved.has,
+              ~RAnswers.Resolved,
+              ~RAnswers.Resolved.has,
               r,
-              Answers.Resolved{vs, i}
+              RAnswers.Resolved{vs, i}
             )
           )(h)
         )
@@ -1529,7 +1532,7 @@ def Status.merge_after(
   +i: Ledgers.Id,
   m: Maybe<&2, List<&2, String>>
 ) -> {
-  Spec.Status.follows(Spec.Status.Conflicted{i}, Answers.Status.merge(vs2, i, m)) == True{}: Bool
+  Spec.Status.follows(Spec.Status.Conflicted{i}, RAnswers.Status.merge(vs2, i, m)) == True{}: Bool
 }:
   match m:
     case None{}:
@@ -1545,10 +1548,10 @@ def Status.merge_after(
         },
         Shared.List.holds(
           ~String,
-          ~Answers.Resolved,
-          ~Answers.Resolved.has,
+          ~RAnswers.Resolved,
+          ~RAnswers.Resolved.has,
           ps,
-          Answers.Resolved{vs2, i}
+          RAnswers.Resolved{vs2, i}
         ),
         et => {==},
         ef => Ledgers.Id.is_eq_refl(i)
@@ -1572,8 +1575,8 @@ def Status.merge_follows(
   +ho: {Facts.Facts.ok(name, s2) == True{}: Bool}
 ) -> {
   Spec.Status.follows(
-    Answers.Status.merge(vs, i, Answers.Clashes.of(s, c, k, e)),
-    Answers.Status.merge(vs2, i, Answers.Clashes.of(s2, c, k, e))
+    RAnswers.Status.merge(vs, i, Answers.Clashes.of(s, c, k, e)),
+    RAnswers.Status.merge(vs2, i, Answers.Clashes.of(s2, c, k, e))
   )
     == True{}: Bool
 }:
@@ -1581,8 +1584,8 @@ def Status.merge_follows(
     List<&2, String>,
     m => {
       Spec.Status.follows(
-        Answers.Status.merge(vs, i, m),
-        Answers.Status.merge(vs2, i, Answers.Clashes.of(s2, c, k, e))
+        RAnswers.Status.merge(vs, i, m),
+        RAnswers.Status.merge(vs2, i, Answers.Clashes.of(s2, c, k, e))
       )
         == True{}: Bool
     },
@@ -1592,8 +1595,8 @@ def Status.merge_follows(
       Maybe<&2, List<&2, String>>,
       m => {
         Spec.Status.follows(
-          Answers.Status.merge(vs, i, Some{ps}),
-          Answers.Status.merge(vs2, i, m)
+          RAnswers.Status.merge(vs, i, Some{ps}),
+          RAnswers.Status.merge(vs2, i, m)
         )
           == True{}: Bool
       },
@@ -1608,10 +1611,10 @@ def Status.merge_follows(
               Spec.Status,
               Shared.List.holds(
                 ~String,
-                ~Answers.Resolved,
-                ~Answers.Resolved.has,
+                ~RAnswers.Resolved,
+                ~RAnswers.Resolved.has,
                 ps,
-                Answers.Resolved{vs2, i}
+                RAnswers.Resolved{vs2, i}
               ),
               Spec.Status.Written{},
               Spec.Status.Conflicted{i}
@@ -1621,10 +1624,10 @@ def Status.merge_follows(
         },
         Shared.List.holds(
           ~String,
-          ~Answers.Resolved,
-          ~Answers.Resolved.has,
+          ~RAnswers.Resolved,
+          ~RAnswers.Resolved.has,
           ps,
-          Answers.Resolved{vs, i}
+          RAnswers.Resolved{vs, i}
         ),
         et => Eq.up(
           Bool,
@@ -1637,10 +1640,10 @@ def Status.merge_follows(
           },
           Shared.List.holds(
             ~String,
-            ~Answers.Resolved,
-            ~Answers.Resolved.has,
+            ~RAnswers.Resolved,
+            ~RAnswers.Resolved.has,
             ps,
-            Answers.Resolved{vs2, i}
+            RAnswers.Resolved{vs2, i}
           ),
           True{},
           Resolved.holds_ext(ps, vs, vs2, zs, ez, i)(et),
@@ -1656,10 +1659,10 @@ def Status.merge_follows(
           },
           Shared.List.holds(
             ~String,
-            ~Answers.Resolved,
-            ~Answers.Resolved.has,
+            ~RAnswers.Resolved,
+            ~RAnswers.Resolved.has,
             ps,
-            Answers.Resolved{vs2, i}
+            RAnswers.Resolved{vs2, i}
           ),
           et => {==},
           ef2 => Ledgers.Id.is_eq_refl(i)
@@ -1678,10 +1681,10 @@ def Status.mark_follows.of(
   +k: Nat,
   +j: Nat,
   +ej: {
-    Lists.List.index(~Types.Entry, ~String, ~Answers.Entry.marks, vs, m) == Some{j}: Maybe<&2, Nat>
+    Lists.List.index(~Types.Entry, ~String, ~RAnswers.Entry.marks, vs, m) == Some{j}: Maybe<&2, Nat>
   }
 ) -> {
-  Spec.Status.follows(Answers.Status.mark(vs, m, k), Answers.Status.mark(vs2, m, k)) == True{}: Bool
+  Spec.Status.follows(RAnswers.Status.mark(vs, m, k), RAnswers.Status.mark(vs2, m, k)) == True{}: Bool
 }:
   Eq.up(
     Maybe<&2, Nat>,
@@ -1693,11 +1696,11 @@ def Status.mark_follows.of(
           Spec.Status.Written{},
           Spec.Status.Stale{}
         ),
-        Answers.Status.mark(vs2, m, k)
+        RAnswers.Status.mark(vs2, m, k)
       )
         == True{}: Bool
     },
-    Lists.List.index(~Types.Entry, ~String, ~Answers.Entry.marks, vs, m),
+    Lists.List.index(~Types.Entry, ~String, ~RAnswers.Entry.marks, vs, m),
     Some{j},
     ej,
     Eq.up(
@@ -1719,12 +1722,12 @@ def Status.mark_follows.of(
         )
           == True{}: Bool
       },
-      Lists.List.index(~Types.Entry, ~String, ~Answers.Entry.marks, vs2, m),
+      Lists.List.index(~Types.Entry, ~String, ~RAnswers.Entry.marks, vs2, m),
       Some{j},
       Lists.List.index_ext(
         ~Types.Entry,
         ~String,
-        ~Answers.Entry.marks,
+        ~RAnswers.Entry.marks,
         vs,
         vs2,
         m,
@@ -1756,7 +1759,7 @@ def Status.mark_follows(
       Lists.List.index(
         ~Types.Entry,
         ~String,
-        ~Answers.Entry.marks,
+        ~RAnswers.Entry.marks,
         vs,
         m
       )
@@ -1764,7 +1767,7 @@ def Status.mark_follows(
     }
   )
 ) -> {
-  Spec.Status.follows(Answers.Status.mark(vs, m, k), Answers.Status.mark(vs2, m, k)) == True{}: Bool
+  Spec.Status.follows(RAnswers.Status.mark(vs, m, k), RAnswers.Status.mark(vs2, m, k)) == True{}: Bool
 }:
   (j, ej) = r
   Status.mark_follows.of(vs, vs2, zs, ez, m, k, j, ej)
@@ -1834,7 +1837,7 @@ def Status.of_follows(
         Lists.List.index_some(
           ~Types.Entry,
           ~String,
-          ~Answers.Entry.marks,
+          ~RAnswers.Entry.marks,
           vs,
           m,
           k,
@@ -1859,7 +1862,7 @@ def Case.version(
   ha => Lists.Maybe.by(
     Types.Entry,
     m => {
-      Answers.Reply.id(m) == Some{a}: Maybe<&2, Spec.Reply>
+      RAnswers.Reply.id(m) == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Version{c, k}, a),
     Lines.Line.at(s, c, k),
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Version{c, k}, a), a, ha),
@@ -1869,7 +1872,7 @@ def Case.version(
       a,
       Eq.up(
         Maybe<&2, Types.Entry>,
-        m => {Answers.Reply.id(m) == Some{a}: Maybe<&2, Spec.Reply>},
+        m => {RAnswers.Reply.id(m) == Some{a}: Maybe<&2, Spec.Reply>},
         Lines.Line.at(s2, c, k),
         Some{e},
         Stays.Line.at_stays(name, s, s2, c, k, e)(hw)(hl)(ho)(ee),
@@ -1895,7 +1898,7 @@ def Case.parents(
   ha => Lists.Maybe.by(
     Types.Entry,
     m => {
-      Answers.Reply.parents(c, k, m) == Some{a}: Maybe<&2, Spec.Reply>
+      RAnswers.Reply.parents(c, k, m) == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Parents{c, k}, a),
     Lines.Line.at(s, c, k),
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Parents{c, k}, a), a, ha),
@@ -1905,7 +1908,7 @@ def Case.parents(
       a,
       Eq.up(
         Maybe<&2, Types.Entry>,
-        m => {Answers.Reply.parents(c, k, m) == Some{a}: Maybe<&2, Spec.Reply>},
+        m => {RAnswers.Reply.parents(c, k, m) == Some{a}: Maybe<&2, Spec.Reply>},
         Lines.Line.at(s2, c, k),
         Some{e},
         Stays.Line.at_stays(name, s, s2, c, k, e)(hw)(hl)(ho)(ee),
@@ -1931,7 +1934,7 @@ def Case.content(
   ha => Lists.Maybe.by(
     Files.Files(),
     m => {
-      Answers.Reply.hash(m) == Some{a}: Maybe<&2, Spec.Reply>
+      RAnswers.Reply.hash(m) == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Content{c, k}, a),
     Contents.Content.of(s, c, k),
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Content{c, k}, a), a, ha),
@@ -1941,7 +1944,7 @@ def Case.content(
       a,
       Eq.up(
         Maybe<&2, Files.Files()>,
-        m => {Answers.Reply.hash(m) == Some{a}: Maybe<&2, Spec.Reply>},
+        m => {RAnswers.Reply.hash(m) == Some{a}: Maybe<&2, Spec.Reply>},
         Contents.Content.of(s2, c, k),
         Some{t},
         Reads.Content.of_stays(name, s, s2, c, k, t)(hw)(hl)(ho)(et),
@@ -1970,14 +1973,14 @@ def Case.affects(
   ha => Lists.Maybe.by(
     Files.Files(),
     m => {
-      Answers.Affects.of(m, Contents.Content.of(s, c, y), us, bs) == Some{a}: Maybe<&2, Spec.Reply>
+      RAnswers.Affects.of(m, Contents.Content.of(s, c, y), us, bs) == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Affects{c, x, y, us, bs}, a),
     Contents.Content.of(s, c, x),
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Affects{c, x, y, us, bs}, a), a, ha),
     +t1 => +e1 => +ha => Lists.Maybe.by(
       Files.Files(),
       m => {
-        Answers.Affects.of(Some{t1}, m, us, bs) == Some{a}: Maybe<&2, Spec.Reply>
+        RAnswers.Affects.of(Some{t1}, m, us, bs) == Some{a}: Maybe<&2, Spec.Reply>
       } -> Moved(s2, Spec.Question.Affects{c, x, y, us, bs}, a),
       Contents.Content.of(s, c, y),
       en => ha => None.elim(
@@ -1993,7 +1996,7 @@ def Case.affects(
         Eq.up(
           Maybe<&2, Files.Files()>,
           m => {
-            Answers.Affects.of(
+            RAnswers.Affects.of(
               m,
               Contents.Content.of(s2, c, y),
               us,
@@ -2006,7 +2009,7 @@ def Case.affects(
           Reads.Content.of_stays(name, s, s2, c, x, t1)(hw)(hl)(ho)(e1),
           Eq.up(
             Maybe<&2, Files.Files()>,
-            m => {Answers.Affects.of(Some{t1}, m, us, bs) == Some{a}: Maybe<&2, Spec.Reply>},
+            m => {RAnswers.Affects.of(Some{t1}, m, us, bs) == Some{a}: Maybe<&2, Spec.Reply>},
             Contents.Content.of(s2, c, y),
             Some{t2},
             Reads.Content.of_stays(name, s, s2, c, y, t2)(hw)(hl)(ho)(e3),
@@ -2032,14 +2035,14 @@ def Case.group(
   Answers.Answer.of(s, Spec.Question.Group{c, k}) == Some{a}: Maybe<&2, Spec.Reply>
 } -> Moved(s2, Spec.Question.Group{c, k}, a):
   ha => Lists.Maybe.by(
-    Lines.Rule,
+    RLines.Rule,
     m => {
       Maybe.bind(
         &2,
-        Lines.Rule,
+        RLines.Rule,
         Spec.Reply,
         m,
-        Answers.Rule.group
+        RAnswers.Rule.group
       )
         == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Group{c, k}, a),
@@ -2050,14 +2053,14 @@ def Case.group(
       Spec.Question.Group{c, k},
       a,
       Eq.up(
-        Maybe<&2, Lines.Rule>,
+        Maybe<&2, RLines.Rule>,
         m => {
           Maybe.bind(
             &2,
-            Lines.Rule,
+            RLines.Rule,
             Spec.Reply,
             m,
-            Answers.Rule.group
+            RAnswers.Rule.group
           )
             == Some{a}: Maybe<&2, Spec.Reply>
         },
@@ -2084,14 +2087,14 @@ def Case.owner(
   Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{a}: Maybe<&2, Spec.Reply>
 } -> Moved(s2, Spec.Question.Owner{c, k}, a):
   ha => Lists.Maybe.by(
-    Lines.Rule,
+    RLines.Rule,
     m => {
       Maybe.bind(
         &2,
-        Lines.Rule,
+        RLines.Rule,
         Spec.Reply,
         m,
-        Answers.Rule.owner
+        RAnswers.Rule.owner
       )
         == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Owner{c, k}, a),
@@ -2102,14 +2105,14 @@ def Case.owner(
       Spec.Question.Owner{c, k},
       a,
       Eq.up(
-        Maybe<&2, Lines.Rule>,
+        Maybe<&2, RLines.Rule>,
         m => {
           Maybe.bind(
             &2,
-            Lines.Rule,
+            RLines.Rule,
             Spec.Reply,
             m,
-            Answers.Rule.owner
+            RAnswers.Rule.owner
           )
             == Some{a}: Maybe<&2, Spec.Reply>
         },
@@ -2138,7 +2141,7 @@ def Case.era(
   ha => Lists.Maybe.by(
     Nat,
     m => {
-      Answers.Reply.number(m) == Some{a}: Maybe<&2, Spec.Reply>
+      RAnswers.Reply.number(m) == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Era{c, k}, a),
     Answers.Era.for(s, c, k),
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Era{c, k}, a), a, ha),
@@ -2148,7 +2151,7 @@ def Case.era(
       a,
       Eq.up(
         Maybe<&2, Nat>,
-        m => {Answers.Reply.number(m) == Some{a}: Maybe<&2, Spec.Reply>},
+        m => {RAnswers.Reply.number(m) == Some{a}: Maybe<&2, Spec.Reply>},
         Answers.Era.for(s2, c, k),
         Some{n},
         Era.for_stays(name, s, s2, c, k, n, hw, hl, ho)(en2),
@@ -2179,7 +2182,7 @@ def Case.owners(
     Lines.Line.at(s, c, k),
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Owners{c, k}, a), a, ha),
     +e => +ee => +ha => Lists.Maybe.by(
-      Lines.Rule,
+      RLines.Rule,
       m => {
         Answers.Owners.of(s, c, Some{e}, m) == Some{a}: Maybe<&2, Spec.Reply>
       } -> Moved(s2, Spec.Question.Owners{c, k}, a),
@@ -2204,7 +2207,7 @@ def Case.owners(
           Some{e},
           Stays.Line.at_stays(name, s, s2, c, k, e)(hw)(hl)(ho)(ee),
           Eq.up(
-            Maybe<&2, Lines.Rule>,
+            Maybe<&2, RLines.Rule>,
             m => {Answers.Owners.of(s2, c, Some{e}, m) == Some{a}: Maybe<&2, Spec.Reply>},
             Answers.Rule.for(s2, c, k),
             Some{u},
@@ -2234,8 +2237,8 @@ def Case.members(
   ha => Lists.Maybe.by(
     List<&2, Types.Entry>,
     v => {
-      Answers.Reply.names(
-        Answers.Store.read.of(List<&2, String>, m, R => Groups.Groups.members(R, r, g, m), v)
+      RAnswers.Reply.names(
+        RAnswers.Store.read.of(List<&2, String>, m, R => Groups.Groups.members(R, r, g, m), v)
       )
         == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Members{r, g, m}, a),
@@ -2243,7 +2246,7 @@ def Case.members(
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Members{r, g, m}, a), a, ha),
     +vs => +ev => +ha => Lists.Bool.by(
       b => {
-        Answers.Reply.names(
+        RAnswers.Reply.names(
           Shared.Maybe.when(List<&2, String>, b, u => Groups.Groups.members(vs, r, g, m))
         )
           == Some{a}: Maybe<&2, Spec.Reply>
@@ -2267,8 +2270,8 @@ def Case.members(
           Eq.up(
             Maybe<&2, List<&2, Types.Entry>>,
             v => {
-              Answers.Reply.names(
-                Answers.Store.read.of(
+              RAnswers.Reply.names(
+                RAnswers.Store.read.of(
                   List<&2, String>,
                   m,
                   R => Groups.Groups.members(R, r, g, m),
@@ -2283,7 +2286,7 @@ def Case.members(
             Eq.up(
               Bool,
               b => {
-                Answers.Reply.names(
+                RAnswers.Reply.names(
                   Shared.Maybe.when(List<&2, String>, b, u => Groups.Groups.members(vs2, r, g, m))
                 )
                   == Some{a}: Maybe<&2, Spec.Reply>
@@ -2293,7 +2296,7 @@ def Case.members(
               Ext.lt(vs, vs2, zs, ez, m)(elt),
               Eq.up(
                 Maybe<&2, List<&2, String>>,
-                y => {Answers.Reply.names(y) == Some{a}: Maybe<&2, Spec.Reply>},
+                y => {RAnswers.Reply.names(y) == Some{a}: Maybe<&2, Spec.Reply>},
                 Groups.Groups.members(vs2, r, g, m),
                 Groups.Groups.members(vs, r, g, m),
                 Groups.Groups.members_take(vs2, vs, r, g, m, Ext.take(vs, vs2, zs, ez, m)(elt)),
@@ -2325,8 +2328,8 @@ def Case.nodes(
   ha => Lists.Maybe.by(
     List<&2, Types.Entry>,
     v => {
-      Answers.Reply.names(
-        Answers.Store.read.of(List<&2, String>, m, R => Groups.Groups.nodes(R, r, g, m), v)
+      RAnswers.Reply.names(
+        RAnswers.Store.read.of(List<&2, String>, m, R => Groups.Groups.nodes(R, r, g, m), v)
       )
         == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Nodes{r, g, m}, a),
@@ -2334,7 +2337,7 @@ def Case.nodes(
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Nodes{r, g, m}, a), a, ha),
     +vs => +ev => +ha => Lists.Bool.by(
       b => {
-        Answers.Reply.names(
+        RAnswers.Reply.names(
           Shared.Maybe.when(List<&2, String>, b, u => Groups.Groups.nodes(vs, r, g, m))
         )
           == Some{a}: Maybe<&2, Spec.Reply>
@@ -2358,8 +2361,8 @@ def Case.nodes(
           Eq.up(
             Maybe<&2, List<&2, Types.Entry>>,
             v => {
-              Answers.Reply.names(
-                Answers.Store.read.of(List<&2, String>, m, R => Groups.Groups.nodes(R, r, g, m), v)
+              RAnswers.Reply.names(
+                RAnswers.Store.read.of(List<&2, String>, m, R => Groups.Groups.nodes(R, r, g, m), v)
               )
                 == Some{a}: Maybe<&2, Spec.Reply>
             },
@@ -2369,7 +2372,7 @@ def Case.nodes(
             Eq.up(
               Bool,
               b => {
-                Answers.Reply.names(
+                RAnswers.Reply.names(
                   Shared.Maybe.when(List<&2, String>, b, u => Groups.Groups.nodes(vs2, r, g, m))
                 )
                   == Some{a}: Maybe<&2, Spec.Reply>
@@ -2379,7 +2382,7 @@ def Case.nodes(
               Ext.lt(vs, vs2, zs, ez, m)(elt),
               Eq.up(
                 Maybe<&2, List<&2, String>>,
-                y => {Answers.Reply.names(y) == Some{a}: Maybe<&2, Spec.Reply>},
+                y => {RAnswers.Reply.names(y) == Some{a}: Maybe<&2, Spec.Reply>},
                 Groups.Groups.nodes(vs2, r, g, m),
                 Groups.Groups.nodes(vs, r, g, m),
                 Groups.Groups.nodes_take(vs2, vs, r, g, m, Ext.take(vs, vs2, zs, ez, m)(elt)),
@@ -2411,8 +2414,8 @@ def Case.is_group(
   ha => Lists.Maybe.by(
     List<&2, Types.Entry>,
     v => {
-      Answers.Reply.yes(
-        Answers.Store.read.of(Bool, m, R => Groups.Groups.is_group(R, r, g, m), v)
+      RAnswers.Reply.yes(
+        RAnswers.Store.read.of(Bool, m, R => Groups.Groups.is_group(R, r, g, m), v)
       )
         == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.IsGroup{r, g, m}, a),
@@ -2420,7 +2423,7 @@ def Case.is_group(
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.IsGroup{r, g, m}, a), a, ha),
     +vs => +ev => +ha => Lists.Bool.by(
       b => {
-        Answers.Reply.yes(
+        RAnswers.Reply.yes(
           Shared.Maybe.when(Bool, b, u => Groups.Groups.is_group(vs, r, g, m))
         )
           == Some{a}: Maybe<&2, Spec.Reply>
@@ -2444,8 +2447,8 @@ def Case.is_group(
           Eq.up(
             Maybe<&2, List<&2, Types.Entry>>,
             v => {
-              Answers.Reply.yes(
-                Answers.Store.read.of(Bool, m, R => Groups.Groups.is_group(R, r, g, m), v)
+              RAnswers.Reply.yes(
+                RAnswers.Store.read.of(Bool, m, R => Groups.Groups.is_group(R, r, g, m), v)
               )
                 == Some{a}: Maybe<&2, Spec.Reply>
             },
@@ -2455,7 +2458,7 @@ def Case.is_group(
             Eq.up(
               Bool,
               b => {
-                Answers.Reply.yes(
+                RAnswers.Reply.yes(
                   Shared.Maybe.when(Bool, b, u => Groups.Groups.is_group(vs2, r, g, m))
                 )
                   == Some{a}: Maybe<&2, Spec.Reply>
@@ -2465,7 +2468,7 @@ def Case.is_group(
               Ext.lt(vs, vs2, zs, ez, m)(elt),
               Eq.up(
                 Maybe<&2, Bool>,
-                y => {Answers.Reply.yes(y) == Some{a}: Maybe<&2, Spec.Reply>},
+                y => {RAnswers.Reply.yes(y) == Some{a}: Maybe<&2, Spec.Reply>},
                 Groups.Groups.is_group(vs2, r, g, m),
                 Groups.Groups.is_group(vs, r, g, m),
                 Groups.Groups.is_group_take(vs2, vs, r, g, m, Ext.take(vs, vs2, zs, ez, m)(elt)),
@@ -2496,21 +2499,21 @@ def Case.mark(
   ha => Lists.Maybe.by(
     List<&2, Types.Entry>,
     v => {
-      Answers.Reply.number(Answers.Mark.of(m, v)) == Some{a}: Maybe<&2, Spec.Reply>
+      RAnswers.Reply.number(RAnswers.Mark.of(m, v)) == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Mark{c, m}, a),
     Lines.Line.versions(s, c),
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Mark{c, m}, a), a, ha),
     +vs => +ev => +ha => Lists.Maybe.by(
       Nat,
       y => {
-        Answers.Reply.number(Answers.Mark.at(vs, y)) == Some{a}: Maybe<&2, Spec.Reply>
+        RAnswers.Reply.number(RAnswers.Mark.at(vs, y)) == Some{a}: Maybe<&2, Spec.Reply>
       } -> Moved(s2, Spec.Question.Mark{c, m}, a),
-      Lists.List.index(~Types.Entry, ~String, ~Answers.Entry.marks, vs, m),
+      Lists.List.index(~Types.Entry, ~String, ~RAnswers.Entry.marks, vs, m),
       en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Mark{c, m}, a), a, ha),
       +j => +ej => +ha => Lists.Maybe.by(
         Types.Entry,
         y => {
-          Answers.Reply.number(Answers.Mark.in(y)) == Some{a}: Maybe<&2, Spec.Reply>
+          RAnswers.Reply.number(RAnswers.Mark.in(y)) == Some{a}: Maybe<&2, Spec.Reply>
         } -> Moved(s2, Spec.Question.Mark{c, m}, a),
         List.get(&2, Types.Entry, vs, j),
         en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Mark{c, m}, a), a, ha),
@@ -2531,21 +2534,21 @@ def Case.mark(
             a,
             Eq.up(
               Maybe<&2, List<&2, Types.Entry>>,
-              v => {Answers.Reply.number(Answers.Mark.of(m, v)) == Some{a}: Maybe<&2, Spec.Reply>},
+              v => {RAnswers.Reply.number(RAnswers.Mark.of(m, v)) == Some{a}: Maybe<&2, Spec.Reply>},
               Lines.Line.versions(s2, c),
               Some{vs2},
               e2,
               Eq.up(
                 Maybe<&2, Nat>,
                 y => {
-                  Answers.Reply.number(Answers.Mark.at(vs2, y)) == Some{a}: Maybe<&2, Spec.Reply>
+                  RAnswers.Reply.number(RAnswers.Mark.at(vs2, y)) == Some{a}: Maybe<&2, Spec.Reply>
                 },
-                Lists.List.index(~Types.Entry, ~String, ~Answers.Entry.marks, vs2, m),
+                Lists.List.index(~Types.Entry, ~String, ~RAnswers.Entry.marks, vs2, m),
                 Some{j},
                 Lists.List.index_ext(
                   ~Types.Entry,
                   ~String,
-                  ~Answers.Entry.marks,
+                  ~RAnswers.Entry.marks,
                   vs,
                   vs2,
                   m,
@@ -2553,7 +2556,7 @@ def Case.mark(
                 )((zs, ez))(ej),
                 Eq.up(
                   Maybe<&2, Types.Entry>,
-                  y => {Answers.Reply.number(Answers.Mark.in(y)) == Some{a}: Maybe<&2, Spec.Reply>},
+                  y => {RAnswers.Reply.number(RAnswers.Mark.in(y)) == Some{a}: Maybe<&2, Spec.Reply>},
                   List.get(&2, Types.Entry, vs2, j),
                   Some{e},
                   Lists.List.ext_get(Types.Entry, vs, vs2, j, e)((zs, ez))(eg),
@@ -2583,7 +2586,7 @@ def Case.count(
   ha => Lists.Maybe.by(
     List<&2, Types.Entry>,
     v => {
-      Answers.Reply.count(v) == Some{a}: Maybe<&2, Spec.Reply>
+      RAnswers.Reply.count(v) == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Count{c}, a),
     Lines.Line.versions(s, c),
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Count{c}, a), a, ha),
@@ -2610,7 +2613,7 @@ def Case.count(
             Eq.up(
               Maybe<&2, List<&2, Types.Entry>>,
               v => {
-                Answers.Reply.count(
+                RAnswers.Reply.count(
                   v
                 )
                   == Some{
@@ -2646,13 +2649,13 @@ def Case.request(
   ha => Lists.Maybe.by(
     List<&2, Types.Entry>,
     v => {
-      Answers.Reply.ask(Answers.Line.find.of(i, v)) == Some{a}: Maybe<&2, Spec.Reply>
+      RAnswers.Reply.ask(RAnswers.Line.find.of(i, v)) == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Request{c, i}, a),
     Lines.Line.versions(s, c),
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Request{c, i}, a), a, ha),
     +vs => +ev => +ha => Find.by(
       f => {
-        Answers.Reply.ask(f) == Some{a}: Maybe<&2, Spec.Reply>
+        RAnswers.Reply.ask(f) == Some{a}: Maybe<&2, Spec.Reply>
       } -> Moved(s2, Spec.Question.Request{c, i}, a),
       vs,
       i,
@@ -2674,15 +2677,15 @@ def Case.request(
           a,
           Eq.up(
             Maybe<&2, List<&2, Types.Entry>>,
-            v => {Answers.Reply.ask(Answers.Line.find.of(i, v)) == Some{a}: Maybe<&2, Spec.Reply>},
+            v => {RAnswers.Reply.ask(RAnswers.Line.find.of(i, v)) == Some{a}: Maybe<&2, Spec.Reply>},
             Lines.Line.versions(s2, c),
             Some{vs2},
             e2,
             Eq.up(
-              Maybe<&2, Answers.Found>,
-              f => {Answers.Reply.ask(f) == Some{a}: Maybe<&2, Spec.Reply>},
-              Answers.Versions.find(vs2, i),
-              Some{Answers.Found{j, x}},
+              Maybe<&2, RAnswers.Found>,
+              f => {RAnswers.Reply.ask(f) == Some{a}: Maybe<&2, Spec.Reply>},
+              RAnswers.Versions.find(vs2, i),
+              Some{RAnswers.Found{j, x}},
               Find.ext(vs, vs2, zs, ez, i, j, x, ei, eg),
               ha
             )
@@ -2709,10 +2712,10 @@ def Case.clashes(
   ha => Lists.Maybe.by(
     List<&2, Types.Entry>,
     v => {
-      Answers.Reply.names(
-        Answers.Found.then(
+      RAnswers.Reply.names(
+        RAnswers.Found.then(
           List<&2, String>,
-          Answers.Line.find.of(i, v),
+          RAnswers.Line.find.of(i, v),
           k => e => Answers.Clashes.of(s, c, k, e)
         )
       )
@@ -2722,8 +2725,8 @@ def Case.clashes(
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Clashes{c, i}, a), a, ha),
     +vs => +ev => +ha => Find.by(
       f => {
-        Answers.Reply.names(
-          Answers.Found.then(List<&2, String>, f, k => e => Answers.Clashes.of(s, c, k, e))
+        RAnswers.Reply.names(
+          RAnswers.Found.then(List<&2, String>, f, k => e => Answers.Clashes.of(s, c, k, e))
         )
           == Some{a}: Maybe<&2, Spec.Reply>
       } -> Moved(s2, Spec.Question.Clashes{c, i}, a),
@@ -2733,7 +2736,7 @@ def Case.clashes(
       +j => +x => +ei => +eg => +ha => Lists.Maybe.by(
         List<&2, String>,
         y => {
-          Answers.Reply.names(y) == Some{a}: Maybe<&2, Spec.Reply>
+          RAnswers.Reply.names(y) == Some{a}: Maybe<&2, Spec.Reply>
         } -> Moved(s2, Spec.Question.Clashes{c, i}, a),
         Answers.Clashes.of(s, c, j, x),
         en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Clashes{c, i}, a), a, ha),
@@ -2755,10 +2758,10 @@ def Case.clashes(
             Eq.up(
               Maybe<&2, List<&2, Types.Entry>>,
               v => {
-                Answers.Reply.names(
-                  Answers.Found.then(
+                RAnswers.Reply.names(
+                  RAnswers.Found.then(
                     List<&2, String>,
-                    Answers.Line.find.of(i, v),
+                    RAnswers.Line.find.of(i, v),
                     k => e => Answers.Clashes.of(s2, c, k, e)
                   )
                 )
@@ -2768,10 +2771,10 @@ def Case.clashes(
               Some{vs2},
               e2,
               Eq.up(
-                Maybe<&2, Answers.Found>,
+                Maybe<&2, RAnswers.Found>,
                 f => {
-                  Answers.Reply.names(
-                    Answers.Found.then(
+                  RAnswers.Reply.names(
+                    RAnswers.Found.then(
                       List<&2, String>,
                       f,
                       k => e => Answers.Clashes.of(s2, c, k, e)
@@ -2779,12 +2782,12 @@ def Case.clashes(
                   )
                     == Some{a}: Maybe<&2, Spec.Reply>
                 },
-                Answers.Versions.find(vs2, i),
-                Some{Answers.Found{j, x}},
+                RAnswers.Versions.find(vs2, i),
+                Some{RAnswers.Found{j, x}},
                 Find.ext(vs, vs2, zs, ez, i, j, x, ei, eg),
                 Eq.up(
                   Maybe<&2, List<&2, String>>,
-                  y => {Answers.Reply.names(y) == Some{a}: Maybe<&2, Spec.Reply>},
+                  y => {RAnswers.Reply.names(y) == Some{a}: Maybe<&2, Spec.Reply>},
                   Answers.Clashes.of(s2, c, j, x),
                   Some{z},
                   Clashes.of_stays(name, s, s2, c, j, x, z, hw, hl, ho)(ep),
@@ -2815,10 +2818,10 @@ def Case.base(
   ha => Lists.Maybe.by(
     List<&2, Types.Entry>,
     v => {
-      Answers.Reply.point(
-        Answers.Found.then(
+      RAnswers.Reply.point(
+        RAnswers.Found.then(
           Spec.Point,
-          Answers.Line.find.of(i, v),
+          RAnswers.Line.find.of(i, v),
           k => e => Answers.Base.of(s, c, k, e)
         )
       )
@@ -2828,8 +2831,8 @@ def Case.base(
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Base{c, i}, a), a, ha),
     +vs => +ev => +ha => Find.by(
       f => {
-        Answers.Reply.point(
-          Answers.Found.then(Spec.Point, f, k => e => Answers.Base.of(s, c, k, e))
+        RAnswers.Reply.point(
+          RAnswers.Found.then(Spec.Point, f, k => e => Answers.Base.of(s, c, k, e))
         )
           == Some{a}: Maybe<&2, Spec.Reply>
       } -> Moved(s2, Spec.Question.Base{c, i}, a),
@@ -2839,7 +2842,7 @@ def Case.base(
       +j => +x => +ei => +eg => +ha => Lists.Maybe.by(
         Spec.Point,
         y => {
-          Answers.Reply.point(y) == Some{a}: Maybe<&2, Spec.Reply>
+          RAnswers.Reply.point(y) == Some{a}: Maybe<&2, Spec.Reply>
         } -> Moved(s2, Spec.Question.Base{c, i}, a),
         Answers.Base.of(s, c, j, x),
         en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Base{c, i}, a), a, ha),
@@ -2861,10 +2864,10 @@ def Case.base(
             Eq.up(
               Maybe<&2, List<&2, Types.Entry>>,
               v => {
-                Answers.Reply.point(
-                  Answers.Found.then(
+                RAnswers.Reply.point(
+                  RAnswers.Found.then(
                     Spec.Point,
-                    Answers.Line.find.of(i, v),
+                    RAnswers.Line.find.of(i, v),
                     k => e => Answers.Base.of(s2, c, k, e)
                   )
                 )
@@ -2874,19 +2877,19 @@ def Case.base(
               Some{vs2},
               e2,
               Eq.up(
-                Maybe<&2, Answers.Found>,
+                Maybe<&2, RAnswers.Found>,
                 f => {
-                  Answers.Reply.point(
-                    Answers.Found.then(Spec.Point, f, k => e => Answers.Base.of(s2, c, k, e))
+                  RAnswers.Reply.point(
+                    RAnswers.Found.then(Spec.Point, f, k => e => Answers.Base.of(s2, c, k, e))
                   )
                     == Some{a}: Maybe<&2, Spec.Reply>
                 },
-                Answers.Versions.find(vs2, i),
-                Some{Answers.Found{j, x}},
+                RAnswers.Versions.find(vs2, i),
+                Some{RAnswers.Found{j, x}},
                 Find.ext(vs, vs2, zs, ez, i, j, x, ei, eg),
                 Eq.up(
                   Maybe<&2, Spec.Point>,
-                  y => {Answers.Reply.point(y) == Some{a}: Maybe<&2, Spec.Reply>},
+                  y => {RAnswers.Reply.point(y) == Some{a}: Maybe<&2, Spec.Reply>},
                   Answers.Base.of(s2, c, j, x),
                   Some{z},
                   Merge.base_stays(name, s, s2, c, j, x, z, hw, hl, ho)(ep),
@@ -2917,7 +2920,7 @@ def Case.status(
   ha => Lists.Maybe.by(
     List<&2, Types.Entry>,
     v => {
-      Answers.Reply.status(s, c, v, Answers.Line.find.of(i, v)) == Some{a}: Maybe<&2, Spec.Reply>
+      Answers.Reply.status(s, c, v, RAnswers.Line.find.of(i, v)) == Some{a}: Maybe<&2, Spec.Reply>
     } -> Moved(s2, Spec.Question.Status{c, i}, a),
     Lines.Line.versions(s, c),
     en => ha => None.elim(Spec.Reply, Moved(s2, Spec.Question.Status{c, i}, a), a, ha),
@@ -2955,7 +2958,7 @@ def Case.status(
                     s2,
                     c,
                     v,
-                    Answers.Line.find.of(i, v)
+                    RAnswers.Line.find.of(i, v)
                   )
                     == Some{
                       Spec.Reply.Status{Answers.Status.of(s2, c, vs2, j, x)}
@@ -2965,7 +2968,7 @@ def Case.status(
                 Some{vs2},
                 e2,
                 Eq.up(
-                  Maybe<&2, Answers.Found>,
+                  Maybe<&2, RAnswers.Found>,
                   f => {
                     Answers.Reply.status(
                       s2,
@@ -2977,8 +2980,8 @@ def Case.status(
                         Spec.Reply.Status{Answers.Status.of(s2, c, vs2, j, x)}
                       }: Maybe<&2, Spec.Reply>
                   },
-                  Answers.Versions.find(vs2, i),
-                  Some{Answers.Found{j, x}},
+                  RAnswers.Versions.find(vs2, i),
+                  Some{RAnswers.Found{j, x}},
                   Find.ext(vs, vs2, zs, ez, i, j, x, ei, eg),
                   {==}
                 )

@@ -16,6 +16,10 @@ import ./mirror.bend as Mirror
 import ./node.bend as Nodes
 import ./owners.bend as Owners
 import ./reads.bend as Reads
+import ./run/answers.bend as RAnswers
+import ./run/facts.bend as RFacts
+import ./run/parts.bend as RParts
+import ./run/lines.bend as RLines
 import ./shared/format.bend as Formats
 import ./shared/lists.bend as Lists
 import ./shared/parts.bend as Parts
@@ -23,15 +27,23 @@ import ./spec.bend as Spec
 import ./types.bend as Types
 import ./versions.bend as Versions
 import ./work.bend as Works
+import ../shared/shared/shared/shared/crit.bend as Crits
+import ./run/set.bend as Checks
+import ./shared/set.bend as Sets
+import ./run/work.bend as RWorks
 
 # A Vend Node
 # -----------
 # This file fills the names of spec.bend and proves its laws. A node is its
-# state (Nodes.Raw) with the proof that its facts are sound for its name
-# (Facts.ok) and that its name is not reserved (Facts.Trust.reserved), so
+# state (Nodes.Raw), which is plain, with one proof: that the state passes
+# the check of a node (Nodes.Raw.ok). The check says that its facts are a set
+# and its parts a well formed map, that its facts are sound for its name
+# (Facts.ok), and that its name is not reserved (Facts.Trust.reserved), so
 # every node, however it came to be, never names itself a liar, and is never
-# the one that another node names when its trust breaks. The laws are those
-# of the core, said of the facts of the node.
+# the one that another node names when its trust breaks. The code that runs
+# (Nodes.Raw.does and what it calls, in run/) works on the plain state and
+# builds no proof. The laws are those of the core, said of the facts of the
+# node: the set that the map of its state is (Node.facts).
 def Spec.VendNode():
   Sigma<&2, &2, Nodes.Raw, r => {Nodes.Raw.ok(r) == True{}: Bool}>
 
@@ -42,7 +54,7 @@ def Spec.Request.code(i, r):
   Coded.Named.code(i, r)
 
 def Spec.Change.ballot(c):
-  Facts.Change.ballot(c)
+  RFacts.Change.ballot(c)
 
 def Spec.Diff():
   Formats.Diff()
@@ -71,44 +83,128 @@ def Node.raw(n: Spec.VendNode) -> Nodes.Raw:
     case Tuple{r, ok}:
       r
 
+# the map of the facts of the node n: what the code that runs holds
+def Node.tree(n: Spec.VendNode) -> RFacts.Plain():
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
+      fs
+
+# the map fs of a sound state passes the two checks of a set
+def Node.set_ok(
+  +name: String,
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
+) -> {
+  Bool.and(
+    Crits.Crit.wf(~Types.Fact, fs, 0n),
+    Checks.ValSet.ok(~Types.Fact, ~Coded.Fact.words, fs)
+  ) == True{}: Bool
+}:
+  Shared.Bool.and_true_left(
+    Bool.and(
+      Crits.Crit.wf(~Types.Fact, fs, 0n),
+      Checks.ValSet.ok(~Types.Fact, ~Coded.Fact.words, fs)
+    ),
+    RParts.Parts.wf(ps)
+  )(
+    Shared.Bool.and_true_left(
+      Nodes.Raw.set(fs, ps),
+      Bool.and(RFacts.Facts.ok(name, fs), Bool.not(RFacts.Trust.reserved(name)))
+    )(ok)
+  )
+
+# the map of the parts ps of a sound state is well formed
+def Node.parts_wf(
+  +name: String,
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
+) -> {RParts.Parts.wf(ps) == True{}: Bool}:
+  Shared.Bool.and_true_right(
+    Bool.and(
+      Crits.Crit.wf(~Types.Fact, fs, 0n),
+      Checks.ValSet.ok(~Types.Fact, ~Coded.Fact.words, fs)
+    ),
+    RParts.Parts.wf(ps)
+  )(
+    Shared.Bool.and_true_left(
+      Nodes.Raw.set(fs, ps),
+      Bool.and(RFacts.Facts.ok(name, fs), Bool.not(RFacts.Trust.reserved(name)))
+    )(ok)
+  )
+
+# the proofs that the map fs of a sound state is a set, from the check that
+# the state passes (ok)
+def Node.checked(
+  +name: String,
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
+) -> Sets.ValSet.Checked(~Types.Fact, ~Coded.Fact.words, fs):
+  (
+    Shared.Bool.and_true_left(
+      Crits.Crit.wf(~Types.Fact, fs, 0n),
+      Checks.ValSet.ok(~Types.Fact, ~Coded.Fact.words, fs)
+    )(Node.set_ok(name, fs, ps, ok)),
+    Shared.Bool.and_true_right(
+      Crits.Crit.wf(~Types.Fact, fs, 0n),
+      Checks.ValSet.ok(~Types.Fact, ~Coded.Fact.words, fs)
+    )(Node.set_ok(name, fs, ps, ok))
+  )
+
+# the facts of a sound state of the name name and the map fs: the map, with
+# the proofs that it is a set. Only the laws use it: the code that runs holds
+# the map alone
+def Node.set(
+  +name: String,
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
+) -> Facts.Facts():
+  (fs, Node.checked(name, fs, ps, ok))
+
 # the facts of the node n
 def Node.facts(n: Spec.VendNode) -> Facts.Facts():
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
-      fs
+    case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, +ps}, +ok}:
+      Node.set(name, fs, ps, ok)
 
 def Spec.VendNode.name(n):
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
       name
 
 def Spec.VendNode.writers(n):
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
       ws
 
 def Spec.VendNode.mounts(n):
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
       Nodes.Mounts.addresses(ms)
 
 def Spec.VendNode.stopped(n):
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
       st
 
 def Spec.VendNode.holds(n, c):
   Facts.Facts.holds(Node.facts(n), c)
 
-def Spec.VendNode.parts(n):
+# the parts of the node n: the map that its state holds, with the proof that
+# it is well formed. Only the laws use it
+def Node.kept(n: Spec.VendNode) -> Parts.Parts:
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
-      Parts.Parts.list(ps)
+    case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, +ps}, +ok}:
+      Parts.Parts.of(ps, Node.parts_wf(name, fs, ps, ok))
+
+def Spec.VendNode.parts(n):
+  Parts.Parts.list(Node.kept(n))
 
 def Spec.VendNode.part(n, h):
-  match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
-      Parts.Parts.get(ps, h)
+  Parts.Parts.get(Node.kept(n), h)
 
 def Spec.VendNode.read(n, c, k, p):
   Contents.Content.read(Node.facts(n), c, k, p)
@@ -122,52 +218,251 @@ def Spec.VendNode.answer(n, q):
 def Spec.VendNode.liars(n):
   Facts.Facts.liars(Node.facts(n))
 
+# What the code that runs shows
+# -----------------------------
+# What a node shows is said of its facts (a set, with its proofs), so that the
+# laws of the core are laws of the node. The code that runs reads the same
+# from the plain state (Nodes.Raw.answer, ...), and builds no proof.
+
+# the map of the facts of a node is the map that its state holds
+def Node.facts_tree(
+  n: Spec.VendNode
+) -> {Facts.Facts.crit(Node.facts(n)) == Nodes.Raw.facts(Node.raw(n)): RFacts.Plain()}:
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
+      {==}
+
+# a node holds a change when its state does
+def Node.holds_runs(
+  n: Spec.VendNode,
+  c: Types.Change
+) -> {Spec.VendNode.holds(n, c) == Nodes.Raw.holds(Node.raw(n), c): Bool}:
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
+      {==}
+
+# a node reads what its state reads
+def Node.read_runs(
+  n: Spec.VendNode,
+  c: Ledgers.Line,
+  k: Nat,
+  p: String
+) -> {
+  Spec.VendNode.read(n, c, k, p) == Nodes.Raw.read(Node.raw(n), c, k, p): Maybe<
+    &2,
+    Maybe<&2, List<&2, U32>>>
+}:
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
+      {==}
+
+# a node shows a writer what its state shows
+def Node.view_runs(
+  n: Spec.VendNode,
+  w: String,
+  b: Ledgers.Line,
+  p: String
+) -> {
+  Spec.VendNode.view(n, w, b, p) == Nodes.Raw.view(Node.raw(n), w, b, p): Maybe<
+    &2,
+    Maybe<&2, List<&2, U32>>>
+}:
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
+      {==}
+
+# a node answers what its state answers
+def Node.answer_runs(
+  n: Spec.VendNode,
+  q: Spec.Question
+) -> {Spec.VendNode.answer(n, q) == Nodes.Raw.answer(Node.raw(n), q): Maybe<&2, Spec.Reply>}:
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
+      {==}
+
+# a node names the liars that its state names
+def Node.liars_runs(
+  n: Spec.VendNode
+) -> {Spec.VendNode.liars(n) == Nodes.Raw.liars(Node.raw(n)): List<&2, String>}:
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
+      {==}
+
+# a node lists the parts that its state lists
+def Node.parts_runs(
+  n: Spec.VendNode
+) -> {Spec.VendNode.parts(n) == Nodes.Raw.parts(Node.raw(n)): List<&2, Hashes.Hash>}:
+  match n:
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, RParts.Parts{+m}}, +ok}:
+      Parts.Parts.list_runs(Node.kept(Tuple{Nodes.Raw{name, ws, ms, st, fs, RParts.Parts{m}}, ok}))
+
+# a node holds the words of a hash that its state holds
+def Node.part_runs(
+  n: Spec.VendNode,
+  +h: Hashes.Hash
+) -> {Spec.VendNode.part(n, h) == Nodes.Raw.part(Node.raw(n), h): Maybe<&2, List<&2, U32>>}:
+  match n:
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, RParts.Parts{+m}}, +ok}:
+      Parts.Parts.get_runs(Node.kept(Tuple{Nodes.Raw{name, ws, ms, st, fs, RParts.Parts{m}}, ok}), h)
+
 # What a node does
 # ----------------
 
-# the facts fs of a node of the name name are sound for the name
+# the facts of a sound state of the name name are sound for the name
 def Node.sound(
   +name: String,
-  +fs: Facts.Facts(),
-  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
-) -> {Facts.Facts.ok(name, fs) == True{}: Bool}:
-  Shared.Bool.and_true_left(Facts.Facts.ok(name, fs), Bool.not(Facts.Trust.reserved(name)))(ok)
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
+) -> {Facts.Facts.ok(name, Node.set(name, fs, ps, ok)) == True{}: Bool}:
+  Shared.Bool.and_true_left(
+    RFacts.Facts.ok(name, fs),
+    Bool.not(RFacts.Trust.reserved(name))
+  )(
+    Shared.Bool.and_true_right(
+      Nodes.Raw.set(fs, ps),
+      Bool.and(RFacts.Facts.ok(name, fs), Bool.not(RFacts.Trust.reserved(name)))
+    )(ok)
+  )
 
 # the name name of a node, whatever its facts fs, is not reserved
 def Node.free(
   +name: String,
-  +fs: Facts.Facts(),
-  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
-) -> {Bool.not(Facts.Trust.reserved(name)) == True{}: Bool}:
-  Shared.Bool.and_true_right(Facts.Facts.ok(name, fs), Bool.not(Facts.Trust.reserved(name)))(ok)
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
+) -> {Bool.not(RFacts.Trust.reserved(name)) == True{}: Bool}:
+  Shared.Bool.and_true_right(
+    RFacts.Facts.ok(name, fs),
+    Bool.not(RFacts.Trust.reserved(name))
+  )(
+    Shared.Bool.and_true_right(
+      Nodes.Raw.set(fs, ps),
+      Bool.and(RFacts.Facts.ok(name, fs), Bool.not(RFacts.Trust.reserved(name)))
+    )(ok)
+  )
 
-# facts fs that are sound for a name name that is not reserved can be those of
-# a node of that name
+# a map m that is the map of facts gs, sound for a name name that is not
+# reserved, can be the map of a node of that name, with parts qs that are
+# well formed: the proofs that m is a set are those of gs
 def Node.join(
   +name: String,
-  +fs: Facts.Facts(),
-  sound: {Facts.Facts.ok(name, fs) == True{}: Bool},
-  free: {Bool.not(Facts.Trust.reserved(name)) == True{}: Bool}
-) -> {Nodes.Raw.sound(name, fs) == True{}: Bool}:
-  Shared.Bool.and_both(Facts.Facts.ok(name, fs), Bool.not(Facts.Trust.reserved(name)))(sound)(free)
+  +m: RFacts.Plain(),
+  +qs: RParts.Parts,
+  +gs: Facts.Facts(),
+  e: {Facts.Facts.crit(gs) == m: RFacts.Plain()},
+  pw: {RParts.Parts.wf(qs) == True{}: Bool},
+  sound: {Facts.Facts.ok(name, gs) == True{}: Bool},
+  free: {Bool.not(RFacts.Trust.reserved(name)) == True{}: Bool}
+) -> {Nodes.Raw.sound(name, m, qs) == True{}: Bool}:
+  %e: {Nodes.Raw.sound(name, _, qs) == True{}: Bool}
+  Shared.Bool.and_both(
+    Nodes.Raw.set(Facts.Facts.crit(gs), qs),
+    Bool.and(
+      RFacts.Facts.ok(name, Facts.Facts.crit(gs)),
+      Bool.not(RFacts.Trust.reserved(name))
+    )
+  )(
+    Shared.Bool.and_both(
+      Bool.and(
+        Crits.Crit.wf(~Types.Fact, Facts.Facts.crit(gs), 0n),
+        Checks.ValSet.ok(~Types.Fact, ~Coded.Fact.words, Facts.Facts.crit(gs))
+      ),
+      RParts.Parts.wf(qs)
+    )(
+      Shared.Bool.and_both(
+        Crits.Crit.wf(~Types.Fact, Facts.Facts.crit(gs), 0n),
+        Checks.ValSet.ok(~Types.Fact, ~Coded.Fact.words, Facts.Facts.crit(gs))
+      )(
+        Sets.ValSet.wf(~Types.Fact, ~Coded.Fact.words, gs)
+      )(Sets.ValSet.checked(~Types.Fact, ~Coded.Fact.words, gs))
+    )(pw)
+  )(
+    Shared.Bool.and_both(
+      RFacts.Facts.ok(name, Facts.Facts.crit(gs)),
+      Bool.not(RFacts.Trust.reserved(name))
+    )(sound)(free)
+  )
 
-# a node of the name name keeps its proof when its facts go from fs to gs, if
-# gs are sound for the name whenever fs are
+# a node of the name name keeps its proof when its map goes from fs to m and
+# its parts from ps to qs, if qs are well formed and m is the map of facts gs
+# that are sound for the name whenever those of fs are
 def Node.resound(
   +name: String,
-  +fs: Facts.Facts(),
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
   +gs: Facts.Facts(),
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
-  step: {Facts.Facts.ok(name, fs) == True{}: Bool} -> {Facts.Facts.ok(name, gs) == True{}: Bool}
-) -> {Nodes.Raw.sound(name, gs) == True{}: Bool}:
-  Node.join(name, gs, step(Node.sound(name, fs, ok)), Node.free(name, fs, ok))
+  +m: RFacts.Plain(),
+  +qs: RParts.Parts,
+  e: {Facts.Facts.crit(gs) == m: RFacts.Plain()},
+  pw: {RParts.Parts.wf(qs) == True{}: Bool},
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
+  step: {
+    Facts.Facts.ok(name, Node.set(name, fs, ps, ok)) == True{}: Bool
+  } -> {Facts.Facts.ok(name, gs) == True{}: Bool}
+) -> {Nodes.Raw.sound(name, m, qs) == True{}: Bool}:
+  Node.join(
+    name,
+    m,
+    qs,
+    gs,
+    e,
+    pw,
+    step(Node.sound(name, fs, ps, ok)),
+    Node.free(name, fs, ps, ok)
+  )
+
+# the parts ps with the words m, if any, are well formed
+def Node.kept_wf(
+  +ps: RParts.Parts,
+  m: Maybe<&2, List<&2, U32>>
+) -> {
+  RParts.Parts.wf(ps) == True{}: Bool
+} -> {RParts.Parts.wf(Nodes.Kept.with(ps, m)) == True{}: Bool}:
+  match m:
+    case None{}:
+      w => w
+    case Some{+ws}:
+      w => Parts.Plain.put_wf(ps, ws)(w)
+
+# sets of facts on one map are one set: the facts of a sound state are any
+# facts gs whose map is its map
+def Node.set_eq(
+  +name: String,
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
+  gs: Facts.Facts()
+) -> {
+  Facts.Facts.crit(gs) == fs: RFacts.Plain()
+} -> {Node.set(name, fs, ps, ok) == gs: Facts.Facts()}:
+  match gs:
+    case Tuple{+m, +p}:
+      e => Sets.ValSet.of_eq(
+        ~Types.Fact,
+        ~Coded.Fact.words,
+        fs,
+        m,
+        Equal.sym(RFacts.Plain(), m, fs, e)
+      )(Node.checked(name, fs, ps, ok))(p)
+
+# the facts of a node are any facts gs whose map is the map of the node
+def Node.facts_eq(
+  n: Spec.VendNode,
+  +gs: Facts.Facts()
+) -> {
+  Facts.Facts.crit(gs) == Node.tree(n): RFacts.Plain()
+} -> {Node.facts(n) == gs: Facts.Facts()}:
+  match n:
+    case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, +ps}, +ok}:
+      e => Node.set_eq(name, fs, ps, ok, gs)(e)
 
 # a node of the name name, that holds nothing yet, unless the name is
 # reserved (b)
 def Node.new.if(
   +name: String,
   b: Bool,
-  e: {Facts.Trust.reserved(name) == b: Bool}
+  e: {RFacts.Trust.reserved(name) == b: Bool}
 ) -> Maybe<&2, Spec.VendNode>:
   match b e:
     case True{} e:
@@ -178,9 +473,13 @@ def Node.new.if(
           Nodes.Raw.new(name),
           Node.join(
             name,
+            RFacts.Facts.new(),
+            RParts.Parts.new(),
             Facts.Facts.new(),
+            {==},
+            Parts.Plain.new_wf(),
             Facts.Facts.new_ok(name),
-            Equal.cong(Bool, Bool, Bool.not, Facts.Trust.reserved(name), False{}, e)
+            Equal.cong(Bool, Bool, Bool.not, RFacts.Trust.reserved(name), False{}, e)
           )
         )
       }
@@ -188,7 +487,7 @@ def Node.new.if(
 # a node of the name name, that holds nothing yet; none if the name is
 # reserved, as no node has such a name
 def Node.new(+name: String) -> Maybe<&2, Spec.VendNode>:
-  Node.new.if(name, Facts.Trust.reserved(name), {==})
+  Node.new.if(name, RFacts.Trust.reserved(name), {==})
 
 # the deed d on plain states: the other node of a Sync is its state
 def Node.act(d: Spec.Deed) -> Nodes.Act:
@@ -212,18 +511,20 @@ def Node.act(d: Spec.Deed) -> Nodes.Act:
     case Spec.Deed.Stop{f}:
       Nodes.Act.Stop{f}
 
-# a sound state stays sound when the node takes in a request
+# a sound state stays sound when the node takes in a request: its map is the
+# map of the facts that the laws build (Facts.Facts.ask_crit), which are a
+# set and are sound
 def Node.asks_sound(
   +name: String,
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool,
-  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
 ) -> {Nodes.Raw.ok(Nodes.Raw.asks(name, ws, ms, st, fs, ps, i, r, go)) == True{}: Bool}:
   match go:
     case False{}:
@@ -232,9 +533,18 @@ def Node.asks_sound(
       Node.resound(
         name,
         fs,
-        Facts.Facts.ask(name, fs, i, r),
+        ps,
+        Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r),
+        RFacts.Facts.ask(name, fs, i, r),
+        Nodes.Kept.with(ps, Nodes.Request.content(r)),
+        Facts.Facts.ask_crit(name, Node.set(name, fs, ps, ok), i, r),
+        Node.kept_wf(ps, Nodes.Request.content(r))(Node.parts_wf(name, fs, ps, ok)),
         ok,
-        Facts.Facts.take_ok(name, fs, Types.Fact.Ask{Facts.Facts.asked(fs, i, r)})
+        Facts.Facts.take_ok(
+          name,
+          Node.set(name, fs, ps, ok),
+          Types.Fact.Ask{Facts.Facts.asked(Node.set(name, fs, ps, ok), i, r)}
+        )
       )
 
 # a sound state stays sound when the node works
@@ -243,15 +553,26 @@ def Node.works_sound(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
 ) -> {Nodes.Raw.ok(Nodes.Raw.works(name, ws, ms, st, fs, ps)) == True{}: Bool}:
   match st:
     case True{}:
       ok
     case False{}:
-      Node.resound(name, fs, Works.Work.does(fs, name), ok, Live.Work.does_ok(name, fs))
+      Node.resound(
+        name,
+        fs,
+        ps,
+        Works.Work.does(Node.set(name, fs, ps, ok), name),
+        RWorks.Work.does(fs, name),
+        ps,
+        Works.Work.does_crit(Node.set(name, fs, ps, ok), name),
+        Node.parts_wf(name, fs, ps, ok),
+        ok,
+        Live.Work.does_ok(name, Node.set(name, fs, ps, ok))
+      )
 
 # a sound state stays sound after any deed: the proof that a node carries,
 # which the code that runs (Nodes.Raw.does) never builds
@@ -267,7 +588,7 @@ def Node.does_sound(
     case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Leave{+w}:
       ok => ok
     case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Ask{+i, +q}:
-      ok => Node.asks_sound(
+      +ok => Node.asks_sound(
         name,
         ws,
         ms,
@@ -286,16 +607,21 @@ def Node.does_sound(
       +st,
       +fs,
       +ps
-    } Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, +fs2, ps2}, ok2}}:
-      ok => Node.resound(
+    } Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, +fs2, +ps2}, ok2}}:
+      +ok => Node.resound(
         name,
         fs,
-        Facts.Facts.take_all(name, Facts.Facts.list(fs2), fs),
+        ps,
+        Facts.Facts.take_all(name, RFacts.Facts.list(fs2), Node.set(name, fs, ps, ok)),
+        RFacts.Facts.take_all(name, RFacts.Facts.list(fs2), fs),
+        RParts.Parts.join(ps, ps2),
+        Facts.Facts.take_all_crit(name, RFacts.Facts.list(fs2), Node.set(name, fs, ps, ok)),
+        Parts.Plain.join_wf(ps, ps2)(Node.parts_wf(name, fs, ps, ok)),
         ok,
-        Facts.Facts.take_all_ok(name, Facts.Facts.list(fs2), fs)
+        Facts.Facts.take_all_ok(name, RFacts.Facts.list(fs2), Node.set(name, fs, ps, ok))
       )
     case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Mount{+a, +b, +p, +held}:
-      ok => Node.asks_sound(
+      +ok => Node.asks_sound(
         name,
         ws,
         Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
@@ -310,9 +636,18 @@ def Node.does_sound(
     case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Unmount{+a}:
       ok => ok
     case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Work{}:
-      ok => Node.works_sound(name, ws, ms, st, fs, ps, ok)
+      +ok => Node.works_sound(name, ws, ms, st, fs, ps, ok)
     case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Drop{}:
-      ok => ok
+      +ok => Node.join(
+        name,
+        fs,
+        RParts.Parts.only(ps, Nodes.Needs.of(fs, name, ms)),
+        Node.set(name, fs, ps, ok),
+        {==},
+        Parts.Plain.only_wf(ps, Nodes.Needs.of(fs, name, ms)),
+        Node.sound(name, fs, ps, ok),
+        Node.free(name, fs, ps, ok)
+      )
     case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Stop{+f}:
       ok => ok
 
@@ -345,9 +680,9 @@ def Node.asks(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   +go: Bool
@@ -364,11 +699,109 @@ def Node.works(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
 ) -> Spec.VendNode:
   (Nodes.Raw.works(name, ws, ms, st, fs, ps), Node.works_sound(name, ws, ms, st, fs, ps, ok))
+
+# the facts of a node that takes a request in are the facts with the request
+def Node.asks_facts(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
+  +i: Ledgers.Id,
+  +r: Spec.Request
+) -> {
+  Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r) == Node.facts(
+    Node.asks(name, ws, ms, st, fs, ps, ok, i, r, True{})
+  ): Facts.Facts()
+}:
+  Equal.sym(
+    Facts.Facts(),
+    Node.facts(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, True{})),
+    Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r),
+    Node.facts_eq(
+      Node.asks(name, ws, ms, st, fs, ps, ok, i, r, True{}),
+      Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r)
+    )(Facts.Facts.ask_crit(name, Node.set(name, fs, ps, ok), i, r))
+  )
+
+# the facts of a node that works are the facts after a work
+def Node.works_facts(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
+) -> {
+  Works.Work.does(Node.set(name, fs, ps, ok), name) == Node.facts(
+    Node.works(name, ws, ms, False{}, fs, ps, ok)
+  ): Facts.Facts()
+}:
+  Equal.sym(
+    Facts.Facts(),
+    Node.facts(Node.works(name, ws, ms, False{}, fs, ps, ok)),
+    Works.Work.does(Node.set(name, fs, ps, ok), name),
+    Node.facts_eq(
+      Node.works(name, ws, ms, False{}, fs, ps, ok),
+      Works.Work.does(Node.set(name, fs, ps, ok), name)
+    )(Works.Work.does_crit(Node.set(name, fs, ps, ok), name))
+  )
+
+# the facts of a node after a Sync are its facts after it takes in each fact
+# of the other node
+def Node.syncs_facts(
+  n: Spec.VendNode,
+  m: Spec.VendNode
+) -> {
+  Facts.Facts.take_all(
+    Spec.VendNode.name(n),
+    Facts.Facts.list(Node.facts(m)),
+    Node.facts(n)
+  ) == Node.facts(Spec.VendNode.does(n, Spec.Deed.Sync{m})): Facts.Facts()
+}:
+  match n m:
+    case Tuple{
+      Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
+      +ok
+    } Tuple{Nodes.Raw{+name2, +ws2, +ms2, +st2, +fs2, +ps2}, +ok2}:
+      Equal.sym(
+        Facts.Facts(),
+        Node.facts(
+          Spec.VendNode.does(
+            Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok},
+            Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}
+          )
+        ),
+        Facts.Facts.take_all(
+          name,
+          Facts.Facts.list(Node.set(name2, fs2, ps2, ok2)),
+          Node.set(name, fs, ps, ok)
+        ),
+        Node.facts_eq(
+          Spec.VendNode.does(
+            Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok},
+            Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}
+          ),
+          Facts.Facts.take_all(
+            name,
+            Facts.Facts.list(Node.set(name2, fs2, ps2, ok2)),
+            Node.set(name, fs, ps, ok)
+          )
+        )(
+          Facts.Facts.take_all_crit(
+            name,
+            Facts.Facts.list(Node.set(name2, fs2, ps2, ok2)),
+            Node.set(name, fs, ps, ok)
+          )
+        )
+      )
 
 # Laws of formats and names
 # -------------------------
@@ -398,60 +831,58 @@ def Node.ok(
   n: Spec.VendNode
 ) -> {Facts.Facts.ok(Spec.VendNode.name(n), Node.facts(n)) == True{}: Bool}:
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
-      Node.sound(name, fs, ok)
+    case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, +ps}, +ok}:
+      Node.sound(name, fs, ps, ok)
 
 # the name of a node is not reserved: it is never the name under which a node
 # says that its trust broke (Facts.Trust.voter), so no node is named a liar
 # by the broken trust of another
 def Node.name_free(
   n: Spec.VendNode
-) -> {Facts.Trust.reserved(Spec.VendNode.name(n)) == False{}: Bool}:
+) -> {RFacts.Trust.reserved(Spec.VendNode.name(n)) == False{}: Bool}:
   match n:
-    case Tuple{Nodes.Raw{+name, ws, ms, st, fs, ps}, ok}:
-      Shared.Bool.not_true(Facts.Trust.reserved(name))(Node.free(name, fs, ok))
+    case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, +ps}, +ok}:
+      Shared.Bool.not_true(RFacts.Trust.reserved(name))(Node.free(name, fs, ps, ok))
 
 def Spec.VendNode.never_lies(n):
   match n:
-    case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, ps}, ok}:
-      Facts.Facts.ok_never(name, fs)(Node.sound(name, fs, ok))
+    case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, +ps}, +ok}:
+      Facts.Facts.ok_never(name, Node.set(name, fs, ps, ok))(Node.sound(name, fs, ps, ok))
 
 def Spec.VendNode.liars_are(n, v):
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
-      Facts.Facts.liars_are(fs, v)
+    case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, +ps}, +ok}:
+      Facts.Facts.liars_are(Node.set(name, fs, ps, ok), v)
 
 def Spec.VendNode.liars_found(n, a, b, v, s, x, y):
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
-      Facts.Facts.liars_found(fs, a, b, v, s, x, y)
+    case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, +ps}, +ok}:
+      Facts.Facts.liars_found(Node.set(name, fs, ps, ok), a, b, v, s, x, y)
 
 def Spec.VendNode.part_is(n, h, ws):
-  match n:
-    case Tuple{Nodes.Raw{name, ws2, ms, st, fs, ps}, ok}:
-      Parts.Parts.part_is(ps, h, ws)
+  Parts.Parts.part_is(Node.kept(n), h, ws)
 
 def Spec.VendNode.same_changes(n1, n2, q):
   match n1 n2:
     case Tuple{
-      Nodes.Raw{name, ws, ms, st, fs, ps},
-      ok
-    } Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}:
+      Nodes.Raw{+name, ws, ms, st, +fs, +ps},
+      +ok
+    } Tuple{Nodes.Raw{+name2, ws2, ms2, st2, +fs2, +ps2}, +ok2}:
       h => Equal.cong(
         Facts.Facts(),
         Maybe<&2, Spec.Reply>,
         s => Answers.Answer.of(s, q),
-        fs,
-        fs2,
-        Facts.Facts.same(fs, fs2)(h)
+        Node.set(name, fs, ps, ok),
+        Node.set(name2, fs2, ps2, ok2),
+        Facts.Facts.same(Node.set(name, fs, ps, ok), Node.set(name2, fs2, ps2, ok2))(h)
       )
 
 def Spec.VendNode.reads_agree(n1, n2, c, k, p, x, y):
   match n1 n2:
     case Tuple{
-      Nodes.Raw{name, ws, ms, st, fs, ps},
-      ok
-    } Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}:
+      Nodes.Raw{+name, ws, ms, st, +fs, +ps},
+      +ok
+    } Tuple{Nodes.Raw{+name2, ws2, ms2, st2, +fs2, +ps2}, +ok2}:
       h => hx => hy => Shared.Maybe.some_inj(
         Maybe<&2, List<&2, U32>>,
         x,
@@ -459,16 +890,16 @@ def Spec.VendNode.reads_agree(n1, n2, c, k, p, x, y):
         Equal.trans(
           Maybe<&2, Maybe<&2, List<&2, U32>>>,
           Some{x},
-          Contents.Content.read(fs2, c, k, p),
+          Contents.Content.read(Node.set(name2, fs2, ps2, ok2), c, k, p),
           Some{y},
           Equal.trans(
             Maybe<&2, Maybe<&2, List<&2, U32>>>,
             Some{x},
-            Contents.Content.read(fs, c, k, p),
-            Contents.Content.read(fs2, c, k, p),
+            Contents.Content.read(Node.set(name, fs, ps, ok), c, k, p),
+            Contents.Content.read(Node.set(name2, fs2, ps2, ok2), c, k, p),
             Equal.sym(
               Maybe<&2, Maybe<&2, List<&2, U32>>>,
-              Contents.Content.read(fs, c, k, p),
+              Contents.Content.read(Node.set(name, fs, ps, ok), c, k, p),
               Some{x},
               hx
             ),
@@ -476,9 +907,9 @@ def Spec.VendNode.reads_agree(n1, n2, c, k, p, x, y):
               Facts.Facts(),
               Maybe<&2, Maybe<&2, List<&2, U32>>>,
               s => Contents.Content.read(s, c, k, p),
-              fs,
-              fs2,
-              Facts.Facts.same(fs, fs2)(h)
+              Node.set(name, fs, ps, ok),
+              Node.set(name2, fs2, ps2, ok2),
+              Facts.Facts.same(Node.set(name, fs, ps, ok), Node.set(name2, fs2, ps2, ok2))(h)
             )
           ),
           hy
@@ -488,16 +919,16 @@ def Spec.VendNode.reads_agree(n1, n2, c, k, p, x, y):
 def Spec.VendNode.views_agree(n1, n2, w, b, p):
   match n1 n2:
     case Tuple{
-      Nodes.Raw{name, ws, ms, st, fs, ps},
-      ok
-    } Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}:
+      Nodes.Raw{+name, ws, ms, st, +fs, +ps},
+      +ok
+    } Tuple{Nodes.Raw{+name2, ws2, ms2, st2, +fs2, +ps2}, +ok2}:
       h => Equal.cong(
         Facts.Facts(),
         Maybe<&2, Maybe<&2, List<&2, U32>>>,
         s => Answers.View.at(s, w, b, p),
-        fs,
-        fs2,
-        Facts.Facts.same(fs, fs2)(h)
+        Node.set(name, fs, ps, ok),
+        Node.set(name2, fs2, ps2, ok2),
+        Facts.Facts.same(Node.set(name, fs, ps, ok), Node.set(name2, fs2, ps2, ok2))(h)
       )
 
 # Laws of what a node is
@@ -509,9 +940,9 @@ def Node.asks_name(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -528,9 +959,9 @@ def Node.works_name(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
 ) -> {Spec.VendNode.name(Node.works(name, ws, ms, st, fs, ps, ok)) == name: String}:
   match st:
     case True{}:
@@ -560,7 +991,7 @@ def Spec.VendNode.name_stays(n, d):
     case Tuple{
       Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
       +ok
-    } Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}:
+    } Spec.Deed.Sync{Tuple{Nodes.Raw{+name2, ws2, ms2, st2, +fs2, +ps2}, +ok2}}:
       {==}
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
       Node.asks_name(
@@ -630,9 +1061,9 @@ def Node.asks_writers(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -651,9 +1082,9 @@ def Node.works_writers(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
 ) -> {Spec.VendNode.writers(Node.works(name, ws, ms, st, fs, ps, ok)) == ws: List<&2, String>}:
   match st:
     case True{}:
@@ -701,7 +1132,7 @@ def Spec.VendNode.writers_are(n, d):
     case Tuple{
       Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
       +ok
-    } Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}:
+    } Spec.Deed.Sync{Tuple{Nodes.Raw{+name2, ws2, ms2, st2, +fs2, +ps2}, +ok2}}:
       Node.same_refl(ws)
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
       Node.same_of(
@@ -752,9 +1183,9 @@ def Node.asks_mounts(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -776,9 +1207,9 @@ def Node.works_mounts(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
 ) -> {
   Spec.VendNode.mounts(
     Node.works(name, ws, ms, st, fs, ps, ok)
@@ -904,7 +1335,7 @@ def Spec.VendNode.mounts_are(n, d):
     case Tuple{
       Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
       +ok
-    } Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}:
+    } Spec.Deed.Sync{Tuple{Nodes.Raw{+name2, ws2, ms2, st2, +fs2, +ps2}, +ok2}}:
       Node.same_refl(Nodes.Mounts.addresses(ms))
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
       Node.same_of(
@@ -985,9 +1416,9 @@ def Node.asks_stopped(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -1004,9 +1435,9 @@ def Node.works_stopped(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
 ) -> {Spec.VendNode.stopped(Node.works(name, ws, ms, st, fs, ps, ok)) == st: Bool}:
   match st:
     case True{}:
@@ -1036,7 +1467,7 @@ def Spec.VendNode.stops(n, d):
     case Tuple{
       Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
       +ok
-    } Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}:
+    } Spec.Deed.Sync{Tuple{Nodes.Raw{+name2, ws2, ms2, st2, +fs2, +ps2}, +ok2}}:
       {==}
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
       Node.asks_stopped(
@@ -1069,24 +1500,27 @@ def Node.asks_wider(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
 ) -> {
   Facts.Facts.wider(
-    fs,
+    Node.set(name, fs, ps, ok),
     Node.facts(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, go))
   )
     == True{}: Bool
 }:
   match go:
     case False{}:
-      Facts.Facts.wider_refl(fs)
+      Facts.Facts.wider_refl(Node.set(name, fs, ps, ok))
     case True{}:
-      Facts.Facts.take_wider(name, fs, Types.Fact.Ask{Facts.Facts.asked(fs, i, r)})
+      %Node.asks_facts(name, ws, ms, st, fs, ps, ok, i, r): {
+        Facts.Facts.wider(Node.set(name, fs, ps, ok), _) == True{}: Bool
+      }
+      Facts.Facts.take_wider(name, Node.set(name, fs, ps, ok), Types.Fact.Ask{Facts.Facts.asked(Node.set(name, fs, ps, ok), i, r)})
 
 # the facts of a node that works are wider
 def Node.works_wider(
@@ -1094,15 +1528,18 @@ def Node.works_wider(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
-) -> {Facts.Facts.wider(fs, Node.facts(Node.works(name, ws, ms, st, fs, ps, ok))) == True{}: Bool}:
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
+) -> {Facts.Facts.wider(Node.set(name, fs, ps, ok), Node.facts(Node.works(name, ws, ms, st, fs, ps, ok))) == True{}: Bool}:
   match st:
     case True{}:
-      Facts.Facts.wider_refl(fs)
+      Facts.Facts.wider_refl(Node.set(name, fs, ps, ok))
     case False{}:
-      Live.Work.does_wider(name, fs)
+      %Node.works_facts(name, ws, ms, fs, ps, ok): {
+        Facts.Facts.wider(Node.set(name, fs, ps, ok), _) == True{}: Bool
+      }
+      Live.Work.does_wider(name, Node.set(name, fs, ps, ok))
 
 # the facts of a node are wider after any deed
 def Node.does_wider(
@@ -1111,9 +1548,9 @@ def Node.does_wider(
 ) -> {Facts.Facts.wider(Node.facts(n), Node.facts(Spec.VendNode.does(n, d))) == True{}: Bool}:
   match n d:
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Connect{+w}:
-      Facts.Facts.wider_refl(fs)
+      Facts.Facts.wider_refl(Node.set(name, fs, ps, ok))
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Leave{+w}:
-      Facts.Facts.wider_refl(fs)
+      Facts.Facts.wider_refl(Node.set(name, fs, ps, ok))
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Ask{+i, +r}:
       Node.asks_wider(
         name,
@@ -1130,8 +1567,12 @@ def Node.does_wider(
     case Tuple{
       Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
       +ok
-    } Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, +fs2, ps2}, ok2}}:
-      Facts.Facts.take_all_wider(name, Facts.Facts.list(fs2), fs)
+    } Spec.Deed.Sync{Tuple{Nodes.Raw{+name2, +ws2, +ms2, +st2, +fs2, +ps2}, +ok2}}:
+      %Node.syncs_facts(
+        Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok},
+        Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}
+      ): {Facts.Facts.wider(Node.set(name, fs, ps, ok), _) == True{}: Bool}
+      Facts.Facts.take_all_wider(name, Facts.Facts.list(Node.set(name2, fs2, ps2, ok2)), Node.set(name, fs, ps, ok))
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
       Node.asks_wider(
         name,
@@ -1146,13 +1587,13 @@ def Node.does_wider(
         Bool.not(st)
       )
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Unmount{+a}:
-      Facts.Facts.wider_refl(fs)
+      Facts.Facts.wider_refl(Node.set(name, fs, ps, ok))
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Work{}:
       Node.works_wider(name, ws, ms, st, fs, ps, ok)
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Drop{}:
-      Facts.Facts.wider_refl(fs)
+      Facts.Facts.wider_refl(Node.set(name, fs, ps, ok))
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Stop{f}:
-      Facts.Facts.wider_refl(fs)
+      Facts.Facts.wider_refl(Node.set(name, fs, ps, ok))
 
 # a node holds after a deed each change that it held
 def Node.keeps(
@@ -1176,8 +1617,20 @@ def Spec.VendNode.sync_joins(n, m, c):
     case Tuple{
       Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
       +ok
-    } Tuple{Nodes.Raw{name2, ws2, ms2, st2, +fs2, ps2}, ok2}:
-      hn => hc => Facts.Facts.take_all_holds(name, fs2, fs, c)(hn)(hc)
+    } Tuple{Nodes.Raw{+name2, +ws2, +ms2, +st2, +fs2, +ps2}, +ok2}:
+      hn => hc =>
+        %Node.syncs_facts(
+          Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok},
+          Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}
+        ): {Facts.Facts.holds(_, c) == True{}: Bool}
+        Facts.Facts.take_all_holds(name, Node.set(name2, fs2, ps2, ok2), Node.set(name, fs, ps, ok), c)((
+            %Equal.sym(
+              Facts.Facts(),
+              Facts.Facts.take_all(name, Facts.Facts.list(Node.set(name2, fs2, ps2, ok2)), Node.set(name, fs, ps, ok)),
+              Node.facts(Spec.VendNode.does(Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}, Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}})),
+              Node.syncs_facts(Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}, Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2})
+            ): {Facts.Facts.liars(_) == []: List<&2, String>}
+            hn))(hc)
 
 # hashes that differ in the words of the parts differ in the words of the spec
 def Node.distinct(hs: List<&2, Hashes.Hash>, d: Parts.Parts.Distinct(hs)) -> Spec.Distinct(hs):
@@ -1222,8 +1675,8 @@ def Node.parts_once.of(
 
 def Spec.VendNode.parts_once(n):
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
-      Node.parts_once.of(ps, Parts.Parts.once(ps))
+    case Tuple{+r, +ok}:
+      Node.parts_once.of(Node.kept(Tuple{r, ok}), Parts.Parts.once(Node.kept(Tuple{r, ok})))
 
 # a node that has not stopped takes in what a connected writer asks
 def Node.gate(
@@ -1255,16 +1708,16 @@ def Node.asks_at(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
 ) -> {
   go == True{}: Bool
 } -> P(
-  Facts.Facts.ask(name, fs, i, r)
+  Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r)
 ) -> P(Node.facts(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, go))):
   match go:
     case False{}:
@@ -1273,7 +1726,39 @@ def Node.asks_at(
         Shared.Bool.false_ne_true(h)
       )
     case True{}:
-      h => p => p
+      h => p =>
+        %Node.asks_facts(name, ws, ms, st, fs, ps, ok, i, r): P(_)
+        p
+
+# the facts of a node that takes a request in and works are the facts with the
+# request, after a work
+def Node.asks_works_facts(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
+  +i: Ledgers.Id,
+  +r: Spec.Request
+) -> {
+  Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name) == Node.facts(
+    Spec.VendNode.does(Node.asks(name, ws, ms, False{}, fs, ps, ok, i, r, True{}), Spec.Deed.Work{})
+  ): Facts.Facts()
+}:
+  Equal.sym(
+    Facts.Facts(),
+    Node.facts(Spec.VendNode.does(Node.asks(name, ws, ms, False{}, fs, ps, ok, i, r, True{}), Spec.Deed.Work{})),
+    Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name),
+    Node.facts_eq(
+      Spec.VendNode.does(Node.asks(name, ws, ms, False{}, fs, ps, ok, i, r, True{}), Spec.Deed.Work{}),
+      Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)
+    )((
+        %Facts.Facts.ask_crit(name, Node.set(name, fs, ps, ok), i, r): {
+          Facts.Facts.crit(Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)) == RWorks.Work.does(_, name): RFacts.Plain()
+        }
+        Works.Work.does_crit(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)))
+  )
 
 # what holds of the facts with a request, after a work, holds of the facts of
 # a node that takes it in and works
@@ -1283,9 +1768,9 @@ def Node.asks_works_at(
   +ws: List<&2, String>,
   +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
-  +fs: Facts.Facts(),
-  +ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
+  +fs: RFacts.Plain(),
+  +ps: RParts.Parts,
+  +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -1294,7 +1779,7 @@ def Node.asks_works_at(
 } -> {
   go == True{}: Bool
 } -> P(
-  Works.Work.does(Facts.Facts.ask(name, fs, i, r), name)
+  Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)
 ) -> P(
   Node.facts(
     Spec.VendNode.does(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, go), Spec.Deed.Work{})
@@ -1302,7 +1787,9 @@ def Node.asks_works_at(
 ):
   match st go:
     case False{} True{}:
-      hs => hg => p => p
+      hs => hg => p =>
+        %Node.asks_works_facts(name, ws, ms, fs, ps, ok, i, r): P(_)
+        p
     case True{} +go:
       hs => hg => p => Empty.absurd(
         P(
@@ -1386,14 +1873,14 @@ def Node.starts(
           Equal.cong(
             Maybe<&2, Types.Entry>,
             Maybe<&2, Spec.Reply>,
-            Answers.Reply.id,
+            RAnswers.Reply.id,
             Lines.Line.at(
-              Facts.Facts.ask(name, fs, i, Spec.Request.Start{[name]}),
-              Ledgers.Line{Facts.Start.root(i, Spec.Request.Start{[name]}), None{}},
+              Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, Spec.Request.Start{[name]}),
+              Ledgers.Line{RFacts.Start.root(i, Spec.Request.Start{[name]}), None{}},
               0n
             ),
-            Some{Lines.Entry.first(i, Spec.Request.Start{[name]}, 0n)},
-            Versions.Line.started(name, fs, i, [name])
+            Some{RLines.Entry.first(i, Spec.Request.Start{[name]}, 0n)},
+            Versions.Line.started(name, Node.set(name, fs, ps, ok), i, [name])
           )
         )
       )
@@ -1445,7 +1932,7 @@ def Node.reads_own(
         Bool.and(Bool.not(st), List.contains(~String, ~String.eq, wrs, Spec.Id.writer(i)))
       )(
         Node.gate(st, List.contains(~String, ~String.eq, wrs, Spec.Id.writer(i)))(hs)(hw)
-      )(Live.View.reads_own(name, fs, i, b, p, ws))
+      )(Live.View.reads_own(name, Node.set(name, fs, ps, ok), i, b, p, ws))
 
 def Spec.VendNode.reads_own(n, i, b, p, ws):
   Node.reads_own(n, i, b, p, ws)
@@ -1486,7 +1973,7 @@ def Node.mount_records(
         Bool.not(st)
       )(
         Node.gate_not(st)(hs)
-      )(Live.View.reads_own(name, fs, Nodes.Mount.id(name, a), b, p, Some{ws}))
+      )(Live.View.reads_own(name, Node.set(name, fs, ps, ok), Nodes.Mount.id(name, a), b, p, Some{ws}))
 
 def Spec.VendNode.mount_records(n, a, b, p, ws):
   Node.mount_records(n, a, b, p, ws)
@@ -1571,7 +2058,7 @@ def Node.decides_alone(
               hs
             )(
               Node.gate(st, List.contains(~String, ~String.eq, wrs, Spec.Id.writer(i)))(hs)(hw)
-            )(Live.Work.decides(name, fs, b, k, i, p, ws)(Node.sound(name, fs, ok))(h1)(h2)(h3))
+            )(Live.Work.decides(name, Node.set(name, fs, ps, ok), b, k, i, p, ws)(Node.sound(name, fs, ps, ok))(h1)(h2)(h3))
           )
         )
       )

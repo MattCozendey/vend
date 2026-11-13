@@ -6,6 +6,8 @@ import ../shared/shared/shared/text.bend as Texts
 import ./codes.bend as Coded
 import ./facts.bend as Facts
 import ./lines.bend as Lines
+import ./run/facts.bend as RFacts
+import ./run/lines.bend as RLines
 import ./shared/lists.bend as Lists
 import ./types.bend as Types
 
@@ -40,7 +42,7 @@ def Delta.side(d: Delta, +s: Facts.Facts(), f: Bool) -> Facts.Facts():
 def Delta.ok(d: Delta) -> Bool:
   match d:
     case Delta.Ask{name, a}:
-      Bool.not(Facts.Request.is_start(Lines.Ask.request(a)))
+      Bool.not(RFacts.Request.is_start(RLines.Ask.request(a)))
     case Delta.Vote{name, c, k, pk}:
       True{}
 
@@ -195,13 +197,13 @@ def Ask.starts_start(
   +h: Hashes.Hash,
   a: Types.Ask
 ) -> {
-  Facts.Ask.starts(h, a) == True{}: Bool
-} -> {Facts.Request.is_start(Lines.Ask.request(a)) == True{}: Bool}:
+  RFacts.Ask.starts(h, a) == True{}: Bool
+} -> {RFacts.Request.is_start(RLines.Ask.request(a)) == True{}: Bool}:
   match a:
     case Types.Ask{+i, k, +r}:
       e => Shared.Bool.and_true_left(
-        Facts.Request.is_start(r),
-        Hashes.Hash.is_eq(Facts.Start.root(i, r), h)
+        RFacts.Request.is_start(r),
+        Hashes.Hash.is_eq(RFacts.Start.root(i, r), h)
       )(e)
 
 # after the node adds a d that starts no store, the facts hold the asks that
@@ -214,7 +216,7 @@ def Delta.asks(
 ) -> {
   Delta.ok(d) == True{}: Bool
 } -> {
-  Facts.Ask.starts(h, b) == True{}: Bool
+  RFacts.Ask.starts(h, b) == True{}: Bool
 } -> {
   Facts.Facts.has(Delta.to(d, s), Types.Fact.Ask{b}) == Facts.Facts.has(s, Types.Fact.Ask{b}): Bool
 }:
@@ -243,10 +245,10 @@ def Delta.asks(
             )
               == Facts.Facts.has(s, Types.Fact.Ask{b}): Bool
           },
-          Facts.Request.is_start(Lines.Ask.request(a)),
-          Shared.Bool.not_true(Facts.Request.is_start(Lines.Ask.request(a)))(ok),
+          RFacts.Request.is_start(RLines.Ask.request(a)),
+          Shared.Bool.not_true(RFacts.Request.is_start(RLines.Ask.request(a)))(ok),
           (
-            %Coded.Ask.is_eq_sound(b, a)(et): {Facts.Request.is_start(Lines.Ask.request(_)) == True{}: Bool}
+            %Coded.Ask.is_eq_sound(b, a)(et): {RFacts.Request.is_start(RLines.Ask.request(_)) == True{}: Bool}
             Ask.starts_start(h, b)(st))
         ),
         ef => e => e
@@ -301,7 +303,7 @@ def Delta.asks_side(
 ) -> {
   Delta.ok(d) == True{}: Bool
 } -> {
-  Facts.Ask.starts(h, b) == True{}: Bool
+  RFacts.Ask.starts(h, b) == True{}: Bool
 } -> {
   Facts.Facts.has(
     Delta.side(d, s, f),
@@ -338,17 +340,17 @@ def Count.kept(
 } -> {
   Lists.List.count(
     ~String,
-    ~Lines.Voting,
-    ~Lines.Voting.voted,
+    ~RLines.Voting,
+    ~RLines.Voting.voted,
     ds,
-    Lines.Voting{Delta.side(d, s, f), Types.Step.At{c2, j}, q}
+    RLines.Voting{Facts.Facts.crit(Delta.side(d, s, f)), Types.Step.At{c2, j}, q}
   )
     == Lists.List.count(
       ~String,
-      ~Lines.Voting,
-      ~Lines.Voting.voted,
+      ~RLines.Voting,
+      ~RLines.Voting.voted,
       ds,
-      Lines.Voting{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, q}
+      RLines.Voting{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, q}
     ): Nat
 }:
   match ds:
@@ -356,8 +358,8 @@ def Count.kept(
       h => {==}
     case Con{+x, +r}:
       +h => (
-        %Delta.votes_side(d, s, f, x, c2, j, q)(h): {Shared.Nat.add_if(Facts.Facts.has(Delta.side(d, s, f), Types.Fact.Vote{x, Types.Step.At{c2, j}, q}), Lists.List.count(~String, ~Lines.Voting, ~Lines.Voting.voted, r, Lines.Voting{Delta.side(d, s, f), Types.Step.At{c2, j}, q})) == Shared.Nat.add_if(_, Lists.List.count(~String, ~Lines.Voting, ~Lines.Voting.voted, r, Lines.Voting{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, q})): Nat}
-        %Count.kept(r, d, s, f, c2, j, q)(h): {Shared.Nat.add_if(Facts.Facts.has(Delta.side(d, s, f), Types.Fact.Vote{x, Types.Step.At{c2, j}, q}), Lists.List.count(~String, ~Lines.Voting, ~Lines.Voting.voted, r, Lines.Voting{Delta.side(d, s, f), Types.Step.At{c2, j}, q})) == Shared.Nat.add_if(Facts.Facts.has(Delta.side(d, s, f), Types.Fact.Vote{x, Types.Step.At{c2, j}, q}), _): Nat}
+        %Delta.votes_side(d, s, f, x, c2, j, q)(h): {Shared.Nat.add_if(Facts.Facts.has(Delta.side(d, s, f), Types.Fact.Vote{x, Types.Step.At{c2, j}, q}), Lists.List.count(~String, ~RLines.Voting, ~RLines.Voting.voted, r, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, f)), Types.Step.At{c2, j}, q})) == Shared.Nat.add_if(_, Lists.List.count(~String, ~RLines.Voting, ~RLines.Voting.voted, r, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, q})): Nat}
+        %Count.kept(r, d, s, f, c2, j, q)(h): {Shared.Nat.add_if(Facts.Facts.has(Delta.side(d, s, f), Types.Fact.Vote{x, Types.Step.At{c2, j}, q}), Lists.List.count(~String, ~RLines.Voting, ~RLines.Voting.voted, r, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, f)), Types.Step.At{c2, j}, q})) == Shared.Nat.add_if(Facts.Facts.has(Delta.side(d, s, f), Types.Fact.Vote{x, Types.Step.At{c2, j}, q}), _): Nat}
         {==})
 
 # more than half of the nodes ds voted for the pick q at a slot that d is no
@@ -373,13 +375,13 @@ def Most.kept(
 ) -> {
   Delta.keeps(d, c2, j) == True{}: Bool
 } -> {
-  Lines.Voting.most(
+  RLines.Voting.most(
     ds,
-    Lines.Voting{Delta.side(d, s, f), Types.Step.At{c2, j}, q}
+    RLines.Voting{Facts.Facts.crit(Delta.side(d, s, f)), Types.Step.At{c2, j}, q}
   )
-    == Lines.Voting.most(
+    == RLines.Voting.most(
       ds,
-      Lines.Voting{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, q}
+      RLines.Voting{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, q}
     ): Bool
 }:
   h => Equal.cong(
@@ -388,17 +390,17 @@ def Most.kept(
     n => Lists.Nat.most(List.length(&2, String, ds), n),
     Lists.List.count(
       ~String,
-      ~Lines.Voting,
-      ~Lines.Voting.voted,
+      ~RLines.Voting,
+      ~RLines.Voting.voted,
       ds,
-      Lines.Voting{Delta.side(d, s, f), Types.Step.At{c2, j}, q}
+      RLines.Voting{Facts.Facts.crit(Delta.side(d, s, f)), Types.Step.At{c2, j}, q}
     ),
     Lists.List.count(
       ~String,
-      ~Lines.Voting,
-      ~Lines.Voting.voted,
+      ~RLines.Voting,
+      ~RLines.Voting.voted,
       ds,
-      Lines.Voting{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, q}
+      RLines.Voting{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, q}
     ),
     Count.kept(ds, d, s, f, c2, j, q)(h)
   )
@@ -433,15 +435,15 @@ def Picks.cons(
   +st: Types.Step,
   +pk: Types.Pick
 ) -> {
-  List.contains(~Types.Pick, ~Coded.Pick.is_eq, Lines.Votes.picks(r, st), pk) == True{}: Bool
+  List.contains(~Types.Pick, ~Coded.Pick.is_eq, RLines.Votes.picks(r, st), pk) == True{}: Bool
 } -> {
-  List.contains(~Types.Pick, ~Coded.Pick.is_eq, Lines.Votes.picks(f <> r, st), pk) == True{}: Bool
+  List.contains(~Types.Pick, ~Coded.Pick.is_eq, RLines.Votes.picks(f <> r, st), pk) == True{}: Bool
 }:
   match f:
     case Types.Fact.Ask{a}:
       h => h
     case Types.Fact.Vote{v, st2, pk2}:
-      h => Put.contains(pk2, Lines.Votes.picks(r, st), Coded.Step.is_eq(st2, st), pk)(h)
+      h => Put.contains(pk2, RLines.Votes.picks(r, st), Coded.Step.is_eq(st2, st), pk)(h)
 
 # the pick of a vote among fs for the step st is one of the picks for st
 def Picks.in(
@@ -451,7 +453,7 @@ def Picks.in(
   +pk: Types.Pick
 ) -> {
   List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Vote{v, st, pk}) == True{}: Bool
-} -> {List.contains(~Types.Pick, ~Coded.Pick.is_eq, Lines.Votes.picks(fs, st), pk) == True{}: Bool}:
+} -> {List.contains(~Types.Pick, ~Coded.Pick.is_eq, RLines.Votes.picks(fs, st), pk) == True{}: Bool}:
   match fs:
     case Nil{}:
       h => h
@@ -464,7 +466,7 @@ def Picks.in(
           List.contains(
             ~Types.Pick,
             ~Coded.Pick.is_eq,
-            Lines.Votes.picks(f <> r, st),
+            RLines.Votes.picks(f <> r, st),
             pk
           )
             == True{}: Bool
@@ -474,9 +476,9 @@ def Picks.in(
         Types.Fact.Vote{v, st, pk},
         hin,
         ef => (
-          %Equal.sym(Types.Fact, f, Types.Fact.Vote{v, st, pk}, ef): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, Lines.Votes.picks(_ <> r, st), pk) == True{}: Bool}
-          %Equal.sym(Bool, Coded.Step.is_eq(st, st), True{}, Coded.Step.is_eq_refl(st)): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, List.filter.put(Types.Pick, pk, Lines.Votes.picks(r, st), _), pk) == True{}: Bool}
-          Lists.List.contains_head(~Types.Pick, ~Coded.Pick.is_eq, ~Coded.Pick.laws(), pk, Lines.Votes.picks(r, st))),
+          %Equal.sym(Types.Fact, f, Types.Fact.Vote{v, st, pk}, ef): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, RLines.Votes.picks(_ <> r, st), pk) == True{}: Bool}
+          %Equal.sym(Bool, Coded.Step.is_eq(st, st), True{}, Coded.Step.is_eq_refl(st)): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, List.filter.put(Types.Pick, pk, RLines.Votes.picks(r, st), _), pk) == True{}: Bool}
+          Lists.List.contains_head(~Types.Pick, ~Coded.Pick.is_eq, ~Coded.Pick.laws(), pk, RLines.Votes.picks(r, st))),
         c => Picks.cons(f, r, st, pk)(Picks.in(r, v, st, pk)(c))
       )
 
@@ -491,13 +493,13 @@ def Most.in.of(
     x => {
       List.contains(~String, ~String.eq, ds, x) == True{}: Bool
     }
-      & {Lines.Voting.voted(Lines.Voting{s, st, o}, x) == True{}: Bool}
+      & {RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s), st, o}, x) == True{}: Bool}
   )
 ) -> {
   List.contains(
     ~Types.Pick,
     ~Coded.Pick.is_eq,
-    Lines.Votes.picks(Facts.Facts.list(s), st),
+    RLines.Votes.picks(Facts.Facts.list(s), st),
     o
   )
     == True{}: Bool
@@ -538,12 +540,12 @@ def Most.in(
   +ds: List<&2, String>,
   +o: Types.Pick
 ) -> {
-  Lines.Voting.most(ds, Lines.Voting{s, st, o}) == True{}: Bool
+  RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, o}) == True{}: Bool
 } -> {
   List.contains(
     ~Types.Pick,
     ~Coded.Pick.is_eq,
-    Lines.Votes.picks(Facts.Facts.list(s), st),
+    RLines.Votes.picks(Facts.Facts.list(s), st),
     o
   )
     == True{}: Bool
@@ -555,16 +557,16 @@ def Most.in(
     o,
     Lists.List.count_pos(
       ~String,
-      ~Lines.Voting,
-      ~Lines.Voting.voted,
+      ~RLines.Voting,
+      ~RLines.Voting.voted,
       ~String.eq,
       ~Texts.String.laws(),
       ds,
-      Lines.Voting{s, st, o}
+      RLines.Voting{Facts.Facts.crit(s), st, o}
     )(
       Lists.Nat.most_pos(
         List.length(&2, String, ds),
-        Lists.List.count(~String, ~Lines.Voting, ~Lines.Voting.voted, ds, Lines.Voting{s, st, o})
+        Lists.List.count(~String, ~RLines.Voting, ~RLines.Voting.voted, ds, RLines.Voting{Facts.Facts.crit(s), st, o})
       )(m)
     )
   )
@@ -577,16 +579,16 @@ def Wins.only(
   +pk: Types.Pick,
   +o: Types.Pick
 ) -> {
-  Lines.Tally.wins(
-    Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)},
+  RLines.Tally.wins(
+    RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)},
     pk
   )
     == True{}: Bool
-} -> {Lines.Voting.most(ds, Lines.Voting{s, st, o}) == True{}: Bool} -> {o == pk: Types.Pick}:
+} -> {RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, o}) == True{}: Bool} -> {o == pk: Types.Pick}:
   w => +m => (
     bt: {Bool.or(Coded.Pick.is_eq(o, pk), False{}) == True{}: Bool} = (
     %m: {Bool.or(Coded.Pick.is_eq(o, pk), Bool.not(_)) == True{}: Bool}
-    Lists.List.holds_in(~Types.Pick, ~Lines.Rival, ~Lines.Rival.beats, ~Coded.Pick.is_eq, ~Coded.Pick.laws(), Lines.Votes.picks(Facts.Facts.list(s), st), Lines.Rival{Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)}, pk}, o)(Shared.Bool.and_true_right(Lines.Voting.most(ds, Lines.Voting{s, st, pk}), Shared.List.holds(~Types.Pick, ~Lines.Rival, ~Lines.Rival.beats, Lines.Votes.picks(Facts.Facts.list(s), st), Lines.Rival{Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)}, pk}))(w))(Most.in(s, st, ds, o)(m)))
+    Lists.List.holds_in(~Types.Pick, ~RLines.Rival, ~RLines.Rival.beats, ~Coded.Pick.is_eq, ~Coded.Pick.laws(), RLines.Votes.picks(Facts.Facts.list(s), st), RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)}, pk}, o)(Shared.Bool.and_true_right(RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, pk}), Shared.List.holds(~Types.Pick, ~RLines.Rival, ~RLines.Rival.beats, RLines.Votes.picks(Facts.Facts.list(s), st), RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)}, pk}))(w))(Most.in(s, st, ds, o)(m)))
     Coded.Pick.is_eq_sound(o, pk)(Equal.trans(Bool, Coded.Pick.is_eq(o, pk), Bool.or(Coded.Pick.is_eq(o, pk), False{}), True{}, Shared.Bool.or_false(Coded.Pick.is_eq(o, pk)), bt)))
 
 # no pick stands against the pick that wins a slot that d is no vote for,
@@ -604,28 +606,28 @@ def Beats.kept(
 ) -> {
   Delta.keeps(d, c2, j) == True{}: Bool
 } -> {
-  Lines.Tally.wins(
-    Lines.Tally{
-      Delta.side(d, s, f),
+  RLines.Tally.wins(
+    RLines.Tally{
+      Facts.Facts.crit(Delta.side(d, s, f)),
       Types.Step.At{c2, j},
       ds,
-      Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j})
+      RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j})
     },
     pk
   )
     == True{}: Bool
 } -> {
-  Lines.Rival.beats(
-    Lines.Rival{Lines.Tally{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, ds, xs0}, pk},
+  RLines.Rival.beats(
+    RLines.Rival{RLines.Tally{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, ds, xs0}, pk},
     o
   )
     == True{}: Bool
 }:
   hk => w => Lists.Bool.by(
     x => {Bool.or(Coded.Pick.is_eq(o, pk), Bool.not(x)) == True{}: Bool},
-    Lines.Voting.most(ds, Lines.Voting{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, o}),
+    RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, o}),
     et => (
-      %Wins.only(Delta.side(d, s, f), Types.Step.At{c2, j}, ds, pk, o)(w)(Equal.trans(Bool, Lines.Voting.most(ds, Lines.Voting{Delta.side(d, s, f), Types.Step.At{c2, j}, o}), Lines.Voting.most(ds, Lines.Voting{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, o}), True{}, Most.kept(ds, d, s, f, c2, j, o)(hk), et)): {Bool.or(Coded.Pick.is_eq(o, _), False{}) == True{}: Bool}
+      %Wins.only(Delta.side(d, s, f), Types.Step.At{c2, j}, ds, pk, o)(w)(Equal.trans(Bool, RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, f)), Types.Step.At{c2, j}, o}), RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, o}), True{}, Most.kept(ds, d, s, f, c2, j, o)(hk), et)): {Bool.or(Coded.Pick.is_eq(o, _), False{}) == True{}: Bool}
       %Equal.sym(Bool, Coded.Pick.is_eq(o, o), True{}, Coded.Pick.is_eq_refl(o)): {Bool.or(_, False{}) == True{}: Bool}
       {==}),
     ef => Shared.Bool.or_true_right(Coded.Pick.is_eq(o, pk))
@@ -646,12 +648,12 @@ def Holds.kept(
 ) -> {
   Delta.keeps(d, c2, j) == True{}: Bool
 } -> {
-  Lines.Tally.wins(
-    Lines.Tally{
-      Delta.side(d, s, f),
+  RLines.Tally.wins(
+    RLines.Tally{
+      Facts.Facts.crit(Delta.side(d, s, f)),
       Types.Step.At{c2, j},
       ds,
-      Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j})
+      RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j})
     },
     pk
   )
@@ -659,10 +661,10 @@ def Holds.kept(
 } -> {
   Shared.List.holds(
     ~Types.Pick,
-    ~Lines.Rival,
-    ~Lines.Rival.beats,
+    ~RLines.Rival,
+    ~RLines.Rival.beats,
     ys,
-    Lines.Rival{Lines.Tally{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, ds, x}, pk}
+    RLines.Rival{RLines.Tally{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, ds, x}, pk}
   )
     == True{}: Bool
 }:
@@ -671,16 +673,16 @@ def Holds.kept(
       hk => w => {==}
     case Con{+y, +r}:
       +hk => +w => Shared.List.all.if_both(
-        Lines.Rival.beats(
-          Lines.Rival{Lines.Tally{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, ds, x}, pk},
+        RLines.Rival.beats(
+          RLines.Rival{RLines.Tally{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, ds, x}, pk},
           y
         ),
         u => Shared.List.holds(
           ~Types.Pick,
-          ~Lines.Rival,
-          ~Lines.Rival.beats,
+          ~RLines.Rival,
+          ~RLines.Rival.beats,
           r,
-          Lines.Rival{Lines.Tally{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, ds, x}, pk}
+          RLines.Rival{RLines.Tally{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, ds, x}, pk}
         )
       )(
         Beats.kept(d, s, f, c2, j, ds, pk, x, y)(hk)(w)
@@ -699,41 +701,41 @@ def Wins.kept(
 ) -> {
   Delta.keeps(d, c2, j) == True{}: Bool
 } -> {
-  Lines.Tally.wins(
-    Lines.Tally{
-      Delta.side(d, s, f),
+  RLines.Tally.wins(
+    RLines.Tally{
+      Facts.Facts.crit(Delta.side(d, s, f)),
       Types.Step.At{c2, j},
       ds,
-      Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j})
+      RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j})
     },
     pk
   )
     == True{}: Bool
 } -> {
-  Lines.Tally.wins(
-    Lines.Tally{
-      Delta.side(d, s, Bool.not(f)),
+  RLines.Tally.wins(
+    RLines.Tally{
+      Facts.Facts.crit(Delta.side(d, s, Bool.not(f))),
       Types.Step.At{c2, j},
       ds,
-      Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j})
+      RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j})
     },
     pk
   )
     == True{}: Bool
 }:
   +hk => +w => Shared.Bool.and_both(
-    Lines.Voting.most(ds, Lines.Voting{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, pk}),
+    RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, pk}),
     Shared.List.holds(
       ~Types.Pick,
-      ~Lines.Rival,
-      ~Lines.Rival.beats,
-      Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}),
-      Lines.Rival{
-        Lines.Tally{
-          Delta.side(d, s, Bool.not(f)),
+      ~RLines.Rival,
+      ~RLines.Rival.beats,
+      RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}),
+      RLines.Rival{
+        RLines.Tally{
+          Facts.Facts.crit(Delta.side(d, s, Bool.not(f))),
           Types.Step.At{c2, j},
           ds,
-          Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j})
+          RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j})
         },
         pk
       }
@@ -741,31 +743,31 @@ def Wins.kept(
   )(
     Equal.trans(
       Bool,
-      Lines.Voting.most(ds, Lines.Voting{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, pk}),
-      Lines.Voting.most(ds, Lines.Voting{Delta.side(d, s, f), Types.Step.At{c2, j}, pk}),
+      RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, pk}),
+      RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, f)), Types.Step.At{c2, j}, pk}),
       True{},
       Equal.sym(
         Bool,
-        Lines.Voting.most(ds, Lines.Voting{Delta.side(d, s, f), Types.Step.At{c2, j}, pk}),
-        Lines.Voting.most(
+        RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, f)), Types.Step.At{c2, j}, pk}),
+        RLines.Voting.most(
           ds,
-          Lines.Voting{Delta.side(d, s, Bool.not(f)), Types.Step.At{c2, j}, pk}
+          RLines.Voting{Facts.Facts.crit(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}, pk}
         ),
         Most.kept(ds, d, s, f, c2, j, pk)(hk)
       ),
       Shared.Bool.and_true_left(
-        Lines.Voting.most(ds, Lines.Voting{Delta.side(d, s, f), Types.Step.At{c2, j}, pk}),
+        RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(Delta.side(d, s, f)), Types.Step.At{c2, j}, pk}),
         Shared.List.holds(
           ~Types.Pick,
-          ~Lines.Rival,
-          ~Lines.Rival.beats,
-          Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j}),
-          Lines.Rival{
-            Lines.Tally{
-              Delta.side(d, s, f),
+          ~RLines.Rival,
+          ~RLines.Rival.beats,
+          RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j}),
+          RLines.Rival{
+            RLines.Tally{
+              Facts.Facts.crit(Delta.side(d, s, f)),
               Types.Step.At{c2, j},
               ds,
-              Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j})
+              RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j})
             },
             pk
           }
@@ -774,7 +776,7 @@ def Wins.kept(
     )
   )(
     Holds.kept(
-      Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}),
+      RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j}),
       d,
       s,
       f,
@@ -782,7 +784,7 @@ def Wins.kept(
       j,
       ds,
       pk,
-      Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j})
+      RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), Types.Step.At{c2, j})
     )(hk)(w)
   )
 
@@ -793,20 +795,20 @@ def Wins.most(
   +ds: List<&2, String>,
   +pk: Types.Pick
 ) -> {
-  Lines.Tally.wins(
-    Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)},
+  RLines.Tally.wins(
+    RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)},
     pk
   )
     == True{}: Bool
-} -> {Lines.Voting.most(ds, Lines.Voting{s, st, pk}) == True{}: Bool}:
+} -> {RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, pk}) == True{}: Bool}:
   w => Shared.Bool.and_true_left(
-    Lines.Voting.most(ds, Lines.Voting{s, st, pk}),
+    RLines.Voting.most(ds, RLines.Voting{Facts.Facts.crit(s), st, pk}),
     Shared.List.holds(
       ~Types.Pick,
-      ~Lines.Rival,
-      ~Lines.Rival.beats,
-      Lines.Votes.picks(Facts.Facts.list(s), st),
-      Lines.Rival{Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)}, pk}
+      ~RLines.Rival,
+      ~RLines.Rival.beats,
+      RLines.Votes.picks(Facts.Facts.list(s), st),
+      RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)}, pk}
     )
   )(w)
 
@@ -817,20 +819,20 @@ def Wins.decided(
   +ds: List<&2, String>,
   +pk: Types.Pick
 ) -> {
-  Lines.Tally.wins(
-    Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)},
+  RLines.Tally.wins(
+    RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)},
     pk
   )
     == True{}: Bool
 } -> {Lines.Votes.decided(s, st, ds) == Some{pk}: Maybe<&2, Types.Pick>}:
   +w => Lists.List.pick_one(
     ~Types.Pick,
-    ~Lines.Tally,
-    ~Lines.Tally.wins,
+    ~RLines.Tally,
+    ~RLines.Tally.wins,
     ~Coded.Pick.is_eq,
     ~Coded.Pick.laws(),
-    Lines.Votes.picks(Facts.Facts.list(s), st),
-    Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)},
+    RLines.Votes.picks(Facts.Facts.list(s), st),
+    RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)},
     pk
   )(
     Most.in(s, st, ds, pk)(Wins.most(s, st, ds, pk)(w))
@@ -891,14 +893,14 @@ def Decided.kept(
     )(
       Lists.List.pick_hit(
         ~Types.Pick,
-        ~Lines.Tally,
-        ~Lines.Tally.wins,
-        Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j}),
-        Lines.Tally{
-          Delta.side(d, s, f),
+        ~RLines.Tally,
+        ~RLines.Tally.wins,
+        RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j}),
+        RLines.Tally{
+          Facts.Facts.crit(Delta.side(d, s, f)),
           Types.Step.At{c2, j},
           ds,
-          Lines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j})
+          RLines.Votes.picks(Facts.Facts.list(Delta.side(d, s, f)), Types.Step.At{c2, j})
         },
         pk
       )(e)
@@ -973,7 +975,7 @@ def Delta.spares_keeps(
 def Bound.pos(
   fs: List<&2, Types.Fact>,
   +c: Ledgers.Line
-) -> {Nat.is_le(1n, Lines.Line.bound(fs, c)) == True{}: Bool}:
+) -> {Nat.is_le(1n, RLines.Line.bound(fs, c)) == True{}: Bool}:
   match fs:
     case Nil{}:
       {==}
@@ -984,14 +986,14 @@ def Bound.pos(
     case Con{Types.Fact.Vote{v, Types.Step.At{+c2, +k}, pk}, +rest}:
       Shared.Nat.le_trans(
         1n,
-        Lines.Line.bound(rest, c),
-        Nat.max(Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), Lines.Line.bound(rest, c))
+        RLines.Line.bound(rest, c),
+        Nat.max(RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), RLines.Line.bound(rest, c))
       )(
         Bound.pos(rest, c)
       )(
         Lists.Nat.le_max_right(
-          Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
-          Lines.Line.bound(rest, c)
+          RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
+          RLines.Line.bound(rest, c)
         )
       )
 
@@ -1002,8 +1004,8 @@ def Bound.cons(
   +c: Ledgers.Line,
   +n: Nat
 ) -> {
-  Nat.is_le(n, Lines.Line.bound(r, c)) == True{}: Bool
-} -> {Nat.is_le(n, Lines.Line.bound(f <> r, c)) == True{}: Bool}:
+  Nat.is_le(n, RLines.Line.bound(r, c)) == True{}: Bool
+} -> {Nat.is_le(n, RLines.Line.bound(f <> r, c)) == True{}: Bool}:
   match f:
     case Types.Fact.Ask{a}:
       h => h
@@ -1012,14 +1014,14 @@ def Bound.cons(
     case Types.Fact.Vote{v, Types.Step.At{+c2, +k}, pk}:
       h => Shared.Nat.le_trans(
         n,
-        Lines.Line.bound(r, c),
-        Nat.max(Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), Lines.Line.bound(r, c))
+        RLines.Line.bound(r, c),
+        Nat.max(RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), RLines.Line.bound(r, c))
       )(
         h
       )(
         Lists.Nat.le_max_right(
-          Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
-          Lines.Line.bound(r, c)
+          RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
+          RLines.Line.bound(r, c)
         )
       )
 
@@ -1038,7 +1040,7 @@ def Bound.ge(
     Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
   )
     == True{}: Bool
-} -> {Nat.is_le(1n+k, Lines.Line.bound(fs, c)) == True{}: Bool}:
+} -> {Nat.is_le(1n+k, RLines.Line.bound(fs, c)) == True{}: Bool}:
   match fs:
     case Nil{}:
       h => Empty.absurd({Nat.is_le(1n+k, 1n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
@@ -1047,15 +1049,15 @@ def Bound.ge(
         ~Types.Fact,
         ~Coded.Fact.is_eq,
         ~Coded.Fact.laws(),
-        {Nat.is_le(1n+k, Lines.Line.bound(f <> r, c)) == True{}: Bool},
+        {Nat.is_le(1n+k, RLines.Line.bound(f <> r, c)) == True{}: Bool},
         f,
         r,
         Types.Fact.Vote{v, Types.Step.At{c, k}, pk},
         hin,
         ef => (
-          %Equal.sym(Types.Fact, f, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}, ef): {Nat.is_le(1n+k, Lines.Line.bound(_ <> r, c)) == True{}: Bool}
-          %Equal.sym(Bool, Ledgers.Line.is_eq(c, c), True{}, Ledgers.Line.is_eq_refl(c)): {Nat.is_le(1n+k, Nat.max(Lines.Line.bound.at(_, k), Lines.Line.bound(r, c))) == True{}: Bool}
-          Lists.Nat.le_max_left(1n+k, Lines.Line.bound(r, c))),
+          %Equal.sym(Types.Fact, f, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}, ef): {Nat.is_le(1n+k, RLines.Line.bound(_ <> r, c)) == True{}: Bool}
+          %Equal.sym(Bool, Ledgers.Line.is_eq(c, c), True{}, Ledgers.Line.is_eq_refl(c)): {Nat.is_le(1n+k, Nat.max(RLines.Line.bound.at(_, k), RLines.Line.bound(r, c))) == True{}: Bool}
+          Lists.Nat.le_max_left(1n+k, RLines.Line.bound(r, c))),
         cin => Bound.cons(f, r, c, 1n+k)(Bound.ge(r, c, v, k, pk)(cin))
       )
 
@@ -1156,8 +1158,8 @@ def Bound.is_at.of(
   +c: Ledgers.Line,
   -m: Nat,
   e: {c2 == c: Ledgers.Line},
-  x: {m == 1n+k: Nat} | {m == Lines.Line.bound(r, c): Nat},
-  ih: Bound.Is(r, c, Lines.Line.bound(r, c))
+  x: {m == 1n+k: Nat} | {m == RLines.Line.bound(r, c): Nat},
+  ih: Bound.Is(r, c, RLines.Line.bound(r, c))
 ) -> Bound.Is(Types.Fact.Vote{v, Types.Step.At{c2, k}, pk} <> r, c, m):
   match x:
     case Inl{em}:
@@ -1168,27 +1170,27 @@ def Bound.is_at.of(
       %Equal.sym(
         Nat,
         m,
-        Lines.Line.bound(r, c),
+        RLines.Line.bound(r, c),
         em
       ): Bound.Is(Types.Fact.Vote{v, Types.Step.At{c2, k}, pk} <> r, c, _)
-      Bound.is_cons(Types.Fact.Vote{v, Types.Step.At{c2, k}, pk}, r, c, Lines.Line.bound(r, c), ih)
+      Bound.is_cons(Types.Fact.Vote{v, Types.Step.At{c2, k}, pk}, r, c, RLines.Line.bound(r, c), ih)
 
 # the bound of a line is 1, or one more than a slot of it that a vote is for
 def Bound.is(
   fs: List<&2, Types.Fact>,
   +c: Ledgers.Line
-) -> Bound.Is(fs, c, Lines.Line.bound(fs, c)):
+) -> Bound.Is(fs, c, RLines.Line.bound(fs, c)):
   match fs:
     case Nil{}:
       Inl{{==}}
     case Con{Types.Fact.Ask{+a}, +rest}:
-      Bound.is_cons(Types.Fact.Ask{a}, rest, c, Lines.Line.bound(rest, c), Bound.is(rest, c))
+      Bound.is_cons(Types.Fact.Ask{a}, rest, c, RLines.Line.bound(rest, c), Bound.is(rest, c))
     case Con{Types.Fact.Vote{+v, Types.Step.Broken{}, +pk}, +rest}:
       Bound.is_cons(
         Types.Fact.Vote{v, Types.Step.Broken{}, pk},
         rest,
         c,
-        Lines.Line.bound(rest, c),
+        RLines.Line.bound(rest, c),
         Bound.is(rest, c)
       )
     case Con{Types.Fact.Vote{+v, Types.Step.At{+c2, +k}, +pk}, +rest}:
@@ -1198,7 +1200,7 @@ def Bound.is(
         } -> Bound.Is(
           Types.Fact.Vote{v, Types.Step.At{c2, k}, pk} <> rest,
           c,
-          Nat.max(Lines.Line.bound.at(hit, k), Lines.Line.bound(rest, c))
+          Nat.max(RLines.Line.bound.at(hit, k), RLines.Line.bound(rest, c))
         ),
         Ledgers.Line.is_eq(c2, c),
         et => eh => Bound.is_at.of(
@@ -1208,16 +1210,16 @@ def Bound.is(
           pk,
           rest,
           c,
-          Nat.max(1n+k, Lines.Line.bound(rest, c)),
+          Nat.max(1n+k, RLines.Line.bound(rest, c)),
           Ledgers.Line.is_eq_sound(c2, c)(eh),
-          Nat.max_either(1n+k, Lines.Line.bound(rest, c)),
+          Nat.max_either(1n+k, RLines.Line.bound(rest, c)),
           Bound.is(rest, c)
         ),
         ef => eh => Bound.is_cons(
           Types.Fact.Vote{v, Types.Step.At{c2, k}, pk},
           rest,
           c,
-          Lines.Line.bound(rest, c),
+          RLines.Line.bound(rest, c),
           Bound.is(rest, c)
         )
       )({==})
@@ -1232,7 +1234,7 @@ def Bound.le.of(
   r: Bound.Is(Facts.Facts.list(Delta.side(d, s, f)), c, n),
   hs: {Delta.spares(d, c) == True{}: Bool}
 ) -> {
-  Nat.is_le(n, Lines.Line.bound(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), c)) == True{}: Bool
+  Nat.is_le(n, RLines.Line.bound(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), c)) == True{}: Bool
 }:
   match r:
     case Inl{e}:
@@ -1244,7 +1246,7 @@ def Bound.le.of(
       ): {
         Nat.is_le(
           _,
-          Lines.Line.bound(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), c)
+          RLines.Line.bound(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), c)
         )
           == True{}: Bool
       }
@@ -1262,7 +1264,7 @@ def Bound.le.of(
       ): {
         Nat.is_le(
           _,
-          Lines.Line.bound(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), c)
+          RLines.Line.bound(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), c)
         )
           == True{}: Bool
       }
@@ -1351,8 +1353,8 @@ def Bound.le(
   Delta.spares(d, c) == True{}: Bool
 } -> {
   Nat.is_le(
-    Lines.Line.bound(Facts.Facts.list(Delta.side(d, s, f)), c),
-    Lines.Line.bound(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), c)
+    RLines.Line.bound(Facts.Facts.list(Delta.side(d, s, f)), c),
+    RLines.Line.bound(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), c)
   )
     == True{}: Bool
 }:
@@ -1361,7 +1363,7 @@ def Bound.le(
     s,
     f,
     c,
-    Lines.Line.bound(Facts.Facts.list(Delta.side(d, s, f)), c),
+    RLines.Line.bound(Facts.Facts.list(Delta.side(d, s, f)), c),
     Bound.is(Facts.Facts.list(Delta.side(d, s, f)), c),
     hs
   )
@@ -1376,30 +1378,30 @@ def Bound.same(
 ) -> {
   Delta.spares(d, c) == True{}: Bool
 } -> {
-  Lines.Line.bound(
+  RLines.Line.bound(
     Facts.Facts.list(Delta.to(d, s)),
     c
   )
-    == Lines.Line.bound(Facts.Facts.list(s), c): Nat
+    == RLines.Line.bound(Facts.Facts.list(s), c): Nat
 }:
   +hs => Shared.Nat.is_eq_sound(
-    Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
-    Lines.Line.bound(Facts.Facts.list(s), c)
+    RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
+    RLines.Line.bound(Facts.Facts.list(s), c)
   )(
     Equal.trans(
       Bool,
       Nat.is_eq(
-        Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
-        Lines.Line.bound(Facts.Facts.list(s), c)
+        RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
+        RLines.Line.bound(Facts.Facts.list(s), c)
       ),
       Bool.and(
         Nat.is_le(
-          Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
-          Lines.Line.bound(Facts.Facts.list(s), c)
+          RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
+          RLines.Line.bound(Facts.Facts.list(s), c)
         ),
         Nat.is_le(
-          Lines.Line.bound(Facts.Facts.list(s), c),
-          Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c)
+          RLines.Line.bound(Facts.Facts.list(s), c),
+          RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c)
         )
       ),
       True{},
@@ -1407,31 +1409,31 @@ def Bound.same(
         Bool,
         Bool.and(
           Nat.is_le(
-            Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
-            Lines.Line.bound(Facts.Facts.list(s), c)
+            RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
+            RLines.Line.bound(Facts.Facts.list(s), c)
           ),
           Nat.is_le(
-            Lines.Line.bound(Facts.Facts.list(s), c),
-            Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c)
+            RLines.Line.bound(Facts.Facts.list(s), c),
+            RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c)
           )
         ),
         Nat.is_eq(
-          Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
-          Lines.Line.bound(Facts.Facts.list(s), c)
+          RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
+          RLines.Line.bound(Facts.Facts.list(s), c)
         ),
         Shared.Nat.le_both(
-          Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
-          Lines.Line.bound(Facts.Facts.list(s), c)
+          RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
+          RLines.Line.bound(Facts.Facts.list(s), c)
         )
       ),
       Shared.Bool.and_both(
         Nat.is_le(
-          Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
-          Lines.Line.bound(Facts.Facts.list(s), c)
+          RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
+          RLines.Line.bound(Facts.Facts.list(s), c)
         ),
         Nat.is_le(
-          Lines.Line.bound(Facts.Facts.list(s), c),
-          Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c)
+          RLines.Line.bound(Facts.Facts.list(s), c),
+          RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c)
         )
       )(Bound.le(d, s, True{}, c)(hs))(Bound.le(d, s, False{}, c)(hs))
     )
@@ -1532,13 +1534,13 @@ def Starts.cons(
   +h: Hashes.Hash,
   +a: Types.Ask
 ) -> {
-  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(r, h), a) == True{}: Bool
-} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(f <> r, h), a) == True{}: Bool}:
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(r, h), a) == True{}: Bool
+} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(f <> r, h), a) == True{}: Bool}:
   match f:
     case Types.Fact.Vote{v, st, pk}:
       e => e
     case Types.Fact.Ask{+b}:
-      e => Asks.put_contains(b, Lines.Starts.of(r, h), Facts.Ask.starts(h, b), a)(e)
+      e => Asks.put_contains(b, RLines.Starts.of(r, h), RFacts.Ask.starts(h, b), a)(e)
 
 # an ask among fs that starts the store of h is one of its starts
 def Starts.in(
@@ -1548,8 +1550,8 @@ def Starts.in(
 ) -> {
   List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Ask{a}) == True{}: Bool
 } -> {
-  Facts.Ask.starts(h, a) == True{}: Bool
-} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(fs, h), a) == True{}: Bool}:
+  RFacts.Ask.starts(h, a) == True{}: Bool
+} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(fs, h), a) == True{}: Bool}:
   match fs:
     case Nil{}:
       hin => st => hin
@@ -1559,16 +1561,16 @@ def Starts.in(
         ~Coded.Fact.is_eq,
         ~Coded.Fact.laws(),
         {
-          List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(f <> r, h), a) == True{}: Bool
+          List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(f <> r, h), a) == True{}: Bool
         },
         f,
         r,
         Types.Fact.Ask{a},
         hin,
         ef => (
-          %Equal.sym(Types.Fact, f, Types.Fact.Ask{a}, ef): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(_ <> r, h), a) == True{}: Bool}
-          %Equal.sym(Bool, Facts.Ask.starts(h, a), True{}, st): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, a, Lines.Starts.of(r, h), _), a) == True{}: Bool}
-          Lists.List.contains_head(~Types.Ask, ~Coded.Ask.is_eq, ~Coded.Ask.laws(), a, Lines.Starts.of(r, h))),
+          %Equal.sym(Types.Fact, f, Types.Fact.Ask{a}, ef): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(_ <> r, h), a) == True{}: Bool}
+          %Equal.sym(Bool, RFacts.Ask.starts(h, a), True{}, st): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, a, RLines.Starts.of(r, h), _), a) == True{}: Bool}
+          Lists.List.contains_head(~Types.Ask, ~Coded.Ask.is_eq, ~Coded.Ask.laws(), a, RLines.Starts.of(r, h))),
         cin => Starts.cons(f, r, h, a)(Starts.in(r, h, a)(cin)(st))
       )
 
@@ -1581,11 +1583,11 @@ def Starts.out.up(
   p: {
     List.contains(~Types.Fact, ~Coded.Fact.is_eq, r, Types.Fact.Ask{a}) == True{}: Bool
   }
-    & {Facts.Ask.starts(h, a) == True{}: Bool}
+    & {RFacts.Ask.starts(h, a) == True{}: Bool}
 ) -> {
   List.contains(~Types.Fact, ~Coded.Fact.is_eq, f <> r, Types.Fact.Ask{a}) == True{}: Bool
 }
-  & {Facts.Ask.starts(h, a) == True{}: Bool}:
+  & {RFacts.Ask.starts(h, a) == True{}: Bool}:
   (c, e) = p
   (Shared.List.contains_cons(~Types.Fact, ~Coded.Fact.is_eq, f, r, Types.Fact.Ask{a})(c), e)
 
@@ -1595,18 +1597,18 @@ def Starts.out(
   +h: Hashes.Hash,
   +a: Types.Ask
 ) -> {
-  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(fs, h), a) == True{}: Bool
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(fs, h), a) == True{}: Bool
 } -> {
   List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Ask{a}) == True{}: Bool
 }
-  & {Facts.Ask.starts(h, a) == True{}: Bool}:
+  & {RFacts.Ask.starts(h, a) == True{}: Bool}:
   match fs:
     case Nil{}:
       hin => Empty.absurd(
         {
           List.contains(~Types.Fact, ~Coded.Fact.is_eq, [], Types.Fact.Ask{a}) == True{}: Bool
         }
-          & {Facts.Ask.starts(h, a) == True{}: Bool},
+          & {RFacts.Ask.starts(h, a) == True{}: Bool},
         Shared.Bool.false_ne_true(hin)
       )
     case Con{Types.Fact.Vote{+v, +st, +pk}, +r}:
@@ -1614,12 +1616,12 @@ def Starts.out(
     case Con{Types.Fact.Ask{+b}, +r}:
       Lists.Bool.by(
         hit => {
-          Facts.Ask.starts(h, b) == hit: Bool
+          RFacts.Ask.starts(h, b) == hit: Bool
         } -> {
           List.contains(
             ~Types.Ask,
             ~Coded.Ask.is_eq,
-            List.filter.put(Types.Ask, b, Lines.Starts.of(r, h), hit),
+            List.filter.put(Types.Ask, b, RLines.Starts.of(r, h), hit),
             a
           )
             == True{}: Bool
@@ -1632,8 +1634,8 @@ def Starts.out(
           )
             == True{}: Bool
         }
-          & {Facts.Ask.starts(h, a) == True{}: Bool},
-        Facts.Ask.starts(h, b),
+          & {RFacts.Ask.starts(h, a) == True{}: Bool},
+        RFacts.Ask.starts(h, b),
         et => es => hin => Lists.List.contains_cons_by(
           ~Types.Ask,
           ~Coded.Ask.is_eq,
@@ -1647,14 +1649,14 @@ def Starts.out(
             )
               == True{}: Bool
           }
-            & {Facts.Ask.starts(h, a) == True{}: Bool},
+            & {RFacts.Ask.starts(h, a) == True{}: Bool},
           b,
-          Lines.Starts.of(r, h),
+          RLines.Starts.of(r, h),
           a,
           hin,
           eb => (
             %eb: {List.contains(~Types.Fact, ~Coded.Fact.is_eq, Types.Fact.Ask{b} <> r, Types.Fact.Ask{_}) == True{}: Bool}
-              & {Facts.Ask.starts(h, _) == True{}: Bool}
+              & {RFacts.Ask.starts(h, _) == True{}: Bool}
             (Lists.List.contains_head(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), Types.Fact.Ask{b}, r), es)),
           cin => Starts.out.up(Types.Fact.Ask{b}, r, h, a, Starts.out(r, h, a)(cin))
         ),
@@ -1678,12 +1680,12 @@ def Starts.kept.of(
     )
       == True{}: Bool
   }
-    & {Facts.Ask.starts(h, x) == True{}: Bool}
+    & {RFacts.Ask.starts(h, x) == True{}: Bool}
 ) -> {
   List.contains(
     ~Types.Ask,
     ~Coded.Ask.is_eq,
-    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+    RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
     x
   )
     == True{}: Bool
@@ -1757,7 +1759,7 @@ def Starts.kept(
   List.contains(
     ~Types.Ask,
     ~Coded.Ask.is_eq,
-    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+    RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
     x
   )
     == True{}: Bool
@@ -1765,7 +1767,7 @@ def Starts.kept(
   List.contains(
     ~Types.Ask,
     ~Coded.Ask.is_eq,
-    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+    RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
     x
   )
     == True{}: Bool
@@ -1794,7 +1796,7 @@ def Starts.kept_back(
   List.contains(
     ~Types.Ask,
     ~Coded.Ask.is_eq,
-    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+    RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
     x
   )
     == True{}: Bool
@@ -1802,7 +1804,7 @@ def Starts.kept_back(
   List.contains(
     ~Types.Ask,
     ~Coded.Ask.is_eq,
-    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+    RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
     x
   )
     == True{}: Bool
@@ -1825,31 +1827,31 @@ def Leads.kept.go(
 ) -> {
   Delta.ok(d) == True{}: Bool
 } -> {
-  Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h), x) == True{}: Bool
+  RLines.Ask.leads(RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h), x) == True{}: Bool
 } -> {
   Shared.List.within(
     ~Types.Ask,
     ~Coded.Ask.is_eq,
     ys,
-    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
+    RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
   )
     == True{}: Bool
-} -> {Shared.List.holds(~Types.Ask, ~Types.Ask, ~Lines.Ask.led, ys, x) == True{}: Bool}:
+} -> {Shared.List.holds(~Types.Ask, ~Types.Ask, ~RLines.Ask.led, ys, x) == True{}: Bool}:
   match ys:
     case Nil{}:
       ok => l => w => {==}
     case Con{+y, +r}:
       +ok => +l => +w => Shared.List.all.if_both(
-        Lines.Ask.led(x, y),
-        u => Shared.List.holds(~Types.Ask, ~Types.Ask, ~Lines.Ask.led, r, x)
+        RLines.Ask.led(x, y),
+        u => Shared.List.holds(~Types.Ask, ~Types.Ask, ~RLines.Ask.led, r, x)
       )(
         Lists.List.holds_in(
           ~Types.Ask,
           ~Types.Ask,
-          ~Lines.Ask.led,
+          ~RLines.Ask.led,
           ~Coded.Ask.is_eq,
           ~Coded.Ask.laws(),
-          Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+          RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
           x,
           y
         )(
@@ -1868,14 +1870,14 @@ def Leads.kept.go(
               List.contains(
                 ~Types.Ask,
                 ~Coded.Ask.is_eq,
-                Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+                RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
                 y
               ),
               Shared.List.within(
                 ~Types.Ask,
                 ~Coded.Ask.is_eq,
                 r,
-                Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
+                RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
               )
             )(w)
           )
@@ -1897,14 +1899,14 @@ def Leads.kept.go(
             List.contains(
               ~Types.Ask,
               ~Coded.Ask.is_eq,
-              Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+              RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
               y
             ),
             Shared.List.within(
               ~Types.Ask,
               ~Coded.Ask.is_eq,
               r,
-              Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
+              RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
             )
           )(w)
         )
@@ -1921,16 +1923,16 @@ def Leads.kept(
 ) -> {
   Delta.ok(d) == True{}: Bool
 } -> {
-  Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h), x) == True{}: Bool
+  RLines.Ask.leads(RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h), x) == True{}: Bool
 } -> {
-  Lines.Ask.leads(
-    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+  RLines.Ask.leads(
+    RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
     x
   )
     == True{}: Bool
 }:
   ok => l => Leads.kept.go(
-    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+    RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
     d,
     s,
     f,
@@ -1945,7 +1947,7 @@ def Leads.kept(
       ~Types.Ask,
       ~Coded.Ask.is_eq,
       ~Coded.Ask.laws(),
-      Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
+      RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
     )
   )
 
@@ -1954,10 +1956,10 @@ def Led.same(
   x: Types.Ask,
   y: Types.Ask
 ) -> {
-  Lines.Ask.led(x, y) == True{}: Bool
+  RLines.Ask.led(x, y) == True{}: Bool
 } -> {
-  Lines.Ask.led(y, x) == True{}: Bool
-} -> {Lines.Store.first.of(Some{y}) == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>}:
+  RLines.Ask.led(y, x) == True{}: Bool
+} -> {RLines.Store.first.of(Some{y}) == RLines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>}:
   match x y:
     case Types.Ask{+i, +k, +r} Types.Ask{+j, +l, +q}:
       h1 => h2 => Lists.Bool.by(
@@ -1971,35 +1973,35 @@ def Led.same(
             == True{}: Bool
         } -> {
           Some{
-            Lines.Entry.first(j, q, 0n)
+            RLines.Entry.first(j, q, 0n)
           }
-            == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>
+            == Some{RLines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>
         },
         Bool.and(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q)),
         +et => g1 => g2 => (
-          %Ledgers.Id.is_eq_sound(i, j)(Shared.Bool.and_true_left(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))(et)): {Some{Lines.Entry.first(_, q, 0n)} == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>}
-          %Coded.Request.is_eq_sound(r, q)(Shared.Bool.and_true_right(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))(et)): {Some{Lines.Entry.first(i, _, 0n)} == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>}
+          %Ledgers.Id.is_eq_sound(i, j)(Shared.Bool.and_true_left(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))(et)): {Some{RLines.Entry.first(_, q, 0n)} == Some{RLines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>}
+          %Coded.Request.is_eq_sound(r, q)(Shared.Bool.and_true_right(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))(et)): {Some{RLines.Entry.first(i, _, 0n)} == Some{RLines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>}
           {==}),
         ef => g1 => g2 => Lists.Bool.by(
           b => {
             Bool.or(b, Nat.is_lt(k, l)) == True{}: Bool
           } -> {
             Some{
-              Lines.Entry.first(j, q, 0n)
+              RLines.Entry.first(j, q, 0n)
             }
-              == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>
+              == Some{RLines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>
           },
           Bool.and(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r)),
           +et2 => g3 => (
-            %Ledgers.Id.is_eq_sound(j, i)(Shared.Bool.and_true_left(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r))(et2)): {Some{Lines.Entry.first(j, q, 0n)} == Some{Lines.Entry.first(_, r, 0n)}: Maybe<&2, Types.Entry>}
-            %Coded.Request.is_eq_sound(q, r)(Shared.Bool.and_true_right(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r))(et2)): {Some{Lines.Entry.first(j, q, 0n)} == Some{Lines.Entry.first(j, _, 0n)}: Maybe<&2, Types.Entry>}
+            %Ledgers.Id.is_eq_sound(j, i)(Shared.Bool.and_true_left(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r))(et2)): {Some{RLines.Entry.first(j, q, 0n)} == Some{RLines.Entry.first(_, r, 0n)}: Maybe<&2, Types.Entry>}
+            %Coded.Request.is_eq_sound(q, r)(Shared.Bool.and_true_right(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r))(et2)): {Some{RLines.Entry.first(j, q, 0n)} == Some{RLines.Entry.first(j, _, 0n)}: Maybe<&2, Types.Entry>}
             {==}),
           ef2 => g3 => Lists.Bool.clash(
             {
               Some{
-                Lines.Entry.first(j, q, 0n)
+                RLines.Entry.first(j, q, 0n)
               }
-                == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>
+                == Some{RLines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>
             },
             Nat.is_lt(k, l),
             Shared.Nat.le_nlt(l, k)(Shared.Nat.lt_weak(l, k)(g1)),
@@ -2020,46 +2022,46 @@ def First.kept.of(
     List.contains(
       ~Types.Ask,
       ~Coded.Ask.is_eq,
-      Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+      RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
       x
     )
       == True{}: Bool
   },
   +xl: {
-    Lines.Ask.leads(
-      Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+    RLines.Ask.leads(
+      RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
       x
     )
       == True{}: Bool
   }
 ) -> {
-  Lines.Store.first(
+  RLines.Store.first(
     Facts.Facts.list(Delta.side(d, s, Bool.not(f))),
     h
   )
-    == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>
+    == RLines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>
 }:
   Lists.Maybe.by(
     Types.Ask,
-    m => {Lines.Store.first.of(m) == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>},
+    m => {RLines.Store.first.of(m) == RLines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>},
     Lists.List.pick(
       ~Types.Ask,
       ~List<&2, Types.Ask>,
-      ~Lines.Ask.leads,
-      Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
-      Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
+      ~RLines.Ask.leads,
+      RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+      RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
     ),
     en => Lists.Bool.clash(
-      {None{} == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>},
-      Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h), x),
+      {None{} == RLines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>},
+      RLines.Ask.leads(RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h), x),
       List.pick_miss(
         ~Types.Ask,
         ~List<&2, Types.Ask>,
-        ~Lines.Ask.leads,
+        ~RLines.Ask.leads,
         ~Coded.Ask.is_eq,
         ~Coded.Ask.laws(),
-        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
-        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+        RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+        RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
         x
       )(en)(xin),
       xl
@@ -2071,10 +2073,10 @@ def First.kept.of(
       Lists.List.holds_in(
         ~Types.Ask,
         ~Types.Ask,
-        ~Lines.Ask.led,
+        ~RLines.Ask.led,
         ~Coded.Ask.is_eq,
         ~Coded.Ask.laws(),
-        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+        RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
         x,
         y
       )(
@@ -2083,11 +2085,11 @@ def First.kept.of(
         Lists.List.pick_in(
           ~Types.Ask,
           ~List<&2, Types.Ask>,
-          ~Lines.Ask.leads,
+          ~RLines.Ask.leads,
           ~Coded.Ask.is_eq,
           ~Coded.Ask.laws(),
-          Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
-          Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+          RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+          RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
           y
         )(ey)
       )
@@ -2095,19 +2097,19 @@ def First.kept.of(
       Lists.List.holds_in(
         ~Types.Ask,
         ~Types.Ask,
-        ~Lines.Ask.led,
+        ~RLines.Ask.led,
         ~Coded.Ask.is_eq,
         ~Coded.Ask.laws(),
-        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+        RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
         y,
         x
       )(
         Lists.List.pick_hit(
           ~Types.Ask,
           ~List<&2, Types.Ask>,
-          ~Lines.Ask.leads,
-          Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
-          Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+          ~RLines.Ask.leads,
+          RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+          RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
           y
         )(ey)
       )(xin)
@@ -2128,17 +2130,17 @@ def First.kept(
   Lists.List.pick(
     ~Types.Ask,
     ~List<&2, Types.Ask>,
-    ~Lines.Ask.leads,
-    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
-    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h)
+    ~RLines.Ask.leads,
+    RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+    RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h)
   )
     == Some{x}: Maybe<&2, Types.Ask>
 } -> {
-  Lines.Store.first(
+  RLines.Store.first(
     Facts.Facts.list(Delta.side(d, s, Bool.not(f))),
     h
   )
-    == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>
+    == RLines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>
 }:
   +ok => +e => First.kept.of(
     d,
@@ -2158,11 +2160,11 @@ def First.kept(
       Lists.List.pick_in(
         ~Types.Ask,
         ~List<&2, Types.Ask>,
-        ~Lines.Ask.leads,
+        ~RLines.Ask.leads,
         ~Coded.Ask.is_eq,
         ~Coded.Ask.laws(),
-        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
-        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+        RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+        RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
         x
       )(e)
     ),
@@ -2178,9 +2180,9 @@ def First.kept(
       Lists.List.pick_hit(
         ~Types.Ask,
         ~List<&2, Types.Ask>,
-        ~Lines.Ask.leads,
-        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
-        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+        ~RLines.Ask.leads,
+        RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+        RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
         x
       )(e)
     )
@@ -2195,60 +2197,60 @@ def First.same(
 ) -> {
   Delta.ok(d) == True{}: Bool
 } -> {
-  Lines.Store.first(
+  RLines.Store.first(
     Facts.Facts.list(Delta.to(d, s)),
     h
   )
-    == Lines.Store.first(Facts.Facts.list(s), h): Maybe<&2, Types.Entry>
+    == RLines.Store.first(Facts.Facts.list(s), h): Maybe<&2, Types.Entry>
 }:
   +ok => Lists.Maybe.by(
     Types.Ask,
     m => {
-      Lines.Store.first(
+      RLines.Store.first(
         Facts.Facts.list(Delta.to(d, s)),
         h
       )
-        == Lines.Store.first.of(m): Maybe<&2, Types.Entry>
+        == RLines.Store.first.of(m): Maybe<&2, Types.Entry>
     },
     Lists.List.pick(
       ~Types.Ask,
       ~List<&2, Types.Ask>,
-      ~Lines.Ask.leads,
-      Lines.Starts.of(Facts.Facts.list(s), h),
-      Lines.Starts.of(Facts.Facts.list(s), h)
+      ~RLines.Ask.leads,
+      RLines.Starts.of(Facts.Facts.list(s), h),
+      RLines.Starts.of(Facts.Facts.list(s), h)
     ),
     +en => Lists.Maybe.by(
       Types.Ask,
-      m => {Lines.Store.first.of(m) == None{}: Maybe<&2, Types.Entry>},
+      m => {RLines.Store.first.of(m) == None{}: Maybe<&2, Types.Entry>},
       Lists.List.pick(
         ~Types.Ask,
         ~List<&2, Types.Ask>,
-        ~Lines.Ask.leads,
-        Lines.Starts.of(Facts.Facts.list(Delta.to(d, s)), h),
-        Lines.Starts.of(Facts.Facts.list(Delta.to(d, s)), h)
+        ~RLines.Ask.leads,
+        RLines.Starts.of(Facts.Facts.list(Delta.to(d, s)), h),
+        RLines.Starts.of(Facts.Facts.list(Delta.to(d, s)), h)
       ),
       en2 => {==},
       +y => ey => Equal.trans(
         Maybe<&2, Types.Entry>,
-        Lines.Store.first.of(Some{y}),
-        Lines.Store.first(Facts.Facts.list(s), h),
+        RLines.Store.first.of(Some{y}),
+        RLines.Store.first(Facts.Facts.list(s), h),
         None{},
         Equal.sym(
           Maybe<&2, Types.Entry>,
-          Lines.Store.first(Facts.Facts.list(s), h),
-          Lines.Store.first.of(Some{y}),
+          RLines.Store.first(Facts.Facts.list(s), h),
+          RLines.Store.first.of(Some{y}),
           First.kept(d, s, True{}, h, y)(ok)(ey)
         ),
         Equal.cong(
           Maybe<&2, Types.Ask>,
           Maybe<&2, Types.Entry>,
-          m => Lines.Store.first.of(m),
+          m => RLines.Store.first.of(m),
           Lists.List.pick(
             ~Types.Ask,
             ~List<&2, Types.Ask>,
-            ~Lines.Ask.leads,
-            Lines.Starts.of(Facts.Facts.list(s), h),
-            Lines.Starts.of(Facts.Facts.list(s), h)
+            ~RLines.Ask.leads,
+            RLines.Starts.of(Facts.Facts.list(s), h),
+            RLines.Starts.of(Facts.Facts.list(s), h)
           ),
           None{},
           en
@@ -2267,8 +2269,8 @@ def Step.same.at(
   +d: Delta,
   +s: Facts.Facts(),
   +c: Ledgers.Line,
-  +st: Lines.State,
-  u: Maybe<&2, Lines.Rule>
+  +st: RLines.State,
+  u: Maybe<&2, RLines.Rule>
 ) -> {
   Delta.spares(d, c) == True{}: Bool
 } -> {
@@ -2278,7 +2280,7 @@ def Step.same.at(
     st,
     u
   )
-    == Lines.Line.step.at(s, c, st, u): Maybe<&2, Lines.State>
+    == Lines.Line.step.at(s, c, st, u): Maybe<&2, RLines.State>
 }:
   match u:
     case None{}:
@@ -2286,21 +2288,21 @@ def Step.same.at(
     case Some{+rule}:
       h => Equal.cong(
         Maybe<&2, Types.Pick>,
-        Maybe<&2, Lines.State>,
-        m => Lines.Line.step.of(st, m),
+        Maybe<&2, RLines.State>,
+        m => RLines.Line.step.of(st, m),
         Lines.Votes.decided(
           Delta.to(d, s),
-          Types.Step.At{c, Lines.State.slot(st)},
-          Lines.Rule.nodes(rule)
+          Types.Step.At{c, RLines.State.slot(st)},
+          RLines.Rule.nodes(rule)
         ),
-        Lines.Votes.decided(s, Types.Step.At{c, Lines.State.slot(st)}, Lines.Rule.nodes(rule)),
+        Lines.Votes.decided(s, Types.Step.At{c, RLines.State.slot(st)}, RLines.Rule.nodes(rule)),
         Decided.same(
           d,
           s,
           c,
-          Lines.State.slot(st),
-          Lines.Rule.nodes(rule)
-        )(Delta.spares_keeps(d, c, Lines.State.slot(st))(h))
+          RLines.State.slot(st),
+          RLines.Rule.nodes(rule)
+        )(Delta.spares_keeps(d, c, RLines.State.slot(st))(h))
       )
 
 # after the node adds d, the next slot of a line that d is no vote for a slot
@@ -2310,13 +2312,13 @@ def Step.same(
   +s: Facts.Facts(),
   +r: Maybe<&2, List<&2, Types.Entry>>,
   +c: Ledgers.Line,
-  +st: Lines.State
+  +st: RLines.State
 ) -> {
   Delta.spares(d, c) == True{}: Bool
 } -> {
-  Lines.Line.step(Delta.to(d, s), r, c, st) == Lines.Line.step(s, r, c, st): Maybe<&2, Lines.State>
+  Lines.Line.step(Delta.to(d, s), r, c, st) == Lines.Line.step(s, r, c, st): Maybe<&2, RLines.State>
 }:
-  h => Step.same.at(d, s, c, st, Lines.Line.rule(r, c, Lines.State.versions(st)))(h)
+  h => Step.same.at(d, s, c, st, RLines.Line.rule(r, c, RLines.State.versions(st)))(h)
 
 # after the node adds d, a run of a line that d is no vote for a slot of ends
 # where it ended
@@ -2326,8 +2328,8 @@ def Run.same(
   +s: Facts.Facts(),
   +r: Maybe<&2, List<&2, Types.Entry>>,
   +c: Ledgers.Line,
-  +st: Lines.State,
-  m: Maybe<&2, Lines.State>
+  +st: RLines.State,
+  m: Maybe<&2, RLines.State>
 ) -> {
   Delta.spares(d, c) == True{}: Bool
 } -> {
@@ -2339,7 +2341,7 @@ def Run.same(
     st,
     m
   )
-    == Lines.Line.run(fuel, s, r, c, st, m): Lines.State
+    == Lines.Line.run(fuel, s, r, c, st, m): RLines.State
 }:
   match fuel m:
     case 0n _:
@@ -2348,7 +2350,7 @@ def Run.same(
       h => {==}
     case 1n+(+f) Some{+st2}:
       +h => (
-        %Step.same(d, s, r, c, st2)(h): {Lines.Line.run(f, Delta.to(d, s), r, c, st2, Lines.Line.step(Delta.to(d, s), r, c, st2)) == Lines.Line.run(f, s, r, c, st2, _): Lines.State}
+        %Step.same(d, s, r, c, st2)(h): {Lines.Line.run(f, Delta.to(d, s), r, c, st2, Lines.Line.step(Delta.to(d, s), r, c, st2)) == Lines.Line.run(f, s, r, c, st2, _): RLines.State}
         Run.same(f, d, s, r, c, st2, Lines.Line.step(Delta.to(d, s), r, c, st2))(h))
 
 # after the node adds d, a line that d is no vote for a slot of goes from a
@@ -2358,14 +2360,14 @@ def Start.same(
   +s: Facts.Facts(),
   +r: Maybe<&2, List<&2, Types.Entry>>,
   +c: Ledgers.Line,
-  +st: Lines.State
+  +st: RLines.State
 ) -> {
   Delta.spares(d, c) == True{}: Bool
-} -> {Lines.Line.start(Delta.to(d, s), r, c, st) == Lines.Line.start(s, r, c, st): Lines.State}:
+} -> {Lines.Line.start(Delta.to(d, s), r, c, st) == Lines.Line.start(s, r, c, st): RLines.State}:
   +h => (
-    %Bound.same(d, s, c)(h): {Lines.Line.start(Delta.to(d, s), r, c, st) == Lines.Line.run(_, s, r, c, st, Lines.Line.step(s, r, c, st)): Lines.State}
-    %Step.same(d, s, r, c, st)(h): {Lines.Line.start(Delta.to(d, s), r, c, st) == Lines.Line.run(Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c), s, r, c, st, _): Lines.State}
-    Run.same(Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c), d, s, r, c, st, Lines.Line.step(Delta.to(d, s), r, c, st))(h))
+    %Bound.same(d, s, c)(h): {Lines.Line.start(Delta.to(d, s), r, c, st) == Lines.Line.run(_, s, r, c, st, Lines.Line.step(s, r, c, st)): RLines.State}
+    %Step.same(d, s, r, c, st)(h): {Lines.Line.start(Delta.to(d, s), r, c, st) == Lines.Line.run(RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c), s, r, c, st, _): RLines.State}
+    Run.same(RLines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c), d, s, r, c, st, Lines.Line.step(Delta.to(d, s), r, c, st))(h))
 
 # after the node adds d, a line that d is no vote for a slot of goes from its
 # version 0 as far as before
@@ -2378,19 +2380,19 @@ def From.same(
 ) -> {
   Delta.spares(d, c) == True{}: Bool
 } -> {
-  Lines.Line.from(Delta.to(d, s), r, c, m) == Lines.Line.from(s, r, c, m): Maybe<&2, Lines.State>
+  Lines.Line.from(Delta.to(d, s), r, c, m) == Lines.Line.from(s, r, c, m): Maybe<&2, RLines.State>
 }:
   match m:
     case None{}:
       h => {==}
     case Some{+e}:
       h => Equal.cong(
-        Lines.State,
-        Maybe<&2, Lines.State>,
+        RLines.State,
+        Maybe<&2, RLines.State>,
         x => Some{x},
-        Lines.Line.start(Delta.to(d, s), r, c, Lines.State{[e], 1n}),
-        Lines.Line.start(s, r, c, Lines.State{[e], 1n}),
-        Start.same(d, s, r, c, Lines.State{[e], 1n})(h)
+        Lines.Line.start(Delta.to(d, s), r, c, RLines.State{[e], 1n}),
+        Lines.Line.start(s, r, c, RLines.State{[e], 1n}),
+        Start.same(d, s, r, c, RLines.State{[e], 1n})(h)
       )
 
 # after the node adds a d that starts no store and is no vote for a slot of
@@ -2403,10 +2405,10 @@ def Store.same(
   Delta.ok(d) == True{}: Bool
 } -> {
   Delta.spares(d, Ledgers.Line{h, None{}}) == True{}: Bool
-} -> {Lines.Store.state(Delta.to(d, s), h) == Lines.Store.state(s, h): Maybe<&2, Lines.State>}:
+} -> {Lines.Store.state(Delta.to(d, s), h) == Lines.Store.state(s, h): Maybe<&2, RLines.State>}:
   ok => sp => (
-    %First.same(d, s, h)(ok): {Lines.Store.state(Delta.to(d, s), h) == Lines.Line.from(s, None{}, Ledgers.Line{h, None{}}, _): Maybe<&2, Lines.State>}
-    From.same(d, s, None{}, Ledgers.Line{h, None{}}, Lines.Store.first(Facts.Facts.list(Delta.to(d, s)), h))(sp))
+    %First.same(d, s, h)(ok): {Lines.Store.state(Delta.to(d, s), h) == Lines.Line.from(s, None{}, Ledgers.Line{h, None{}}, _): Maybe<&2, RLines.State>}
+    From.same(d, s, None{}, Ledgers.Line{h, None{}}, RLines.Store.first(Facts.Facts.list(Delta.to(d, s)), h))(sp))
 
 # after the node adds d, the state of a branch that d is no vote for a slot
 # of is as before, once the versions m of its store are known
@@ -2418,13 +2420,13 @@ def Branch.same.at(
 ) -> {
   Delta.spares(d, c) == True{}: Bool
 } -> {
-  Lines.Branch.state(Delta.to(d, s), c, m) == Lines.Branch.state(s, c, m): Maybe<&2, Lines.State>
+  Lines.Branch.state(Delta.to(d, s), c, m) == Lines.Branch.state(s, c, m): Maybe<&2, RLines.State>
 }:
   match m:
     case None{}:
       h => {==}
     case Some{+R}:
-      h => From.same(d, s, Some{R}, c, Lines.Branch.first(R, c))(h)
+      h => From.same(d, s, Some{R}, c, RLines.Branch.first(R, c))(h)
 
 # after the node adds a d that starts no store and is no vote for a slot of
 # a branch or of its store, the state of the branch is as before
@@ -2444,10 +2446,10 @@ def Branch.same(
     Delta.to(d, s),
     Ledgers.Line{h, Some{b}}
   )
-    == Lines.Line.state(s, Ledgers.Line{h, Some{b}}): Maybe<&2, Lines.State>
+    == Lines.Line.state(s, Ledgers.Line{h, Some{b}}): Maybe<&2, RLines.State>
 }:
   ok => sp => sb => (
-    %Store.same(d, s, h)(ok)(sp): {Lines.Line.state(Delta.to(d, s), Ledgers.Line{h, Some{b}}) == Lines.Branch.state(s, Ledgers.Line{h, Some{b}}, Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, _)): Maybe<&2, Lines.State>}
+    %Store.same(d, s, h)(ok)(sp): {Lines.Line.state(Delta.to(d, s), Ledgers.Line{h, Some{b}}) == Lines.Branch.state(s, Ledgers.Line{h, Some{b}}, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)): Maybe<&2, RLines.State>}
     Branch.same.at(d, s, Ledgers.Line{h, Some{b}}, Lines.Store.versions(Delta.to(d, s), h))(sb))
 
 # a node that takes in an ask that starts no store reads each line as before
@@ -2457,22 +2459,22 @@ def Line.state_asked(
   +a: Types.Ask,
   +c: Ledgers.Line
 ) -> {
-  Facts.Request.is_start(Lines.Ask.request(a)) == False{}: Bool
+  RFacts.Request.is_start(RLines.Ask.request(a)) == False{}: Bool
 } -> {
   Lines.Line.state(
     Facts.Facts.take(name, s, Types.Fact.Ask{a}),
     c
   )
-    == Lines.Line.state(s, c): Maybe<&2, Lines.State>
+    == Lines.Line.state(s, c): Maybe<&2, RLines.State>
 }:
   match c:
     case Ledgers.Line{+h, None{}}:
       e => Store.same(Delta.Ask{name, a}, s, h)(
-        %Equal.sym(Bool, Facts.Request.is_start(Lines.Ask.request(a)), False{}, e): {Bool.not(_) == True{}: Bool}
+        %Equal.sym(Bool, RFacts.Request.is_start(RLines.Ask.request(a)), False{}, e): {Bool.not(_) == True{}: Bool}
         {==})({==})
     case Ledgers.Line{+h, Some{+b}}:
       e => Branch.same(Delta.Ask{name, a}, s, h, b)(
-        %Equal.sym(Bool, Facts.Request.is_start(Lines.Ask.request(a)), False{}, e): {Bool.not(_) == True{}: Bool}
+        %Equal.sym(Bool, RFacts.Request.is_start(RLines.Ask.request(a)), False{}, e): {Bool.not(_) == True{}: Bool}
         {==})({==})({==})
 
 # A vote of a node that decides alone
@@ -2508,12 +2510,12 @@ def Cast.none(
       nc,
       Lists.List.in_some(
         ~Types.Fact,
-        ~Facts.Seat,
-        ~Facts.Fact.is_cast,
+        ~RFacts.Seat,
+        ~RFacts.Fact.is_cast,
         ~Coded.Fact.is_eq,
         ~Coded.Fact.laws(),
         Facts.Facts.list(s),
-        Facts.Seat{name, st},
+        RFacts.Seat{name, st},
         Types.Fact.Vote{name, st, o}
       )(
         Equal.trans(
@@ -2629,8 +2631,8 @@ def Alone.beats(
 ) -> {
   Facts.Facts.cast(s, name, st) == False{}: Bool
 } -> {
-  Lines.Rival.beats(
-    Lines.Rival{Lines.Tally{Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, [name], x}, pk},
+  RLines.Rival.beats(
+    RLines.Rival{RLines.Tally{Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st, [name], x}, pk},
     o
   )
     == True{}: Bool
@@ -2668,10 +2670,10 @@ def Alone.holds(
 } -> {
   Shared.List.holds(
     ~Types.Pick,
-    ~Lines.Rival,
-    ~Lines.Rival.beats,
+    ~RLines.Rival,
+    ~RLines.Rival.beats,
     ys,
-    Lines.Rival{Lines.Tally{Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, [name], x}, pk}
+    RLines.Rival{RLines.Tally{Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st, [name], x}, pk}
   )
     == True{}: Bool
 }:
@@ -2680,20 +2682,20 @@ def Alone.holds(
       nc => {==}
     case Con{+y, +r}:
       +nc => Shared.List.all.if_both(
-        Lines.Rival.beats(
-          Lines.Rival{
-            Lines.Tally{Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, [name], x},
+        RLines.Rival.beats(
+          RLines.Rival{
+            RLines.Tally{Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st, [name], x},
             pk
           },
           y
         ),
         u => Shared.List.holds(
           ~Types.Pick,
-          ~Lines.Rival,
-          ~Lines.Rival.beats,
+          ~RLines.Rival,
+          ~RLines.Rival.beats,
           r,
-          Lines.Rival{
-            Lines.Tally{Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, [name], x},
+          RLines.Rival{
+            RLines.Tally{Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st, [name], x},
             pk
           }
         )
@@ -2723,21 +2725,21 @@ def Alone.decided(
     pk
   )(
     Shared.Bool.and_both(
-      Lines.Voting.most(
+      RLines.Voting.most(
         [name],
-        Lines.Voting{Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, pk}
+        RLines.Voting{Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st, pk}
       ),
       Shared.List.holds(
         ~Types.Pick,
-        ~Lines.Rival,
-        ~Lines.Rival.beats,
-        Lines.Votes.picks(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st),
-        Lines.Rival{
-          Lines.Tally{
-            Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}),
+        ~RLines.Rival,
+        ~RLines.Rival.beats,
+        RLines.Votes.picks(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st),
+        RLines.Rival{
+          RLines.Tally{
+            Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})),
             st,
             [name],
-            Lines.Votes.picks(
+            RLines.Votes.picks(
               Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})),
               st
             )
@@ -2749,12 +2751,12 @@ def Alone.decided(
       %Equal.sym(Bool, Facts.Facts.has(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), Types.Fact.Vote{name, st, pk}), True{}, Added.has(s, Types.Fact.Vote{name, st, pk})): {Lists.Nat.most(1n, Shared.Nat.add_if(_, 0n)) == True{}: Bool}
       {==})(
       Alone.holds(
-        Lines.Votes.picks(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st),
+        RLines.Votes.picks(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st),
         s,
         name,
         st,
         pk,
-        Lines.Votes.picks(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st)
+        RLines.Votes.picks(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st)
       )(nc)
     )
   )
@@ -2772,14 +2774,14 @@ def Alone.step(
   +pk: Types.Pick,
   +r: Maybe<&2, List<&2, Types.Entry>>
 ) -> {
-  Lines.Line.rule(r, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>
+  RLines.Line.rule(r, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
 } -> {
   Shared.List.some(
     ~Types.Entry,
     ~Ledgers.Id,
-    ~Lines.Entry.is_of,
+    ~RLines.Entry.is_of,
     vs,
-    Lines.Pick.id(pk)
+    RLines.Pick.id(pk)
   )
     == False{}: Bool
 } -> {
@@ -2789,27 +2791,27 @@ def Alone.step(
     Alone.to(s, name, c, k, pk),
     r,
     c,
-    Lines.State{vs, k}
+    RLines.State{vs, k}
   )
     == Some{
-      Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}
-    }: Maybe<&2, Lines.State>
+      RLines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}
+    }: Maybe<&2, RLines.State>
 }:
   er => ed => nc => (
-    %Equal.sym(Maybe<&2, Lines.Rule>, Lines.Line.rule(r, c, vs), Some{Lines.Rule{g, [name]}}, er): {Lines.Line.step.at(Alone.to(s, name, c, k, pk), c, Lines.State{vs, k}, _) == Some{Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}: Maybe<&2, Lines.State>}
-    %Equal.sym(Maybe<&2, Types.Pick>, Lines.Votes.decided(Alone.to(s, name, c, k, pk), Types.Step.At{c, k}, [name]), Some{pk}, Alone.decided(s, name, Types.Step.At{c, k}, pk)(nc)): {Lines.Line.step.of(Lines.State{vs, k}, _) == Some{Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}: Maybe<&2, Lines.State>}
-    %Equal.sym(Bool, Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)), False{}, ed): {Some{Lines.State.put.if(vs, k, pk, _)} == Some{Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}: Maybe<&2, Lines.State>}
+    %Equal.sym(Maybe<&2, RLines.Rule>, RLines.Line.rule(r, c, vs), Some{RLines.Rule{g, [name]}}, er): {Lines.Line.step.at(Alone.to(s, name, c, k, pk), c, RLines.State{vs, k}, _) == Some{RLines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}: Maybe<&2, RLines.State>}
+    %Equal.sym(Maybe<&2, Types.Pick>, Lines.Votes.decided(Alone.to(s, name, c, k, pk), Types.Step.At{c, k}, [name]), Some{pk}, Alone.decided(s, name, Types.Step.At{c, k}, pk)(nc)): {RLines.Line.step.of(RLines.State{vs, k}, _) == Some{RLines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}: Maybe<&2, RLines.State>}
+    %Equal.sym(Bool, Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, RLines.Pick.id(pk)), False{}, ed): {Some{RLines.State.put.if(vs, k, pk, _)} == Some{RLines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}: Maybe<&2, RLines.State>}
     {==})
 
 # the state b comes after a decided slot of the state a: its versions extend
 # those of a, and its slot is the next one
-def Step.Next(a: Lines.State, b: Lines.State) -> Type:
+def Step.Next(a: RLines.State, b: RLines.State) -> Type:
   Lists.List.Ext(
     Types.Entry,
-    Lines.State.versions(a),
-    Lines.State.versions(b)
+    RLines.State.versions(a),
+    RLines.State.versions(b)
   )
-    & {Lines.State.slot(b) == 1n+Lines.State.slot(a): Nat}
+    & {RLines.State.slot(b) == 1n+RLines.State.slot(a): Nat}
 
 # the state after a decided slot comes after the state before it, whether the
 # pick is a new version or not (dup)
@@ -2818,7 +2820,7 @@ def Step.next.if(
   +k: Nat,
   +pk: Types.Pick,
   dup: Bool
-) -> Step.Next(Lines.State{vs, k}, Lines.State.put.if(vs, k, pk, dup)):
+) -> Step.Next(RLines.State{vs, k}, RLines.State.put.if(vs, k, pk, dup)):
   match dup:
     case True{}:
       (Lists.List.ext_refl(Types.Entry, vs), {==})
@@ -2827,37 +2829,37 @@ def Step.next.if(
 
 # Step.next, once the decided pick m of the slot is known
 def Step.next.of(
-  st: Lines.State,
-  -st2: Lines.State,
+  st: RLines.State,
+  -st2: RLines.State,
   m: Maybe<&2, Types.Pick>
-) -> {Lines.Line.step.of(st, m) == Some{st2}: Maybe<&2, Lines.State>} -> Step.Next(st, st2):
+) -> {RLines.Line.step.of(st, m) == Some{st2}: Maybe<&2, RLines.State>} -> Step.Next(st, st2):
   match st m:
-    case Lines.State{+vs, +k} None{}:
+    case RLines.State{+vs, +k} None{}:
       e => Empty.absurd(
-        Step.Next(Lines.State{vs, k}, st2),
-        Shared.Maybe.none_ne_some(Lines.State, st2, e)
+        Step.Next(RLines.State{vs, k}, st2),
+        Shared.Maybe.none_ne_some(RLines.State, st2, e)
       )
-    case Lines.State{+vs, +k} Some{+pk}:
+    case RLines.State{+vs, +k} Some{+pk}:
       e => (
-        %Shared.Maybe.some_inj(Lines.State, Lines.State.put(vs, k, pk), st2, e): Step.Next(Lines.State{vs, k}, _)
-        Step.next.if(vs, k, pk, Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk))))
+        %Shared.Maybe.some_inj(RLines.State, RLines.State.put(vs, k, pk), st2, e): Step.Next(RLines.State{vs, k}, _)
+        Step.next.if(vs, k, pk, Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, RLines.Pick.id(pk))))
 
 # Step.next, once the rule u of the slot is known
 def Step.next.at(
   +s: Facts.Facts(),
   +c: Ledgers.Line,
-  +st: Lines.State,
-  -st2: Lines.State,
-  u: Maybe<&2, Lines.Rule>
-) -> {Lines.Line.step.at(s, c, st, u) == Some{st2}: Maybe<&2, Lines.State>} -> Step.Next(st, st2):
+  +st: RLines.State,
+  -st2: RLines.State,
+  u: Maybe<&2, RLines.Rule>
+) -> {Lines.Line.step.at(s, c, st, u) == Some{st2}: Maybe<&2, RLines.State>} -> Step.Next(st, st2):
   match u:
     case None{}:
-      e => Empty.absurd(Step.Next(st, st2), Shared.Maybe.none_ne_some(Lines.State, st2, e))
+      e => Empty.absurd(Step.Next(st, st2), Shared.Maybe.none_ne_some(RLines.State, st2, e))
     case Some{rule}:
       e => Step.next.of(
         st,
         st2,
-        Lines.Votes.decided(s, Types.Step.At{c, Lines.State.slot(st)}, Lines.Rule.nodes(rule))
+        Lines.Votes.decided(s, Types.Step.At{c, RLines.State.slot(st)}, RLines.Rule.nodes(rule))
       )(e)
 
 # the state after a decided slot comes after the state before it
@@ -2865,26 +2867,26 @@ def Step.next(
   +s: Facts.Facts(),
   +r: Maybe<&2, List<&2, Types.Entry>>,
   +c: Ledgers.Line,
-  +st: Lines.State,
-  -st2: Lines.State
-) -> {Lines.Line.step(s, r, c, st) == Some{st2}: Maybe<&2, Lines.State>} -> Step.Next(st, st2):
-  e => Step.next.at(s, c, st, st2, Lines.Line.rule(r, c, Lines.State.versions(st)))(e)
+  +st: RLines.State,
+  -st2: RLines.State
+) -> {Lines.Line.step(s, r, c, st) == Some{st2}: Maybe<&2, RLines.State>} -> Step.Next(st, st2):
+  e => Step.next.at(s, c, st, st2, RLines.Line.rule(r, c, RLines.State.versions(st)))(e)
 
 # the versions of a state that comes after a extend those of a
 def Next.ext(
-  -a: Lines.State,
-  -b: Lines.State,
+  -a: RLines.State,
+  -b: RLines.State,
   n: Step.Next(a, b)
-) -> Lists.List.Ext(Types.Entry, Lines.State.versions(a), Lines.State.versions(b)):
+) -> Lists.List.Ext(Types.Entry, RLines.State.versions(a), RLines.State.versions(b)):
   (x, e) = n
   x
 
 # the slot of a state that comes after a is the slot after that of a
 def Next.slot(
-  -a: Lines.State,
-  -b: Lines.State,
+  -a: RLines.State,
+  -b: RLines.State,
   n: Step.Next(a, b)
-) -> {Lines.State.slot(b) == 1n+Lines.State.slot(a): Nat}:
+) -> {RLines.State.slot(b) == 1n+RLines.State.slot(a): Nat}:
   (x, e) = n
   e
 
@@ -2894,30 +2896,30 @@ def Run.grows(
   +s: Facts.Facts(),
   +r: Maybe<&2, List<&2, Types.Entry>>,
   +c: Ledgers.Line,
-  +st: Lines.State
+  +st: RLines.State
 ) -> Lists.List.Ext(
   Types.Entry,
-  Lines.State.versions(st),
-  Lines.State.versions(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st)))
+  RLines.State.versions(st),
+  RLines.State.versions(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st)))
 ):
   match f:
     case 0n:
-      Lists.List.ext_refl(Types.Entry, Lines.State.versions(st))
+      Lists.List.ext_refl(Types.Entry, RLines.State.versions(st))
     case 1n+(+p):
       Lists.Maybe.by(
-        Lines.State,
+        RLines.State,
         m => Lists.List.Ext(
           Types.Entry,
-          Lines.State.versions(st),
-          Lines.State.versions(Lines.Line.run(1n+p, s, r, c, st, m))
+          RLines.State.versions(st),
+          RLines.State.versions(Lines.Line.run(1n+p, s, r, c, st, m))
         ),
         Lines.Line.step(s, r, c, st),
-        en => Lists.List.ext_refl(Types.Entry, Lines.State.versions(st)),
+        en => Lists.List.ext_refl(Types.Entry, RLines.State.versions(st)),
         +st2 => e2 => Lists.List.ext_trans(
           Types.Entry,
-          Lines.State.versions(st),
-          Lines.State.versions(st2),
-          Lines.State.versions(Lines.Line.run(p, s, r, c, st2, Lines.Line.step(s, r, c, st2)))
+          RLines.State.versions(st),
+          RLines.State.versions(st2),
+          RLines.State.versions(Lines.Line.run(p, s, r, c, st2, Lines.Line.step(s, r, c, st2)))
         )(Next.ext(st, st2, Step.next(s, r, c, st, st2)(e2)))(Run.grows(p, s, r, c, st2))
       )
 
@@ -2927,36 +2929,36 @@ def Run.slot_le(
   +s: Facts.Facts(),
   +r: Maybe<&2, List<&2, Types.Entry>>,
   +c: Ledgers.Line,
-  +st: Lines.State
+  +st: RLines.State
 ) -> {
   Nat.is_le(
-    Lines.State.slot(st),
-    Lines.State.slot(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st)))
+    RLines.State.slot(st),
+    RLines.State.slot(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st)))
   )
     == True{}: Bool
 }:
   match f:
     case 0n:
-      Shared.Nat.le_refl(Lines.State.slot(st))
+      Shared.Nat.le_refl(RLines.State.slot(st))
     case 1n+(+p):
       Lists.Maybe.by(
-        Lines.State,
+        RLines.State,
         m => {
           Nat.is_le(
-            Lines.State.slot(st),
-            Lines.State.slot(Lines.Line.run(1n+p, s, r, c, st, m))
+            RLines.State.slot(st),
+            RLines.State.slot(Lines.Line.run(1n+p, s, r, c, st, m))
           )
             == True{}: Bool
         },
         Lines.Line.step(s, r, c, st),
-        en => Shared.Nat.le_refl(Lines.State.slot(st)),
+        en => Shared.Nat.le_refl(RLines.State.slot(st)),
         +st2 => e2 => Shared.Nat.le_trans(
-          Lines.State.slot(st),
-          Lines.State.slot(st2),
-          Lines.State.slot(Lines.Line.run(p, s, r, c, st2, Lines.Line.step(s, r, c, st2)))
+          RLines.State.slot(st),
+          RLines.State.slot(st2),
+          RLines.State.slot(Lines.Line.run(p, s, r, c, st2, Lines.Line.step(s, r, c, st2)))
         )(
-          %Equal.sym(Nat, Lines.State.slot(st2), 1n+Lines.State.slot(st), Next.slot(st, st2, Step.next(s, r, c, st, st2)(e2))): {Nat.is_le(Lines.State.slot(st), _) == True{}: Bool}
-          Shared.Nat.le_succ(Lines.State.slot(st), Lines.State.slot(st))(Shared.Nat.le_refl(Lines.State.slot(st))))(
+          %Equal.sym(Nat, RLines.State.slot(st2), 1n+RLines.State.slot(st), Next.slot(st, st2, Step.next(s, r, c, st, st2)(e2))): {Nat.is_le(RLines.State.slot(st), _) == True{}: Bool}
+          Shared.Nat.le_succ(RLines.State.slot(st), RLines.State.slot(st))(Shared.Nat.le_refl(RLines.State.slot(st))))(
           Run.slot_le(p, s, r, c, st2)
         )
       )
@@ -2967,10 +2969,10 @@ def Step.kept.at(
   +d: Delta,
   +s: Facts.Facts(),
   +c: Ledgers.Line,
-  +st: Lines.State,
-  u: Maybe<&2, Lines.Rule>
+  +st: RLines.State,
+  u: Maybe<&2, RLines.Rule>
 ) -> {
-  Delta.keeps(d, c, Lines.State.slot(st)) == True{}: Bool
+  Delta.keeps(d, c, RLines.State.slot(st)) == True{}: Bool
 } -> {
   Lines.Line.step.at(
     Delta.to(d, s),
@@ -2978,7 +2980,7 @@ def Step.kept.at(
     st,
     u
   )
-    == Lines.Line.step.at(s, c, st, u): Maybe<&2, Lines.State>
+    == Lines.Line.step.at(s, c, st, u): Maybe<&2, RLines.State>
 }:
   match u:
     case None{}:
@@ -2986,15 +2988,15 @@ def Step.kept.at(
     case Some{+rule}:
       h => Equal.cong(
         Maybe<&2, Types.Pick>,
-        Maybe<&2, Lines.State>,
-        m => Lines.Line.step.of(st, m),
+        Maybe<&2, RLines.State>,
+        m => RLines.Line.step.of(st, m),
         Lines.Votes.decided(
           Delta.to(d, s),
-          Types.Step.At{c, Lines.State.slot(st)},
-          Lines.Rule.nodes(rule)
+          Types.Step.At{c, RLines.State.slot(st)},
+          RLines.Rule.nodes(rule)
         ),
-        Lines.Votes.decided(s, Types.Step.At{c, Lines.State.slot(st)}, Lines.Rule.nodes(rule)),
-        Decided.same(d, s, c, Lines.State.slot(st), Lines.Rule.nodes(rule))(h)
+        Lines.Votes.decided(s, Types.Step.At{c, RLines.State.slot(st)}, RLines.Rule.nodes(rule)),
+        Decided.same(d, s, c, RLines.State.slot(st), RLines.Rule.nodes(rule))(h)
       )
 
 # a number below another is not it
@@ -3037,13 +3039,13 @@ def Alone.Got(
   pk: Types.Pick,
   r: Maybe<&2, List<&2, Types.Entry>>,
   f2: Nat,
-  st: Lines.State
+  st: RLines.State
 ) -> Type:
   {
     List.get(
       &2,
       Types.Entry,
-      Lines.State.versions(
+      RLines.State.versions(
         Lines.Line.run(
           f2,
           Alone.to(s, name, c, k, pk),
@@ -3071,33 +3073,33 @@ def Alone.end(
   +pk: Types.Pick,
   +r: Maybe<&2, List<&2, Types.Entry>>
 ) -> {
-  Lines.Line.rule(r, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>
+  RLines.Line.rule(r, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
 } -> {
   Shared.List.some(
     ~Types.Entry,
     ~Ledgers.Id,
-    ~Lines.Entry.is_of,
+    ~RLines.Entry.is_of,
     vs,
-    Lines.Pick.id(pk)
+    RLines.Pick.id(pk)
   )
     == False{}: Bool
 } -> {
   Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool
 } -> {
   Nat.is_lt(k, Nat.add(f2, k)) == True{}: Bool
-} -> Alone.Got(s, name, c, vs, k, pk, r, f2, Lines.State{vs, k}):
+} -> Alone.Got(s, name, c, vs, k, pk, r, f2, RLines.State{vs, k}):
   match f2:
     case 0n:
       er => ed => nc => hl => Lists.Bool.clash(
-        Alone.Got(s, name, c, vs, k, pk, r, 0n, Lines.State{vs, k}),
+        Alone.Got(s, name, c, vs, k, pk, r, 0n, RLines.State{vs, k}),
         Nat.is_lt(k, k),
         Shared.Nat.lt_irrefl(k),
         hl
       )
     case 1n+(+p):
       er => ed => nc => hl => (
-        %Equal.sym(Maybe<&2, Lines.State>, Lines.Line.step(Alone.to(s, name, c, k, pk), r, c, Lines.State{vs, k}), Some{Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}, Alone.step(s, name, c, vs, k, g, pk, r)(er)(ed)(nc)): {List.get(&2, Types.Entry, Lines.State.versions(Lines.Line.run(1n+p, Alone.to(s, name, c, k, pk), r, c, Lines.State{vs, k}, _)), List.length(&2, Types.Entry, vs)) == Some{Types.Entry{pk, k}}: Maybe<&2, Types.Entry>}
-        Lists.List.ext_get(Types.Entry, List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), Lines.State.versions(Lines.Line.run(p, Alone.to(s, name, c, k, pk), r, c, Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}, Lines.Line.step(Alone.to(s, name, c, k, pk), r, c, Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}))), List.length(&2, Types.Entry, vs), Types.Entry{pk, k})(Run.grows(p, Alone.to(s, name, c, k, pk), r, c, Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}))(Lists.List.get_snoc(Types.Entry, vs, Types.Entry{pk, k})))
+        %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.step(Alone.to(s, name, c, k, pk), r, c, RLines.State{vs, k}), Some{RLines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}, Alone.step(s, name, c, vs, k, g, pk, r)(er)(ed)(nc)): {List.get(&2, Types.Entry, RLines.State.versions(Lines.Line.run(1n+p, Alone.to(s, name, c, k, pk), r, c, RLines.State{vs, k}, _)), List.length(&2, Types.Entry, vs)) == Some{Types.Entry{pk, k}}: Maybe<&2, Types.Entry>}
+        Lists.List.ext_get(Types.Entry, List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), RLines.State.versions(Lines.Line.run(p, Alone.to(s, name, c, k, pk), r, c, RLines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}, Lines.Line.step(Alone.to(s, name, c, k, pk), r, c, RLines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}))), List.length(&2, Types.Entry, vs), Types.Entry{pk, k})(Run.grows(p, Alone.to(s, name, c, k, pk), r, c, RLines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}))(Lists.List.get_snoc(Types.Entry, vs, Types.Entry{pk, k})))
 
 # Alone.end, from a state that is the state that the line was read up to
 def Alone.stop(
@@ -3110,27 +3112,27 @@ def Alone.stop(
   +g: Maybe<&2, String>,
   +pk: Types.Pick,
   +r: Maybe<&2, List<&2, Types.Entry>>,
-  +st: Lines.State
+  +st: RLines.State
 ) -> {
-  Lines.Line.rule(r, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>
+  RLines.Line.rule(r, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
 } -> {
   Shared.List.some(
     ~Types.Entry,
     ~Ledgers.Id,
-    ~Lines.Entry.is_of,
+    ~RLines.Entry.is_of,
     vs,
-    Lines.Pick.id(pk)
+    RLines.Pick.id(pk)
   )
     == False{}: Bool
 } -> {
   Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool
 } -> {
-  st == Lines.State{vs, k}: Lines.State
+  st == RLines.State{vs, k}: RLines.State
 } -> {
-  Nat.is_lt(k, Nat.add(f2, Lines.State.slot(st))) == True{}: Bool
+  Nat.is_lt(k, Nat.add(f2, RLines.State.slot(st))) == True{}: Bool
 } -> Alone.Got(s, name, c, vs, k, pk, r, f2, st):
   er => ed => nc => e => (
-    %Equal.sym(Lines.State, st, Lines.State{vs, k}, e): ({Nat.is_lt(k, Nat.add(f2, Lines.State.slot(_))) == True{}: Bool} -> Alone.Got(s, name, c, vs, k, pk, r, f2, _))
+    %Equal.sym(RLines.State, st, RLines.State{vs, k}, e): ({Nat.is_lt(k, Nat.add(f2, RLines.State.slot(_))) == True{}: Bool} -> Alone.Got(s, name, c, vs, k, pk, r, f2, _))
     Alone.end(f2, s, name, c, vs, k, g, pk, r)(er)(ed)(nc))
 
 # from a state whose slot is below k and decided, a run after the vote does
@@ -3144,44 +3146,44 @@ def Alone.go(
   +k: Nat,
   +pk: Types.Pick,
   +r: Maybe<&2, List<&2, Types.Entry>>,
-  +st: Lines.State,
-  +st2: Lines.State,
-  +e2: {Lines.Line.step(s, r, c, st) == Some{st2}: Maybe<&2, Lines.State>},
-  lt: {Nat.is_le(1n+Lines.State.slot(st), k) == True{}: Bool},
+  +st: RLines.State,
+  +st2: RLines.State,
+  +e2: {Lines.Line.step(s, r, c, st) == Some{st2}: Maybe<&2, RLines.State>},
+  lt: {Nat.is_le(1n+RLines.State.slot(st), k) == True{}: Bool},
   ih: @f3: Nat -> {
-    Nat.is_lt(k, Nat.add(f3, Lines.State.slot(st2))) == True{}: Bool
+    Nat.is_lt(k, Nat.add(f3, RLines.State.slot(st2))) == True{}: Bool
   } -> Alone.Got(s, name, c, vs, k, pk, r, f3, st2)
 ) -> {
-  Nat.is_lt(k, Nat.add(f2, Lines.State.slot(st))) == True{}: Bool
+  Nat.is_lt(k, Nat.add(f2, RLines.State.slot(st))) == True{}: Bool
 } -> Alone.Got(s, name, c, vs, k, pk, r, f2, st):
   match f2:
     case 0n:
       hl => Lists.Bool.clash(
         Alone.Got(s, name, c, vs, k, pk, r, 0n, st),
-        Nat.is_lt(k, Lines.State.slot(st)),
+        Nat.is_lt(k, RLines.State.slot(st)),
         Shared.Nat.le_nlt(
-          Lines.State.slot(st),
+          RLines.State.slot(st),
           k
         )(
           Shared.Nat.le_trans(
-            Lines.State.slot(st),
-            1n+Lines.State.slot(st),
+            RLines.State.slot(st),
+            1n+RLines.State.slot(st),
             k
           )(
             Shared.Nat.le_succ(
-              Lines.State.slot(st),
-              Lines.State.slot(st)
-            )(Shared.Nat.le_refl(Lines.State.slot(st)))
+              RLines.State.slot(st),
+              RLines.State.slot(st)
+            )(Shared.Nat.le_refl(RLines.State.slot(st)))
           )(lt)
         ),
         hl
       )
     case 1n+(+p):
       hl => (
-        %Equal.sym(Maybe<&2, Lines.State>, Lines.Line.step(Alone.to(s, name, c, k, pk), r, c, st), Some{st2}, Equal.trans(Maybe<&2, Lines.State>, Lines.Line.step(Alone.to(s, name, c, k, pk), r, c, st), Lines.Line.step(s, r, c, st), Some{st2}, Step.kept.at(Delta.Vote{name, c, k, pk}, s, c, st, Lines.Line.rule(r, c, Lines.State.versions(st)))(Alone.keeps(name, c, k, pk, Lines.State.slot(st))(lt)), e2)): {List.get(&2, Types.Entry, Lines.State.versions(Lines.Line.run(1n+p, Alone.to(s, name, c, k, pk), r, c, st, _)), List.length(&2, Types.Entry, vs)) == Some{Types.Entry{pk, k}}: Maybe<&2, Types.Entry>}
+        %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.step(Alone.to(s, name, c, k, pk), r, c, st), Some{st2}, Equal.trans(Maybe<&2, RLines.State>, Lines.Line.step(Alone.to(s, name, c, k, pk), r, c, st), Lines.Line.step(s, r, c, st), Some{st2}, Step.kept.at(Delta.Vote{name, c, k, pk}, s, c, st, RLines.Line.rule(r, c, RLines.State.versions(st)))(Alone.keeps(name, c, k, pk, RLines.State.slot(st))(lt)), e2)): {List.get(&2, Types.Entry, RLines.State.versions(Lines.Line.run(1n+p, Alone.to(s, name, c, k, pk), r, c, st, _)), List.length(&2, Types.Entry, vs)) == Some{Types.Entry{pk, k}}: Maybe<&2, Types.Entry>}
         ih(p)(
-        %Equal.sym(Nat, Lines.State.slot(st2), 1n+Lines.State.slot(st), Next.slot(st, st2, Step.next(s, r, c, st, st2)(e2))): {Nat.is_lt(k, Nat.add(p, _)) == True{}: Bool}
-        %Equal.sym(Nat, Nat.add(p, 1n+Lines.State.slot(st)), 1n+Nat.add(p, Lines.State.slot(st)), Shared.Nat.add_succ(p, Lines.State.slot(st))): {Nat.is_lt(k, _) == True{}: Bool}
+        %Equal.sym(Nat, RLines.State.slot(st2), 1n+RLines.State.slot(st), Next.slot(st, st2, Step.next(s, r, c, st, st2)(e2))): {Nat.is_lt(k, Nat.add(p, _)) == True{}: Bool}
+        %Equal.sym(Nat, Nat.add(p, 1n+RLines.State.slot(st)), 1n+Nat.add(p, RLines.State.slot(st)), Shared.Nat.add_succ(p, RLines.State.slot(st))): {Nat.is_lt(k, _) == True{}: Bool}
         hl))
 
 # bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- a proof does not run
@@ -3199,24 +3201,24 @@ def Alone.run(
   +g: Maybe<&2, String>,
   +pk: Types.Pick,
   +r: Maybe<&2, List<&2, Types.Entry>>,
-  +st: Lines.State
+  +st: RLines.State
 ) -> {
-  Lines.Line.rule(r, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>
+  RLines.Line.rule(r, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
 } -> {
   Shared.List.some(
     ~Types.Entry,
     ~Ledgers.Id,
-    ~Lines.Entry.is_of,
+    ~RLines.Entry.is_of,
     vs,
-    Lines.Pick.id(pk)
+    RLines.Pick.id(pk)
   )
     == False{}: Bool
 } -> {
   Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool
 } -> {
-  Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st)) == Lines.State{vs, k}: Lines.State
+  Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st)) == RLines.State{vs, k}: RLines.State
 } -> {
-  Nat.is_lt(k, Nat.add(f2, Lines.State.slot(st))) == True{}: Bool
+  Nat.is_lt(k, Nat.add(f2, RLines.State.slot(st))) == True{}: Bool
 } -> Alone.Got(s, name, c, vs, k, pk, r, f2, st):
   match f:
     case 0n:
@@ -3234,17 +3236,17 @@ def Alone.run(
       )(er)(ed)(nc)(e)(hl)
     case 1n+(+p):
       +er => +ed => +nc => e => hl => Lists.Maybe.by(
-        Lines.State,
+        RLines.State,
         m => {
-          Lines.Line.run(1n+p, s, r, c, st, m) == Lines.State{vs, k}: Lines.State
+          Lines.Line.run(1n+p, s, r, c, st, m) == RLines.State{vs, k}: RLines.State
         } -> {
-          Nat.is_lt(k, Nat.add(f2, Lines.State.slot(st))) == True{}: Bool
+          Nat.is_lt(k, Nat.add(f2, RLines.State.slot(st))) == True{}: Bool
         } -> Alone.Got(s, name, c, vs, k, pk, r, f2, st),
         Lines.Line.step(s, r, c, st),
         en => e1 => hl1 => Alone.stop(f2, s, name, c, vs, k, g, pk, r, st)(er)(ed)(nc)(e1)(hl1),
         +st2 => +e2 => +e1 => hl1 => Alone.go(f2, s, name, c, vs, k, pk, r, st, st2, e2, (
             %Next.slot(st, st2, Step.next(s, r, c, st, st2)(e2)): {Nat.is_le(_, k) == True{}: Bool}
-            %e1: {Nat.is_le(Lines.State.slot(st2), Lines.State.slot(_)) == True{}: Bool}
+            %e1: {Nat.is_le(RLines.State.slot(st2), RLines.State.slot(_)) == True{}: Bool}
             Run.slot_le(p, s, r, c, st2)), +f3 => h3 => Alone.run(p, f3, s, name, c, vs, k, g, pk, r, st2)(er)(ed)(nc)(e1)(h3))(hl1)
       )(e)(hl)
 # bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
@@ -3260,7 +3262,7 @@ def Line.root_ne(
     et => Equal.cong(
       Ledgers.Line,
       Bool,
-      l => Lines.Line.is_root(l),
+      l => RLines.Line.is_root(l),
       Ledgers.Line{h, None{}},
       Ledgers.Line{h, Some{b}},
       Ledgers.Line.is_eq_sound(Ledgers.Line{h, None{}}, Ledgers.Line{h, Some{b}})(et)
@@ -3278,19 +3280,19 @@ def Alone.fuel(
 ) -> {
   Nat.is_lt(
     k,
-    Nat.add(Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c), 1n)
+    Nat.add(RLines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c), 1n)
   )
     == True{}: Bool
 }:
   Shared.Nat.lt_le(
     k,
-    Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c),
-    Nat.add(Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c), 1n)
+    RLines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c),
+    Nat.add(RLines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c), 1n)
   )(
     Shared.Nat.lt_le(
       k,
       1n+k,
-      Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c)
+      RLines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c)
     )(
       Shared.Nat.lt_succ(k)
     )(
@@ -3335,7 +3337,7 @@ def Alone.fuel(
         )
       )
     )
-  )(Shared.Nat.le_add_first(Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c), 1n))
+  )(Shared.Nat.le_add_first(RLines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c), 1n))
 
 # the state x has versions, and the version after the versions vs is the
 # pick pk of the slot k
@@ -3343,16 +3345,16 @@ def Alone.Made(
   vs: List<&2, Types.Entry>,
   k: Nat,
   pk: Types.Pick,
-  x: Maybe<&2, Lines.State>
+  x: Maybe<&2, RLines.State>
 ) -> Type:
   Exists(
     List<&2, Types.Entry>,
     vs2 => {
       Maybe.map(
         &2,
-        Lines.State,
+        RLines.State,
         List<&2, Types.Entry>,
-        Lines.State.versions,
+        RLines.State.versions,
         x
       )
         == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
@@ -3381,37 +3383,37 @@ def Alone.from(
   +r: Maybe<&2, List<&2, Types.Entry>>,
   m: Maybe<&2, Types.Entry>
 ) -> {
-  Lines.Line.rule(r, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>
+  RLines.Line.rule(r, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
 } -> {
   Shared.List.some(
     ~Types.Entry,
     ~Ledgers.Id,
-    ~Lines.Entry.is_of,
+    ~RLines.Entry.is_of,
     vs,
-    Lines.Pick.id(pk)
+    RLines.Pick.id(pk)
   )
     == False{}: Bool
 } -> {
   Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool
 } -> {
-  Lines.Line.from(s, r, c, m) == Some{Lines.State{vs, k}}: Maybe<&2, Lines.State>
+  Lines.Line.from(s, r, c, m) == Some{RLines.State{vs, k}}: Maybe<&2, RLines.State>
 } -> Alone.Made(vs, k, pk, Lines.Line.from(Alone.to(s, name, c, k, pk), r, c, m)):
   match m:
     case None{}:
       er => ed => nc => e => Empty.absurd(
         Alone.Made(vs, k, pk, None{}),
-        Shared.Maybe.none_ne_some(Lines.State, Lines.State{vs, k}, e)
+        Shared.Maybe.none_ne_some(RLines.State, RLines.State{vs, k}, e)
       )
     case Some{+e0}:
       er => ed => nc => e => (
-        Lines.State.versions(
-          Lines.Line.start(Alone.to(s, name, c, k, pk), r, c, Lines.State{[e0], 1n})
+        RLines.State.versions(
+          Lines.Line.start(Alone.to(s, name, c, k, pk), r, c, RLines.State{[e0], 1n})
         ),
         (
           {==},
           Alone.run(
-            Lines.Line.bound(Facts.Facts.list(s), c),
-            Lines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c),
+            RLines.Line.bound(Facts.Facts.list(s), c),
+            RLines.Line.bound(Facts.Facts.list(Alone.to(s, name, c, k, pk)), c),
             s,
             name,
             c,
@@ -3420,7 +3422,7 @@ def Alone.from(
             g,
             pk,
             r,
-            Lines.State{[e0], 1n}
+            RLines.State{[e0], 1n}
           )(
             er
           )(
@@ -3429,9 +3431,9 @@ def Alone.from(
             nc
           )(
             Shared.Maybe.some_inj(
-              Lines.State,
-              Lines.Line.start(s, r, c, Lines.State{[e0], 1n}),
-              Lines.State{vs, k},
+              RLines.State,
+              Lines.Line.start(s, r, c, RLines.State{[e0], 1n}),
+              RLines.State{vs, k},
               e
             )
           )(Alone.fuel(s, name, c, k, pk))
@@ -3449,26 +3451,26 @@ def Alone.branch(
   +pk: Types.Pick,
   m: Maybe<&2, List<&2, Types.Entry>>
 ) -> {
-  Lines.Rule.after.of(c, vs, m) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>
+  RLines.Rule.after.of(c, vs, m) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
 } -> {
   Shared.List.some(
     ~Types.Entry,
     ~Ledgers.Id,
-    ~Lines.Entry.is_of,
+    ~RLines.Entry.is_of,
     vs,
-    Lines.Pick.id(pk)
+    RLines.Pick.id(pk)
   )
     == False{}: Bool
 } -> {
   Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool
 } -> {
-  Lines.Branch.state(s, c, m) == Some{Lines.State{vs, k}}: Maybe<&2, Lines.State>
+  Lines.Branch.state(s, c, m) == Some{RLines.State{vs, k}}: Maybe<&2, RLines.State>
 } -> Alone.Made(vs, k, pk, Lines.Branch.state(Alone.to(s, name, c, k, pk), c, m)):
   match m:
     case None{}:
       er => ed => nc => e => Empty.absurd(
         Alone.Made(vs, k, pk, None{}),
-        Shared.Maybe.none_ne_some(Lines.State, Lines.State{vs, k}, e)
+        Shared.Maybe.none_ne_some(RLines.State, RLines.State{vs, k}, e)
       )
     case Some{+R}:
       er => ed => nc => e => Alone.from(
@@ -3480,7 +3482,7 @@ def Alone.branch(
         g,
         pk,
         Some{R},
-        Lines.Branch.first(R, c)
+        RLines.Branch.first(R, c)
       )(er)(ed)(nc)(e)
 
 # a node that alone decides the next slot of a line, and votes there for a
@@ -3495,16 +3497,16 @@ def Line.voted_alone(
   +g: Maybe<&2, String>,
   +pk: Types.Pick
 ) -> {
-  Lines.Line.state(s, c) == Some{Lines.State{vs, k}}: Maybe<&2, Lines.State>
+  Lines.Line.state(s, c) == Some{RLines.State{vs, k}}: Maybe<&2, RLines.State>
 } -> {
-  Lines.Rule.after(s, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>
+  Lines.Rule.after(s, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
 } -> {
   Shared.List.some(
     ~Types.Entry,
     ~Ledgers.Id,
-    ~Lines.Entry.is_of,
+    ~RLines.Entry.is_of,
     vs,
-    Lines.Pick.id(pk)
+    RLines.Pick.id(pk)
   )
     == False{}: Bool
 } -> {
@@ -3531,11 +3533,11 @@ def Line.voted_alone(
   match c:
     case Ledgers.Line{+h, None{}}:
       es => er => ed => nc => (
-        %Equal.sym(Maybe<&2, Types.Entry>, Lines.Store.first(Facts.Facts.list(Alone.to(s, name, Ledgers.Line{h, None{}}, k, pk)), h), Lines.Store.first(Facts.Facts.list(s), h), First.same(Delta.Vote{name, Ledgers.Line{h, None{}}, k, pk}, s, h)({==})): Alone.Made(vs, k, pk, Lines.Line.from(Alone.to(s, name, Ledgers.Line{h, None{}}, k, pk), None{}, Ledgers.Line{h, None{}}, _))
-        Alone.from(s, name, Ledgers.Line{h, None{}}, vs, k, g, pk, None{}, Lines.Store.first(Facts.Facts.list(s), h))(er)(ed)(nc)(es))
+        %Equal.sym(Maybe<&2, Types.Entry>, RLines.Store.first(Facts.Facts.list(Alone.to(s, name, Ledgers.Line{h, None{}}, k, pk)), h), RLines.Store.first(Facts.Facts.list(s), h), First.same(Delta.Vote{name, Ledgers.Line{h, None{}}, k, pk}, s, h)({==})): Alone.Made(vs, k, pk, Lines.Line.from(Alone.to(s, name, Ledgers.Line{h, None{}}, k, pk), None{}, Ledgers.Line{h, None{}}, _))
+        Alone.from(s, name, Ledgers.Line{h, None{}}, vs, k, g, pk, None{}, RLines.Store.first(Facts.Facts.list(s), h))(er)(ed)(nc)(es))
     case Ledgers.Line{+h, Some{+b}}:
       es => er => ed => nc => (
-        %Equal.sym(Maybe<&2, Lines.State>, Lines.Store.state(Alone.to(s, name, Ledgers.Line{h, Some{b}}, k, pk), h), Lines.Store.state(s, h), Store.same(Delta.Vote{name, Ledgers.Line{h, Some{b}}, k, pk}, s, h)({==})(
+        %Equal.sym(Maybe<&2, RLines.State>, Lines.Store.state(Alone.to(s, name, Ledgers.Line{h, Some{b}}, k, pk), h), Lines.Store.state(s, h), Store.same(Delta.Vote{name, Ledgers.Line{h, Some{b}}, k, pk}, s, h)({==})(
           %Equal.sym(Bool, Ledgers.Line.is_eq(Ledgers.Line{h, None{}}, Ledgers.Line{h, Some{b}}), False{}, Line.root_ne(h, b)): {Bool.not(_) == True{}: Bool}
-          {==})): Alone.Made(vs, k, pk, Lines.Branch.state(Alone.to(s, name, Ledgers.Line{h, Some{b}}, k, pk), Ledgers.Line{h, Some{b}}, Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, _)))
+          {==})): Alone.Made(vs, k, pk, Lines.Branch.state(Alone.to(s, name, Ledgers.Line{h, Some{b}}, k, pk), Ledgers.Line{h, Some{b}}, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)))
         Alone.branch(s, name, Ledgers.Line{h, Some{b}}, vs, k, g, pk, Lines.Store.versions(s, h))(er)(ed)(nc)(es))

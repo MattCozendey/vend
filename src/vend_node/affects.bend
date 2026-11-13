@@ -6,7 +6,10 @@ import ./answers.bend as Answers
 import ./content.bend as Contents
 import ./facts.bend as Facts
 import ./mirror.bend as Mirror
-import ./shared/files.bend as Files
+import ./run/answers.bend as RAnswers
+import ./run/content.bend as RContents
+import ./run/facts.bend as RFacts
+import ./run/files.bend as Files
 import ./shared/format.bend as Formats
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
@@ -178,7 +181,7 @@ def Reach.add_keeps(
   qs: List<&2, String>,
   +seen: List<&2, String>,
   +x: String
-) -> In(seen, x) -> In(Answers.Reach.add(qs, seen), x):
+) -> In(seen, x) -> In(RAnswers.Reach.add(qs, seen), x):
   match qs:
     case Nil{}:
       h => h
@@ -190,13 +193,13 @@ def Reach.add_has(
   qs: List<&2, String>,
   +seen: List<&2, String>,
   +x: String
-) -> In(qs, x) -> In(Answers.Reach.add(qs, seen), x):
+) -> In(qs, x) -> In(RAnswers.Reach.add(qs, seen), x):
   match qs:
     case Nil{}:
       h => In.nil(In(seen, x), x, h)
     case Con{+q, +rest}:
-      h => In.cases(In(Answers.Reach.add(rest, Reach.put(seen, q)), x), q, rest, x, h, e => (
-          %e: In(Answers.Reach.add(rest, Reach.put(seen, q)), _)
+      h => In.cases(In(RAnswers.Reach.add(rest, Reach.put(seen, q)), x), q, rest, x, h, e => (
+          %e: In(RAnswers.Reach.add(rest, Reach.put(seen, q)), _)
           Reach.add_keeps(rest, Reach.put(seen, q), q)(Reach.put_has(seen, q))), t => Reach.add_has(rest, Reach.put(seen, q), x)(t))
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
@@ -238,7 +241,7 @@ def Reach.add_in(
   qs: List<&2, String>,
   +seen: List<&2, String>,
   +x: String
-) -> In(Answers.Reach.add(qs, seen), x) -> In(seen, x)
+) -> In(RAnswers.Reach.add(qs, seen), x) -> In(seen, x)
   | In(qs, x):
   match qs:
     case Nil{}:
@@ -256,7 +259,7 @@ def Reach.grow_keeps(
   ps: List<&2, String>,
   +seen: List<&2, String>,
   +x: String
-) -> In(seen, x) -> In(Answers.Reach.grow(b, bs, ps, seen), x):
+) -> In(seen, x) -> In(RAnswers.Reach.grow(b, bs, ps, seen), x):
   match ps:
     case Nil{}:
       h => h
@@ -265,9 +268,9 @@ def Reach.grow_keeps(
         b,
         bs,
         rest,
-        Answers.Reach.add(Answers.Reach.imports(b, bs, p), seen),
+        RAnswers.Reach.add(RAnswers.Reach.imports(b, bs, p), seen),
         x
-      )(Reach.add_keeps(Answers.Reach.imports(b, bs, p), seen, x)(h))
+      )(Reach.add_keeps(RAnswers.Reach.imports(b, bs, p), seen, x)(h))
 
 # a seen path stays seen through the rounds
 def Reach.go_keeps(
@@ -276,7 +279,7 @@ def Reach.go_keeps(
   +bs: List<&2, String>,
   +seen: List<&2, String>,
   +x: String
-) -> In(seen, x) -> In(Answers.Reach.go(fuel, b, bs, seen), x):
+) -> In(seen, x) -> In(RAnswers.Reach.go(fuel, b, bs, seen), x):
   match fuel:
     case 0n:
       h => h
@@ -285,7 +288,7 @@ def Reach.go_keeps(
         f,
         b,
         bs,
-        Answers.Reach.grow(b, bs, seen, seen),
+        RAnswers.Reach.grow(b, bs, seen, seen),
         x
       )(Reach.grow_keeps(b, bs, seen, seen, x)(h))
 
@@ -297,7 +300,7 @@ def Reach.Grown(
   seen: List<&2, String>,
   x: String
 ) -> Type:
-  In(seen, x) | Exists(String, p => In(ps, p) & In(Answers.Reach.imports(b, bs, p), x))
+  In(seen, x) | Exists(String, p => In(ps, p) & In(RAnswers.Reach.imports(b, bs, p), x))
 
 # Reach.grow_in, once x is known to have been seen or to be an import of p
 def Reach.grow_in.at(
@@ -307,7 +310,7 @@ def Reach.grow_in.at(
   -rest: List<&2, String>,
   -seen: List<&2, String>,
   -x: String,
-  r: In(seen, x) | In(Answers.Reach.imports(b, bs, p), x)
+  r: In(seen, x) | In(RAnswers.Reach.imports(b, bs, p), x)
 ) -> Reach.Grown(b, bs, p <> rest, seen, x):
   match r:
     case Inl{h}:
@@ -324,7 +327,7 @@ def Reach.grow_in.of(
   +rest: List<&2, String>,
   +seen: List<&2, String>,
   +x: String,
-  r: Reach.Grown(b, bs, rest, Answers.Reach.add(Answers.Reach.imports(b, bs, p), seen), x)
+  r: Reach.Grown(b, bs, rest, RAnswers.Reach.add(RAnswers.Reach.imports(b, bs, p), seen), x)
 ) -> Reach.Grown(b, bs, p <> rest, seen, x):
   match r:
     case Inl{h}:
@@ -335,7 +338,7 @@ def Reach.grow_in.of(
         rest,
         seen,
         x,
-        Reach.add_in(Answers.Reach.imports(b, bs, p), seen, x)(h)
+        Reach.add_in(RAnswers.Reach.imports(b, bs, p), seen, x)(h)
       )
     case Inr{w}:
       (+p2, w2) = w
@@ -350,7 +353,7 @@ def Reach.grow_in(
   ps: List<&2, String>,
   +seen: List<&2, String>,
   +x: String
-) -> In(Answers.Reach.grow(b, bs, ps, seen), x) -> Reach.Grown(b, bs, ps, seen, x):
+) -> In(RAnswers.Reach.grow(b, bs, ps, seen), x) -> Reach.Grown(b, bs, ps, seen, x):
   match ps:
     case Nil{}:
       h => Inl{h}
@@ -362,7 +365,7 @@ def Reach.grow_in(
         rest,
         seen,
         x,
-        Reach.grow_in(b, bs, rest, Answers.Reach.add(Answers.Reach.imports(b, bs, p), seen), x)(h)
+        Reach.grow_in(b, bs, rest, RAnswers.Reach.add(RAnswers.Reach.imports(b, bs, p), seen), x)(h)
       )
 
 # Reads and imports
@@ -389,7 +392,7 @@ def Content.read_of(
   hb => Equal.cong(
     Maybe<&2, Files.Files()>,
     Maybe<&2, Maybe<&2, List<&2, U32>>>,
-    m => Contents.Content.get(m, p),
+    m => RContents.Content.get(m, p),
     Contents.Content.of(s, c, k),
     Some{b},
     hb
@@ -434,7 +437,7 @@ def Reach.imports.of_in(
   +bs: List<&2, String>,
   +x: String
 ) -> In(
-  Answers.Reach.imports.of(p, bs, m),
+  RAnswers.Reach.imports.of(p, bs, m),
   x
 ) -> Exists(
   List<&2, U32>,
@@ -496,7 +499,7 @@ def Imports.step(
   +rest: List<&2, String>,
   +x: String,
   hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>},
-  hi: In(Answers.Reach.imports(b, bs, p), q),
+  hi: In(RAnswers.Reach.imports(b, bs, p), q),
   ch: Mirror.Imports(s, c, k, bs, q, rest, x)
 ) -> Mirror.Imports(s, c, k, bs, p, q <> rest, x):
   Imports.step.of(
@@ -565,7 +568,7 @@ def Reach.go_in.of(
   +seen: List<&2, String>,
   +x: String,
   hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>},
-  w: Reach.From(s, c, k, bs, Answers.Reach.grow(b, bs, seen, seen), x)
+  w: Reach.From(s, c, k, bs, RAnswers.Reach.grow(b, bs, seen, seen), x)
 ) -> Reach.From(s, c, k, bs, seen, x):
   (+u, w1) = w
   (hu, w2) = w1
@@ -583,7 +586,7 @@ def Reach.go_in(
   +seen: List<&2, String>,
   +x: String,
   +hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>}
-) -> In(Answers.Reach.go(fuel, b, bs, seen), x) -> Reach.From(s, c, k, bs, seen, x):
+) -> In(RAnswers.Reach.go(fuel, b, bs, seen), x) -> Reach.From(s, c, k, bs, seen, x):
   match fuel:
     case 0n:
       h => (x, (h, ([], {==})))
@@ -597,19 +600,19 @@ def Reach.go_in(
         seen,
         x,
         hb,
-        Reach.go_in(f, s, c, k, bs, b, Answers.Reach.grow(b, bs, seen, seen), x, hb)(h)
+        Reach.go_in(f, s, c, k, bs, b, RAnswers.Reach.grow(b, bs, seen, seen), x, hb)(h)
       )
 
 # the paths seen from us in the content b: what Reach.of answers
 def Reach.seen(+b: Files.Files(), +bs: List<&2, String>, +us: List<&2, String>) -> List<&2, String>:
-  Answers.Reach.go(
+  RAnswers.Reach.go(
     1n+Nat.add(
-      List.length(&2, String, Answers.Reach.add(us, [])),
+      List.length(&2, String, RAnswers.Reach.add(us, [])),
       List.length(&2, String, Files.Files.paths(b))
     ),
     b,
     bs,
-    Answers.Reach.add(us, [])
+    RAnswers.Reach.add(us, [])
   )
 
 # Reach.start_in, by where Reach.add found u
@@ -624,7 +627,7 @@ def Reach.start_in.of(-us: List<&2, String>, -u: String, r: In([], u) | In(us, u
 def Reach.start_in(
   +us: List<&2, String>,
   +u: String
-) -> In(Answers.Reach.add(us, []), u) -> In(us, u):
+) -> In(RAnswers.Reach.add(us, []), u) -> In(us, u):
   h => Reach.start_in.of(us, u, Reach.add_in(us, [], u)(h))
 
 # Reach.seen_in, from what Reach.go_in gives
@@ -635,7 +638,7 @@ def Reach.seen_in.of(
   -bs: List<&2, String>,
   +us: List<&2, String>,
   -x: String,
-  w: Reach.From(s, c, k, bs, Answers.Reach.add(us, []), x)
+  w: Reach.From(s, c, k, bs, RAnswers.Reach.add(us, []), x)
 ) -> Mirror.Reaches(s, c, k, bs, us, x):
   (+u, w1) = w
   (hu, w2) = w1
@@ -661,7 +664,7 @@ def Reach.seen_in(
     x,
     Reach.go_in(
       1n+Nat.add(
-        List.length(&2, String, Answers.Reach.add(us, [])),
+        List.length(&2, String, RAnswers.Reach.add(us, [])),
         List.length(&2, String, Files.Files.paths(b))
       ),
       s,
@@ -669,7 +672,7 @@ def Reach.seen_in(
       k,
       bs,
       b,
-      Answers.Reach.add(us, []),
+      RAnswers.Reach.add(us, []),
       x,
       hb
     )(h)
@@ -683,10 +686,10 @@ def Reach.Closed(b: Files.Files(), bs: List<&2, String>, seen: List<&2, String>)
   {
     Shared.List.holds(
       ~String,
-      ~Answers.Reached,
-      ~Answers.Reached.closed,
+      ~RAnswers.Reached,
+      ~RAnswers.Reached.closed,
       seen,
-      Answers.Reached{b, bs, seen}
+      RAnswers.Reached{b, bs, seen}
     )
       == True{}: Bool
   }
@@ -702,20 +705,20 @@ def Reach.closed_in(
   b,
   bs,
   seen
-) -> In(seen, p) -> In(Answers.Reach.imports(b, bs, p), x) -> In(seen, x):
+) -> In(seen, p) -> In(RAnswers.Reach.imports(b, bs, p), x) -> In(seen, x):
   hc => hp => hi => In.within(
-    Answers.Reach.imports(b, bs, p),
+    RAnswers.Reach.imports(b, bs, p),
     seen,
     x
   )(
     Lists.List.holds_in(
       ~String,
-      ~Answers.Reached,
-      ~Answers.Reached.closed,
+      ~RAnswers.Reached,
+      ~RAnswers.Reached.closed,
       ~String.eq,
       ~Texts.String.laws(),
       seen,
-      Answers.Reached{b, bs, seen},
+      RAnswers.Reached{b, bs, seen},
       p
     )(hc)(hp)
   )(hi)
@@ -734,14 +737,14 @@ def Reach.imports_of(
   Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>
 } -> {
   Contents.Content.read(s, c, k, a) == Some{Some{ws}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
-} -> In(Formats.Format.imports(a, ws, bs), q) -> In(Answers.Reach.imports(b, bs, a), q):
+} -> In(Formats.Format.imports(a, ws, bs), q) -> In(RAnswers.Reach.imports(b, bs, a), q):
   hb => er => hi =>
     %Equal.sym(
       Maybe<&2, List<&2, U32>>,
       Files.Files.get(b, a),
       Some{ws},
       Content.read_get(s, c, k, b, a, Some{ws})(hb)(er)
-    ): In(Answers.Reach.imports.of(a, bs, _), q)
+    ): In(RAnswers.Reach.imports.of(a, bs, _), q)
     hi
 
 # Reach.chain_in at a step of the chain w, given the rest of the chain (ih)
@@ -840,39 +843,39 @@ def Delta.put_skip(
 
 # the first path is among the changed ones when it differs
 def Delta.changed_head(
-  +g: Answers.Delta,
+  +g: RAnswers.Delta,
   +h: String,
   +rest: List<&2, String>
 ) -> {
-  Answers.Delta.differ(g, h) == True{}: Bool
-} -> In(List.filter.put(String, h, Answers.Delta.changed(g, rest), Answers.Delta.differ(g, h)), h):
+  RAnswers.Delta.differ(g, h) == True{}: Bool
+} -> In(List.filter.put(String, h, RAnswers.Delta.changed(g, rest), RAnswers.Delta.differ(g, h)), h):
   d =>
     %Equal.sym(
       Bool,
-      Answers.Delta.differ(g, h),
+      RAnswers.Delta.differ(g, h),
       True{},
       d
-    ): In(List.filter.put(String, h, Answers.Delta.changed(g, rest), _), h)
-    In.head(h, Answers.Delta.changed(g, rest))
+    ): In(List.filter.put(String, h, RAnswers.Delta.changed(g, rest), _), h)
+    In.head(h, RAnswers.Delta.changed(g, rest))
 
 # a path of ps that differs is among the changed ones
 def Delta.changed_has(
   ps: List<&2, String>,
-  +g: Answers.Delta,
+  +g: RAnswers.Delta,
   +p: String
 ) -> In(
   ps,
   p
-) -> {Answers.Delta.differ(g, p) == True{}: Bool} -> In(Answers.Delta.changed(g, ps), p):
+) -> {RAnswers.Delta.differ(g, p) == True{}: Bool} -> In(RAnswers.Delta.changed(g, ps), p):
   match ps:
     case Nil{}:
       hin => d => In.nil(In([], p), p, hin)
     case Con{+h, +rest}:
       hin => In.cases(
         {
-          Answers.Delta.differ(g, p) == True{}: Bool
+          RAnswers.Delta.differ(g, p) == True{}: Bool
         } -> In(
-          List.filter.put(String, h, Answers.Delta.changed(g, rest), Answers.Delta.differ(g, h)),
+          List.filter.put(String, h, RAnswers.Delta.changed(g, rest), RAnswers.Delta.differ(g, h)),
           p
         ),
         h,
@@ -880,57 +883,57 @@ def Delta.changed_has(
         p,
         hin,
         e => (
-          %e: {Answers.Delta.differ(g, _) == True{}: Bool} -> In(List.filter.put(String, h, Answers.Delta.changed(g, rest), Answers.Delta.differ(g, h)), _)
+          %e: {RAnswers.Delta.differ(g, _) == True{}: Bool} -> In(List.filter.put(String, h, RAnswers.Delta.changed(g, rest), RAnswers.Delta.differ(g, h)), _)
           Delta.changed_head(g, h, rest)),
         t => d => Delta.put_skip(
-          Answers.Delta.differ(g, h),
+          RAnswers.Delta.differ(g, h),
           h,
-          Answers.Delta.changed(g, rest),
+          RAnswers.Delta.changed(g, rest),
           p
         )(Delta.changed_has(rest, g, p)(t)(d))
       )
 
 # Delta.changed_in, from what the rest of the paths give
 def Delta.changed_in.up(
-  -g: Answers.Delta,
+  -g: RAnswers.Delta,
   h: String,
   rest: List<&2, String>,
   p: String,
-  w: In(rest, p) & {Answers.Delta.differ(g, p) == True{}: Bool}
+  w: In(rest, p) & {RAnswers.Delta.differ(g, p) == True{}: Bool}
 ) -> In(h <> rest, p)
-  & {Answers.Delta.differ(g, p) == True{}: Bool}:
+  & {RAnswers.Delta.differ(g, p) == True{}: Bool}:
   (a, d) = w
   (In.tail(h, rest, p)(a), d)
 
 # a changed path is one of ps, and differs
 def Delta.changed_in(
   ps: List<&2, String>,
-  +g: Answers.Delta,
+  +g: RAnswers.Delta,
   +p: String
 ) -> In(
-  Answers.Delta.changed(g, ps),
+  RAnswers.Delta.changed(g, ps),
   p
 ) -> In(ps, p)
-  & {Answers.Delta.differ(g, p) == True{}: Bool}:
+  & {RAnswers.Delta.differ(g, p) == True{}: Bool}:
   match ps:
     case Nil{}:
-      hin => In.nil(In([], p) & {Answers.Delta.differ(g, p) == True{}: Bool}, p, hin)
+      hin => In.nil(In([], p) & {RAnswers.Delta.differ(g, p) == True{}: Bool}, p, hin)
     case Con{+h, +rest}:
       Lists.Bool.by(
         k => In(
-          List.filter.put(String, h, Answers.Delta.changed(g, rest), k),
+          List.filter.put(String, h, RAnswers.Delta.changed(g, rest), k),
           p
         ) -> In(h <> rest, p)
-          & {Answers.Delta.differ(g, p) == True{}: Bool},
-        Answers.Delta.differ(g, h),
+          & {RAnswers.Delta.differ(g, p) == True{}: Bool},
+        RAnswers.Delta.differ(g, h),
         e => hin => In.cases(
-          In(h <> rest, p) & {Answers.Delta.differ(g, p) == True{}: Bool},
+          In(h <> rest, p) & {RAnswers.Delta.differ(g, p) == True{}: Bool},
           h,
-          Answers.Delta.changed(g, rest),
+          RAnswers.Delta.changed(g, rest),
           p,
           hin,
           eq => (
-            %eq: In(h <> rest, _) & {Answers.Delta.differ(g, _) == True{}: Bool}
+            %eq: In(h <> rest, _) & {RAnswers.Delta.differ(g, _) == True{}: Bool}
             (In.head(h, rest), e)),
           t => Delta.changed_in.up(g, h, rest, p, Delta.changed_in(rest, g, p)(t))
         ),
@@ -939,7 +942,7 @@ def Delta.changed_in(
 
 # the words x, if any, are the same as the words y, if any
 def Words.same(x: Maybe<&2, List<&2, U32>>, y: Maybe<&2, List<&2, U32>>) -> Bool:
-  Shared.Maybe.is_eq(~List<&2, U32>, ~Facts.Words.is_eq, x, y)
+  Shared.Maybe.is_eq(~List<&2, U32>, ~RFacts.Words.is_eq, x, y)
 
 # words, if any, are the same as themselves
 def Words.same_refl(x: Maybe<&2, List<&2, U32>>) -> {Words.same(x, x) == True{}: Bool}:
@@ -956,7 +959,7 @@ def Words.same_sound(
 ) -> {Words.same(x, y) == True{}: Bool} -> {x == y: Maybe<&2, List<&2, U32>>}:
   Shared.Maybe.is_eq_sound(
     ~List<&2, U32>,
-    ~Facts.Words.is_eq,
+    ~RFacts.Words.is_eq,
     a => b => Facts.Words.is_eq_sound(a, b),
     x,
     y
@@ -1011,7 +1014,7 @@ def Changed.of_differ(
   +p: String,
   ea: {Contents.Content.of(s, c, a) == Some{fa}: Maybe<&2, Files.Files()>},
   eb: {Contents.Content.of(s, c, b) == Some{fb}: Maybe<&2, Files.Files()>},
-  d: {Answers.Delta.differ(Answers.Delta{fa, fb}, p) == True{}: Bool}
+  d: {RAnswers.Delta.differ(RAnswers.Delta{fa, fb}, p) == True{}: Bool}
 ) -> Mirror.Changed(s, c, a, b, p):
   (
     Files.Files.get(fa, p),
@@ -1037,7 +1040,7 @@ def Changed.differ.at(
   ex: {Files.Files.get(fa, p) == x: Maybe<&2, List<&2, U32>>},
   ey: {Files.Files.get(fb, p) == y: Maybe<&2, List<&2, U32>>},
   ne: {x == y: Maybe<&2, List<&2, U32>>} -> Empty
-) -> {Answers.Delta.differ(Answers.Delta{fa, fb}, p) == True{}: Bool}:
+) -> {RAnswers.Delta.differ(RAnswers.Delta{fa, fb}, p) == True{}: Bool}:
   Words.ne_differ(
     Files.Files.get(fa, p),
     Files.Files.get(fb, p)
@@ -1074,7 +1077,7 @@ def Changed.differ(
   ea: {Contents.Content.of(s, c, a) == Some{fa}: Maybe<&2, Files.Files()>},
   eb: {Contents.Content.of(s, c, b) == Some{fb}: Maybe<&2, Files.Files()>},
   ch: Mirror.Changed(s, c, a, b, p)
-) -> {Answers.Delta.differ(Answers.Delta{fa, fb}, p) == True{}: Bool}:
+) -> {RAnswers.Delta.differ(RAnswers.Delta{fa, fb}, p) == True{}: Bool}:
   (+x, w) = ch
   (+y, w2) = w
   (ra, w3) = w2
@@ -1108,7 +1111,7 @@ def Reach.of_some(
   +us: List<&2, String>,
   +seen: List<&2, String>
 ) -> {
-  Answers.Reach.of(b, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>
+  RAnswers.Reach.of(b, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>
 } -> {Reach.seen(b, bs, us) == seen: List<&2, String>}
   & Reach.Closed(b, bs, Reach.seen(b, bs, us)):
   Lists.Bool.by(
@@ -1123,10 +1126,10 @@ def Reach.of_some(
       & {k == True{}: Bool},
     Shared.List.holds(
       ~String,
-      ~Answers.Reached,
-      ~Answers.Reached.closed,
+      ~RAnswers.Reached,
+      ~RAnswers.Reached.closed,
       Reach.seen(b, bs, us),
-      Answers.Reached{b, bs, Reach.seen(b, bs, us)}
+      RAnswers.Reached{b, bs, Reach.seen(b, bs, us)}
     ),
     e => h => (Shared.Maybe.some_inj(List<&2, String>, Reach.seen(b, bs, us), seen, h), {==}),
     e => h => Empty.absurd(
@@ -1146,9 +1149,9 @@ def Affects.Told(
   Exists(
     List<&2, String>,
     seen => {
-      Answers.Reach.of(fb, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>
+      RAnswers.Reach.of(fb, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>
     }
-      & {Answers.Delta.changed(Answers.Delta{fa, fb}, seen) == ps: List<&2, String>}
+      & {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>}
   )
 
 # a reply of the names ps is the changed ones among the reached paths m
@@ -1158,13 +1161,13 @@ def Affects.at_some(
   +fb: Files.Files(),
   +ps: List<&2, String>
 ) -> {
-  Answers.Affects.at(fa, fb, m) == Some{Spec.Reply.Names{ps}}: Maybe<&2, Spec.Reply>
+  RAnswers.Affects.at(fa, fb, m) == Some{Spec.Reply.Names{ps}}: Maybe<&2, Spec.Reply>
 } -> Exists(
   List<&2, String>,
   seen => {
     m == Some{seen}: Maybe<&2, List<&2, String>>
   }
-    & {Answers.Delta.changed(Answers.Delta{fa, fb}, seen) == ps: List<&2, String>}
+    & {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>}
 ):
   match m:
     case None{}:
@@ -1174,7 +1177,7 @@ def Affects.at_some(
           seen => {
             None{} == Some{seen}: Maybe<&2, List<&2, String>>
           }
-            & {Answers.Delta.changed(Answers.Delta{fa, fb}, seen) == ps: List<&2, String>}
+            & {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>}
         ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{ps}, h)
       )
@@ -1187,11 +1190,11 @@ def Affects.at_some(
             Spec.Reply,
             List<&2, String>,
             r => Reply.names(r),
-            Spec.Reply.Names{Answers.Delta.changed(Answers.Delta{fa, fb}, seen)},
+            Spec.Reply.Names{RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen)},
             Spec.Reply.Names{ps},
             Shared.Maybe.some_inj(
               Spec.Reply,
-              Spec.Reply.Names{Answers.Delta.changed(Answers.Delta{fa, fb}, seen)},
+              Spec.Reply.Names{RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen)},
               Spec.Reply.Names{ps},
               h
             )
@@ -1226,11 +1229,11 @@ def Affects.of_some(
   +bs: List<&2, String>,
   +ps: List<&2, String>
 ) -> {
-  Answers.Affects.of(old, new, us, bs) == Some{Spec.Reply.Names{ps}}: Maybe<&2, Spec.Reply>
+  RAnswers.Affects.of(old, new, us, bs) == Some{Spec.Reply.Names{ps}}: Maybe<&2, Spec.Reply>
 } -> Affects.Some(old, new, us, bs, ps):
   match old new:
     case Some{+fa} Some{+fb}:
-      h => (fa, (fb, ({==}, ({==}, Affects.at_some(Answers.Reach.of(fb, bs, us), fa, fb, ps)(h)))))
+      h => (fa, (fb, ({==}, ({==}, Affects.at_some(RAnswers.Reach.of(fb, bs, us), fa, fb, ps)(h)))))
     case Some{fa} None{}:
       h => Empty.absurd(
         Affects.Some(Some{fa}, None{}, us, bs, ps),
@@ -1256,17 +1259,17 @@ def Affects.names(
   +ps: List<&2, String>,
   +seen: List<&2, String>,
   es: {Reach.seen(fb, bs, us) == seen: List<&2, String>},
-  ep: {Answers.Delta.changed(Answers.Delta{fa, fb}, seen) == ps: List<&2, String>}
-) -> {Answers.Delta.changed(Answers.Delta{fa, fb}, Reach.seen(fb, bs, us)) == ps: List<&2, String>}:
+  ep: {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>}
+) -> {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, Reach.seen(fb, bs, us)) == ps: List<&2, String>}:
   Equal.trans(
     List<&2, String>,
-    Answers.Delta.changed(Answers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
-    Answers.Delta.changed(Answers.Delta{fa, fb}, seen),
+    RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
+    RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen),
     ps,
     Equal.cong(
       List<&2, String>,
       List<&2, String>,
-      z => Answers.Delta.changed(Answers.Delta{fa, fb}, z),
+      z => RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, z),
       Reach.seen(fb, bs, us),
       seen,
       es
@@ -1286,26 +1289,26 @@ def Affects.told_in(
   +ps: List<&2, String>,
   +p: String,
   +seen: List<&2, String>,
-  er: {Answers.Reach.of(fb, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>},
-  ep: {Answers.Delta.changed(Answers.Delta{fa, fb}, seen) == ps: List<&2, String>},
+  er: {RAnswers.Reach.of(fb, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>},
+  ep: {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>},
   hin: In(ps, p)
 ) -> In(
   Reach.seen(fb, bs, us),
   p
 )
-  & {Answers.Delta.differ(Answers.Delta{fa, fb}, p) == True{}: Bool}:
+  & {RAnswers.Delta.differ(RAnswers.Delta{fa, fb}, p) == True{}: Bool}:
   Delta.changed_in(
     Reach.seen(fb, bs, us),
-    Answers.Delta{fa, fb},
+    RAnswers.Delta{fa, fb},
     p
   )(
     In.cast(
       ps,
-      Answers.Delta.changed(Answers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
+      RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
       p,
       Equal.sym(
         List<&2, String>,
-        Answers.Delta.changed(Answers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
+        RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
         ps,
         Affects.names(
           fa,
@@ -1344,7 +1347,7 @@ def Core.affects_only.at(
     Reach.seen(fb, bs, us),
     p
   )
-    & {Answers.Delta.differ(Answers.Delta{fa, fb}, p) == True{}: Bool}
+    & {RAnswers.Delta.differ(RAnswers.Delta{fa, fb}, p) == True{}: Bool}
 ) -> Mirror.Changed(s, c, a, b, p)
   & Mirror.Reaches(s, c, b, bs, us, p):
   (hs, d) = w
@@ -1438,14 +1441,14 @@ def Core.affects_all.at(
   +seen: List<&2, String>,
   ea: {Contents.Content.of(s, c, a) == Some{fa}: Maybe<&2, Files.Files()>},
   +eb: {Contents.Content.of(s, c, b) == Some{fb}: Maybe<&2, Files.Files()>},
-  +er: {Answers.Reach.of(fb, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>},
-  ep: {Answers.Delta.changed(Answers.Delta{fa, fb}, seen) == ps: List<&2, String>},
+  +er: {RAnswers.Reach.of(fb, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>},
+  ep: {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>},
   ch: Mirror.Changed(s, c, a, b, p),
   hu: In(us, u),
   chain: Mirror.Imports(s, c, b, bs, u, qs, p)
 ) -> In(ps, p):
   In.cast(
-    Answers.Delta.changed(Answers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
+    RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
     ps,
     p,
     Affects.names(
@@ -1464,7 +1467,7 @@ def Core.affects_all.at(
     ),
     Delta.changed_has(
       Reach.seen(fb, bs, us),
-      Answers.Delta{fa, fb},
+      RAnswers.Delta{fa, fb},
       p
     )(
       Reach.chain_in(
@@ -1488,12 +1491,12 @@ def Core.affects_all.at(
       )(
         Reach.go_keeps(
           1n+Nat.add(
-            List.length(&2, String, Answers.Reach.add(us, [])),
+            List.length(&2, String, RAnswers.Reach.add(us, [])),
             List.length(&2, String, Files.Files.paths(fb))
           ),
           fb,
           bs,
-          Answers.Reach.add(us, []),
+          RAnswers.Reach.add(us, []),
           u
         )(Reach.add_has(us, [], u)(hu))
       )
