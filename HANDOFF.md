@@ -19,15 +19,20 @@ of work". These are the decisions.
    name (`Trust` in `facts.bend`), so the laws that need `Honest` release it. Names that start with
    `~` are reserved: no node has one (`Node.name_free`), so this never names a node.
 2. Speed: all code that runs works on plain values and builds no proof (`src/vend_node/run/`,
-   `node.bend`). The proofs are beside it, in the law world. Next: the node keeps the state of each
-   line and the content of each version, proven equal to the reads (after rounds).
-3. Rounds: in work. A majority must be enough to decide when a node is lost (README).
+   `node.bend`). The proofs are beside it, in the law world. In work: the node keeps the state of
+   each line, then the content of each version, proven equal to the reads.
+3. Rounds: done. A slot is decided when more than half of its nodes cast a sound vote for one
+   pick in one round. The ballots of a node for a slot are a chain (`Step.At{line, slot, turn}`):
+   a ballot counts only with all the earlier ones, so a node cannot hide a vote. A ballot is a vote
+   or a pass to a higher round; every reader checks it (`run/rounds.bend`). Two rounds never decide
+   two picks (`safety.bend`, the Paxos argument, no liar premise). When the node whose turn it is
+   is lost, the others pass and decide in the next round.
 4. `Members`, `Nodes`, `IsGroup` and `Affects` are total. The closures are proven complete with
    `src/shared/shared/shared/reach.bend` (`Closure` in `groups.bend`); no check at run time.
 5. A vote keeps its whole request. A hash would make every read depend on which asks a node holds,
    and add a second trust break. The storage and wire code will keep one copy of a request for the
    votes that name it, when IO is built.
-6. Lint: the findings left in code that runs get a lemma each, after rounds.
+6. Lint: the findings left in code that runs get a lemma each, after decision 2.
 7. `Drop` cannot drop the words of a write: the spec makes a request a change that a node holds for
    good. To look at last, with the spec.
 
@@ -52,7 +57,7 @@ that need facts skip each file that imports it. It also fails on files that this
 - A node holds facts: asks (a request, with a number that the node gives it) and votes. The set
   has one shape for its content (crit-bit tree), so the same changes give the same answers.
 - Version 0 of a store is its start. Version 0 of a branch is the first `Own` of it in the store.
-  Each later version is the pick that more than half of the nodes of the slot voted for.
+  Each later version is the pick that a slot decides (decision 3).
 - Owners only order requests. Every node reads what a decided request does.
 - A merge pins its base and a way to it from each side. A node checks the ways. It does not search.
 
