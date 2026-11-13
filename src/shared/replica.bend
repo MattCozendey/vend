@@ -1340,6 +1340,14 @@ def Line.key(c: Ledgers.Line) -> List<&2, U32>:
 def Tops() -> Data:
   Crits.Dict(Top)
 
+# a set of lines, by the key of each
+def Lines() -> Data:
+  Crits.Dict(Ledgers.Line)
+
+# the line c is among the lines ls
+def Lines.has(ls: Lines(), c: Ledgers.Line) -> Bool:
+  Crits.Dict.has(Ledgers.Line, ls, Line.key(c))
+
 # the top of the line c among the tops ts
 def Tops.get(ts: Tops(), c: Ledgers.Line) -> Maybe<&2, Top>:
   Crits.Dict.get(Top, ts, Line.key(c))
@@ -3106,7 +3114,8 @@ def Led.Sound(-mach: Machine(), -d: Led(mach), -kern: Kernel(mach, d), -l: Led.L
 # what a replica does next: a request arrives; it takes in the entries that
 # another replica sent; it keeps words as data; a client that is connected to
 # it asks for a request that changes who votes; it passes to the next round on
-# a line; or it lets go of what it no longer uses
+# a line; it lets go of what it no longer uses; or it goes on with the work
+# that a deed left (Kind.busy)
 type Deed<-Q: Data> is Data:
   Deed.Ask{id: Ledgers.Id, time: String, ask: Q}
   Deed.Take{sent: List<&2, Ledgers.Entry<Q>>}
@@ -3114,6 +3123,7 @@ type Deed<-Q: Data> is Data:
   Deed.Consent{ask: Hashes.Hash}
   Deed.Pass{line: Ledgers.Line}
   Deed.Drop{names: List<&2, Ledgers.Name>}
+  Deed.Work{}
 
 # the entries that the deed x brings
 def Deed.entries(-Q: Data, x: Deed<Q>) -> List<&2, Ledgers.Entry<Q>>:
@@ -3131,6 +3141,8 @@ def Deed.entries(-Q: Data, x: Deed<Q>) -> List<&2, Ledgers.Entry<Q>>:
     case Deed.Pass{c}:
       []
     case Deed.Drop{ns}:
+      []
+    case Deed.Work{}:
       []
 
 # the deed x lets go of entries
@@ -3321,9 +3333,10 @@ def Deed.checks(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), l: Led.
 # seed that holds nothing; its name; its ledger; the replica after a deed;
 # whether a client that is connected to it asked for a request; its secret
 # seed; how many ballots it cast under a root, which numbers its next one;
-# and the newest tip of a line that it ran to itself, with its height (none:
-# the line has no tip yet). A replica answers from its tops: each step runs
-# once, when it lands, and no read replays a line
+# the newest tip of each line that it ran to itself, with its height; and the
+# lines whose work a deed left to a later one. A replica answers from its
+# tops: each step runs once, when it lands, and no read replays a line. Each
+# deed does a bounded part of the work: a kernel may ask for ever
 def Replica.Ops(-mach: Machine(), -d: Led(mach), -R: Data) -> Type:
   (String -> Hashes.Hash -> R)
     & (
@@ -3334,7 +3347,7 @@ def Replica.Ops(-mach: Machine(), -d: Led(mach), -R: Data) -> Type:
               (R -> Deed<Machine.Q(mach)> -> R)
                 & (
                   (R -> Hashes.Hash -> Bool)
-                    & ((R -> Hashes.Hash) & ((R -> Hashes.Hash -> U32) & (R -> Tops())))
+                    & ((R -> Hashes.Hash) & ((R -> Hashes.Hash -> U32) & ((R -> Tops()) & (R -> Lines()))))
                 )
             )
         )
@@ -3394,13 +3407,13 @@ def Kind.consented(
   k: Replica.Kind(mach, d)
 ) -> Kind.R(mach, d, k) -> Hashes.Hash -> Bool:
   match k:
-    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, Tuple{cn, tp}}}}}}}}:
+    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, Tuple{cn, Tuple{tp, bz}}}}}}}}}:
       c
 
 # the secret seed of a replica
 def Kind.seed(-mach: Machine(), -d: Led(mach), k: Replica.Kind(mach, d)) -> Kind.R(mach, d, k) -> Hashes.Hash:
   match k:
-    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, Tuple{cn, tp}}}}}}}}:
+    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, Tuple{cn, Tuple{tp, bz}}}}}}}}}:
       h
 
 # how many ballots a replica cast under a root
@@ -3410,14 +3423,20 @@ def Kind.count(
   k: Replica.Kind(mach, d)
 ) -> Kind.R(mach, d, k) -> Hashes.Hash -> U32:
   match k:
-    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, Tuple{cn, tp}}}}}}}}:
+    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, Tuple{cn, Tuple{tp, bz}}}}}}}}}:
       cn
 
 # the tops of a replica
 def Kind.tops(-mach: Machine(), -d: Led(mach), k: Replica.Kind(mach, d)) -> Kind.R(mach, d, k) -> Tops():
   match k:
-    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, Tuple{cn, tp}}}}}}}}:
+    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, Tuple{cn, Tuple{tp, bz}}}}}}}}}:
       tp
+
+# the lines whose work a deed left to a later one (Deed.Work)
+def Kind.busy(-mach: Machine(), -d: Led(mach), k: Replica.Kind(mach, d)) -> Kind.R(mach, d, k) -> Lines():
+  match k:
+    case Tuple{r, Tuple{e, Tuple{n, Tuple{l, Tuple{f, Tuple{c, Tuple{h, Tuple{cn, Tuple{tp, bz}}}}}}}}}:
+      bz
 
 # the newest tip of a line that a replica ran to itself, with its height
 # (none: the line has no tip yet)
@@ -3572,7 +3591,8 @@ def Replica.Runs(
       & Replica.Consents(mach, d, k, s, qs)
   )
 
-# that the replica s asks by itself: for each line, it holds an entry under
+# that the replica s asks by itself: for each line that is not busy, it holds
+# an entry under
 # the name of the request that the kernel says to ask for that line, from its
 # tops
 def Replica.Asks(
@@ -3584,7 +3604,7 @@ def Replica.Asks(
 ) -> Type:
   @c: Ledgers.Line -> @i: Ledgers.Id -> @time: String -> @q: Machine.Q(
     mach
-  ) -> {
+  ) -> {Lines.has(Kind.busy(mach, d, k)(s), c) == False{}: Bool} -> {
 
     Kernel.follow(mach, d, kern)(Kind.tops(mach, d, k)(s))(Kind.ledger(mach, d, k)(s))(c)
       == Some{Some{Request{i, time, q}}}: Maybe<&2, Maybe<&2, Request<Machine.Q(mach)>>>
@@ -3693,7 +3713,8 @@ def Round.now(
     voter
   )
 
-# that the replica s follows: at its top of a line where it is a voter
+# that the replica s follows: at its top of a line that is not busy, where it
+# is a voter
 # and has a key, in the round that it is in, it holds its own vote for the
 # step that the voter whose turn it is cast there, when the rules allow that
 # step, the replica can run it to the tip that it names, and a client asked
@@ -3707,7 +3728,7 @@ def Replica.Follows(
 ) -> Type:
   @c: Ledgers.Line -> @h: U32 -> @t: Tip -> @p: String -> @v: Ledgers.Step -> @from: List<
     &2,
-    String> -> {
+    String> -> {Lines.has(Kind.busy(mach, d, k)(s), c) == False{}: Bool} -> {
     Kind.top(mach, d, k)(s)(c) == Some{Top{h, t}}: Maybe<&2, Top>
   } -> {
     List.contains(~String, ~String.eq, Tip.voters(t), Kind.name(mach, d, k)(s)) == True{}: Bool
@@ -3795,7 +3816,8 @@ def Replica.voted(
     Led.voted(~mach, ~d, l, Ledgers.Place{c, h, Round.now(~mach, ~d, l, c, h, n)}, n)
   )
 
-# that the replica s leads: at its top of a line where it is a voter
+# that the replica s leads: at its top of a line that is not busy, where it
+# is a voter
 # and has a key, when the turn is its own in the round that it is in, it holds
 # a vote of its own there. In the first round: when a request waits on the
 # line that it can run alone, and that a client asked for if it changes who
@@ -3808,7 +3830,7 @@ def Replica.Leads(
   -k: Replica.Kind(mach, d),
   -s: Kind.R(mach, d, k)
 ) -> Type:
-  @c: Ledgers.Line -> @h: U32 -> @t: Tip -> {
+  @c: Ledgers.Line -> @h: U32 -> @t: Tip -> {Lines.has(Kind.busy(mach, d, k)(s), c) == False{}: Bool} -> {
     Kind.top(mach, d, k)(s)(c) == Some{Top{h, t}}: Maybe<&2, Top>
   } -> {
     List.contains(~String, ~String.eq, Tip.voters(t), Kind.name(mach, d, k)(s)) == True{}: Bool
@@ -3895,9 +3917,9 @@ def Replica.Leads(
       )
   )
 
-# that the tops of the replica s are current: a line has no top only when it
-# has no start in the ledger of s, and no step that s holds moves a line on
-# from its top. So s runs each decided step when it lands
+# that the tops of the replica s are current, on each line that is not busy:
+# it has no top only when it has no start in the ledger of s, and no step that
+# s holds moves it on from its top. So s runs each decided step when it lands
 def Replica.Tops(
   -mach: Machine(),
   -d: Led(mach),
@@ -3906,12 +3928,12 @@ def Replica.Tops(
   -s: Kind.R(mach, d, k)
 ) -> Type:
   (
-    @c: Ledgers.Line -> {
+    @c: Ledgers.Line -> {Lines.has(Kind.busy(mach, d, k)(s), c) == False{}: Bool} -> {
       Kind.top(mach, d, k)(s)(c) == None{}: Maybe<&2, Top>
     } -> {Line.start(~mach, ~d, ~kern, Kind.ledger(mach, d, k)(s), c) == None{}: Maybe<&2, Tip>}
   )
     & (
-      @c: Ledgers.Line -> @h: U32 -> @t: Tip -> {
+      @c: Ledgers.Line -> @h: U32 -> @t: Tip -> {Lines.has(Kind.busy(mach, d, k)(s), c) == False{}: Bool} -> {
         Kind.top(mach, d, k)(s)(c) == Some{Top{h, t}}: Maybe<&2, Top>
       } -> {Line.next(~mach, ~d, ~kern, Kind.ledger(mach, d, k)(s), c, h, t) == None{}: Maybe<&2, Tip>}
     )
