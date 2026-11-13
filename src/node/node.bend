@@ -6306,3 +6306,323 @@ law VendNode.try_start_or_resume:
   for n: String
   for store: Uris.Uri
   IO(Start)
+
+# The node
+# --------
+# A Vend Node holds its name, the part of each store that it uses, the
+# writers connected to it and the resources mounted to it (README). It keeps
+# each store as a replica of its own, by the root of the store, and a deed of
+# the node goes to the replica of the store it is about. A request of a
+# writer reaches the node only while the writer is connected, and when it
+# changes who votes, it comes with that writer's consent. A node only stops
+# when no resource is mounted and no writer is connected, unless forced.
+
+# a resource mounted to a branch, with the settings that its kind reads
+type Mounted is Data:
+  Mounted{uri: Uris.Uri, branch: Vend.Branch, settings: List<&2, String>}
+
+# a node: its name and seed, the replica of each store it holds a part of (by
+# the root of the store), the writers connected to it, the resources mounted
+# to it (by address), and whether it stopped
+type Node<-R: Data> is Data:
+  Node{
+    name: String,
+    seed: Hashes.Hash,
+    stores: Crits.Dict(R),
+    writers: Crits.Dict(Unit),
+    mounts: Crits.Dict(Mounted),
+    stopped: Bool
+  }
+
+# what a node does next: a writer connects or leaves; a writer asks for a
+# request, with the data that it brings; a store takes in what another node
+# sent, passes to the next round on a line, lets go of what it no longer
+# uses, or goes on with its work; a resource is mounted or unmounted; or the
+# node is asked to stop
+type Node.Deed is Data:
+  Node.Deed.Open{writer: String}
+  Node.Deed.Close{writer: String}
+  Node.Deed.Ask{id: Ledgers.Id, time: String, ask: Requests.Ask, words: List<&2, List<&2, U32>>}
+  Node.Deed.Take{store: Hashes.Hash, sent: List<&2, Ledgers.Entry<Requests.Ask>>}
+  Node.Deed.Pass{store: Hashes.Hash, line: Ledgers.Line}
+  Node.Deed.Drop{store: Hashes.Hash, names: List<&2, Ledgers.Name>}
+  Node.Deed.Work{}
+  Node.Deed.Mount{uri: Uris.Uri, branch: Vend.Branch, settings: List<&2, String>}
+  Node.Deed.Unmount{uri: Uris.Uri}
+  Node.Deed.Stop{force: Bool}
+
+# the writer of the request ID i
+def Node.author(i: Ledgers.Id) -> String:
+  match i:
+    case Ledgers.Id{a, r}:
+      a
+
+# the key of the store whose root is r, of the writer w, or of the resource u
+def Node.store_key(r: Hashes.Hash) -> List<&2, U32>:
+  Hashes.Hash.code(r, [])
+
+def Node.writer_key(w: String) -> List<&2, U32>:
+  Codes.Code.text(w, [])
+
+def Node.mount_key(u: Uris.Uri) -> List<&2, U32>:
+  Codes.Code.text(Uris.Uri.show(u), [])
+
+# the root of the store of the request q, whose entry has the hash a: the store
+# it names, or the one it starts
+def Ask.store(a: Hashes.Hash, q: Requests.Ask) -> Hashes.Hash:
+  match q:
+    case Requests.Ask.Start{os}:
+      a
+    case Requests.Ask.On{st, b, x}:
+      st
+
+# the node of the name n and the seed sd that holds nothing and runs
+def Node.empty(~R: Data, n: String, sd: Hashes.Hash) -> Node<R>:
+  Node{n, sd, Crits.Dict.new(~R), Crits.Dict.new(~Unit), Crits.Dict.new(~Mounted), False{}}
+
+# the replica of the store r at the node n (none: n holds no part of it)
+def Node.store(-R: Data, n: Node<R>, r: Hashes.Hash) -> Maybe<&2, R>:
+  match n:
+    case Node{nm, sd, ss, ws, ms, st}:
+      Crits.Dict.get(R, ss, Node.store_key(r))
+
+# the writer w is connected to the node n
+def Node.connected(-R: Data, n: Node<R>, w: String) -> Bool:
+  match n:
+    case Node{nm, sd, ss, ws, ms, st}:
+      Crits.Dict.has(Unit, ws, Node.writer_key(w))
+
+# the node n has stopped
+def Node.stopped(-R: Data, n: Node<R>) -> Bool:
+  match n:
+    case Node{nm, sd, ss, ws, ms, st}:
+      st
+
+# the node n with the replica x of the store r
+def Node.set_store(~R: Data, n: Node<R>, +r: Hashes.Hash, x: R) -> Node<R>:
+  match n:
+    case Node{nm, sd, ss, ws, ms, st}:
+      Node{nm, sd, Crits.Dict.set(~R, ss, Node.store_key(r), x), ws, ms, st}
+
+# the replica of the store r at n after the deeds xs, one after another (an
+# empty replica of the name and seed of n when n holds no part of it yet)
+def Node.store_does(
+  ~d: Vend.Led(),
+  ~k: Replicas.Replica.Kind(Requests.Ask.machine(), d),
+  +n: Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>,
+  +r: Hashes.Hash,
+  xs: List<&2, Replicas.Deed<Requests.Ask>>
+) -> Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>:
+  match n:
+    case Node{+nm, +sd, ss, ws, ms, st}:
+      Node.set_store(
+        ~Replicas.Kind.R(Requests.Ask.machine(), d, k),
+        Node{nm, sd, ss, ws, ms, st},
+        r,
+        Replicas.Kind.run(
+          ~Requests.Ask.machine(),
+          ~d,
+          ~k,
+          xs,
+          Maybe.default(
+            &2,
+            Replicas.Kind.R(Requests.Ask.machine(), d, k),
+            Crits.Dict.get(Replicas.Kind.R(Requests.Ask.machine(), d, k), ss, Node.store_key(r)),
+            Replicas.Kind.empty(Requests.Ask.machine(), d, k)(nm)(sd)
+          )
+        )
+      )
+
+# the deeds of a replica for the request q of a connected writer, whose entry
+# has the hash a: the data that it brings, the request, and the consent of
+# the writer when it changes who votes
+def Ask.deeds(+i: Ledgers.Id, +t: String, +q: Requests.Ask, a: Hashes.Hash, ws: List<&2, List<&2, U32>>) -> List<&2, Replicas.Deed<Requests.Ask>>:
+  List.append(
+    &2,
+    Replicas.Deed<Requests.Ask>,
+    [Replicas.Deed.Keep{ws}, Replicas.Deed.Ask{i, t, q}],
+    Shared.Bool.when(
+      List<&2, Replicas.Deed<Requests.Ask>>,
+      Replicas.Machine.governs(Requests.Ask.machine())(q),
+      u => [Replicas.Deed.Consent{a}],
+      u => []
+    )
+  )
+
+# the hash of the entry of the request q of the ID i at the time t
+def Ask.hash(+i: Ledgers.Id, +t: String, +q: Requests.Ask) -> Hashes.Hash:
+  Replicas.Entry.hash(~Requests.Ask.machine(), Ledgers.Entry.Ask{i, t, q})
+
+# the stores of n, as a list of their roots and replicas
+def Node.stores(-R: Data, n: Node<R>) -> List<&2, Crits.Bind<R>>:
+  match n:
+    case Node{nm, sd, ss, ws, ms, st}:
+      Crits.Dict.entries(R, ss)
+
+# n with the writer w connected (yes) or not
+def Node.writers(~R: Data, n: Node<R>, +w: String, yes: Bool) -> Node<R>:
+  match n:
+    case Node{nm, sd, ss, +ws, ms, st}:
+      Node{
+        nm,
+        sd,
+        ss,
+        Shared.Bool.when(
+          Crits.Dict(Unit),
+          yes,
+          u => Crits.Dict.set(~Unit, ws, Node.writer_key(w), Unit{}),
+          u => Crits.Dict.drop(~Unit, ws, Node.writer_key(w))
+        ),
+        ms,
+        st
+      }
+
+# n with the resource u mounted as m, or unmounted (none)
+def Node.mount(~R: Data, n: Node<R>, +u: Uris.Uri, m: Maybe<&2, Mounted>) -> Node<R>:
+  match n m:
+    case Node{nm, sd, ss, ws, ms, st} Some{x}:
+      Node{nm, sd, ss, ws, Crits.Dict.set(~Mounted, ms, Node.mount_key(u), x), st}
+    case Node{nm, sd, ss, ws, ms, st} None{}:
+      Node{nm, sd, ss, ws, Crits.Dict.drop(~Mounted, ms, Node.mount_key(u)), st}
+
+# n after it is asked to stop: it stops when forced, or when no resource is
+# mounted and no writer is connected
+def Node.stop(~R: Data, n: Node<R>, force: Bool) -> Node<R>:
+  match n:
+    case Node{nm, sd, ss, +ws, +ms, st}:
+      Node{
+        nm,
+        sd,
+        ss,
+        ws,
+        ms,
+        Bool.or(st, Bool.or(force, Bool.and(Crits.Dict.is_empty(Unit, ws), Crits.Dict.is_empty(Mounted, ms))))
+      }
+
+# the node n with the replica x under the key key
+def Node.with_store_key(~R: Data, n: Node<R>, key: List<&2, U32>, x: R) -> Node<R>:
+  match n:
+    case Node{nm, sd, ss, ws, ms, st}:
+      Node{nm, sd, Crits.Dict.set(~R, ss, key, x), ws, ms, st}
+
+# n with each replica among bs after it goes on with its work
+def Node.work(
+  ~d: Vend.Led(),
+  ~k: Replicas.Replica.Kind(Requests.Ask.machine(), d),
+  bs: List<&2, Crits.Bind<Replicas.Kind.R(Requests.Ask.machine(), d, k)>>,
+  n: Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>
+) -> Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>:
+  match bs:
+    case Nil{}:
+      n
+    case Con{Crits.Bind{key, x}, rest}:
+      Node.work(
+        ~d,
+        ~k,
+        rest,
+        Node.with_store_key(~Replicas.Kind.R(Requests.Ask.machine(), d, k), n, key, Replicas.Kind.does(Requests.Ask.machine(), d, k)(x)(Replicas.Deed.Work{}))
+      )
+
+# the node n after the deed x
+def Node.does(
+  ~d: Vend.Led(),
+  ~k: Replicas.Replica.Kind(Requests.Ask.machine(), d),
+  +n: Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>,
+  x: Node.Deed
+) -> Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>:
+  match x:
+    case Node.Deed.Open{w}:
+      Node.writers(~Replicas.Kind.R(Requests.Ask.machine(), d, k), n, w, True{})
+    case Node.Deed.Close{w}:
+      Node.writers(~Replicas.Kind.R(Requests.Ask.machine(), d, k), n, w, False{})
+    case Node.Deed.Ask{+i, +t, +q, ws}:
+      +a = Ask.hash(i, t, q)
+      Shared.Bool.when(
+        Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>,
+        Node.connected(Replicas.Kind.R(Requests.Ask.machine(), d, k), n, Node.author(i)),
+        u => Node.store_does(~d, ~k, n, Ask.store(a, q), Ask.deeds(i, t, q, a, ws)),
+        u => n
+      )
+    case Node.Deed.Take{r, es}:
+      Node.store_does(~d, ~k, n, r, [Replicas.Deed.Take{es}])
+    case Node.Deed.Pass{r, c}:
+      Node.store_does(~d, ~k, n, r, [Replicas.Deed.Pass{c}])
+    case Node.Deed.Drop{r, ns}:
+      Node.store_does(~d, ~k, n, r, [Replicas.Deed.Drop{ns}])
+    case Node.Deed.Work{}:
+      Node.work(~d, ~k, Node.stores(Replicas.Kind.R(Requests.Ask.machine(), d, k), n), n)
+    case Node.Deed.Mount{+u, b, ss}:
+      Node.mount(~Replicas.Kind.R(Requests.Ask.machine(), d, k), n, u, Some{Mounted{u, b, ss}})
+    case Node.Deed.Unmount{u}:
+      Node.mount(~Replicas.Kind.R(Requests.Ask.machine(), d, k), n, u, None{})
+    case Node.Deed.Stop{f}:
+      Node.stop(~Replicas.Kind.R(Requests.Ask.machine(), d, k), n, f)
+
+# the node n after the deeds xs, one after another
+def Node.run(
+  ~d: Vend.Led(),
+  ~k: Replicas.Replica.Kind(Requests.Ask.machine(), d),
+  xs: List<&2, Node.Deed>,
+  n: Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>
+) -> Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>:
+  match xs:
+    case Nil{}:
+      n
+    case Con{x, rest}:
+      Node.run(~d, ~k, rest, Node.does(~d, ~k, n, x))
+
+# that the node n came to be by deeds: some deeds take the node of some name
+# and seed that holds nothing to n
+def Node.Reached(-d: Vend.Led(), -k: Replicas.Replica.Kind(Requests.Ask.machine(), d), -n: Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>) -> Type:
+  Exists(
+    String,
+    name => Exists(
+      Hashes.Hash,
+      seed => Exists(
+        List<&2, Node.Deed>,
+        xs => {n == Node.run(~d, ~k, xs, Node.empty(~Replicas.Kind.R(Requests.Ask.machine(), d, k), name, seed)): Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>}
+      )
+    )
+  )
+
+# each replica that a node holds came to be by deeds, so every law of a
+# replica (Replicas.Replica.Laws) holds of the stores of a node
+law Node.stores_reached:
+  for ~d: Vend.Led()
+  for ~k: Replicas.Replica.Kind(Requests.Ask.machine(), d)
+  for n: Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>
+  for r: Hashes.Hash
+  for x: Replicas.Kind.R(Requests.Ask.machine(), d, k)
+  Node.Reached(d, k, n)
+    -> {Node.store(Replicas.Kind.R(Requests.Ask.machine(), d, k), n, r) == Some{x}: Maybe<&2, Replicas.Kind.R(Requests.Ask.machine(), d, k)>}
+    -> Replicas.Replica.Reached(Requests.Ask.machine(), d, k, x)
+
+def Node.stores_reached(d, k, n, r, x):
+  ?TODO
+
+# a request of a connected writer reaches the replica of its store: the node
+# then holds it there
+law Node.routes:
+  for ~d: Vend.Led()
+  for ~kern: Vend.Kern(d)
+  for ~k: Replicas.Replica.Kind(Requests.Ask.machine(), d)
+  for ~laws: Replicas.Replica.Laws(Requests.Ask.machine(), d, kern, k)
+  for n: Node<Replicas.Kind.R(Requests.Ask.machine(), d, k)>
+  for i: Ledgers.Id
+  for t: String
+  for q: Requests.Ask
+  for ws: List<&2, List<&2, U32>>
+  for x: Replicas.Kind.R(Requests.Ask.machine(), d, k)
+  Node.Reached(d, k, n)
+    -> {Node.connected(Replicas.Kind.R(Requests.Ask.machine(), d, k), n, Node.author(i)) == True{}: Bool}
+    -> {
+      Node.store(Replicas.Kind.R(Requests.Ask.machine(), d, k), Node.does(~d, ~k, n, Node.Deed.Ask{i, t, q, ws}), Ask.store(Ask.hash(i, t, q), q))
+        == Some{x}: Maybe<&2, Replicas.Kind.R(Requests.Ask.machine(), d, k)>
+    }
+    -> {
+      Replicas.Led.has(~Requests.Ask.machine(), ~d, Replicas.Kind.ledger(Requests.Ask.machine(), d, k)(x), Ledgers.Entry.Ask{i, t, q})
+        == True{}: Bool
+    }
+
+def Node.routes(d, kern, k, laws, n, i, t, q, ws, x):
+  ?TODO
