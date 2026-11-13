@@ -6239,3 +6239,19 @@ law Node.affects_complete:
 
 def Node.affects_complete(d, kern, l, view, x, ts):
   Reads.Affects.complete_law(~d, ~kern, l, view, x, ts)
+
+# The kernel of Vend, built
+# -------------------------
+
+# the kernel of Vend on the ledger d: what a request does is Ask.act, which
+# stays as the ledger grows (Ask.act_stable); what a node asks by itself is
+# Own.due, from its tops
+def Kern.vend(~d: Vend.Led()) -> Vend.Kern(d):
+  (
+    l => t => c => i => q => Owners.Ask.act(~d, l, t, c, i, q),
+    (Ask.act_stable(d), hs => l => c => Owners.Own.due(~d, hs, l, c))
+  )
+
+# the kernel of Vend obeys the rules of Vend by its construction
+def Kernel.vend(~d: Vend.Led()) -> Kernel(d):
+  (Kern.vend(~d), (l => t => c => i => q => {==}, hs => l => c => {==}))
