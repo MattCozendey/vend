@@ -1247,3 +1247,1437 @@ def Core.read_stays(+name: String, +s: Facts.Facts(), +s2: Facts.Facts(), +c: Le
       )
     )
   }
+
+# Merges
+# ------
+
+# a reply of names comes from names that are known
+def Reply.names_some(m: Maybe<&2, List<&2, String>>, -cs: List<&2, String>) -> {Answers.Reply.names(m) == Some{Spec.Reply.Names{cs}}: Maybe<&2, Spec.Reply>} -> {
+  m == Some{cs}: Maybe<&2, List<&2, String>>
+}:
+  match m:
+    case None{}:
+      h => Empty.absurd({None{} == Some{cs}: Maybe<&2, List<&2, String>>}, Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{cs}, h))
+    case Some{ns}:
+      h => Equal.cong(
+        Maybe<&2, Spec.Reply>,
+        Maybe<&2, List<&2, String>>,
+        x => Some{Reply.to_names(x, cs)},
+        Some{Spec.Reply.Names{ns}},
+        Some{Spec.Reply.Names{cs}},
+        h
+      )
+
+# a reply of a point comes from a point that is known
+def Reply.point_some(m: Maybe<&2, Spec.Point>, -a: Spec.Point) -> {Answers.Reply.point(m) == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>} -> {
+  m == Some{a}: Maybe<&2, Spec.Point>
+}:
+  match m:
+    case None{}:
+      h => Empty.absurd({None{} == Some{a}: Maybe<&2, Spec.Point>}, Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Point{a}, h))
+    case Some{x}:
+      h => Equal.cong(
+        Maybe<&2, Spec.Reply>,
+        Maybe<&2, Spec.Point>,
+        y => Some{Reply.to_point(y, a)},
+        Some{Spec.Reply.Point{x}},
+        Some{Spec.Reply.Point{a}},
+        h
+      )
+
+# the second of two parents is the point that the entry takes
+def Entry.takes_second(m: Maybe<&2, Spec.Point>, -x: Spec.Point, -y: Spec.Point, -z: Spec.Point) -> {
+  x <> Shared.Maybe.cons(Spec.Point, m, []) == [y, z]: List<&2, Spec.Point>
+} -> {m == Some{z}: Maybe<&2, Spec.Point>}:
+  match m:
+    case None{}:
+      h => Empty.absurd(
+        {None{} == Some{z}: Maybe<&2, Spec.Point>},
+        Shared.Maybe.none_ne_some(
+          Spec.Point,
+          z,
+          Equal.cong(List<&2, Spec.Point>, Maybe<&2, Spec.Point>, l => List.get(&2, Spec.Point, l, 1n), [x], [y, z], h)
+        )
+      )
+    case Some{w}:
+      h => Equal.cong(List<&2, Spec.Point>, Maybe<&2, Spec.Point>, l => List.get(&2, Spec.Point, l, 1n), [x, w], [y, z], h)
+
+# the entry of a version whose parents are version k and the point f, v takes
+# that point
+def Parents.takes(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +e: Types.Entry, -f: Ledgers.Line, -v: Nat) -> {
+  Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>
+} -> {
+  Answers.Answer.of(s, Spec.Question.Parents{c, 1n+k}) == Some{Spec.Reply.Points{[Spec.Point{c, k}, Spec.Point{f, v}]}}: Maybe<&2, Spec.Reply>
+} -> {Contents.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>}:
+  ha => hp => Entry.takes_second(Contents.Entry.takes(e), Spec.Point{c, k}, Spec.Point{c, k}, Spec.Point{f, v})(
+    Equal.cong(
+      Maybe<&2, Spec.Reply>,
+      List<&2, Spec.Point>,
+      x => Reply.to_points(x, []),
+      Some{Spec.Reply.Points{Contents.Entry.parents(c, 1n+k, e)}},
+      Some{Spec.Reply.Points{[Spec.Point{c, k}, Spec.Point{f, v}]}},
+      Eq.to(
+        Maybe<&2, Types.Entry>,
+        m => {Answers.Reply.parents(c, 1n+k, m) == Some{Spec.Reply.Points{[Spec.Point{c, k}, Spec.Point{f, v}]}}: Maybe<&2, Spec.Reply>},
+        Lines.Line.at(s, c, 1n+k),
+        Some{e},
+        ha,
+        hp
+      )
+    )
+  )
+
+# a reply of a point, given when b holds, says that b holds
+def When.point(b: Bool, m: Maybe<&2, Spec.Point>, -a: Spec.Point) -> {
+  Answers.Reply.point(Shared.Maybe.when(Spec.Point, b, u => m)) == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>
+} -> {b == True{}: Bool} & {m == Some{a}: Maybe<&2, Spec.Point>}:
+  match b:
+    case False{}:
+      h => Empty.absurd(
+        {False{} == True{}: Bool} & {m == Some{a}: Maybe<&2, Spec.Point>},
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Point{a}, h)
+      )
+    case True{}:
+      h => ({==}, Reply.point_some(m, a)(h))
+
+# a merge whose base a node tells fits, and pins that base
+def Base.fits(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +i: Ledgers.Id, +e: Types.Entry, -a: Spec.Point) -> {
+  Answers.Line.find(s, c, i) == Some{Answers.Found{1n+k, e}}: Maybe<&2, Answers.Found>
+} -> {Answers.Answer.of(s, Spec.Question.Base{c, i}) == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>} -> {
+  Contents.Merge.fits(s, c, k, e) == True{}: Bool
+}
+  & {Contents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>}:
+  hf => hb => When.point(Contents.Merge.fits(s, c, k, e), Contents.Entry.base(e), a)(
+    Eq.to(
+      Maybe<&2, Answers.Found>,
+      m => {
+        Answers.Reply.point(Answers.Found.then(Spec.Point, m, k2 => e2 => Answers.Base.of(s, c, k2, e2))) == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>
+      },
+      Answers.Line.find(s, c, i),
+      Some{Answers.Found{1n+k, e}},
+      hf,
+      hb
+    )
+  )
+
+# the paths that a node tells clash in a merge are those of Clashes.of
+def Clashes.reply(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +i: Ledgers.Id, +e: Types.Entry, -cs: List<&2, String>) -> {
+  Answers.Line.find(s, c, i) == Some{Answers.Found{1n+k, e}}: Maybe<&2, Answers.Found>
+} -> {Answers.Answer.of(s, Spec.Question.Clashes{c, i}) == Some{Spec.Reply.Names{cs}}: Maybe<&2, Spec.Reply>} -> {
+  Answers.Clashes.of(s, c, 1n+k, e) == Some{cs}: Maybe<&2, List<&2, String>>
+}:
+  hf => hc => Reply.names_some(Answers.Clashes.of(s, c, 1n+k, e), cs)(
+    Eq.to(
+      Maybe<&2, Answers.Found>,
+      m => {
+        Answers.Reply.names(Answers.Found.then(List<&2, String>, m, k2 => e2 => Answers.Clashes.of(s, c, k2, e2))) == Some{Spec.Reply.Names{cs}}: Maybe<&2, Spec.Reply>
+      },
+      Answers.Line.find(s, c, i),
+      Some{Answers.Found{1n+k, e}},
+      hf,
+      hc
+    )
+  )
+
+# what a merge that fits gives from three held contents is their merge
+def Merge.of_all(-r: Spec.Request, -fits: Bool, -prev: Maybe<&2, Files.Files()>, -other: Maybe<&2, Files.Files()>, -base: Maybe<&2, Files.Files()>, -f: Ledgers.Line, -x: Ledgers.Line, -B: Files.Files(), -O: Files.Files(), -T: Files.Files(), -M: Files.Files()) -> {
+  r == Spec.Request.Merge{f, x}: Spec.Request
+} -> {fits == True{}: Bool} -> {prev == Some{O}: Maybe<&2, Files.Files()>} -> {other == Some{T}: Maybe<&2, Files.Files()>} -> {base == Some{B}: Maybe<&2, Files.Files()>} -> {
+  Contents.Content.apply(r, fits, prev, other, base) == Some{M}: Maybe<&2, Files.Files()>
+} -> {Contents.Merge.files(B, O, T) == M: Files.Files()}:
+  hr => hf => hp => ho => hb => h => Shared.Maybe.some_inj(
+    Files.Files(),
+    Contents.Merge.files(B, O, T),
+    M,
+    Eq.to(
+      Maybe<&2, Files.Files()>,
+      y => {Contents.Merge.of(True{}, Some{O}, Some{T}, y) == Some{M}: Maybe<&2, Files.Files()>},
+      base,
+      Some{B},
+      hb,
+      Eq.to(
+        Maybe<&2, Files.Files()>,
+        y => {Contents.Merge.of(True{}, Some{O}, y, base) == Some{M}: Maybe<&2, Files.Files()>},
+        other,
+        Some{T},
+        ho,
+        Eq.to(
+          Maybe<&2, Files.Files()>,
+          y => {Contents.Merge.of(True{}, y, other, base) == Some{M}: Maybe<&2, Files.Files()>},
+          prev,
+          Some{O},
+          hp,
+          Eq.to(
+            Bool,
+            y => {Contents.Merge.of(y, prev, other, base) == Some{M}: Maybe<&2, Files.Files()>},
+            fits,
+            True{},
+            hf,
+            Eq.to(
+              Spec.Request,
+              y => {Contents.Content.apply(y, fits, prev, other, base) == Some{M}: Maybe<&2, Files.Files()>},
+              r,
+              Spec.Request.Merge{f, x},
+              hr,
+              h
+            )
+          )
+        )
+      )
+    )
+  )
+
+# the paths that clash in a merge that fits, of three held contents, are
+# their clashes
+def Clashes.at_all(-r: Spec.Request, -fits: Bool, -base: Maybe<&2, Files.Files()>, -ours: Maybe<&2, Files.Files()>, -theirs: Maybe<&2, Files.Files()>, -f: Ledgers.Line, -x: Ledgers.Line, -B: Files.Files(), -O: Files.Files(), -T: Files.Files(), -cs: List<&2, String>) -> {
+  r == Spec.Request.Merge{f, x}: Spec.Request
+} -> {fits == True{}: Bool} -> {base == Some{B}: Maybe<&2, Files.Files()>} -> {ours == Some{O}: Maybe<&2, Files.Files()>} -> {theirs == Some{T}: Maybe<&2, Files.Files()>} -> {
+  Answers.Clashes.at(Bool.and(Contents.Request.is_merge(r), fits), base, ours, theirs) == Some{cs}: Maybe<&2, List<&2, String>>
+} -> {Contents.Merge.clashes(B, O, T) == cs: List<&2, String>}:
+  hr => hf => hb => ho => ht => h => Shared.Maybe.some_inj(
+    List<&2, String>,
+    Contents.Merge.clashes(B, O, T),
+    cs,
+    Eq.to(
+      Maybe<&2, Files.Files()>,
+      y => {Answers.Clashes.at(True{}, Some{B}, Some{O}, y) == Some{cs}: Maybe<&2, List<&2, String>>},
+      theirs,
+      Some{T},
+      ht,
+      Eq.to(
+        Maybe<&2, Files.Files()>,
+        y => {Answers.Clashes.at(True{}, Some{B}, y, theirs) == Some{cs}: Maybe<&2, List<&2, String>>},
+        ours,
+        Some{O},
+        ho,
+        Eq.to(
+          Maybe<&2, Files.Files()>,
+          y => {Answers.Clashes.at(True{}, y, ours, theirs) == Some{cs}: Maybe<&2, List<&2, String>>},
+          base,
+          Some{B},
+          hb,
+          Eq.to(
+            Bool,
+            y => {Answers.Clashes.at(Bool.and(True{}, y), base, ours, theirs) == Some{cs}: Maybe<&2, List<&2, String>>},
+            fits,
+            True{},
+            hf,
+            Eq.to(
+              Spec.Request,
+              y => {Answers.Clashes.at(Bool.and(Contents.Request.is_merge(y), fits), base, ours, theirs) == Some{cs}: Maybe<&2, List<&2, String>>},
+              r,
+              Spec.Request.Merge{f, x},
+              hr,
+              h
+            )
+          )
+        )
+      )
+    )
+  )
+
+# a merge put at another path is not read at p
+def Merge.put_other(acc: Files.Files(), +q: String, m: Maybe<&2, Maybe<&2, List<&2, U32>>>, +p: String) -> {String.eq(q, p) == False{}: Bool} -> {
+  Files.Files.get(Contents.Merge.put(acc, q, m), p) == Files.Files.get(acc, p): Maybe<&2, List<&2, U32>>
+}:
+  match m:
+    case None{}:
+      h => {==}
+    case Some{x}:
+      h => Files.Files.get_set_other(acc, q, x, p)(h)
+
+# a merge put at p that does not clash is read there
+def Merge.put_same(+acc: Files.Files(), +p: String, m: Maybe<&2, Maybe<&2, List<&2, U32>>>, -x: Maybe<&2, List<&2, U32>>) -> {m == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>} -> {
+  Files.Files.get(Contents.Merge.put(acc, p, m), p) == x: Maybe<&2, List<&2, U32>>
+}:
+  match m:
+    case None{}:
+      h => Empty.absurd({Files.Files.get(acc, p) == x: Maybe<&2, List<&2, U32>>}, Shared.Maybe.none_ne_some(Maybe<&2, List<&2, U32>>, x, h))
+    case Some{+y}:
+      h => Eq.to(
+        Maybe<&2, List<&2, U32>>,
+        z => {Files.Files.get(Files.Files.set(acc, p, y), p) == z: Maybe<&2, List<&2, U32>>},
+        y,
+        x,
+        Shared.Maybe.some_inj(Maybe<&2, List<&2, U32>>, y, x, h),
+        Files.Files.get_set_same(acc, p, y)
+      )
+
+# the merge of the path q, put where q is p, is read at p
+def Merge.put_hit(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), +acc: Files.Files(), +q: String, +p: String, -x: Maybe<&2, List<&2, U32>>) -> {
+  Contents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {String.eq(q, p) == True{}: Bool} -> {
+  Files.Files.get(Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)), p) == x: Maybe<&2, List<&2, U32>>
+}:
+  hm => et => Eq.back(
+    String,
+    y => {Files.Files.get(Contents.Merge.put(acc, y, Contents.Merge.at(b, o, t, y)), p) == x: Maybe<&2, List<&2, U32>>},
+    q,
+    p,
+    Texts.String.eq_sound(q, p)(et),
+    Merge.put_same(acc, p, Contents.Merge.at(b, o, t, p), x)(hm)
+  )
+
+# after the merge of the path q is put, p still reads its merge x, if it did
+def Merge.put_keep(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), +acc: Files.Files(), +q: String, +p: String, -x: Maybe<&2, List<&2, U32>>) -> {
+  Contents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {Files.Files.get(acc, p) == x: Maybe<&2, List<&2, U32>>} -> {
+  Files.Files.get(Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)), p) == x: Maybe<&2, List<&2, U32>>
+}:
+  hm => ha => Lists.Bool.by(
+    d => {Files.Files.get(Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)), p) == x: Maybe<&2, List<&2, U32>>},
+    String.eq(q, p),
+    et => Merge.put_hit(b, o, t, acc, q, p, x)(hm)(et),
+    ef => Equal.trans(
+      Maybe<&2, List<&2, U32>>,
+      Files.Files.get(Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)), p),
+      Files.Files.get(acc, p),
+      x,
+      Merge.put_other(acc, q, Contents.Merge.at(b, o, t, q), p)(ef),
+      ha
+    )
+  )
+
+# the merges of the paths ps keep what p reads, if it is its merge
+def Merge.fold_keep(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), ps: List<&2, String>, +acc: Files.Files(), +p: String, -x: Maybe<&2, List<&2, U32>>) -> {
+  Contents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {Files.Files.get(acc, p) == x: Maybe<&2, List<&2, U32>>} -> {Files.Files.get(Contents.Merge.fold(b, o, t, ps, acc), p) == x: Maybe<&2, List<&2, U32>>}:
+  match ps:
+    case Nil{}:
+      hm => ha => ha
+    case Con{+q, +rest}:
+      +hm => ha => Merge.fold_keep(b, o, t, rest, Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)), p, x)(hm)(
+        Merge.put_keep(b, o, t, acc, q, p, x)(hm)(ha)
+      )
+
+# after the merges of the paths ps, one of them reads its merge
+def Merge.fold_in(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), ps: List<&2, String>, +acc: Files.Files(), +p: String, -x: Maybe<&2, List<&2, U32>>) -> {
+  Contents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {List.contains(~String, ~String.eq, ps, p) == True{}: Bool} -> {
+  Files.Files.get(Contents.Merge.fold(b, o, t, ps, acc), p) == x: Maybe<&2, List<&2, U32>>
+}:
+  match ps:
+    case Nil{}:
+      hm => hc => Empty.absurd({Files.Files.get(acc, p) == x: Maybe<&2, List<&2, U32>>}, Shared.Bool.false_ne_true(hc))
+    case Con{+q, +rest}:
+      +hm => hc => Lists.Bool.by(
+        d => {List.any.if(u => List.contains(~String, ~String.eq, rest, p), d) == True{}: Bool} -> {
+          Files.Files.get(Contents.Merge.fold(b, o, t, rest, Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q))), p) == x: Maybe<&2, List<&2, U32>>
+        },
+        String.eq(q, p),
+        et => hc2 => Merge.fold_keep(b, o, t, rest, Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)), p, x)(hm)(
+          Merge.put_hit(b, o, t, acc, q, p, x)(hm)(et)
+        ),
+        ef => hc2 => Merge.fold_in(b, o, t, rest, Contents.Merge.put(acc, q, Contents.Merge.at(b, o, t, q)), p, x)(hm)(hc2)
+      )(hc)
+
+# a member of r is a member of r with q, kept or not
+def Filter.put_in(+q: String, +r: List<&2, String>, keep: Bool, +p: String) -> {List.contains(~String, ~String.eq, r, p) == True{}: Bool} -> {
+  List.contains(~String, ~String.eq, List.filter.put(String, q, r, keep), p) == True{}: Bool
+}:
+  match keep:
+    case False{}:
+      h => h
+    case True{}:
+      h => Shared.List.contains_cons(~String, ~String.eq, q, r, p)(h)
+
+# a path kept before r is a member
+def Filter.put_head(+p: String, -r: List<&2, String>) -> {List.contains(~String, ~String.eq, List.filter.put(String, p, r, True{}), p) == True{}: Bool}:
+  Eq.back(
+    Bool,
+    d => {List.any.if(u => List.contains(~String, ~String.eq, r, p), d) == True{}: Bool},
+    String.eq(p, p),
+    True{},
+    Texts.String.eq_refl(p),
+    {==}
+  )
+
+# a path among ps whose merge clashes is among the clashes of ps
+def Merge.clashes_in(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), ps: List<&2, String>, +p: String) -> {
+  Contents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {List.contains(~String, ~String.eq, ps, p) == True{}: Bool} -> {
+  List.contains(~String, ~String.eq, Contents.Merge.clashes.go(b, o, t, ps), p) == True{}: Bool
+}:
+  match ps:
+    case Nil{}:
+      hm => hc => hc
+    case Con{+q, +rest}:
+      +hm => hc => Lists.Bool.by(
+        d => {List.any.if(u => List.contains(~String, ~String.eq, rest, p), d) == True{}: Bool} -> {
+          List.contains(
+            ~String,
+            ~String.eq,
+            List.filter.put(
+              String,
+              q,
+              Contents.Merge.clashes.go(b, o, t, rest),
+              Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, Contents.Merge.at(b, o, t, q))
+            ),
+            p
+          )
+            == True{}: Bool
+        },
+        String.eq(q, p),
+        et => hc2 => Eq.back(
+          String,
+          y => {
+            List.contains(
+              ~String,
+              ~String.eq,
+              List.filter.put(
+                String,
+                y,
+                Contents.Merge.clashes.go(b, o, t, rest),
+                Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, Contents.Merge.at(b, o, t, y))
+              ),
+              p
+            )
+              == True{}: Bool
+          },
+          q,
+          p,
+          Texts.String.eq_sound(q, p)(et),
+          Eq.back(
+            Maybe<&2, Maybe<&2, List<&2, U32>>>,
+            m => {
+              List.contains(
+                ~String,
+                ~String.eq,
+                List.filter.put(String, p, Contents.Merge.clashes.go(b, o, t, rest), Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, m)),
+                p
+              )
+                == True{}: Bool
+            },
+            Contents.Merge.at(b, o, t, p),
+            None{},
+            hm,
+            Filter.put_head(p, Contents.Merge.clashes.go(b, o, t, rest))
+          )
+        ),
+        ef => hc2 => Filter.put_in(
+          q,
+          Contents.Merge.clashes.go(b, o, t, rest),
+          Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, Contents.Merge.at(b, o, t, q)),
+          p
+        )(
+          Merge.clashes_in(b, o, t, rest, p)(hm)(hc2)
+        )
+      )(hc)
+
+# a Maybe that is no Some is None
+def Maybe.none_by(-A: Data, m: Maybe<&2, A>, f: @x: A -> {m == Some{x}: Maybe<&2, A>} -> Empty) -> {m == None{}: Maybe<&2, A>}:
+  Lists.Maybe.by(
+    A,
+    y => {y == None{}: Maybe<&2, A>},
+    m,
+    en => {==},
+    x => es => Empty.absurd({Some{x} == None{}: Maybe<&2, A>}, f(x)(es))
+  )
+
+# a path that the base holds is among the paths of a merge
+def Paths.base(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), +p: String, +ws: List<&2, U32>) -> {Files.Files.get(b, p) == Some{ws}: Maybe<&2, List<&2, U32>>} -> {
+  List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p) == True{}: Bool
+}:
+  h => Shared.List.contains_left(
+    ~String,
+    ~String.eq,
+    Files.Files.paths(b),
+    List.append(&2, String, Files.Files.paths(o), Files.Files.paths(t)),
+    p,
+    Files.Files.get_paths(b, p, ws)(h)
+  )
+
+# a path that ours holds is among the paths of a merge
+def Paths.ours(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), +p: String, +ws: List<&2, U32>) -> {Files.Files.get(o, p) == Some{ws}: Maybe<&2, List<&2, U32>>} -> {
+  List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p) == True{}: Bool
+}:
+  h => Shared.List.contains_right(
+    ~String,
+    ~String.eq,
+    Files.Files.paths(b),
+    List.append(&2, String, Files.Files.paths(o), Files.Files.paths(t)),
+    p,
+    Shared.List.contains_left(~String, ~String.eq, Files.Files.paths(o), Files.Files.paths(t), p, Files.Files.get_paths(o, p, ws)(h))
+  )
+
+# a path that theirs holds is among the paths of a merge
+def Paths.theirs(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), +p: String, +ws: List<&2, U32>) -> {Files.Files.get(t, p) == Some{ws}: Maybe<&2, List<&2, U32>>} -> {
+  List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p) == True{}: Bool
+}:
+  h => Shared.List.contains_right(
+    ~String,
+    ~String.eq,
+    Files.Files.paths(b),
+    List.append(&2, String, Files.Files.paths(o), Files.Files.paths(t)),
+    p,
+    Shared.List.contains_right(~String, ~String.eq, Files.Files.paths(o), Files.Files.paths(t), p, Files.Files.get_paths(t, p, ws)(h))
+  )
+
+# the merge of a path is the merge of the words that the three contents hold
+def Merge.at_as(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), +p: String, -x: Maybe<&2, List<&2, U32>>, -y: Maybe<&2, List<&2, U32>>, -z: Maybe<&2, List<&2, U32>>) -> {Files.Files.get(b, p) == x: Maybe<&2, List<&2, U32>>} -> {
+  Files.Files.get(o, p) == y: Maybe<&2, List<&2, U32>>
+} -> {Files.Files.get(t, p) == z: Maybe<&2, List<&2, U32>>} -> {Contents.Merge.at(b, o, t, p) == Formats.Format.merge(p, x, y, z): Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  hb => ho => ht => Eq.back(
+    Maybe<&2, List<&2, U32>>,
+    w => {Formats.Format.merge(p, w, Files.Files.get(o, p), Files.Files.get(t, p)) == Formats.Format.merge(p, x, y, z): Maybe<&2, Maybe<&2, List<&2, U32>>>},
+    Files.Files.get(b, p),
+    x,
+    hb,
+    Eq.back(
+      Maybe<&2, List<&2, U32>>,
+      w => {Formats.Format.merge(p, x, w, Files.Files.get(t, p)) == Formats.Format.merge(p, x, y, z): Maybe<&2, Maybe<&2, List<&2, U32>>>},
+      Files.Files.get(o, p),
+      y,
+      ho,
+      Eq.back(
+        Maybe<&2, List<&2, U32>>,
+        w => {Formats.Format.merge(p, x, y, w) == Formats.Format.merge(p, x, y, z): Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Files.Files.get(t, p),
+        z,
+        ht,
+        {==}
+      )
+    )
+  )
+
+# a path that none of the three contents holds merges to no words, and ours
+# holds none there
+def Merge.out(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), +p: String) -> {
+  List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p) == False{}: Bool
+} -> {Contents.Merge.at(b, o, t, p) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>} & {Files.Files.get(o, p) == None{}: Maybe<&2, List<&2, U32>>}:
+  +hf => (
+    Equal.trans(
+      Maybe<&2, Maybe<&2, List<&2, U32>>>,
+      Contents.Merge.at(b, o, t, p),
+      Formats.Format.merge(p, None{}, None{}, None{}),
+      Some{None{}},
+      Merge.at_as(b, o, t, p, None{}, None{}, None{})(
+        Maybe.none_by(
+          List<&2, U32>,
+          Files.Files.get(b, p),
+          +ws => es => Lists.Bool.clash(
+            Empty,
+            List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
+            hf,
+            Paths.base(b, o, t, p, ws)(es)
+          )
+        )
+      )(
+        Maybe.none_by(
+          List<&2, U32>,
+          Files.Files.get(o, p),
+          +ws => es => Lists.Bool.clash(
+            Empty,
+            List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
+            hf,
+            Paths.ours(b, o, t, p, ws)(es)
+          )
+        )
+      )(
+        Maybe.none_by(
+          List<&2, U32>,
+          Files.Files.get(t, p),
+          +ws => es => Lists.Bool.clash(
+            Empty,
+            List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
+            hf,
+            Paths.theirs(b, o, t, p, ws)(es)
+          )
+        )
+      ),
+      Formats.Format.merge_same(p, None{}, None{})
+    ),
+    Maybe.none_by(
+      List<&2, U32>,
+      Files.Files.get(o, p),
+      +ws => es => Lists.Bool.clash(
+        Empty,
+        List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
+        hf,
+        Paths.ours(b, o, t, p, ws)(es)
+      )
+    )
+  )
+
+# the merge of three contents reads, at each path, the merge of the path when
+# it does not clash
+def Merge.files_get(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), +p: String, -x: Maybe<&2, List<&2, U32>>, +hm: {Contents.Merge.at(b, o, t, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>}) -> {
+  Files.Files.get(Contents.Merge.files(b, o, t), p) == x: Maybe<&2, List<&2, U32>>
+}:
+  Lists.Bool.by(
+    d => {Files.Files.get(Contents.Merge.files(b, o, t), p) == x: Maybe<&2, List<&2, U32>>},
+    List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
+    et => Merge.fold_in(b, o, t, Contents.Merge.paths(b, o, t), o, p, x)(hm)(et),
+    ef => And.by(
+      {Contents.Merge.at(b, o, t, p) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+      {Files.Files.get(o, p) == None{}: Maybe<&2, List<&2, U32>>},
+      {Files.Files.get(Contents.Merge.files(b, o, t), p) == x: Maybe<&2, List<&2, U32>>},
+      Merge.out(b, o, t, p)(ef),
+      hs => hn => Merge.fold_keep(b, o, t, Contents.Merge.paths(b, o, t), o, p, x)(hm)(
+        Eq.back(
+          Maybe<&2, List<&2, U32>>,
+          y => {Files.Files.get(o, p) == y: Maybe<&2, List<&2, U32>>},
+          x,
+          None{},
+          Shared.Maybe.some_inj(
+            Maybe<&2, List<&2, U32>>,
+            x,
+            None{},
+            Equal.trans(
+              Maybe<&2, Maybe<&2, List<&2, U32>>>,
+              Some{x},
+              Contents.Merge.at(b, o, t, p),
+              Some{None{}},
+              Equal.sym(Maybe<&2, Maybe<&2, List<&2, U32>>>, Contents.Merge.at(b, o, t, p), Some{x}, hm),
+              hs
+            )
+          ),
+          hn
+        )
+      )
+    )
+  )
+
+# a path whose merge clashes is among the clashes of the three contents
+def Merge.clashes_get(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), +p: String, +hm: {Contents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}) -> {
+  List.contains(~String, ~String.eq, Contents.Merge.clashes(b, o, t), p) == True{}: Bool
+}:
+  Lists.Bool.by(
+    d => {List.contains(~String, ~String.eq, Contents.Merge.clashes(b, o, t), p) == True{}: Bool},
+    List.contains(~String, ~String.eq, Contents.Merge.paths(b, o, t), p),
+    et => Merge.clashes_in(b, o, t, Contents.Merge.paths(b, o, t), p)(hm)(et),
+    ef => And.by(
+      {Contents.Merge.at(b, o, t, p) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+      {Files.Files.get(o, p) == None{}: Maybe<&2, List<&2, U32>>},
+      {List.contains(~String, ~String.eq, Contents.Merge.clashes(b, o, t), p) == True{}: Bool},
+      Merge.out(b, o, t, p)(ef),
+      hs => hn => Empty.absurd(
+        {List.contains(~String, ~String.eq, Contents.Merge.clashes(b, o, t), p) == True{}: Bool},
+        Shared.Maybe.none_ne_some(
+          Maybe<&2, List<&2, U32>>,
+          None{},
+          Equal.trans(
+            Maybe<&2, Maybe<&2, List<&2, U32>>>,
+            None{},
+            Contents.Merge.at(b, o, t, p),
+            Some{None{}},
+            Equal.sym(Maybe<&2, Maybe<&2, List<&2, U32>>>, Contents.Merge.at(b, o, t, p), None{}, hm),
+            hs
+          )
+        )
+      )
+    )
+  )
+
+# what Core.merge_merges says of the merge that made version 1+k of the line c
+def Merge.Merges(s: Facts.Facts(), c: Ledgers.Line, k: Nat, i: Ledgers.Id, p: String, b: Maybe<&2, List<&2, U32>>, o: Maybe<&2, List<&2, U32>>, t: Maybe<&2, List<&2, U32>>) -> Type:
+  (
+    @x: Maybe<&2, List<&2, U32>> -> {
+      Formats.Format.merge(p, b, o, t) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+    } -> {
+      Contents.Content.read(s, c, 1n+k, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+    }
+      | {Contents.Content.read(s, c, 1n+k, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+  )
+    & (
+      {
+        Formats.Format.merge(p, b, o, t) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      } -> @cs: List<&2, String> -> {
+        Answers.Answer.of(s, Spec.Question.Clashes{c, i}) == Some{Spec.Reply.Names{cs}}: Maybe<&2, Spec.Reply>
+      } -> {List.contains(~String, ~String.eq, cs, p) == True{}: Bool}
+    )
+
+# Core.merge_merges, once the entry e and the three contents are known
+def Merge.fin(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +i: Ledgers.Id,
+  +e: Types.Entry,
+  -f: Ledgers.Line,
+  -x2: Ledgers.Line,
+  +p: String,
+  -b: Maybe<&2, List<&2, U32>>,
+  -o: Maybe<&2, List<&2, U32>>,
+  -t: Maybe<&2, List<&2, U32>>,
+  +B: Files.Files(),
+  +O: Files.Files(),
+  +T: Files.Files(),
+  +ha: {Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>},
+  +hf: {Answers.Line.find(s, c, i) == Some{Answers.Found{1n+k, e}}: Maybe<&2, Answers.Found>},
+  +hr: {Answers.Entry.request(e) == Spec.Request.Merge{f, x2}: Spec.Request},
+  +hfit: {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
+  +hO: {Contents.Content.of(s, c, k) == Some{O}: Maybe<&2, Files.Files()>},
+  +hT: {
+    Contents.Content.of(
+      s,
+      Spec.Point.line(Contents.Point.or(c, Contents.Entry.takes(e))),
+      Spec.Point.n(Contents.Point.or(c, Contents.Entry.takes(e)))
+    )
+      == Some{T}: Maybe<&2, Files.Files()>
+  },
+  +hB: {
+    Contents.Content.of(
+      s,
+      Spec.Point.line(Contents.Point.or(c, Contents.Entry.base(e))),
+      Spec.Point.n(Contents.Point.or(c, Contents.Entry.base(e)))
+    )
+      == Some{B}: Maybe<&2, Files.Files()>
+  },
+  +hm: {Contents.Merge.at(B, O, T, p) == Formats.Format.merge(p, b, o, t): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> Merge.Merges(s, c, k, i, p, b, o, t):
+  (
+    x => hx => Lists.Maybe.by(
+      Files.Files(),
+      m => {Contents.Content.get(m, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>} | {Contents.Content.get(m, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+      Contents.Content.of(s, c, 1n+k),
+      en => Inr{{==}},
+      M => eM => Inl{
+        Equal.cong(
+          Maybe<&2, List<&2, U32>>,
+          Maybe<&2, Maybe<&2, List<&2, U32>>>,
+          y => Some{y},
+          Files.Files.get(M, p),
+          x,
+          Eq.to(
+            Files.Files(),
+            y => {Files.Files.get(y, p) == x: Maybe<&2, List<&2, U32>>},
+            Contents.Merge.files(B, O, T),
+            M,
+            Merge.of_all(
+              Answers.Entry.request(e),
+              Contents.Merge.fits(s, c, k, e),
+              Contents.Content.of(s, c, k),
+              Contents.Content.of(
+                s,
+                Spec.Point.line(Contents.Point.or(c, Contents.Entry.takes(e))),
+                Spec.Point.n(Contents.Point.or(c, Contents.Entry.takes(e)))
+              ),
+              Contents.Content.of(
+                s,
+                Spec.Point.line(Contents.Point.or(c, Contents.Entry.base(e))),
+                Spec.Point.n(Contents.Point.or(c, Contents.Entry.base(e)))
+              ),
+              f,
+              x2,
+              B,
+              O,
+              T,
+              M
+            )(hr)(hfit)(hO)(hT)(hB)(Content.of_step(s, c, k, e, M)(ha)(eM)),
+            Merge.files_get(
+              B,
+              O,
+              T,
+              p,
+              x,
+              Equal.trans(Maybe<&2, Maybe<&2, List<&2, U32>>>, Contents.Merge.at(B, O, T, p), Formats.Format.merge(p, b, o, t), Some{x}, hm, hx)
+            )
+          )
+        )
+      }
+    ),
+    hn => cs => hc => Eq.to(
+      List<&2, String>,
+      y => {List.contains(~String, ~String.eq, y, p) == True{}: Bool},
+      Contents.Merge.clashes(B, O, T),
+      cs,
+      Clashes.at_all(
+        Answers.Entry.request(e),
+        Contents.Merge.fits(s, c, k, e),
+        Contents.Content.of(
+          s,
+          Spec.Point.line(Contents.Point.or(c, Contents.Entry.base(e))),
+          Spec.Point.n(Contents.Point.or(c, Contents.Entry.base(e)))
+        ),
+        Contents.Content.of(s, c, k),
+        Contents.Content.of(
+          s,
+          Spec.Point.line(Contents.Point.or(c, Contents.Entry.takes(e))),
+          Spec.Point.n(Contents.Point.or(c, Contents.Entry.takes(e)))
+        ),
+        f,
+        x2,
+        B,
+        O,
+        T,
+        cs
+      )(hr)(hfit)(hB)(hO)(hT)(Clashes.reply(s, c, k, i, e, cs)(hf)(hc)),
+      Merge.clashes_get(
+        B,
+        O,
+        T,
+        p,
+        Equal.trans(Maybe<&2, Maybe<&2, List<&2, U32>>>, Contents.Merge.at(B, O, T, p), Formats.Format.merge(p, b, o, t), None{}, hm, hn)
+      )
+    )
+  )
+
+# Core.merge_merges, once the entry e, what it takes and its base are known
+def Merge.mid(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +i: Ledgers.Id,
+  +e: Types.Entry,
+  +f: Ledgers.Line,
+  -x2: Ledgers.Line,
+  +v: Nat,
+  +a: Spec.Point,
+  +p: String,
+  -b: Maybe<&2, List<&2, U32>>,
+  -o: Maybe<&2, List<&2, U32>>,
+  -t: Maybe<&2, List<&2, U32>>,
+  +ha: {Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>},
+  +hf: {Answers.Line.find(s, c, i) == Some{Answers.Found{1n+k, e}}: Maybe<&2, Answers.Found>},
+  +hr: {Answers.Entry.request(e) == Spec.Request.Merge{f, x2}: Spec.Request},
+  +hfit: {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
+  +htk: {Contents.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>},
+  +hbs: {Contents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>},
+  rb: {Contents.Content.read(s, Spec.Point.line(a), Spec.Point.n(a), p) == Some{b}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  ro: {Contents.Content.read(s, c, k, p) == Some{o}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+  rt: {Contents.Content.read(s, f, v, p) == Some{t}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+) -> Merge.Merges(s, c, k, i, p, b, o, t):
+  Ex.by(
+    Files.Files(),
+    B => {Contents.Content.of(s, Spec.Point.line(a), Spec.Point.n(a)) == Some{B}: Maybe<&2, Files.Files()>} & {Files.Files.get(B, p) == b: Maybe<&2, List<&2, U32>>},
+    Merge.Merges(s, c, k, i, p, b, o, t),
+    Content.get_some(Contents.Content.of(s, Spec.Point.line(a), Spec.Point.n(a)), p, b)(rb),
+    +B => wb => And.by(
+      {Contents.Content.of(s, Spec.Point.line(a), Spec.Point.n(a)) == Some{B}: Maybe<&2, Files.Files()>},
+      {Files.Files.get(B, p) == b: Maybe<&2, List<&2, U32>>},
+      Merge.Merges(s, c, k, i, p, b, o, t),
+      wb,
+      hB => gb => Ex.by(
+        Files.Files(),
+        O => {Contents.Content.of(s, c, k) == Some{O}: Maybe<&2, Files.Files()>} & {Files.Files.get(O, p) == o: Maybe<&2, List<&2, U32>>},
+        Merge.Merges(s, c, k, i, p, b, o, t),
+        Content.get_some(Contents.Content.of(s, c, k), p, o)(ro),
+        +O => wo => And.by(
+          {Contents.Content.of(s, c, k) == Some{O}: Maybe<&2, Files.Files()>},
+          {Files.Files.get(O, p) == o: Maybe<&2, List<&2, U32>>},
+          Merge.Merges(s, c, k, i, p, b, o, t),
+          wo,
+          hO => go => Ex.by(
+            Files.Files(),
+            T => {Contents.Content.of(s, f, v) == Some{T}: Maybe<&2, Files.Files()>} & {Files.Files.get(T, p) == t: Maybe<&2, List<&2, U32>>},
+            Merge.Merges(s, c, k, i, p, b, o, t),
+            Content.get_some(Contents.Content.of(s, f, v), p, t)(rt),
+            +T => wt => And.by(
+              {Contents.Content.of(s, f, v) == Some{T}: Maybe<&2, Files.Files()>},
+              {Files.Files.get(T, p) == t: Maybe<&2, List<&2, U32>>},
+              Merge.Merges(s, c, k, i, p, b, o, t),
+              wt,
+              hT => gt => Merge.fin(
+                s,
+                c,
+                k,
+                i,
+                e,
+                f,
+                x2,
+                p,
+                b,
+                o,
+                t,
+                B,
+                O,
+                T,
+                ha,
+                hf,
+                hr,
+                hfit,
+                hO,
+                Eq.back(
+                  Maybe<&2, Spec.Point>,
+                  m => {
+                    Contents.Content.of(s, Spec.Point.line(Contents.Point.or(c, m)), Spec.Point.n(Contents.Point.or(c, m))) == Some{T}: Maybe<&2, Files.Files()>
+                  },
+                  Contents.Entry.takes(e),
+                  Some{Spec.Point{f, v}},
+                  htk,
+                  hT
+                ),
+                Eq.back(
+                  Maybe<&2, Spec.Point>,
+                  m => {
+                    Contents.Content.of(s, Spec.Point.line(Contents.Point.or(c, m)), Spec.Point.n(Contents.Point.or(c, m))) == Some{B}: Maybe<&2, Files.Files()>
+                  },
+                  Contents.Entry.base(e),
+                  Some{a},
+                  hbs,
+                  hB
+                ),
+                Merge.at_as(B, O, T, p, b, o, t)(gb)(go)(gt)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+
+# a merge takes, for each path, the merge of the base, ours and theirs in the
+# format of the resource, and tells each path where they clash
+def Core.merge_merges(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +i: Ledgers.Id,
+  +f: Ledgers.Line,
+  +v: Nat,
+  +a: Spec.Point,
+  +p: String,
+  +b: Maybe<&2, List<&2, U32>>,
+  +o: Maybe<&2, List<&2, U32>>,
+  +t: Maybe<&2, List<&2, U32>>
+) -> Mirror.Made(s, c, 1n+k, i, Spec.Request.Merge{f, c}) -> {
+  Answers.Answer.of(
+    s,
+    Spec.Question.Parents{c, 1n+k}
+  )
+    == Some{Spec.Reply.Points{[Spec.Point{c, k}, Spec.Point{f, v}]}}: Maybe<&2, Spec.Reply>
+} -> {Answers.Answer.of(s, Spec.Question.Base{c, i}) == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>} -> {
+  Contents.Content.read(s, Spec.Point.line(a), Spec.Point.n(a), p) == Some{b}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {Contents.Content.read(s, c, k, p) == Some{o}: Maybe<&2, Maybe<&2, List<&2, U32>>>} -> {Contents.Content.read(s, f, v, p) == Some{t}: Maybe<&2, Maybe<&2, List<&2, U32>>>} -> (
+  @x: Maybe<&2, List<&2, U32>> -> {
+    Formats.Format.merge(p, b, o, t) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  } -> {
+    Contents.Content.read(s, c, 1n+k, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+  }
+    | {Contents.Content.read(s, c, 1n+k, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+)
+  & (
+    {
+      Formats.Format.merge(p, b, o, t) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+    } -> @cs: List<&2, String> -> {
+      Answers.Answer.of(s, Spec.Question.Clashes{c, i}) == Some{Spec.Reply.Names{cs}}: Maybe<&2, Spec.Reply>
+    } -> {List.contains(~String, ~String.eq, cs, p) == True{}: Bool}
+  ):
+  m => hp => hb => rb => ro => rt => Made.by(
+    Merge.Merges(s, c, k, i, p, b, o, t),
+    s,
+    c,
+    1n+k,
+    i,
+    Spec.Request.Merge{f, c},
+    m,
+    +e => +ha => +hf => hr => And.by(
+      {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
+      {Contents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>},
+      Merge.Merges(s, c, k, i, p, b, o, t),
+      Base.fits(s, c, k, i, e, a)(hf)(hb),
+      hfit => hbs => Merge.mid(
+        s,
+        c,
+        k,
+        i,
+        e,
+        f,
+        c,
+        v,
+        a,
+        p,
+        b,
+        o,
+        t,
+        ha,
+        hf,
+        hr,
+        hfit,
+        Parents.takes(s, c, k, e, f, v)(ha)(hp),
+        hbs,
+        rb,
+        ro,
+        rt
+      )
+    )
+  )
+
+# Bases
+# -----
+
+# a point is the same version as itself
+def Point.is_eq_refl(x: Spec.Point) -> {Spec.Point.is_eq(x, x) == True{}: Bool}:
+  match x:
+    case Spec.Point{+c, +k}:
+      Shared.Bool.and_both(Ledgers.Line.is_eq(c, c), Nat.is_eq(k, k))(Ledgers.Line.is_eq_refl(c))(Shared.Nat.is_eq_refl(k))
+
+# two points that are the same version are equal
+def Point.is_eq_sound(x: Spec.Point, y: Spec.Point) -> {Spec.Point.is_eq(x, y) == True{}: Bool} -> {x == y: Spec.Point}:
+  match x y:
+    case Spec.Point{+c, +j} Spec.Point{+d, +k}:
+      +h => Eq.back(
+        Ledgers.Line,
+        z => {Spec.Point{z, j} == Spec.Point{d, k}: Spec.Point},
+        c,
+        d,
+        Ledgers.Line.is_eq_sound(c, d)(Shared.Bool.and_true_left(Ledgers.Line.is_eq(c, d), Nat.is_eq(j, k))(h)),
+        Eq.back(
+          Nat,
+          z => {Spec.Point{d, z} == Spec.Point{d, k}: Spec.Point},
+          j,
+          k,
+          Shared.Nat.is_eq_sound(j, k)(Shared.Bool.and_true_right(Ledgers.Line.is_eq(c, d), Nat.is_eq(j, k))(h)),
+          {==}
+        )
+      )
+
+# a version is itself
+def Before.refl(-s: Facts.Facts(), -c: Ledgers.Line, -k: Nat) -> Mirror.Before(s, Spec.Point{c, k}, c, k):
+  ([], {==})
+
+# a point is its own version
+def Before.self(-s: Facts.Facts(), w: Spec.Point) -> Mirror.Before(s, w, Spec.Point.line(w), Spec.Point.n(w)):
+  match w:
+    case Spec.Point{c, k}:
+      ([], {==})
+
+# a chain back to w, then a chain from w back to a, is a chain back to a
+def Back.append(-s: Facts.Facts(), -a: Spec.Point, -w: Spec.Point, qs1: List<&2, Spec.Point>, -qs2: List<&2, Spec.Point>, -c: Ledgers.Line, -k: Nat) -> Mirror.Back(s, w, qs1, c, k) -> Mirror.Back(
+  s,
+  a,
+  qs2,
+  Spec.Point.line(w),
+  Spec.Point.n(w)
+) -> Mirror.Back(s, a, List.append(&2, Spec.Point, qs1, qs2), c, k):
+  match qs1:
+    case Nil{}:
+      b1 => b2 => Eq.to(
+        Spec.Point,
+        x => Mirror.Back(s, a, qs2, Spec.Point.line(x), Spec.Point.n(x)),
+        w,
+        Spec.Point{c, k},
+        b1,
+        b2
+      )
+    case Con{q, rest}:
+      b1 => b2 => Ex.by(
+        List<&2, Spec.Point>,
+        ps => {
+          Answers.Answer.of(s, Spec.Question.Parents{c, k}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+        }
+          & (
+            {
+              List.contains(~Spec.Point, ~Spec.Point.is_eq, ps, q) == True{}: Bool
+            }
+              & Mirror.Back(s, w, rest, Spec.Point.line(q), Spec.Point.n(q))
+          ),
+        Mirror.Back(s, a, List.append(&2, Spec.Point, q <> rest, qs2), c, k),
+        b1,
+        ps => w1 => And.by(
+          {Answers.Answer.of(s, Spec.Question.Parents{c, k}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>},
+          {
+            List.contains(~Spec.Point, ~Spec.Point.is_eq, ps, q) == True{}: Bool
+          }
+            & Mirror.Back(s, w, rest, Spec.Point.line(q), Spec.Point.n(q)),
+          Mirror.Back(s, a, List.append(&2, Spec.Point, q <> rest, qs2), c, k),
+          w1,
+          hp => w2 => And.by(
+            {List.contains(~Spec.Point, ~Spec.Point.is_eq, ps, q) == True{}: Bool},
+            Mirror.Back(s, w, rest, Spec.Point.line(q), Spec.Point.n(q)),
+            Mirror.Back(s, a, List.append(&2, Spec.Point, q <> rest, qs2), c, k),
+            w2,
+            hc => br => (
+              ps,
+              (hp, (hc, Back.append(s, a, w, rest, qs2, Spec.Point.line(q), Spec.Point.n(q))(br)(b2)))
+            )
+          )
+        )
+      )
+
+# a version that comes from w comes from what w comes from
+def Before.append(-s: Facts.Facts(), -a: Spec.Point, -w: Spec.Point, -c: Ledgers.Line, -k: Nat) -> Mirror.Before(s, w, c, k) -> Mirror.Before(
+  s,
+  a,
+  Spec.Point.line(w),
+  Spec.Point.n(w)
+) -> Mirror.Before(s, a, c, k):
+  b1 => b2 => Ex.by(
+    List<&2, Spec.Point>,
+    qs => Mirror.Back(s, w, qs, c, k),
+    Mirror.Before(s, a, c, k),
+    b1,
+    +qs1 => x1 => Ex.by(
+      List<&2, Spec.Point>,
+      qs => Mirror.Back(s, a, qs, Spec.Point.line(w), Spec.Point.n(w)),
+      Mirror.Before(s, a, c, k),
+      b2,
+      qs2 => x2 => (List.append(&2, Spec.Point, qs1, qs2), Back.append(s, a, w, qs1, qs2, c, k)(x1)(x2))
+    )
+  )
+
+# a version, the entry e, comes from what one of its parents comes from
+def Before.step(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +e: Types.Entry, +q: Spec.Point, -a: Spec.Point) -> {
+  Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>
+} -> {List.contains(~Spec.Point, ~Spec.Point.is_eq, Contents.Entry.parents(c, k, e), q) == True{}: Bool} -> Mirror.Before(
+  s,
+  a,
+  Spec.Point.line(q),
+  Spec.Point.n(q)
+) -> Mirror.Before(s, a, c, k):
+  ha => hc => b => Ex.by(
+    List<&2, Spec.Point>,
+    qs => Mirror.Back(s, a, qs, Spec.Point.line(q), Spec.Point.n(q)),
+    Mirror.Before(s, a, c, k),
+    b,
+    qs => x => (
+      q <> qs,
+      (
+        Contents.Entry.parents(c, k, e),
+        (
+          Equal.cong(Maybe<&2, Types.Entry>, Maybe<&2, Spec.Reply>, m => Answers.Reply.parents(c, k, m), Lines.Line.at(s, c, k), Some{e}, ha),
+          (hc, x)
+        )
+      )
+    )
+  )
+
+# version j of a line is a parent of its version 1+j
+def Down.head(+c: Ledgers.Line, +j: Nat, -e: Types.Entry) -> {
+  List.contains(~Spec.Point, ~Spec.Point.is_eq, Contents.Entry.parents(c, 1n+j, e), Spec.Point{c, j}) == True{}: Bool
+}:
+  Eq.back(
+    Bool,
+    d => {
+      List.any.if(
+        u => List.contains(
+          ~Spec.Point,
+          ~Spec.Point.is_eq,
+          Shared.Maybe.cons(Spec.Point, Contents.Entry.takes(e), []),
+          Spec.Point{c, j}
+        ),
+        d
+      )
+        == True{}: Bool
+    },
+    Spec.Point.is_eq(Spec.Point{c, j}, Spec.Point{c, j}),
+    True{},
+    Point.is_eq_refl(Spec.Point{c, j}),
+    {==}
+  )
+
+# a version of a line comes from each older version of the line
+def Down.before(k: Nat, +s: Facts.Facts(), +c: Ledgers.Line, +vs: List<&2, Types.Entry>, +n: Nat) -> {
+  Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
+} -> {Nat.is_lt(k, List.length(&2, Types.Entry, vs)) == True{}: Bool} -> {Nat.is_le(n, k) == True{}: Bool} -> Mirror.Before(
+  s,
+  Spec.Point{c, n},
+  c,
+  k
+):
+  match k:
+    case 0n:
+      hv => hl => hn => Eq.back(
+        Nat,
+        y => Mirror.Before(s, Spec.Point{c, y}, c, 0n),
+        n,
+        0n,
+        Shared.Nat.le_nlt_eq(n, 0n)(hn)({==}),
+        Before.refl(s, c, 0n)
+      )
+    case 1n+(+j):
+      +hv => +hl => +hn => Lists.Bool.by(
+        d => Mirror.Before(s, Spec.Point{c, n}, c, 1n+j),
+        Nat.is_eq(n, 1n+j),
+        et => Eq.back(
+          Nat,
+          y => Mirror.Before(s, Spec.Point{c, y}, c, 1n+j),
+          n,
+          1n+j,
+          Shared.Nat.is_eq_sound(n, 1n+j)(et),
+          Before.refl(s, c, 1n+j)
+        ),
+        ef => Ex.by(
+          Types.Entry,
+          e => {List.get(&2, Types.Entry, vs, 1n+j) == Some{e}: Maybe<&2, Types.Entry>},
+          Mirror.Before(s, Spec.Point{c, n}, c, 1n+j),
+          Lists.List.get_some(Types.Entry, vs, 1n+j)(hl),
+          +e => hg => Before.step(s, c, 1n+j, e, Spec.Point{c, j}, Spec.Point{c, n})(
+            Line.at_of(s, c, vs, 1n+j, e)(hv)(hg)
+          )(
+            Down.head(c, j, e)
+          )(
+            Down.before(j, s, c, vs, n)(hv)(
+              Shared.Nat.lt_le(j, 1n+j, List.length(&2, Types.Entry, vs))(Shared.Nat.lt_succ(j))(
+                Shared.Nat.lt_weak(1n+j, List.length(&2, Types.Entry, vs))(hl)
+              )
+            )(
+              Shared.Nat.le_step(n, j)(hn)(ef)
+            )
+          )
+        )
+      )
+
+# a version that a node holds comes from each older version of its line
+def Down.at(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +n: Nat, -e: Types.Entry) -> {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>} -> {
+  Nat.is_le(n, k) == True{}: Bool
+} -> Mirror.Before(s, Spec.Point{c, n}, c, k):
+  ha => hn => Ex.by(
+    List<&2, Types.Entry>,
+    vs => {Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>} & {List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>},
+    Mirror.Before(s, Spec.Point{c, n}, c, k),
+    Line.at_some(s, c, k, e)(ha),
+    +vs => w => And.by(
+      {Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>},
+      {List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>},
+      Mirror.Before(s, Spec.Point{c, n}, c, k),
+      w,
+      hv => hg => Down.before(k, s, c, vs, n)(hv)(Lists.List.get_lt(Types.Entry, vs, k, e)(hg))(hn)
+    )
+  )
+
+# a request that opens a line takes no version
+def Request.opens_takes(r: Spec.Request, from: Nat) -> {Lines.Request.opens(r) == True{}: Bool} -> {
+  Contents.Request.takes(r, from) == None{}: Maybe<&2, Spec.Point>
+}:
+  match r:
+    case Spec.Request.Start{os}:
+      h => {==}
+    case Spec.Request.Own{c, g}:
+      h => {==}
+    case Spec.Request.Write{b, p, w}:
+      h => Empty.absurd({None{} == None{}: Maybe<&2, Spec.Point>}, Shared.Bool.false_ne_true(h))
+    case Spec.Request.Resolve{m, p, w}:
+      h => Empty.absurd({None{} == None{}: Maybe<&2, Spec.Point>}, Shared.Bool.false_ne_true(h))
+    case Spec.Request.Mark{b, m, v}:
+      h => Empty.absurd({None{} == None{}: Maybe<&2, Spec.Point>}, Shared.Bool.false_ne_true(h))
+    case Spec.Request.Group{g, m, ms}:
+      h => Empty.absurd({None{} == None{}: Maybe<&2, Spec.Point>}, Shared.Bool.false_ne_true(h))
+    case Spec.Request.Move{b, t, v}:
+      h => Empty.absurd({Some{Spec.Point{t, v}} == None{}: Maybe<&2, Spec.Point>}, Shared.Bool.false_ne_true(h))
+    case Spec.Request.Merge{f, x}:
+      h => Empty.absurd({Some{Spec.Point{f, from}} == None{}: Maybe<&2, Spec.Point>}, Shared.Bool.false_ne_true(h))
+
+# an entry whose request opens a line takes no version
+def Entry.opens_takes(e: Types.Entry) -> {Lines.Request.opens(Answers.Entry.request(e)) == True{}: Bool} -> {
+  Contents.Entry.takes(e) == None{}: Maybe<&2, Spec.Point>
+}:
+  match e:
+    case Types.Entry{Types.Pick{Types.Ask{i, n, r}, Types.Pins{era, from, base, ours, theirs}}, k}:
+      Request.opens_takes(r, from)
+
+# the point that an entry takes is among its parents, after version 0
+def Take.in(+c: Ledgers.Line, +j: Nat, -e: Types.Entry, +w: Spec.Point) -> {Contents.Entry.takes(e) == Some{w}: Maybe<&2, Spec.Point>} -> {
+  List.contains(~Spec.Point, ~Spec.Point.is_eq, Contents.Entry.parents(c, 1n+j, e), w) == True{}: Bool
+}:
+  ht => Eq.back(
+    Maybe<&2, Spec.Point>,
+    m => {
+      List.contains(~Spec.Point, ~Spec.Point.is_eq, Spec.Point{c, j} <> Shared.Maybe.cons(Spec.Point, m, []), w) == True{}: Bool
+    },
+    Contents.Entry.takes(e),
+    Some{w},
+    ht,
+    Shared.List.contains_cons(~Spec.Point, ~Spec.Point.is_eq, Spec.Point{c, j}, [w], w)(
+      Eq.back(
+        Bool,
+        d => {List.any.if(u => List.contains(~Spec.Point, ~Spec.Point.is_eq, [], w), d) == True{}: Bool},
+        Spec.Point.is_eq(w, w),
+        True{},
+        Point.is_eq_refl(w),
+        {==}
+      )
+    )
+  )
+
+# a version that a node holds comes from the version that its entry takes
+def Take.before(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, +e: Types.Entry, +w: Spec.Point) -> {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>} -> {
+  Contents.Entry.takes(e) == Some{w}: Maybe<&2, Spec.Point>
+} -> Mirror.Before(s, w, c, k):
+  match k:
+    case 0n:
+      ha => ht => Empty.absurd(
+        Mirror.Before(s, w, c, 0n),
+        Lists.Maybe.some_ne_none(
+          Spec.Point,
+          w,
+          Equal.trans(
+            Maybe<&2, Spec.Point>,
+            Some{w},
+            Contents.Entry.takes(e),
+            None{},
+            Equal.sym(Maybe<&2, Spec.Point>, Contents.Entry.takes(e), Some{w}, ht),
+            Entry.opens_takes(e)(Zero.opens(s, c, e)(ha))
+          )
+        )
+      )
+    case 1n+(+j):
+      ha => ht => Before.step(s, c, 1n+j, e, w, w)(ha)(Take.in(c, j, e, w)(ht))(Before.self(s, w))
+
+# a version that a node holds comes from an older version of its line
+def Hop.down(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, w: Spec.Point, -e: Types.Entry) -> {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>} -> {
+  Bool.and(Ledgers.Line.is_eq(Spec.Point.line(w), c), Nat.is_le(Spec.Point.n(w), k)) == True{}: Bool
+} -> Mirror.Before(s, w, c, k):
+  match w:
+    case Spec.Point{+d, +n}:
+      ha => +h => Eq.back(
+        Ledgers.Line,
+        y => Mirror.Before(s, Spec.Point{y, n}, c, k),
+        d,
+        c,
+        Ledgers.Line.is_eq_sound(d, c)(Shared.Bool.and_true_left(Ledgers.Line.is_eq(d, c), Nat.is_le(n, k))(h)),
+        Down.at(s, c, k, n, e)(ha)(Shared.Bool.and_true_right(Ledgers.Line.is_eq(d, c), Nat.is_le(n, k))(h))
+      )
+
+# Hop.before, once the entry e of the version is known
+def Hop.before.of(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +w: Spec.Point, +e: Types.Entry, +ha: {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>}) -> {
+  Contents.Way.hop.of(c, k, w, Some{e}) == True{}: Bool
+} -> Mirror.Before(s, w, c, k):
+  Lists.Bool.by(
+    d => {
+      Bool.or(d, Shared.Maybe.is_eq(~Spec.Point, ~Spec.Point.is_eq, Contents.Entry.takes(e), Some{w})) == True{}: Bool
+    } -> Mirror.Before(s, w, c, k),
+    Bool.and(Ledgers.Line.is_eq(Spec.Point.line(w), c), Nat.is_le(Spec.Point.n(w), k)),
+    et => h => Hop.down(s, c, k, w, e)(ha)(et),
+    ef => h => Take.before(s, c, k, e, w)(ha)(
+      Shared.Maybe.is_eq_sound(
+        ~Spec.Point,
+        ~Spec.Point.is_eq,
+        x => y => Point.is_eq_sound(x, y),
+        Contents.Entry.takes(e),
+        Some{w}
+      )(h)
+    )
+  )
+
+# a version comes from each point that is one hop from it
+def Hop.before(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +w: Spec.Point) -> {Contents.Way.hop(s, c, k, w) == True{}: Bool} -> Mirror.Before(
+  s,
+  w,
+  c,
+  k
+):
+  Lists.Maybe.by(
+    Types.Entry,
+    m => {Contents.Way.hop.of(c, k, w, m) == True{}: Bool} -> Mirror.Before(s, w, c, k),
+    Lines.Line.at(s, c, k),
+    en => h => Empty.absurd(Mirror.Before(s, w, c, k), Shared.Bool.false_ne_true(h)),
+    +e => +ee => Hop.before.of(s, c, k, w, e, ee)
+  )
+
+# a version comes from the point that a way leads back to
+def Way.before(+s: Facts.Facts(), +a: Spec.Point, ws: List<&2, Spec.Point>, +c: Ledgers.Line, +k: Nat) -> {Contents.Way.ok(s, a, ws, c, k) == True{}: Bool} -> Mirror.Before(
+  s,
+  a,
+  c,
+  k
+):
+  match ws:
+    case Nil{}:
+      h => Eq.back(
+        Spec.Point,
+        y => Mirror.Before(s, y, c, k),
+        a,
+        Spec.Point{c, k},
+        Point.is_eq_sound(a, Spec.Point{c, k})(h),
+        Before.refl(s, c, k)
+      )
+    case Con{+w, +rest}:
+      +h => Before.append(s, a, w, c, k)(
+        Hop.before(s, c, k, w)(
+          Shared.Bool.and_true_left(
+            Contents.Way.hop(s, c, k, w),
+            Contents.Way.ok(s, a, rest, Spec.Point.line(w), Spec.Point.n(w))
+          )(h)
+        )
+      )(
+        Way.before(s, a, rest, Spec.Point.line(w), Spec.Point.n(w))(
+          Shared.Bool.and_true_right(
+            Contents.Way.hop(s, c, k, w),
+            Contents.Way.ok(s, a, rest, Spec.Point.line(w), Spec.Point.n(w))
+          )(h)
+        )
+      )
+
+# Core.base_shared, once the two ways are known to lead to the base
+def Base.both(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +f: Ledgers.Line, +v: Nat, +a: Spec.Point, +ours: List<&2, Spec.Point>, +theirs: List<&2, Spec.Point>, +h: {
+  Bool.and(Contents.Way.ok(s, a, ours, c, k), Contents.Way.ok(s, a, theirs, f, v)) == True{}: Bool
+}) -> Mirror.Before(s, a, c, k) & Mirror.Before(s, a, f, v):
+  (
+    Way.before(s, a, ours, c, k)(
+      Shared.Bool.and_true_left(Contents.Way.ok(s, a, ours, c, k), Contents.Way.ok(s, a, theirs, f, v))(h)
+    ),
+    Way.before(s, a, theirs, f, v)(
+      Shared.Bool.and_true_right(Contents.Way.ok(s, a, ours, c, k), Contents.Way.ok(s, a, theirs, f, v))(h)
+    )
+  )
+
+# the base that a node tells of a merge is a version that both merged
+# versions come from
+def Core.base_shared(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +i: Ledgers.Id, +f: Ledgers.Line, +v: Nat, +a: Spec.Point) -> Mirror.Made(
+  s,
+  c,
+  1n+k,
+  i,
+  Spec.Request.Merge{f, c}
+) -> {
+  Answers.Answer.of(
+    s,
+    Spec.Question.Parents{c, 1n+k}
+  )
+    == Some{Spec.Reply.Points{[Spec.Point{c, k}, Spec.Point{f, v}]}}: Maybe<&2, Spec.Reply>
+} -> {Answers.Answer.of(s, Spec.Question.Base{c, i}) == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>} -> Mirror.Before(s, a, c, k)
+  & Mirror.Before(s, a, f, v):
+  m => hp => hb => Made.by(
+    Mirror.Before(s, a, c, k) & Mirror.Before(s, a, f, v),
+    s,
+    c,
+    1n+k,
+    i,
+    Spec.Request.Merge{f, c},
+    m,
+    +e => ha => hf => hr => And.by(
+      {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
+      {Contents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>},
+      Mirror.Before(s, a, c, k) & Mirror.Before(s, a, f, v),
+      Base.fits(s, c, k, i, e, a)(hf)(hb),
+      hfit => hbs => Base.both(
+        s,
+        c,
+        k,
+        f,
+        v,
+        a,
+        Contents.Entry.ours(e),
+        Contents.Entry.theirs(e),
+        Eq.to(
+          Maybe<&2, Spec.Point>,
+          m2 => {
+            Contents.Merge.fits.of(
+              s,
+              c,
+              k,
+              Some{a},
+              Contents.Entry.ours(e),
+              Contents.Entry.theirs(e),
+              Contents.Point.or(c, m2)
+            )
+              == True{}: Bool
+          },
+          Contents.Entry.takes(e),
+          Some{Spec.Point{f, v}},
+          Parents.takes(s, c, k, e, f, v)(ha)(hp),
+          Eq.to(
+            Maybe<&2, Spec.Point>,
+            m2 => {
+              Contents.Merge.fits.of(
+                s,
+                c,
+                k,
+                m2,
+                Contents.Entry.ours(e),
+                Contents.Entry.theirs(e),
+                Contents.Point.or(c, Contents.Entry.takes(e))
+              )
+                == True{}: Bool
+            },
+            Contents.Entry.base(e),
+            Some{a},
+            hbs,
+            hfit
+          )
+        )
+      )
+    )
+  )

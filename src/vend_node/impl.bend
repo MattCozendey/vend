@@ -1538,3 +1538,17 @@ def Node.base_shared.of(
   match m:
     case Tuple{x, y}:
       (Node.before_of(n, a, c, k, x), Node.before_of(n, a, f, v, y))
+
+def Spec.VendNode.base_shared(n, c, k, i, f, v, a):
+  hm => hp => hb => Node.base_shared.of(
+    n,
+    a,
+    c,
+    k,
+    f,
+    v,
+    Reads.Core.base_shared(Node.facts(n), c, k, i, f, v, a)(hm)(hp)(hb)
+  )
+
+def Spec.VendNode.merge_merges(n, c, k, i, f, v, a, p, b, o, t):
+  Reads.Core.merge_merges(Node.facts(n), c, k, i, f, v, a, p, b, o, t)
