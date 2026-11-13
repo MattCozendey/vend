@@ -17,7 +17,6 @@ import ../shared/shared/tree.bend as Trees
 import ../shared/vend.bend as Vend
 import ../writer/requests.bend as Requests
 
-# TMPK-BEGIN
 # Kept
 # ----
 # The tree of a ledger that holds the whole of a tree keeps it whole, and keeps
