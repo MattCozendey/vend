@@ -18063,6 +18063,441 @@ def Line.top(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), m: Maybe<&
     case Some{Top{+h, +t}}:
       Some{Line.climb(~mach, ~d, ~kern, Line.fuel(~mach, ~d, l, c), c, h, t, Line.land(~mach, ~d, ~kern, l, c, h, t))}
 
+# Voting
+
+# a client of s asked for the request of the hash a, if the entry m of it
+# changes who votes
+def Rep.consents.one(~mach: Machine(), ~d: Led(mach), +s: Rep<Led.L(mach, d)>, +a: Hashes.Hash, m: Maybe<&2, Entry(mach)>) -> Bool:
+  match m:
+    case Some{Ledgers.Entry.Ask{i, t, q}}:
+      Bool.or(Bool.not(Machine.governs(mach)(q)), Rep.consented(Led.L(mach, d), s, a))
+    case _:
+      True{}
+
+# a client of s asked for each request among qs that changes who votes
+# (Replica.Consents), in l
+def Rep.consents(~mach: Machine(), ~d: Led(mach), qs: List<&2, Hashes.Hash>, +s: Rep<Led.L(mach, d)>, +l: Led.L(mach, d)) -> Bool:
+  match qs:
+    case Nil{}:
+      True{}
+    case Con{+a, rest}:
+      List.all.if(
+        u => Rep.consents(~mach, ~d, rest, s, l),
+        Rep.consents.one(~mach, ~d, s, a, Led.get(~mach, ~d, l, Ledgers.Name.Ask{a}))
+      )
+
+# s after it votes for the step v with the voters from at the place w, from
+# the tip t of the line c, in l, once whether the rules allow it (ok) and the
+# run that lands it (m) are known: it keeps what the run adds. When the run
+# lacks data, the line waits for it
+def Rep.vote.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ok: Bool,
+  m: Maybe<&2, Run<Led.L(mach, d)>>,
+  s: Rep<Led.L(mach, d)>,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  w: Ledgers.Place,
+  v: Ledgers.Step,
+  from: List<&2, String>
+) -> Rep.Cast<Led.L(mach, d)>:
+  match ok m:
+    case True{} Some{Run{l2, t2, a}}:
+      Rep.cast(~mach, ~d, ~kern, s, Led.keep(~mach, ~d, a, l), w, Ledgers.Cast.Vote{v, from})
+    case True{} None{}:
+      Rep.Cast{Rep.wait(~Led.L(mach, d), s, c, True{}), False{}}
+    case False{} x:
+      Rep.Cast{s, False{}}
+
+# s after it votes for the step v with the voters from at the place w of the
+# voters vs, from the tip t of the line c, when the rules allow v there, a
+# client asked for its requests, and it runs to the tip that it names
+def Rep.vote(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Rep<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +t: Tip,
+  +w: Ledgers.Place,
+  +vs: List<&2, String>,
+  +v: Ledgers.Step,
+  +from: List<&2, String>
+) -> Rep.Cast<Led.L(mach, d)>:
+  +l = Rep.ledger(Led.L(mach, d), s)
+  Rep.vote.of(
+    ~mach,
+    ~d,
+    ~kern,
+    Bool.and(Step.allowed(~mach, ~d, l, w, vs, v, from), Rep.consents(~mach, ~d, Step.asks(v), s, l)),
+    Step.ready(~mach, ~d, ~kern, l, c, t, v),
+    s,
+    l,
+    c,
+    w,
+    v,
+    from
+  )
+
+# s after it follows the voter whose turn it is, whose cast at w is x
+def Rep.follow(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  x: Maybe<&2, Ledgers.Cast>,
+  s: Rep<Led.L(mach, d)>,
+  c: Ledgers.Line,
+  t: Tip,
+  w: Ledgers.Place,
+  vs: List<&2, String>
+) -> Rep.Cast<Led.L(mach, d)>:
+  match x:
+    case Some{Ledgers.Cast.Vote{v, from}}:
+      Rep.vote(~mach, ~d, ~kern, s, c, t, w, vs, v, from)
+    case _:
+      Rep.Cast{s, False{}}
+
+# a run, and the requests that it ran
+type Batch<-L: Data> is Data:
+  Batch{run: Run<L>, asks: List<&2, Hashes.Hash>}
+
+# the run of the batch b
+def Batch.run_of(~L: Data, b: Batch<L>) -> Run<L>:
+  match b:
+    case Batch{r, qs}:
+      r
+
+# the batch b with the request a, when it ran (m), else b
+def Batch.run(~L: Data, m: Maybe<&2, Run<L>>, b: Batch<L>, a: Hashes.Hash) -> Batch<L>:
+  match m b:
+    case Some{r} Batch{r0, qs}:
+      Batch{r, List.append(&2, Hashes.Hash, qs, [a])}
+    case None{} b2:
+      b2
+
+# the batch b with the request of the hash a, whose entry is m, when it has no
+# outcome at the tip t, a client asked for it if it changes who votes, and it
+# runs after the batch
+def Batch.put(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  m: Maybe<&2, Entry(mach)>,
+  +b: Batch<Led.L(mach, d)>,
+  +s: Rep<Led.L(mach, d)>,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +t: Tip,
+  +a: Hashes.Hash
+) -> Batch<Led.L(mach, d)>:
+  match m:
+    case Some{Ledgers.Entry.Ask{+i, time, +q}}:
+      Shared.Bool.when(
+        Batch<Led.L(mach, d)>,
+        Bool.and(
+          Bool.not(Maybe.is_some(&2, Out, Tip.out(~mach, ~d, l, t, i))),
+          Rep.consents.one(~mach, ~d, s, a, Some{Ledgers.Entry.Ask{i, time, q}})
+        ),
+        u => Batch.run(~Led.L(mach, d), Step.all(~mach, ~d, ~kern, c, [a], Some{Batch.run_of(~Led.L(mach, d), b)}), b, a),
+        u => b
+      )
+    case _:
+      b
+
+# the batch of the requests as that wait on the line c, from the tip t: each
+# that runs after the ones before it
+def Batch.all(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  as: List<&2, Hashes.Hash>,
+  +b: Batch<Led.L(mach, d)>,
+  +s: Rep<Led.L(mach, d)>,
+  +l: Led.L(mach, d),
+  +c: Ledgers.Line,
+  +t: Tip
+) -> Batch<Led.L(mach, d)>:
+  match as:
+    case Nil{}:
+      b
+    case Con{+a, rest}:
+      Batch.all(
+        ~mach,
+        ~d,
+        ~kern,
+        rest,
+        Batch.put(~mach, ~d, ~kern, Led.get(~mach, ~d, l, Ledgers.Name.Ask{a}), b, s, l, c, t, a),
+        s,
+        l,
+        c,
+        t
+      )
+
+# the step of the batch b from the tip t (none: it ran no request)
+def Batch.step(~L: Data, b: Batch<L>, +t: Tip) -> Maybe<&2, Ledgers.Step>:
+  match b:
+    case Batch{Run{l, t2, a}, Nil{}}:
+      None{}
+    case Batch{Run{l, t2, a}, qs}:
+      Some{Ledgers.Step{Some{Tip.hash(t)}, qs, Some{Tip.hash(t2)}}}
+
+# the step that s proposes on the line c from the tip t: the requests that
+# wait there and run, in one batch (none: none does)
+def Rep.propose(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +s: Rep<Led.L(mach, d)>, +c: Ledgers.Line, +t: Tip) -> Maybe<&2, Ledgers.Step>:
+  +l = Rep.ledger(Led.L(mach, d), s)
+  Batch.step(
+    ~Led.L(mach, d),
+    Batch.all(~mach, ~d, ~kern, Rep.pending(Led.L(mach, d), s, c), Batch{Run{l, t, []}, []}, s, l, c, t),
+    t
+  )
+
+# s after it votes for the step m, if any, with the voters from
+def Rep.vote.maybe(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  m: Maybe<&2, Ledgers.Step>,
+  s: Rep<Led.L(mach, d)>,
+  c: Ledgers.Line,
+  t: Tip,
+  w: Ledgers.Place,
+  vs: List<&2, String>,
+  from: List<&2, String>
+) -> Rep.Cast<Led.L(mach, d)>:
+  match m:
+    case None{}:
+      Rep.Cast{s, False{}}
+    case Some{v}:
+      Rep.vote(~mach, ~d, ~kern, s, c, t, w, vs, v, from)
+
+# the voters among vs that passed to the place w, in l
+def Voters.passed(~mach: Machine(), ~d: Led(mach), vs: List<&2, String>, +l: Led.L(mach, d), +w: Ledgers.Place) -> List<&2, String>:
+  match vs:
+    case Nil{}:
+      []
+    case Con{+q, rest}:
+      List.filter.put(
+        String,
+        q,
+        Voters.passed(~mach, ~d, rest, l, w),
+        Maybe.is_some(&2, Maybe<&2, Ledgers.Last>, Led.passed(~mach, ~d, l, w, q))
+      )
+
+# the pass p (of a voter, to w) names no vote, or a vote below the round r, or
+# the vote u in the round r
+def Last.fits(p: Maybe<&2, Maybe<&2, Ledgers.Last>>, +r: Nat, +u: Ledgers.Step) -> Bool:
+  match p:
+    case Some{Some{Ledgers.Last{+t, v}}}:
+      Bool.or(Nat.is_lt(t, r), Bool.and(Nat.is_eq(t, r), Ledgers.Step.is_eq(v, u)))
+    case _:
+      True{}
+
+# the voters among ps whose passes to w fit the vote u in the round r
+# (Last.fits), but q
+def Voters.fit(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ps: List<&2, String>,
+  +l: Led.L(mach, d),
+  +w: Ledgers.Place,
+  +r: Nat,
+  +u: Ledgers.Step,
+  +q: String
+) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      []
+    case Con{+p, rest}:
+      List.filter.put(
+        String,
+        p,
+        Voters.fit(~mach, ~d, rest, l, w, r, u, q),
+        Bool.and(Bool.not(String.eq(p, q)), Last.fits(Led.passed(~mach, ~d, l, w, p), r, u))
+      )
+
+# two last votes are the same
+def Last.is_eq(a: Ledgers.Last, b: Ledgers.Last) -> Bool:
+  match a b:
+    case Ledgers.Last{r, u} Ledgers.Last{t, v}:
+      Bool.and(Nat.is_eq(r, t), Ledgers.Step.is_eq(u, v))
+
+# the voters among ps whose passes to w name no vote
+def Voters.free(~mach: Machine(), ~d: Led(mach), ps: List<&2, String>, +l: Led.L(mach, d), +w: Ledgers.Place) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      []
+    case Con{+p, rest}:
+      List.filter.put(
+        String,
+        p,
+        Voters.free(~mach, ~d, rest, l, w),
+        Shared.Maybe.is_eq(
+          ~Maybe<&2, Ledgers.Last>,
+          ~(x => y => Shared.Maybe.is_eq(~Ledgers.Last, ~Last.is_eq, x, y)),
+          Led.passed(~mach, ~d, l, w, p),
+          Some{None{}}
+        )
+      )
+
+# s after it leads with the vote that the pass p of q names, if any
+def Rep.lead.one(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  p: Maybe<&2, Maybe<&2, Ledgers.Last>>,
+  +q: String,
+  ps: List<&2, String>,
+  s: Rep<Led.L(mach, d)>,
+  +l: Led.L(mach, d),
+  c: Ledgers.Line,
+  t: Tip,
+  +w: Ledgers.Place,
+  vs: List<&2, String>
+) -> Rep.Cast<Led.L(mach, d)>:
+  match p:
+    case Some{Some{Ledgers.Last{+r, +u}}}:
+      Rep.vote(~mach, ~d, ~kern, s, c, t, w, vs, u, q <> Voters.fit(~mach, ~d, ps, l, w, r, u, q))
+    case _:
+      Rep.Cast{s, False{}}
+
+# x, or, when it cast nothing, s after it leads in a later round with the
+# vote that one of the passers qs names, each in turn: the voters whose
+# passes fit that vote, the one who names it first, may allow it
+# (Step.allowed reads the vote of the first)
+def Rep.lead.named(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  qs: List<&2, String>,
+  +ps: List<&2, String>,
+  x: Rep.Cast<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +t: Tip,
+  +w: Ledgers.Place,
+  +vs: List<&2, String>
+) -> Rep.Cast<Led.L(mach, d)>:
+  match qs x:
+    case Nil{} y:
+      y
+    case Con{q, rest} Rep.Cast{s, True{}}:
+      Rep.Cast{s, True{}}
+    case Con{+q, rest} Rep.Cast{+s, False{}}:
+      +l = Rep.ledger(Led.L(mach, d), s)
+      Rep.lead.named(
+        ~mach,
+        ~d,
+        ~kern,
+        rest,
+        ps,
+        Rep.lead.one(~mach, ~d, ~kern, Led.passed(~mach, ~d, l, w, q), q, ps, s, l, c, t, w, vs),
+        c,
+        t,
+        w,
+        vs
+      )
+
+# s after it leads in a round after the first, at the place w: with the
+# voters whose passes name no vote, its own batch or the empty step (any step
+# is allowed then); else with a vote that a pass names
+def Rep.lead.later(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  +s: Rep<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +t: Tip,
+  +w: Ledgers.Place,
+  +vs: List<&2, String>
+) -> Rep.Cast<Led.L(mach, d)>:
+  +l = Rep.ledger(Led.L(mach, d), s)
+  +ps = Voters.passed(~mach, ~d, vs, l, w)
+  Rep.lead.named(
+    ~mach,
+    ~d,
+    ~kern,
+    ps,
+    ps,
+    Rep.vote(
+      ~mach,
+      ~d,
+      ~kern,
+      s,
+      c,
+      t,
+      w,
+      vs,
+      Maybe.default(
+        &2,
+        Ledgers.Step,
+        Rep.propose(~mach, ~d, ~kern, s, c, t),
+        Ledgers.Step{Some{Tip.hash(t)}, [], Some{Tip.hash(t)}}
+      ),
+      Voters.free(~mach, ~d, ps, l, w)
+    ),
+    c,
+    t,
+    w,
+    vs
+  )
+
+# s after it acts at its top t of the line c at the height h, in the round r,
+# when it is a voter there that has not voted (ok), and turn is the voter
+# whose turn it is: it follows, or it leads
+def Rep.act.of(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ~kern: Kernel(mach, d),
+  ok: Bool,
+  turn: Maybe<&2, String>,
+  +s: Rep<Led.L(mach, d)>,
+  +c: Ledgers.Line,
+  +t: Tip,
+  +r: Nat,
+  +w: Ledgers.Place,
+  +vs: List<&2, String>
+) -> Rep.Cast<Led.L(mach, d)>:
+  match ok turn:
+    case True{} Some{+p}:
+      Shared.Bool.when(
+        Rep.Cast<Led.L(mach, d)>,
+        String.eq(p, Rep.name(Led.L(mach, d), s)),
+        u => Shared.Bool.when(
+          Rep.Cast<Led.L(mach, d)>,
+          Nat.is_eq(r, 0n),
+          u2 => Rep.vote.maybe(~mach, ~d, ~kern, Rep.propose(~mach, ~d, ~kern, s, c, t), s, c, t, w, vs, []),
+          u2 => Rep.lead.later(~mach, ~d, ~kern, s, c, t, w, vs)
+        ),
+        u => Rep.follow(~mach, ~d, ~kern, Led.cast(~mach, ~d, Rep.ledger(Led.L(mach, d), s), w, p), s, c, t, w, vs)
+      )
+    case x y:
+      Rep.Cast{s, False{}}
+
+# s after it acts at its top t of the line c at the height h
+def Rep.act(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +s: Rep<Led.L(mach, d)>, +c: Ledgers.Line, +h: U32, +t: Tip) -> Rep.Cast<Led.L(mach, d)>:
+  +l = Rep.ledger(Led.L(mach, d), s)
+  +me = Rep.name(Led.L(mach, d), s)
+  +vs = Tip.voters(t)
+  +r = Round.now(~mach, ~d, l, c, h, me)
+  +w = {Ledgers.Place{c, h, r}: Ledgers.Place}
+  Rep.act.of(
+    ~mach,
+    ~d,
+    ~kern,
+    Bool.and(
+      List.contains(~String, ~String.eq, vs, me),
+      Bool.not(Maybe.is_some(&2, Ledgers.Step, Led.voted(~mach, ~d, l, w, me)))
+    ),
+    Voters.turn(vs, h, r),
+    s,
+    c,
+    t,
+    r,
+    w,
+    vs
+  )
+
 # a line that has a top among ts is among the lines under its root
 law Tops.under_has:
   for ts: Tops()
