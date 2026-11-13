@@ -175,7 +175,7 @@ def Node.new.if(
     case False{} e:
       Some{
         (
-          Nodes.Raw{name, [], [], False{}, Facts.Facts.new(), Parts.Parts.new()},
+          Nodes.Raw.new(name),
           Node.join(
             name,
             Facts.Facts.new(),
@@ -190,135 +190,185 @@ def Node.new.if(
 def Node.new(+name: String) -> Maybe<&2, Spec.VendNode>:
   Node.new.if(name, Facts.Trust.reserved(name), {==})
 
-# the node after it takes in the request r of the id i, with the words m to
-# keep, when it may (go): it has not stopped, and the writer is connected
-def Node.asks(
-  +name: String,
-  ws: List<&2, String>,
-  ms: List<&2, Nodes.Mounted>,
-  st: Bool,
-  +fs: Facts.Facts(),
-  ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
-  +i: Ledgers.Id,
-  +r: Spec.Request,
-  go: Bool
-) -> Spec.VendNode:
-  match go:
-    case False{}:
-      (Nodes.Raw{name, ws, ms, st, fs, ps}, ok)
-    case True{}:
-      (
-        Nodes.Raw{
-          name,
-          ws,
-          ms,
-          st,
-          Facts.Facts.ask(name, fs, i, r),
-          Nodes.Kept.with(ps, Nodes.Request.content(r))
-        },
-        Node.resound(
-          name,
-          fs,
-          Facts.Facts.ask(name, fs, i, r),
-          ok,
-          Facts.Facts.take_ok(name, fs, Types.Fact.Ask{Facts.Facts.asked(fs, i, r)})
-        )
-      )
+# the deed d on plain states: the other node of a Sync is its state
+def Node.act(d: Spec.Deed) -> Nodes.Act:
+  match d:
+    case Spec.Deed.Connect{w}:
+      Nodes.Act.Connect{w}
+    case Spec.Deed.Leave{w}:
+      Nodes.Act.Leave{w}
+    case Spec.Deed.Ask{i, r}:
+      Nodes.Act.Ask{i, r}
+    case Spec.Deed.Sync{Tuple{r, ok}}:
+      Nodes.Act.Sync{r}
+    case Spec.Deed.Mount{a, b, p, held}:
+      Nodes.Act.Mount{a, b, p, held}
+    case Spec.Deed.Unmount{a}:
+      Nodes.Act.Unmount{a}
+    case Spec.Deed.Work{}:
+      Nodes.Act.Work{}
+    case Spec.Deed.Drop{}:
+      Nodes.Act.Drop{}
+    case Spec.Deed.Stop{f}:
+      Nodes.Act.Stop{f}
 
-# the node after a work, unless it has stopped
-def Node.works(
+# a sound state stays sound when the node takes in a request
+def Node.asks_sound(
   +name: String,
-  ws: List<&2, String>,
-  ms: List<&2, Nodes.Mounted>,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
   +st: Bool,
   +fs: Facts.Facts(),
-  ps: Parts.Parts,
-  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
-) -> Spec.VendNode:
-  match st:
-    case True{}:
-      (Nodes.Raw{name, ws, ms, True{}, fs, ps}, ok)
+  +ps: Parts.Parts,
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  go: Bool,
+  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+) -> {Nodes.Raw.ok(Nodes.Raw.asks(name, ws, ms, st, fs, ps, i, r, go)) == True{}: Bool}:
+  match go:
     case False{}:
-      (
-        Nodes.Raw{name, ws, ms, False{}, Works.Work.does(fs, name), ps},
-        Node.resound(name, fs, Works.Work.does(fs, name), ok, Live.Work.does_ok(name, fs))
+      ok
+    case True{}:
+      Node.resound(
+        name,
+        fs,
+        Facts.Facts.ask(name, fs, i, r),
+        ok,
+        Facts.Facts.take_ok(name, fs, Types.Fact.Ask{Facts.Facts.asked(fs, i, r)})
       )
 
-def Spec.VendNode.does(n, d):
-  match n d:
-    case Tuple{Nodes.Raw{name, +ws, ms, st, fs, ps}, ok} Spec.Deed.Connect{+w}:
-      (Nodes.Raw{name, w <> Shared.List.remove(~String, ~String.eq, ws, w), ms, st, fs, ps}, ok)
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok} Spec.Deed.Leave{w}:
-      (Nodes.Raw{name, Shared.List.remove(~String, ~String.eq, ws, w), ms, st, fs, ps}, ok)
-    case Tuple{Nodes.Raw{name, +ws, ms, +st, fs, ps}, ok} Spec.Deed.Ask{+i, r}:
-      Node.asks(
+# a sound state stays sound when the node works
+def Node.works_sound(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+) -> {Nodes.Raw.ok(Nodes.Raw.works(name, ws, ms, st, fs, ps)) == True{}: Bool}:
+  match st:
+    case True{}:
+      ok
+    case False{}:
+      Node.resound(name, fs, Works.Work.does(fs, name), ok, Live.Work.does_ok(name, fs))
+
+# a sound state stays sound after any deed: the proof that a node carries,
+# which the code that runs (Nodes.Raw.does) never builds
+def Node.does_sound(
+  +r: Nodes.Raw,
+  +d: Spec.Deed
+) -> {
+  Nodes.Raw.ok(r) == True{}: Bool
+} -> {Nodes.Raw.ok(Nodes.Raw.does(r, Node.act(d))) == True{}: Bool}:
+  match r d:
+    case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Connect{+w}:
+      ok => ok
+    case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Leave{+w}:
+      ok => ok
+    case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Ask{+i, +q}:
+      ok => Node.asks_sound(
         name,
         ws,
         ms,
         st,
         fs,
         ps,
-        ok,
         i,
-        r,
-        Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+        q,
+        Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))),
+        ok
       )
-    case Tuple{
-      Nodes.Raw{+name, ws, ms, st, +fs, ps},
-      ok
-    } Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}:
-      +gs = Facts.Facts.list(fs2)
-      (
-        Nodes.Raw{name, ws, ms, st, Facts.Facts.take_all(name, gs, fs), Parts.Parts.join(ps, ps2)},
-        Node.resound(
-          name,
-          fs,
-          Facts.Facts.take_all(name, gs, fs),
-          ok,
-          Facts.Facts.take_all_ok(name, gs, fs)
-        )
+    case Nodes.Raw{
+      +name,
+      +ws,
+      +ms,
+      +st,
+      +fs,
+      +ps
+    } Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, +fs2, ps2}, ok2}}:
+      ok => Node.resound(
+        name,
+        fs,
+        Facts.Facts.take_all(name, Facts.Facts.list(fs2), fs),
+        ok,
+        Facts.Facts.take_all_ok(name, Facts.Facts.list(fs2), fs)
       )
-    case Tuple{Nodes.Raw{+name, ws, ms, +st, fs, ps}, ok} Spec.Deed.Mount{+a, +b, +p, +held}:
-      Node.asks(
+    case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Mount{+a, +b, +p, +held}:
+      ok => Node.asks_sound(
         name,
         ws,
         Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
         st,
         fs,
         ps,
-        ok,
         Nodes.Mount.id(name, a),
         Spec.Request.Write{b, p, Some{held}},
-        Bool.not(st)
-      )
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok} Spec.Deed.Unmount{a}:
-      (Nodes.Raw{name, ws, Nodes.Mounts.remove(ms, a), st, fs, ps}, ok)
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok} Spec.Deed.Work{}:
-      Node.works(name, ws, ms, st, fs, ps, ok)
-    case Tuple{Nodes.Raw{+name, ws, +ms, st, +fs, ps}, ok} Spec.Deed.Drop{}:
-      (Nodes.Raw{name, ws, ms, st, fs, Parts.Parts.only(ps, Nodes.Needs.of(fs, name, ms))}, ok)
-    case Tuple{Nodes.Raw{name, +ws, +ms, st, fs, ps}, ok} Spec.Deed.Stop{f}:
-      (
-        Nodes.Raw{
-          name,
-          ws,
-          ms,
-          Bool.or(
-            st,
-            Bool.or(
-              f,
-              Bool.and(
-                List.is_empty(&2, String, ws),
-                List.is_empty(&2, String, Nodes.Mounts.addresses(ms))
-              )
-            )
-          ),
-          fs,
-          ps
-        },
+        Bool.not(st),
         ok
       )
+    case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Unmount{+a}:
+      ok => ok
+    case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Work{}:
+      ok => Node.works_sound(name, ws, ms, st, fs, ps, ok)
+    case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Drop{}:
+      ok => ok
+    case Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps} Spec.Deed.Stop{+f}:
+      ok => ok
+
+# the node n after the deed d: its state after the deed, with the proof that
+# it is sound
+def Node.does(n: Spec.VendNode, +d: Spec.Deed) -> Spec.VendNode:
+  match n:
+    case Tuple{+r, ok}:
+      (Nodes.Raw.does(r, Node.act(d)), Node.does_sound(r, d)(ok))
+
+def Spec.VendNode.does(n, d):
+  Node.does(n, d)
+
+# the code that runs works on plain states (Nodes.Raw.does) and builds no
+# proof; this is the link that it relies on: the state of a node after a deed
+# is what the plain code computes from its state
+def Node.runs(
+  n: Spec.VendNode,
+  d: Spec.Deed
+) -> {Node.raw(Spec.VendNode.does(n, d)) == Nodes.Raw.does(Node.raw(n), Node.act(d)): Nodes.Raw}:
+  match n:
+    case Tuple{r, ok}:
+      {==}
+
+# the node that takes in the request r of the id i when it may (go): the
+# state Nodes.Raw.asks with its proof, as Spec.VendNode.does builds it; the
+# laws of a node that asks are said of it
+def Node.asks(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  +go: Bool
+) -> Spec.VendNode:
+  (
+    Nodes.Raw.asks(name, ws, ms, st, fs, ps, i, r, go),
+    Node.asks_sound(name, ws, ms, st, fs, ps, i, r, go, ok)
+  )
+
+# the node after a work, unless it has stopped: the state Nodes.Raw.works
+# with its proof, as Spec.VendNode.does builds it
+def Node.works(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+) -> Spec.VendNode:
+  (Nodes.Raw.works(name, ws, ms, st, fs, ps), Node.works_sound(name, ws, ms, st, fs, ps, ok))
 
 # Laws of formats and names
 # -------------------------

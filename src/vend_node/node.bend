@@ -1,10 +1,12 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/hash.bend as Hashes
+import ../shared/shared/shared/shared/shared.bend as Shared
 import ./answers.bend as Answers
 import ./facts.bend as Facts
 import ./shared/parts.bend as Parts
 import ./spec.bend as Spec
+import ./work.bend as Works
 
 # The state of a node
 # -------------------
@@ -112,3 +114,125 @@ def Needs.of(+s: Facts.Facts(), +name: String, ms: List<&2, Mounted>) -> List<&2
 # the address a held
 def Mount.id(name: String, a: String) -> Ledgers.Id:
   Ledgers.Id{name, String.append("mount ", a)}
+
+# What a node does
+# ----------------
+# This is the code that runs: a deed takes a plain state to a plain state,
+# and no proof is built on the way. impl.bend pairs a state with the proof
+# that it is sound (Raw.ok) only to state and prove the laws of the spec; it
+# proves there that a deed keeps a sound state sound (Node.does_sound), so a
+# node that runs on plain states holds what the laws say.
+
+# what a node does next, on plain states: the deeds of the spec, where the
+# other node of a Sync is its state
+type Act is Data:
+  Act.Connect{writer: String}
+  Act.Leave{writer: String}
+  Act.Ask{id: Ledgers.Id, request: Spec.Request}
+  Act.Sync{from: Raw}
+  Act.Mount{address: String, branch: Ledgers.Line, path: String, held: List<&2, U32>}
+  Act.Unmount{address: String}
+  Act.Work{}
+  Act.Drop{}
+  Act.Stop{force: Bool}
+
+# the state of a node of the name name, that holds nothing yet
+def Raw.new(name: String) -> Raw:
+  Raw{name, [], [], False{}, Facts.Facts.new(), Parts.Parts.new()}
+
+# the state after the node takes in the request r of the id i, with the words
+# of r to keep, when it may (go): it has not stopped, and the writer is
+# connected
+def Raw.asks(
+  +name: String,
+  ws: List<&2, String>,
+  ms: List<&2, Mounted>,
+  st: Bool,
+  fs: Facts.Facts(),
+  ps: Parts.Parts,
+  i: Ledgers.Id,
+  +r: Spec.Request,
+  go: Bool
+) -> Raw:
+  match go:
+    case False{}:
+      Raw{name, ws, ms, st, fs, ps}
+    case True{}:
+      Raw{name, ws, ms, st, Facts.Facts.ask(name, fs, i, r), Kept.with(ps, Request.content(r))}
+
+# the state after a work, unless the node has stopped
+def Raw.works(
+  +name: String,
+  ws: List<&2, String>,
+  ms: List<&2, Mounted>,
+  st: Bool,
+  fs: Facts.Facts(),
+  ps: Parts.Parts
+) -> Raw:
+  match st:
+    case True{}:
+      Raw{name, ws, ms, True{}, fs, ps}
+    case False{}:
+      Raw{name, ws, ms, False{}, Works.Work.does(fs, name), ps}
+
+# the state r after the deed a
+def Raw.does(r: Raw, a: Act) -> Raw:
+  match r a:
+    case Raw{name, +ws, ms, st, fs, ps} Act.Connect{+w}:
+      Raw{name, w <> Shared.List.remove(~String, ~String.eq, ws, w), ms, st, fs, ps}
+    case Raw{name, ws, ms, st, fs, ps} Act.Leave{w}:
+      Raw{name, Shared.List.remove(~String, ~String.eq, ws, w), ms, st, fs, ps}
+    case Raw{name, +ws, ms, +st, fs, ps} Act.Ask{+i, q}:
+      Raw.asks(
+        name,
+        ws,
+        ms,
+        st,
+        fs,
+        ps,
+        i,
+        q,
+        Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+      )
+    case Raw{+name, ws, ms, st, fs, ps} Act.Sync{Raw{name2, ws2, ms2, st2, fs2, ps2}}:
+      Raw{
+        name,
+        ws,
+        ms,
+        st,
+        Facts.Facts.take_all(name, Facts.Facts.list(fs2), fs),
+        Parts.Parts.join(ps, ps2)
+      }
+    case Raw{+name, ws, ms, +st, fs, ps} Act.Mount{+a, +b, +p, held}:
+      Raw.asks(
+        name,
+        ws,
+        Mounted{a, b, p} <> Mounts.remove(ms, a),
+        st,
+        fs,
+        ps,
+        Mount.id(name, a),
+        Spec.Request.Write{b, p, Some{held}},
+        Bool.not(st)
+      )
+    case Raw{name, ws, ms, st, fs, ps} Act.Unmount{a}:
+      Raw{name, ws, Mounts.remove(ms, a), st, fs, ps}
+    case Raw{name, ws, ms, st, fs, ps} Act.Work{}:
+      Raw.works(name, ws, ms, st, fs, ps)
+    case Raw{+name, ws, +ms, st, +fs, ps} Act.Drop{}:
+      Raw{name, ws, ms, st, fs, Parts.Parts.only(ps, Needs.of(fs, name, ms))}
+    case Raw{name, +ws, +ms, st, fs, ps} Act.Stop{f}:
+      Raw{
+        name,
+        ws,
+        ms,
+        Bool.or(
+          st,
+          Bool.or(
+            f,
+            Bool.and(List.is_empty(&2, String, ws), List.is_empty(&2, String, Mounts.addresses(ms)))
+          )
+        ),
+        fs,
+        ps
+      }
