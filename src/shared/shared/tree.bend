@@ -26101,7 +26101,19 @@ def Runs.trim_differ(
 ) -> {Pieces.sorted(a) == True{}: Bool} -> {Pieces.sorted(b) == True{}: Bool} -> {
   Mst.differ(Pieces.value(~S, ~fetch, f, s, a, k), Pieces.value(~S, ~fetch, f, s, b, k)) == Mst.differ(Pieces.value(~S, ~fetch, f, s, Runs.side_a(Runs.trim(Runs{a, b})), k), Pieces.value(~S, ~fetch, f, s, Runs.side_b(Runs.trim(Runs{a, b})), k)): Bool
 }:
-  ?TODO
+  h1 => h2 =>
+    %Runs.trim_split_a(a, b): {Mst.differ(Pieces.value(~S, ~fetch, f, s, _, k), Pieces.value(~S, ~fetch, f, s, b, k)) == Mst.differ(Pieces.value(~S, ~fetch, f, s, Runs.side_a(Runs.trim(Runs{a, b})), k), Pieces.value(~S, ~fetch, f, s, Runs.side_b(Runs.trim(Runs{a, b})), k)): Bool}
+    %Runs.trim_split_b(a, b): {Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_a(Runs.trim(Runs{a, b})), Mst.trim_back(a, b))), k), Pieces.value(~S, ~fetch, f, s, _, k)) == Mst.differ(Pieces.value(~S, ~fetch, f, s, Runs.side_a(Runs.trim(Runs{a, b})), k), Pieces.value(~S, ~fetch, f, s, Runs.side_b(Runs.trim(Runs{a, b})), k)): Bool}
+    +s1 = Equal.trans(Bool, Pieces.sorted(List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_a(Runs.trim(Runs{a, b})), Mst.trim_back(a, b)))), Pieces.sorted(a), True{}, Equal.cong(List<&2, Piece>, Bool, z => Pieces.sorted(z), List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_a(Runs.trim(Runs{a, b})), Mst.trim_back(a, b))), a, Runs.trim_split_a(a, b)), h1)
+    +s2 = Equal.trans(Bool, Pieces.sorted(List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_b(Runs.trim(Runs{a, b})), Mst.trim_back(a, b)))), Pieces.sorted(b), True{}, Equal.cong(List<&2, Piece>, Bool, z => Pieces.sorted(z), List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_b(Runs.trim(Runs{a, b})), Mst.trim_back(a, b))), b, Runs.trim_split_b(a, b)), h2)
+    Equal.trans(
+      Bool,
+      Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_a(Runs.trim(Runs{a, b})), Mst.trim_back(a, b))), k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_b(Runs.trim(Runs{a, b})), Mst.trim_back(a, b))), k)),
+      Mst.differ(Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, Runs.side_a(Runs.trim(Runs{a, b})), Mst.trim_back(a, b)), k), Pieces.value(~S, ~fetch, f, s, List.append(&2, Piece, Runs.side_b(Runs.trim(Runs{a, b})), Mst.trim_back(a, b)), k)),
+      Mst.differ(Pieces.value(~S, ~fetch, f, s, Runs.side_a(Runs.trim(Runs{a, b})), k), Pieces.value(~S, ~fetch, f, s, Runs.side_b(Runs.trim(Runs{a, b})), k)),
+      Mst.trim_front_differ(~S, ~fetch, f, s, Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_a(Runs.trim(Runs{a, b})), Mst.trim_back(a, b)), List.append(&2, Piece, Runs.side_b(Runs.trim(Runs{a, b})), Mst.trim_back(a, b)), k)(s1)(s2),
+      Mst.trim_back_differ(~S, ~fetch, f, s, Runs.side_a(Runs.trim(Runs{a, b})), Runs.side_b(Runs.trim(Runs{a, b})), Mst.trim_back(a, b), k)(Pieces.sorted_right(Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_a(Runs.trim(Runs{a, b})), Mst.trim_back(a, b)))(s1))(Pieces.sorted_right(Mst.trim_pre(a, b), List.append(&2, Piece, Runs.side_b(Runs.trim(Runs{a, b})), Mst.trim_back(a, b)))(s2))
+    )
 
 # a step of a run of sorted sides with no binding key on both: the keys it
 # gives, and the runs one level down, hold the difference of the run
@@ -26123,7 +26135,38 @@ def Mst.step_at_differ(
 def Mst.step_at_sorted(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +s: S, +a: List<&2, Piece>, +b: List<&2, Piece>, -r1: Round) -> {
   Mst.step.at(~S, ~fetch, s, Runs{a, b}) == Some{r1}: Maybe<&2, Round>
 } -> {Pieces.sorted(a) == True{}: Bool} -> {Pieces.sorted(b) == True{}: Bool} -> {Runs.sorted_all(Round.pairs(r1)) == True{}: Bool}:
-  ?TODO
+  e => +h1 => +h2 => Shared.Bool.when_cases(
+    Maybe<&2, Round>,
+    x => {x == Some{r1}: Maybe<&2, Round>} -> {Runs.sorted_all(Round.pairs(r1)) == True{}: Bool},
+    Bool.or(Pieces.has_sub(a), Pieces.has_sub(b)),
+    u => Maybe.bind(&2, List<&2, Piece>, Round, Mst.open.all(~S, ~fetch, s, a), a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, s, b))),
+    u => Some{Round{Pieces.keys(a, Pieces.keys(b, [])), []}},
+    ht => e2 => Maybe.bind_cases(
+      List<&2, Piece>,
+      Round,
+      Mst.open.all(~S, ~fetch, s, a),
+      a2 => Maybe.map(&2, List<&2, Piece>, Round, b2 => Round{[], [Runs{a2, b2}]}, Mst.open.all(~S, ~fetch, s, b)),
+      r1,
+      {Runs.sorted_all(Round.pairs(r1)) == True{}: Bool},
+      +a2 => ea => e3 => Maybe.map_cases(
+        List<&2, Piece>,
+        Round,
+        Mst.open.all(~S, ~fetch, s, b),
+        b2 => Round{[], [Runs{a2, b2}]},
+        r1,
+        {Runs.sorted_all(Round.pairs(r1)) == True{}: Bool},
+        +b2 => eb => e4 =>
+          %e4: {Runs.sorted_all(Round.pairs(_)) == True{}: Bool}
+          Shared.Bool.and_both(
+            Bool.and(Pieces.sorted(a2), Pieces.sorted(b2)),
+            True{}
+          )(Shared.Bool.and_both(Pieces.sorted(a2), Pieces.sorted(b2))(Mst.open_all_sorted(~S, ~fetch, s, a, a2)(ea)(h1))(Mst.open_all_sorted(~S, ~fetch, s, b, b2)(eb)(h2)))({==})
+      )(e3)
+    )(e2),
+    hf => e2 =>
+      %Shared.Maybe.some_inj(Round, Round{Pieces.keys(a, Pieces.keys(b, [])), []}, r1, e2): {Runs.sorted_all(Round.pairs(_)) == True{}: Bool}
+      {==}
+  )(e)
 
 # runs with sorted sides, then others, have sorted sides
 def Runs.sorted_all_append(ps: List<&2, Runs>, +qs: List<&2, Runs>) -> {Runs.sorted_all(ps) == True{}: Bool} -> {Runs.sorted_all(qs) == True{}: Bool} -> {
