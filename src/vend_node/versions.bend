@@ -1214,6 +1214,422 @@ def Line.branch_owned(+s: Facts.Facts(), +h: Hashes.Hash, +b: String, +vs: List<
     )
   )(hv)
 
+# The start of a store
+# --------------------
+
+# a list that p does not hold of has a member that p does not hold of
+def List.holds_not(
+  ~A: Data,
+  ~V: Data,
+  ~p: V -> A -> Bool,
+  ~same: A -> A -> Bool,
+  ~laws: Shared.Eq.Laws(A, same),
+  xs: List<&2, A>,
+  +g: V
+) -> {Shared.List.holds(~A, ~V, ~p, xs, g) == False{}: Bool} -> Exists(
+  A,
+  x => {List.contains(~A, ~same, xs, x) == True{}: Bool} & {p(g)(x) == False{}: Bool}
+):
+  match xs:
+    case Nil{}:
+      h => Empty.absurd(
+        Exists(A, x => {List.contains(~A, ~same, [], x) == True{}: Bool} & {p(g)(x) == False{}: Bool}),
+        Shared.Bool.true_ne_false(h)
+      )
+    case Con{+z, +t}:
+      Lists.Bool.by(
+        d => {List.all.if(u => Shared.List.holds(~A, ~V, ~p, t, g), d) == False{}: Bool} -> Exists(
+          A,
+          x => {List.contains(~A, ~same, z <> t, x) == True{}: Bool} & {p(g)(x) == False{}: Bool}
+        ),
+        p(g)(z),
+        et => h => Lists.List.exists_cons(
+          ~A,
+          ~same,
+          y => {p(g)(y) == False{}: Bool},
+          z,
+          t,
+          List.holds_not(~A, ~V, ~p, ~same, ~laws, t, g)(h)
+        ),
+        ef => h => (z, (Lists.List.contains_head(~A, ~same, ~laws, z, t), ef))
+      )
+
+# when List.pick gives nothing, p holds of no member of xs
+def List.pick_none_in(
+  ~A: Data,
+  ~V: Data,
+  ~p: V -> A -> Bool,
+  ~same: A -> A -> Bool,
+  ~laws: Shared.Eq.Laws(A, same),
+  xs: List<&2, A>,
+  +g: V,
+  +x: A
+) -> {Lists.List.pick(~A, ~V, ~p, xs, g) == None{}: Maybe<&2, A>} -> {
+  List.contains(~A, ~same, xs, x) == True{}: Bool
+} -> {p(g)(x) == False{}: Bool}:
+  match xs:
+    case Nil{}:
+      hn => hin => Empty.absurd({p(g)(x) == False{}: Bool}, Shared.Bool.false_ne_true(hin))
+    case Con{+h, +t}:
+      hn => hin => Lists.Bool.by(
+        d => {List.find.if(A, h, u => Lists.List.pick(~A, ~V, ~p, t, g), d) == None{}: Maybe<&2, A>} -> {
+          p(g)(x) == False{}: Bool
+        },
+        p(g)(h),
+        et => hn2 => Empty.absurd({p(g)(x) == False{}: Bool}, Lists.Maybe.some_ne_none(A, h, hn2)),
+        ef => hn2 => Lists.List.contains_cons_by(
+          ~A,
+          ~same,
+          ~laws,
+          {p(g)(x) == False{}: Bool},
+          h,
+          t,
+          x,
+          hin,
+          e => (
+            %e: {p(g)(_) == False{}: Bool}
+            ef
+          ),
+          cin => List.pick_none_in(~A, ~V, ~p, ~same, ~laws, t, g, x)(hn2)(cin)
+        )
+      )(hn)
+
+# the fact f is an ask
+def Fact.is_ask(f: Types.Fact) -> Bool:
+  match f:
+    case Types.Fact.Ask{a}:
+      True{}
+    case Types.Fact.Vote{v, st, pk}:
+      False{}
+
+# the ask that the fact f is, or d when it is a vote
+def Fact.ask_or(f: Types.Fact, d: Types.Ask) -> Types.Ask:
+  match f:
+    case Types.Fact.Ask{a}:
+      a
+    case Types.Fact.Vote{v, st, pk}:
+      d
+
+# a member of r is a member of r with y before it when keep is true
+def Asks.contains_put(+y: Types.Ask, +r: List<&2, Types.Ask>, +x: Types.Ask, keep: Bool) -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, r, x) == True{}: Bool
+} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, y, r, keep), x) == True{}: Bool}:
+  match keep:
+    case True{}:
+      Shared.List.contains_cons(~Types.Ask, ~Coded.Ask.is_eq, y, r, x)
+    case False{}:
+      h => h
+
+# an ask that starts the store of the root h is among the starts that it is
+# put before
+def Starts.in_of.head(+b: Types.Ask, +S: List<&2, Types.Ask>, +h: Hashes.Hash, +a: Types.Ask) -> {b == a: Types.Ask} -> {
+  Facts.Ask.starts(h, a) == True{}: Bool
+} -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, b, S, Facts.Ask.starts(h, b)), a) == True{}: Bool
+}:
+  +e => hs => (
+    %e: {
+      List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, b, S, Facts.Ask.starts(h, b)), _) == True{}: Bool
+    }
+    %Equal.sym(
+      Bool,
+      Facts.Ask.starts(h, b),
+      True{},
+      (
+        %Equal.sym(Types.Ask, b, a, e): {Facts.Ask.starts(h, _) == True{}: Bool}
+        hs
+      )
+    ): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, b, S, _), b) == True{}: Bool}
+    Lists.List.contains_head(~Types.Ask, ~Coded.Ask.is_eq, ~Coded.Ask.laws(), b, S)
+  )
+
+# an ask among fs that starts the store of the root h is among its starts
+def Starts.in_of(fs: List<&2, Types.Fact>, +h: Hashes.Hash, +a: Types.Ask) -> {
+  List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Ask{a}) == True{}: Bool
+} -> {Facts.Ask.starts(h, a) == True{}: Bool} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(fs, h), a) == True{}: Bool}:
+  match fs:
+    case Nil{}:
+      hin => hs => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(hin))
+    case Con{Types.Fact.Vote{+v, +st, +pk}, +rest}:
+      hin => hs => Lists.List.contains_cons_by(
+        ~Types.Fact,
+        ~Coded.Fact.is_eq,
+        ~Coded.Fact.laws(),
+        {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(rest, h), a) == True{}: Bool},
+        Types.Fact.Vote{v, st, pk},
+        rest,
+        Types.Fact.Ask{a},
+        hin,
+        e => Empty.absurd(
+          {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(rest, h), a) == True{}: Bool},
+          Shared.Bool.false_ne_true(
+            Equal.cong(Types.Fact, Bool, z => Fact.is_ask(z), Types.Fact.Vote{v, st, pk}, Types.Fact.Ask{a}, e)
+          )
+        ),
+        cin => Starts.in_of(rest, h, a)(cin)(hs)
+      )
+    case Con{Types.Fact.Ask{+b}, +rest}:
+      hin => +hs => Lists.List.contains_cons_by(
+        ~Types.Fact,
+        ~Coded.Fact.is_eq,
+        ~Coded.Fact.laws(),
+        {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, b, Lines.Starts.of(rest, h), Facts.Ask.starts(h, b)), a) == True{}: Bool},
+        Types.Fact.Ask{b},
+        rest,
+        Types.Fact.Ask{a},
+        hin,
+        e => Starts.in_of.head(b, Lines.Starts.of(rest, h), h, a)(
+          Equal.cong(Types.Fact, Types.Ask, z => Fact.ask_or(z, a), Types.Fact.Ask{b}, Types.Fact.Ask{a}, e)
+        )(hs),
+        cin => Asks.contains_put(b, Lines.Starts.of(rest, h), a, Facts.Ask.starts(h, b))(Starts.in_of(rest, h, a)(cin)(hs))
+      )
+
+# each of the asks that start a store is an ask among the facts
+def Starts.of_has(fs: List<&2, Types.Fact>, +h: Hashes.Hash, +b: Types.Ask) -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(fs, h), b) == True{}: Bool
+} -> {List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Ask{b}) == True{}: Bool}:
+  match fs:
+    case Nil{}:
+      hin => hin
+    case Con{Types.Fact.Vote{+v, +st, +pk}, +rest}:
+      hin => Shared.List.contains_cons(~Types.Fact, ~Coded.Fact.is_eq, Types.Fact.Vote{v, st, pk}, rest, Types.Fact.Ask{b})(
+        Starts.of_has(rest, h, b)(hin)
+      )
+    case Con{Types.Fact.Ask{+y}, +rest}:
+      Lists.Bool.by(
+        d => {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, y, Lines.Starts.of(rest, h), d), b) == True{}: Bool} -> {
+          List.contains(~Types.Fact, ~Coded.Fact.is_eq, Types.Fact.Ask{y} <> rest, Types.Fact.Ask{b}) == True{}: Bool
+        },
+        Facts.Ask.starts(h, y),
+        et => hin => Lists.List.contains_cons_by(
+          ~Types.Ask,
+          ~Coded.Ask.is_eq,
+          ~Coded.Ask.laws(),
+          {List.contains(~Types.Fact, ~Coded.Fact.is_eq, Types.Fact.Ask{y} <> rest, Types.Fact.Ask{b}) == True{}: Bool},
+          y,
+          Lines.Starts.of(rest, h),
+          b,
+          hin,
+          e => (
+            %e: {List.contains(~Types.Fact, ~Coded.Fact.is_eq, Types.Fact.Ask{y} <> rest, Types.Fact.Ask{_}) == True{}: Bool}
+            Lists.List.contains_head(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), Types.Fact.Ask{y}, rest)
+          ),
+          cin => Shared.List.contains_cons(~Types.Fact, ~Coded.Fact.is_eq, Types.Fact.Ask{y}, rest, Types.Fact.Ask{b})(
+            Starts.of_has(rest, h, b)(cin)
+          )
+        ),
+        ef => hin => Shared.List.contains_cons(~Types.Fact, ~Coded.Fact.is_eq, Types.Fact.Ask{y}, rest, Types.Fact.Ask{b})(
+          Starts.of_has(rest, h, b)(hin)
+        )
+      )
+
+# a set of facts holds each of the asks that start a store in it
+def Starts.has(+S: Facts.Facts(), +h: Hashes.Hash, +b: Types.Ask) -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(Facts.Facts.list(S), h), b) == True{}: Bool
+} -> {Facts.Facts.has(S, Types.Fact.Ask{b}) == True{}: Bool}:
+  hin => Equal.trans(
+    Bool,
+    Facts.Facts.has(S, Types.Fact.Ask{b}),
+    List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(S), Types.Fact.Ask{b}),
+    True{},
+    Facts.Facts.has_list(S, Types.Fact.Ask{b}),
+    Starts.of_has(Facts.Facts.list(S), h, b)(hin)
+  )
+
+# an ask is alike to itself
+def Ask.alike_refl(a: Types.Ask) -> {Facts.Ask.alike(a, a) == True{}: Bool}:
+  match a:
+    case Types.Ask{+i, k, +r}:
+      Shared.Bool.and_both(Ledgers.Id.is_eq(i, i), Coded.Request.is_eq(r, r))(Ledgers.Id.is_eq_refl(i))(
+        Coded.Request.is_eq_refl(r)
+      )
+
+# an ask that a set holds after it takes in a request is the ask of that
+# request, or of a lesser number
+def Asked.low(+name: String, +s: Facts.Facts(), +i: Ledgers.Id, +r: Spec.Request, +b: Types.Ask) -> {
+  Facts.Facts.has(Facts.Facts.ask(name, s, i, r), Types.Fact.Ask{b}) == True{}: Bool
+} -> {Bool.or(Coded.Ask.is_eq(b, Facts.Facts.asked(s, i, r)), Nat.is_lt(Facts.Ask.seq(b), Facts.Ask.seq(Facts.Facts.asked(s, i, r)))) == True{}: Bool}:
+  hb => Lists.Bool.by(
+    d => {Bool.or(d, Facts.Facts.has(s, Types.Fact.Ask{b})) == True{}: Bool} -> {
+      Bool.or(d, Nat.is_lt(Facts.Ask.seq(b), Facts.Ask.seq(Facts.Facts.asked(s, i, r)))) == True{}: Bool
+    },
+    Coded.Ask.is_eq(b, Facts.Facts.asked(s, i, r)),
+    et => h => {==},
+    ef => h => Shared.Nat.le_lt(Facts.Ask.seq(b), Facts.Seq.peak(Facts.Facts.list(s)), 1n+Facts.Seq.peak(Facts.Facts.list(s)))(Facts.Facts.seq_ask(s, b)(h))(
+      Shared.Nat.lt_succ(Facts.Seq.peak(Facts.Facts.list(s)))
+    )
+  )(
+    Equal.trans(
+      Bool,
+      Bool.or(Coded.Ask.is_eq(b, Facts.Facts.asked(s, i, r)), Facts.Facts.has(s, Types.Fact.Ask{b})),
+      Facts.Facts.has(Facts.Facts.ask(name, s, i, r), Types.Fact.Ask{b}),
+      True{},
+      Equal.sym(
+        Bool,
+        Facts.Facts.has(Facts.Facts.ask(name, s, i, r), Types.Fact.Ask{b}),
+        Bool.or(Coded.Ask.is_eq(b, Facts.Facts.asked(s, i, r)), Facts.Facts.has(s, Types.Fact.Ask{b})),
+        Facts.Facts.take_ask_asks(name, s, Facts.Facts.asked(s, i, r), b)
+      ),
+      hb
+    )
+  )
+
+# no ask that a set holds after it takes in a request stands against the ask
+# of that request
+def Asked.led(+name: String, +s: Facts.Facts(), +i: Ledgers.Id, +r: Spec.Request, +y: Types.Ask) -> {
+  Facts.Facts.has(Facts.Facts.ask(name, s, i, r), Types.Fact.Ask{y}) == True{}: Bool
+} -> {Lines.Ask.led(Facts.Facts.asked(s, i, r), y) == True{}: Bool}:
+  hy => Lists.Bool.by(
+    d => {Bool.or(d, Nat.is_lt(Facts.Ask.seq(y), Facts.Ask.seq(Facts.Facts.asked(s, i, r)))) == True{}: Bool} -> {Lines.Ask.led(Facts.Facts.asked(s, i, r), y) == True{}: Bool},
+    Coded.Ask.is_eq(y, Facts.Facts.asked(s, i, r)),
+    et => h => (
+      %Equal.sym(Types.Ask, y, Facts.Facts.asked(s, i, r), Coded.Ask.is_eq_sound(y, Facts.Facts.asked(s, i, r))(et)): {
+        Lines.Ask.led(Facts.Facts.asked(s, i, r), _) == True{}: Bool
+      }
+      %Equal.sym(Bool, Facts.Ask.alike(Facts.Facts.asked(s, i, r), Facts.Facts.asked(s, i, r)), True{}, Ask.alike_refl(Facts.Facts.asked(s, i, r))): {
+        Bool.or(_, Nat.is_lt(Facts.Ask.seq(Facts.Facts.asked(s, i, r)), Facts.Ask.seq(Facts.Facts.asked(s, i, r)))) == True{}: Bool
+      }
+      {==}
+    ),
+    ef => h => (
+      %Equal.sym(Bool, Nat.is_lt(Facts.Ask.seq(y), Facts.Ask.seq(Facts.Facts.asked(s, i, r))), True{}, h): {
+        Bool.or(Facts.Ask.alike(Facts.Facts.asked(s, i, r), y), _) == True{}: Bool
+      }
+      Shared.Bool.or_true_right(Facts.Ask.alike(Facts.Facts.asked(s, i, r), y))
+    )
+  )(Asked.low(name, s, i, r, y)(hy))
+
+# an ask that a set holds after it takes in a request, and that the ask of
+# that request does not stand against, is alike to it
+def Asked.alike(+name: String, +s: Facts.Facts(), +i: Ledgers.Id, +r: Spec.Request, +x: Types.Ask) -> {
+  Facts.Facts.has(Facts.Facts.ask(name, s, i, r), Types.Fact.Ask{x}) == True{}: Bool
+} -> {Lines.Ask.led(x, Facts.Facts.asked(s, i, r)) == True{}: Bool} -> {Facts.Ask.alike(x, Facts.Facts.asked(s, i, r)) == True{}: Bool}:
+  hx => hl => Lists.Bool.by(
+    d => {Bool.or(d, Nat.is_lt(Facts.Ask.seq(Facts.Facts.asked(s, i, r)), Facts.Ask.seq(x))) == True{}: Bool} -> {d == True{}: Bool},
+    Facts.Ask.alike(x, Facts.Facts.asked(s, i, r)),
+    et => h => {==},
+    +ef => +h => Lists.Bool.by(
+      d2 => {Bool.or(d2, Nat.is_lt(Facts.Ask.seq(x), Facts.Ask.seq(Facts.Facts.asked(s, i, r)))) == True{}: Bool} -> {False{} == True{}: Bool},
+      Coded.Ask.is_eq(x, Facts.Facts.asked(s, i, r)),
+      et2 => h2 => Lists.Bool.clash(
+        {False{} == True{}: Bool},
+        Facts.Ask.alike(x, Facts.Facts.asked(s, i, r)),
+        ef,
+        (
+          %Coded.Ask.is_eq_sound(x, Facts.Facts.asked(s, i, r))(et2): {Facts.Ask.alike(x, _) == True{}: Bool}
+          Ask.alike_refl(x)
+        )
+      ),
+      ef2 => h2 => Lists.Bool.clash(
+        {False{} == True{}: Bool},
+        Nat.is_lt(Facts.Ask.seq(x), Facts.Ask.seq(Facts.Facts.asked(s, i, r))),
+        Shared.Nat.le_nlt(Facts.Ask.seq(Facts.Facts.asked(s, i, r)), Facts.Ask.seq(x))(Shared.Nat.lt_weak(Facts.Ask.seq(Facts.Facts.asked(s, i, r)), Facts.Ask.seq(x))(h)),
+        h2
+      )
+    )(Asked.low(name, s, i, r, x)(hx))
+  )(hl)
+
+# two asks that are alike give the same version 0 of a store
+def Ask.alike_first(x: Types.Ask, +i: Ledgers.Id, -k: Nat, +r: Spec.Request) -> {
+  Facts.Ask.alike(x, Types.Ask{i, k, r}) == True{}: Bool
+} -> {Lines.Store.first.of(Some{x}) == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>}:
+  match x:
+    case Types.Ask{+j, l, +q}:
+      +h => (
+        %Ledgers.Id.is_eq_sound(j, i)(
+          Shared.Bool.and_true_left(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r))(h)
+        ): {Some{Lines.Entry.first(j, q, 0n)} == Some{Lines.Entry.first(_, r, 0n)}: Maybe<&2, Types.Entry>}
+        %Coded.Request.is_eq_sound(q, r)(
+          Shared.Bool.and_true_right(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r))(h)
+        ): {Some{Lines.Entry.first(j, q, 0n)} == Some{Lines.Entry.first(j, _, 0n)}: Maybe<&2, Types.Entry>}
+        {==}
+      )
+
+# the ask of a request that starts a store is among the starts of the store,
+# once the node took it in
+def Asked.in(+name: String, +s: Facts.Facts(), +i: Ledgers.Id, +os: List<&2, String>) -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), Facts.Facts.asked(s, i, Spec.Request.Start{os})) == True{}: Bool
+}:
+  Starts.in_of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os}), Facts.Facts.asked(s, i, Spec.Request.Start{os}))(
+    Equal.trans(
+      Bool,
+      List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Types.Fact.Ask{Facts.Facts.asked(s, i, Spec.Request.Start{os})}),
+      Facts.Facts.has(Facts.Facts.ask(name, s, i, Spec.Request.Start{os}), Types.Fact.Ask{Facts.Facts.asked(s, i, Spec.Request.Start{os})}),
+      True{},
+      Equal.sym(
+        Bool,
+        Facts.Facts.has(Facts.Facts.ask(name, s, i, Spec.Request.Start{os}), Types.Fact.Ask{Facts.Facts.asked(s, i, Spec.Request.Start{os})}),
+        List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Types.Fact.Ask{Facts.Facts.asked(s, i, Spec.Request.Start{os})}),
+        Facts.Facts.has_list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os}), Types.Fact.Ask{Facts.Facts.asked(s, i, Spec.Request.Start{os})})
+      ),
+      Facts.Facts.take_ask_has(name, s, Facts.Facts.asked(s, i, Spec.Request.Start{os}))
+    )
+  )(Hashes.Hash.is_eq_refl(Facts.Start.root(i, Spec.Request.Start{os})))
+
+# Asked.leads, from a start that would stand against the ask
+def Asked.leads.of(
+  +name: String, +s: Facts.Facts(), +i: Ledgers.Id, +os: List<&2, String>,
+  r: Exists(
+    Types.Ask,
+    y => {
+      List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), y) == True{}: Bool
+    }
+      & {Lines.Ask.led(Facts.Facts.asked(s, i, Spec.Request.Start{os}), y) == False{}: Bool}
+  )
+) -> {False{} == True{}: Bool}:
+  (+y, w) = r
+  (hin, hf) = w
+  Lists.Bool.clash(
+    {False{} == True{}: Bool},
+    Lines.Ask.led(Facts.Facts.asked(s, i, Spec.Request.Start{os}), y),
+    hf,
+    Asked.led(name, s, i, Spec.Request.Start{os}, y)(Starts.has(Facts.Facts.ask(name, s, i, Spec.Request.Start{os}), Facts.Start.root(i, Spec.Request.Start{os}), y)(hin))
+  )
+
+# the ask of a request that starts a store leads the starts of the store, once
+# the node took it in
+def Asked.leads(+name: String, +s: Facts.Facts(), +i: Ledgers.Id, +os: List<&2, String>) -> {Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), Facts.Facts.asked(s, i, Spec.Request.Start{os})) == True{}: Bool}:
+  Lists.Bool.by(
+    d => {d == True{}: Bool},
+    Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), Facts.Facts.asked(s, i, Spec.Request.Start{os})),
+    et => {==},
+    ef => Asked.leads.of(
+      name,
+      s,
+      i,
+      os,
+      List.holds_not(~Types.Ask, ~Types.Ask, ~Lines.Ask.led, ~Coded.Ask.is_eq, ~Coded.Ask.laws(), Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), Facts.Facts.asked(s, i, Spec.Request.Start{os}))(ef)
+    )
+  )
+
+# version 0 of a store is the request that started it, once the node took it
+# in
+def Asked.first(+name: String, +s: Facts.Facts(), +i: Ledgers.Id, +os: List<&2, String>) -> {
+  Lines.Store.first(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})) == Some{Lines.Entry.first(i, Spec.Request.Start{os}, 0n)}: Maybe<&2, Types.Entry>
+}:
+  Lists.Maybe.by(
+    Types.Ask,
+    m => {Lines.Store.first.of(m) == Some{Lines.Entry.first(i, Spec.Request.Start{os}, 0n)}: Maybe<&2, Types.Entry>},
+    Lists.List.pick(~Types.Ask, ~List<&2, Types.Ask>, ~Lines.Ask.leads, Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os}))),
+    en => Lists.Bool.clash(
+      {None{} == Some{Lines.Entry.first(i, Spec.Request.Start{os}, 0n)}: Maybe<&2, Types.Entry>},
+      Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), Facts.Facts.asked(s, i, Spec.Request.Start{os})),
+      List.pick_none_in(~Types.Ask, ~List<&2, Types.Ask>, ~Lines.Ask.leads, ~Coded.Ask.is_eq, ~Coded.Ask.laws(), Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), Facts.Facts.asked(s, i, Spec.Request.Start{os}))(en)(Asked.in(name, s, i, os)),
+      Asked.leads(name, s, i, os)
+    ),
+    +x => +ex => Ask.alike_first(x, i, 1n+Facts.Seq.peak(Facts.Facts.list(s)), Spec.Request.Start{os})(
+      Asked.alike(name, s, i, Spec.Request.Start{os}, x)(
+        Starts.has(Facts.Facts.ask(name, s, i, Spec.Request.Start{os}), Facts.Start.root(i, Spec.Request.Start{os}), x)(
+          Lists.List.pick_in(~Types.Ask, ~List<&2, Types.Ask>, ~Lines.Ask.leads, ~Coded.Ask.is_eq, ~Coded.Ask.laws(), Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), x)(ex)
+        )
+      )(
+        Lists.List.holds_in(~Types.Ask, ~Types.Ask, ~Lines.Ask.led, ~Coded.Ask.is_eq, ~Coded.Ask.laws(), Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), x, Facts.Facts.asked(s, i, Spec.Request.Start{os}))(
+          Lists.List.pick_hit(~Types.Ask, ~List<&2, Types.Ask>, ~Lines.Ask.leads, Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), Lines.Starts.of(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})), x)(ex)
+        )(Asked.in(name, s, i, os))
+      )
+    )
+  )
+
 # a node that takes in a request that starts a store holds version 0 of the
 # store: that request
 def Line.started(+name: String, +s: Facts.Facts(), +i: Ledgers.Id, +os: List<&2, String>) -> {
@@ -1224,7 +1640,25 @@ def Line.started(+name: String, +s: Facts.Facts(), +i: Ledgers.Id, +os: List<&2,
   )
     == Some{Lines.Entry.first(i, Spec.Request.Start{os}, 0n)}: Maybe<&2, Types.Entry>
 }:
-  ?TODO
+  %Equal.sym(
+    Maybe<&2, Types.Entry>,
+    Lines.Store.first(Facts.Facts.list(Facts.Facts.ask(name, s, i, Spec.Request.Start{os})), Facts.Start.root(i, Spec.Request.Start{os})),
+    Some{Lines.Entry.first(i, Spec.Request.Start{os}, 0n)},
+    Asked.first(name, s, i, os)
+  ): {
+    Lines.Line.at.of(
+      Maybe.map(
+        &2,
+        Lines.State,
+        List<&2, Types.Entry>,
+        Lines.State.versions,
+        Lines.Line.from(Facts.Facts.ask(name, s, i, Spec.Request.Start{os}), None{}, Ledgers.Line{Facts.Start.root(i, Spec.Request.Start{os}), None{}}, _)
+      ),
+      0n
+    )
+      == Some{Lines.Entry.first(i, Spec.Request.Start{os}, 0n)}: Maybe<&2, Types.Entry>
+  }
+  Line.start_zero(Facts.Facts.ask(name, s, i, Spec.Request.Start{os}), None{}, Ledgers.Line{Facts.Start.root(i, Spec.Request.Start{os}), None{}}, Lines.Entry.first(i, Spec.Request.Start{os}, 0n))
 
 # Where a run stops
 # -----------------

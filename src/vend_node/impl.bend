@@ -329,3 +329,504 @@ def Spec.VendNode.views_agree(n1, n2, w, b, p):
         fs2,
         Facts.Facts.same(fs, fs2)(h)
       )
+
+# Laws of what a node is
+# ----------------------
+
+# a node that asks keeps its name
+def Node.asks_name(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  go: Bool
+) -> {Spec.VendNode.name(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, go)) == name: String}:
+  match go:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a node that works keeps its name
+def Node.works_name(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+) -> {Spec.VendNode.name(Node.works(name, ws, ms, st, fs, ps, ok)) == name: String}:
+  match st:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def Spec.VendNode.name_stays(n, d):
+  match n d:
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Connect{+w}:
+      {==}
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Leave{+w}:
+      {==}
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Ask{+i, +r}:
+      Node.asks_name(
+        name,
+        ws,
+        ms,
+        st,
+        fs,
+        ps,
+        ok,
+        i,
+        r,
+        Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}:
+      {==}
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
+      Node.asks_name(
+        name,
+        ws,
+        Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+        st,
+        fs,
+        ps,
+        ok,
+        Nodes.Mount.id(name, a),
+        Spec.Request.Write{b, p, Some{held}},
+        Bool.not(st)
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Unmount{+a}:
+      {==}
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Work{}:
+      Node.works_name(name, ws, ms, st, fs, ps, ok)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Drop{}:
+      {==}
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Stop{f}:
+      {==}
+
+# every name of xs is in xs
+def Node.within_refl(xs: List<&2, String>) -> {Shared.List.within(~String, ~String.eq, xs, xs) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Shared.Bool.and_both(
+        List.contains(~String, ~String.eq, x <> r, x),
+        Shared.List.within(~String, ~String.eq, r, x <> r)
+      )(Lists.List.contains_head(~String, ~String.eq, ~Texts.String.laws(), x, r))(
+        Lists.List.within_cons(~String, ~String.eq, r, x, r)(Node.within_refl(r))
+      )
+
+# two tests that hold both ways hold as one
+def Node.same_refl.of(a: Bool) -> {a == True{}: Bool} -> {List.all.if(u => a, a) == True{}: Bool}:
+  match a:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => h
+
+# a list of names holds the same names as itself
+def Node.same_refl(+xs: List<&2, String>) -> {Shared.List.same_set(~String, ~String.eq, xs, xs) == True{}: Bool}:
+  Node.same_refl.of(Shared.List.within(~String, ~String.eq, xs, xs))(Node.within_refl(xs))
+
+# equal lists of names hold the same names
+def Node.same_of(+xs: List<&2, String>, +ys: List<&2, String>) -> {xs == ys: List<&2, String>} -> {
+  Shared.List.same_set(~String, ~String.eq, xs, ys) == True{}: Bool
+}:
+  e =>
+    %e: {Shared.List.same_set(~String, ~String.eq, xs, _) == True{}: Bool}
+    Node.same_refl(xs)
+
+# a node that asks keeps its writers
+def Node.asks_writers(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  go: Bool
+) -> {Spec.VendNode.writers(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, go)) == ws: List<&2, String>}:
+  match go:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a node that works keeps its writers
+def Node.works_writers(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+) -> {Spec.VendNode.writers(Node.works(name, ws, ms, st, fs, ps, ok)) == ws: List<&2, String>}:
+  match st:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def Spec.VendNode.writers_are(n, d):
+  match n d:
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Connect{+w}:
+      Node.same_refl(w <> Shared.List.remove(~String, ~String.eq, ws, w))
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Leave{+w}:
+      Node.same_refl(Shared.List.remove(~String, ~String.eq, ws, w))
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Ask{+i, +r}:
+      Node.same_of(
+        Spec.VendNode.writers(
+          Node.asks(
+            name,
+            ws,
+            ms,
+            st,
+            fs,
+            ps,
+            ok,
+            i,
+            r,
+            Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+          )
+        ),
+        ws
+      )(
+        Node.asks_writers(
+          name,
+          ws,
+          ms,
+          st,
+          fs,
+          ps,
+          ok,
+          i,
+          r,
+          Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+        )
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}:
+      Node.same_refl(ws)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
+      Node.same_of(
+        Spec.VendNode.writers(
+          Node.asks(
+            name,
+            ws,
+            Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+            st,
+            fs,
+            ps,
+            ok,
+            Nodes.Mount.id(name, a),
+            Spec.Request.Write{b, p, Some{held}},
+            Bool.not(st)
+          )
+        ),
+        ws
+      )(
+        Node.asks_writers(
+          name,
+          ws,
+          Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+          st,
+          fs,
+          ps,
+          ok,
+          Nodes.Mount.id(name, a),
+          Spec.Request.Write{b, p, Some{held}},
+          Bool.not(st)
+        )
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Unmount{+a}:
+      Node.same_refl(ws)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Work{}:
+      Node.same_of(Spec.VendNode.writers(Node.works(name, ws, ms, st, fs, ps, ok)), ws)(
+        Node.works_writers(name, ws, ms, st, fs, ps, ok)
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Drop{}:
+      Node.same_refl(ws)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Stop{f}:
+      Node.same_refl(ws)
+
+# a node that asks keeps its mounts
+def Node.asks_mounts(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  go: Bool
+) -> {
+  Spec.VendNode.mounts(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, go)) == Nodes.Mounts.addresses(ms): List<&2, String>
+}:
+  match go:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a node that works keeps its mounts
+def Node.works_mounts(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+) -> {
+  Spec.VendNode.mounts(Node.works(name, ws, ms, st, fs, ps, ok)) == Nodes.Mounts.addresses(ms): List<&2, String>
+}:
+  match st:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# the addresses of a kept resource before others are its address, kept, before theirs
+def Node.remove_addresses.put(m: Nodes.Mounted, r: List<&2, Nodes.Mounted>, keep: Bool) -> {
+  Nodes.Mounts.addresses(List.filter.put(Nodes.Mounted, m, r, keep))
+    == List.filter.put(String, Nodes.Mounted.address(m), Nodes.Mounts.addresses(r), keep): List<&2, String>
+}:
+  match keep:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# the addresses of the resources but those at a are the addresses but a
+def Node.remove_addresses(ms: List<&2, Nodes.Mounted>, +a: String) -> {
+  Nodes.Mounts.addresses(Nodes.Mounts.remove(ms, a))
+    == Shared.List.remove(~String, ~String.eq, Nodes.Mounts.addresses(ms), a): List<&2, String>
+}:
+  match ms:
+    case Nil{}:
+      {==}
+    case Con{Nodes.Mounted{+x, +b, +p}, +rest}:
+      Equal.trans(
+        List<&2, String>,
+        Nodes.Mounts.addresses(
+          List.filter.put(Nodes.Mounted, Nodes.Mounted{x, b, p}, Nodes.Mounts.remove(rest, a), Bool.not(String.eq(x, a)))
+        ),
+        List.filter.put(String, x, Nodes.Mounts.addresses(Nodes.Mounts.remove(rest, a)), Bool.not(String.eq(x, a))),
+        List.filter.put(
+          String,
+          x,
+          Shared.List.remove(~String, ~String.eq, Nodes.Mounts.addresses(rest), a),
+          Bool.not(String.eq(x, a))
+        ),
+        Node.remove_addresses.put(Nodes.Mounted{x, b, p}, Nodes.Mounts.remove(rest, a), Bool.not(String.eq(x, a))),
+        Equal.cong(
+          List<&2, String>,
+          List<&2, String>,
+          z => List.filter.put(String, x, z, Bool.not(String.eq(x, a))),
+          Nodes.Mounts.addresses(Nodes.Mounts.remove(rest, a)),
+          Shared.List.remove(~String, ~String.eq, Nodes.Mounts.addresses(rest), a),
+          Node.remove_addresses(rest, a)
+        )
+      )
+
+def Spec.VendNode.mounts_are(n, d):
+  match n d:
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Connect{+w}:
+      Node.same_refl(Nodes.Mounts.addresses(ms))
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Leave{+w}:
+      Node.same_refl(Nodes.Mounts.addresses(ms))
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Ask{+i, +r}:
+      Node.same_of(
+        Spec.VendNode.mounts(
+          Node.asks(
+            name,
+            ws,
+            ms,
+            st,
+            fs,
+            ps,
+            ok,
+            i,
+            r,
+            Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+          )
+        ),
+        Nodes.Mounts.addresses(ms)
+      )(
+        Node.asks_mounts(
+          name,
+          ws,
+          ms,
+          st,
+          fs,
+          ps,
+          ok,
+          i,
+          r,
+          Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+        )
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}:
+      Node.same_refl(Nodes.Mounts.addresses(ms))
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
+      Node.same_of(
+        Spec.VendNode.mounts(
+          Node.asks(
+            name,
+            ws,
+            Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+            st,
+            fs,
+            ps,
+            ok,
+            Nodes.Mount.id(name, a),
+            Spec.Request.Write{b, p, Some{held}},
+            Bool.not(st)
+          )
+        ),
+        a <> Shared.List.remove(~String, ~String.eq, Nodes.Mounts.addresses(ms), a)
+      )(
+        Equal.trans(
+          List<&2, String>,
+          Spec.VendNode.mounts(
+            Node.asks(
+              name,
+              ws,
+              Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+              st,
+              fs,
+              ps,
+              ok,
+              Nodes.Mount.id(name, a),
+              Spec.Request.Write{b, p, Some{held}},
+              Bool.not(st)
+            )
+          ),
+          a <> Nodes.Mounts.addresses(Nodes.Mounts.remove(ms, a)),
+          a <> Shared.List.remove(~String, ~String.eq, Nodes.Mounts.addresses(ms), a),
+          Node.asks_mounts(
+            name,
+            ws,
+            Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+            st,
+            fs,
+            ps,
+            ok,
+            Nodes.Mount.id(name, a),
+            Spec.Request.Write{b, p, Some{held}},
+            Bool.not(st)
+          ),
+          Equal.cong(
+            List<&2, String>,
+            List<&2, String>,
+            z => a <> z,
+            Nodes.Mounts.addresses(Nodes.Mounts.remove(ms, a)),
+            Shared.List.remove(~String, ~String.eq, Nodes.Mounts.addresses(ms), a),
+            Node.remove_addresses(ms, a)
+          )
+        )
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Unmount{+a}:
+      Node.same_of(
+        Nodes.Mounts.addresses(Nodes.Mounts.remove(ms, a)),
+        Shared.List.remove(~String, ~String.eq, Nodes.Mounts.addresses(ms), a)
+      )(Node.remove_addresses(ms, a))
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Work{}:
+      Node.same_of(Spec.VendNode.mounts(Node.works(name, ws, ms, st, fs, ps, ok)), Nodes.Mounts.addresses(ms))(
+        Node.works_mounts(name, ws, ms, st, fs, ps, ok)
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Drop{}:
+      Node.same_refl(Nodes.Mounts.addresses(ms))
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Stop{f}:
+      Node.same_refl(Nodes.Mounts.addresses(ms))
+
+# a node that asks stops no more than it had
+def Node.asks_stopped(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  go: Bool
+) -> {Spec.VendNode.stopped(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, go)) == st: Bool}:
+  match go:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a node that works stops no more than it had
+def Node.works_stopped(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+) -> {Spec.VendNode.stopped(Node.works(name, ws, ms, st, fs, ps, ok)) == st: Bool}:
+  match st:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def Spec.VendNode.stops(n, d):
+  match n d:
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Connect{+w}:
+      {==}
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Leave{+w}:
+      {==}
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Ask{+i, +r}:
+      Node.asks_stopped(
+        name,
+        ws,
+        ms,
+        st,
+        fs,
+        ps,
+        ok,
+        i,
+        r,
+        Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}}:
+      {==}
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
+      Node.asks_stopped(
+        name,
+        ws,
+        Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+        st,
+        fs,
+        ps,
+        ok,
+        Nodes.Mount.id(name, a),
+        Spec.Request.Write{b, p, Some{held}},
+        Bool.not(st)
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Unmount{+a}:
+      {==}
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Work{}:
+      Node.works_stopped(name, ws, ms, st, fs, ps, ok)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Drop{}:
+      {==}
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Stop{f}:
+      {==}

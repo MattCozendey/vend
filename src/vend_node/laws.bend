@@ -69,60 +69,6 @@ def Core.cast(-A: Type, -P: A -> Type, -a: A, -b: A, e: {a == b: A}, p: P(a)) ->
   %e: P(_)
   p
 
-# a reply of an id comes from an entry of that id
-def Reply.id_some(m: Maybe<&2, Types.Entry>, -i: Ledgers.Id) -> {
-  Answers.Reply.id(m) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
-} -> Exists(Types.Entry, e => {m == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}):
-  match m:
-    case None{}:
-      h => Empty.absurd(
-        Exists(Types.Entry, e => {None{} == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}),
-        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Id{i}, h)
-      )
-    case Some{e}:
-      h => (
-        e,
-        (
-          {==},
-          Equal.cong(
-            Maybe<&2, Spec.Reply>,
-            Ledgers.Id,
-            x => Reply.to_id(x, i),
-            Some{Spec.Reply.Id{Lines.Entry.id(e)}},
-            Some{Spec.Reply.Id{i}},
-            h
-          )
-        )
-      )
-
-# a version that a line holds is among its versions
-def Line.at.of_some(m: Maybe<&2, List<&2, Types.Entry>>, -k: Nat, -e: Types.Entry) -> {
-  Lines.Line.at.of(m, k) == Some{e}: Maybe<&2, Types.Entry>
-} -> Exists(
-  List<&2, Types.Entry>,
-  vs => {m == Some{vs}: Maybe<&2, List<&2, Types.Entry>>} & {List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>}
-):
-  match m:
-    case None{}:
-      h => Empty.absurd(
-        Exists(
-          List<&2, Types.Entry>,
-          vs => {None{} == Some{vs}: Maybe<&2, List<&2, Types.Entry>>} & {List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>}
-        ),
-        Shared.Maybe.none_ne_some(Types.Entry, e, h)
-      )
-    case Some{vs}:
-      h => (vs, ({==}, h))
-
-# version k of a line is version k of its versions
-def Line.at_some(+s: Facts.Facts(), +c: Ledgers.Line, -k: Nat, -e: Types.Entry) -> {
-  Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>
-} -> Exists(
-  List<&2, Types.Entry>,
-  vs => {Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>} & {List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>}
-):
-  h => Line.at.of_some(Lines.Line.versions(s, c), k, e)(h)
-
 # version k of the versions of a line is version k of the line
 def Line.at_of(+s: Facts.Facts(), +c: Ledgers.Line, -vs: List<&2, Types.Entry>, -k: Nat, -e: Types.Entry) -> {
   Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
@@ -897,3 +843,966 @@ def Core.written_made(+s: Facts.Facts(), +c: Ledgers.Line, +i: Ledgers.Id) -> {
   k => {Answers.Answer.of(s, Spec.Question.Version{c, k}) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>}
 ):
   h => Core.written_made.of(s, c, i, Lines.Line.versions(s, c), Answers.Line.find(s, c, i))({==})({==})(h)
+
+# A mark that is Written names its version
+# ----------------------------------------
+
+# the status x is Written
+def Status.is_written(x: Spec.Status) -> Bool:
+  match x:
+    case Spec.Status.Written{}:
+      True{}
+    case _:
+      False{}
+
+# a status picked by b is Written only when b holds, if the other is not
+def Status.pick_written(b: Bool, -x: Spec.Status) -> {Status.is_written(x) == False{}: Bool} -> {
+  Bool.pick(Spec.Status, b, Spec.Status.Written{}, x) == Spec.Status.Written{}: Spec.Status
+} -> {b == True{}: Bool}:
+  match b:
+    case True{}:
+      hx => h => {==}
+    case False{}:
+      hx => h => Empty.absurd(
+        {False{} == True{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Status.is_written(x),
+            True{},
+            Equal.sym(Bool, Status.is_written(x), False{}, hx),
+            Equal.cong(Spec.Status, Bool, Status.is_written, x, Spec.Status.Written{}, h)
+          )
+        )
+      )
+
+# Core.mark_names.of, with the two facts of the found entry as a pair
+def Core.mark_names.by(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +m: String,
+  +v: Nat,
+  +vs: List<&2, Types.Entry>,
+  +n: Nat,
+  +e: Types.Entry,
+  w: {List.get(&2, Types.Entry, vs, n) == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == Lines.Entry.id(e): Ledgers.Id},
+  hq: {Answers.Entry.request(e) == Spec.Request.Mark{c, m, v}: Spec.Request},
+  hs: {Answers.Status.of(s, c, vs, n, e) == Spec.Status.Written{}: Spec.Status}
+) -> {Answers.Reply.number(Answers.Mark.of(m, Some{vs})) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>}:
+  (hg, hi) = w
+  +hq = hq
+  %Equal.sym(
+    Maybe<&2, Nat>,
+    Lists.List.index(~Types.Entry, ~String, ~Answers.Entry.marks, vs, m),
+    Some{n},
+    Shared.Maybe.is_eq_sound(
+      ~Nat,
+      ~Nat.is_eq,
+      x => y => Shared.Nat.is_eq_sound(x, y),
+      Lists.List.index(~Types.Entry, ~String, ~Answers.Entry.marks, vs, m),
+      Some{n}
+    )(
+      Status.pick_written(
+        Shared.Maybe.is_eq(~Nat, ~Nat.is_eq, Lists.List.index(~Types.Entry, ~String, ~Answers.Entry.marks, vs, m), Some{n}),
+        Spec.Status.Stale{}
+      )({==})(
+        Core.cast(
+          Spec.Request,
+          rq => {
+            Answers.Status.by(vs, n, Lines.Entry.id(e), rq, Answers.Clashes.of(s, c, n, e)) == Spec.Status.Written{}: Spec.Status
+          },
+          Answers.Entry.request(e),
+          Spec.Request.Mark{c, m, v},
+          hq,
+          hs
+        )
+      )
+    )
+  ): {Answers.Reply.number(Answers.Mark.at(vs, _)) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>}
+  %Equal.sym(Maybe<&2, Types.Entry>, List.get(&2, Types.Entry, vs, n), Some{e}, hg): {Answers.Reply.number(Answers.Mark.in(_)) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>}
+  %Equal.sym(Spec.Request, Answers.Entry.request(e), Spec.Request.Mark{c, m, v}, hq): {Answers.Reply.number(Answers.Request.marked(_)) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>}
+  {==}
+
+# Core.mark_names, once the versions of the line (vv) and the found entry (f)
+# are known
+def Core.mark_names.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +m: String,
+  +v: Nat,
+  vv: Maybe<&2, List<&2, Types.Entry>>,
+  f: Maybe<&2, Answers.Found>
+) -> {Answers.Line.find.of(i, vv) == f: Maybe<&2, Answers.Found>} -> {
+  Answers.Reply.status(s, c, vv, f) == Some{Spec.Reply.Status{Spec.Status.Written{}}}: Maybe<&2, Spec.Reply>
+} -> {Answers.Reply.ask(f) == Some{Spec.Reply.Ask{Spec.Request.Mark{c, m, v}}}: Maybe<&2, Spec.Reply>} -> {
+  Answers.Reply.number(Answers.Mark.of(m, vv)) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>
+}:
+  match vv f:
+    case None{} None{}:
+      ef => hs => hq => Empty.absurd(
+        {Answers.Reply.number(Answers.Mark.of(m, None{})) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>},
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Status{Spec.Status.Written{}}, hs)
+      )
+    case None{} Some{x}:
+      ef => hs => hq => Empty.absurd(
+        {Answers.Reply.number(Answers.Mark.of(m, None{})) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>},
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Status{Spec.Status.Written{}}, hs)
+      )
+    case Some{vs} None{}:
+      ef => hs => hq => Empty.absurd(
+        {Answers.Reply.number(Answers.Mark.of(m, Some{vs})) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>},
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Status{Spec.Status.Written{}}, hs)
+      )
+    case Some{+vs} Some{Answers.Found{+n, +e}}:
+      ef => hs => hq => Core.mark_names.by(
+        s,
+        c,
+        m,
+        v,
+        vs,
+        n,
+        e,
+        (Pair.fst(
+          {List.get(&2, Types.Entry, vs, n) == Some{e}: Maybe<&2, Types.Entry>},
+          {Lines.Entry.id(e) == i: Ledgers.Id},
+          Entries.find_id(vs, i, n, e)(ef)
+        ), {==}),
+        Equal.cong(
+          Maybe<&2, Spec.Reply>,
+          Spec.Request,
+          x => Reply.to_ask(x, Spec.Request.Mark{c, m, v}),
+          Some{Spec.Reply.Ask{Answers.Entry.request(e)}},
+          Some{Spec.Reply.Ask{Spec.Request.Mark{c, m, v}}},
+          hq
+        ),
+        Equal.cong(
+          Maybe<&2, Spec.Reply>,
+          Spec.Status,
+          x => Reply.to_status(x, Spec.Status.Written{}),
+          Some{Spec.Reply.Status{Answers.Status.of(s, c, vs, n, e)}},
+          Some{Spec.Reply.Status{Spec.Status.Written{}}},
+          hs
+        )
+      )
+
+# A mark that is Written names its version for good.
+def Core.mark_names(+s: Facts.Facts(), +c: Ledgers.Line, +i: Ledgers.Id, +m: String, +v: Nat) -> {
+  Answers.Answer.of(s, Spec.Question.Status{c, i}) == Some{Spec.Reply.Status{Spec.Status.Written{}}}: Maybe<&2, Spec.Reply>
+} -> {
+  Answers.Answer.of(s, Spec.Question.Request{c, i}) == Some{Spec.Reply.Ask{Spec.Request.Mark{c, m, v}}}: Maybe<&2, Spec.Reply>
+} -> {Answers.Answer.of(s, Spec.Question.Mark{c, m}) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>}:
+  hs => hq => Core.mark_names.of(s, c, i, m, v, Lines.Line.versions(s, c), Answers.Line.find(s, c, i))({==})(hs)(hq)
+
+# A merge is Written once its clashes are resolved
+# ------------------------------------------------
+
+# List.some_at, from the tail of a list to the list
+def List.some_at.up(
+  ~A: Data,
+  ~V: Data,
+  ~p: V -> A -> Bool,
+  -z: A,
+  -r: List<&2, A>,
+  -g: V,
+  w: Exists(Nat, k => Exists(A, x => {List.get(&2, A, r, k) == Some{x}: Maybe<&2, A>} & {p(g)(x) == True{}: Bool}))
+) -> Exists(Nat, k => Exists(A, x => {List.get(&2, A, z <> r, k) == Some{x}: Maybe<&2, A>} & {p(g)(x) == True{}: Bool})):
+  (k, w1) = w
+  (1n+k, w1)
+
+# a list that p holds of some element of holds, at some index, an element
+# that p holds of
+def List.some_at(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -> {
+  Shared.List.some(~A, ~V, ~p, xs, g) == True{}: Bool
+} -> Exists(Nat, k => Exists(A, x => {List.get(&2, A, xs, k) == Some{x}: Maybe<&2, A>} & {p(g)(x) == True{}: Bool})):
+  match xs:
+    case Nil{}:
+      h => Empty.absurd(
+        Exists(Nat, k => Exists(A, x => {List.get(&2, A, [], k) == Some{x}: Maybe<&2, A>} & {p(g)(x) == True{}: Bool})),
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{+z, +r}:
+      Lists.Bool.by(
+        b => {
+          List.any.if(u => Shared.List.some(~A, ~V, ~p, r, g), b) == True{}: Bool
+        } -> Exists(Nat, k => Exists(A, x => {List.get(&2, A, z <> r, k) == Some{x}: Maybe<&2, A>} & {p(g)(x) == True{}: Bool})),
+        p(g)(z),
+        et => h => (0n, (z, ({==}, et))),
+        ef => h => List.some_at.up(~A, ~V, ~p, z, r, g, List.some_at(~A, ~V, ~p, r, g)(h))
+      )
+
+# a request that resolves the path p of the merge i
+def Request.Resolves(i: Ledgers.Id, p: String, r: Spec.Request) -> Type:
+  Exists(Maybe<&2, List<&2, U32>>, ws => {r == Spec.Request.Resolve{i, p, ws}: Spec.Request})
+
+# a request that resolves the path p of the merge i is a Resolve of them
+def Request.resolves_is(+i: Ledgers.Id, +p: String, r: Spec.Request) -> {
+  Answers.Request.resolves(i, p, r) == True{}: Bool
+} -> Request.Resolves(i, p, r):
+  match r:
+    case Spec.Request.Start{os}:
+      h => Empty.absurd(Request.Resolves(i, p, Spec.Request.Start{os}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Write{b, q, ws}:
+      h => Empty.absurd(Request.Resolves(i, p, Spec.Request.Write{b, q, ws}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Merge{f, x}:
+      h => Empty.absurd(Request.Resolves(i, p, Spec.Request.Merge{f, x}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Resolve{+m, +q, +w}:
+      +h => (
+        w,
+        (
+          %Ledgers.Id.is_eq_sound(m, i)(Shared.Bool.and_true_left(Ledgers.Id.is_eq(m, i), String.eq(q, p))(h)): {Spec.Request.Resolve{m, q, w} == Spec.Request.Resolve{_, p, w}: Spec.Request}
+          %Texts.String.eq_sound(q, p)(Shared.Bool.and_true_right(Ledgers.Id.is_eq(m, i), String.eq(q, p))(h)): {Spec.Request.Resolve{m, q, w} == Spec.Request.Resolve{m, _, w}: Spec.Request}
+          {==}
+        )
+      )
+    case Spec.Request.Mark{b, name, v}:
+      h => Empty.absurd(Request.Resolves(i, p, Spec.Request.Mark{b, name, v}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Move{b, t, v}:
+      h => Empty.absurd(Request.Resolves(i, p, Spec.Request.Move{b, t, v}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Group{st, name, ms}:
+      h => Empty.absurd(Request.Resolves(i, p, Spec.Request.Group{st, name, ms}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Own{l, g}:
+      h => Empty.absurd(Request.Resolves(i, p, Spec.Request.Own{l, g}), Shared.Bool.false_ne_true(h))
+
+# a version of the line c is a decided Resolve of the path p of the merge i
+def Core.Resolved(s: Facts.Facts(), c: Ledgers.Line, i: Ledgers.Id, p: String) -> Type:
+  Exists(
+    Nat,
+    k => Exists(
+      Ledgers.Id,
+      j => Exists(Maybe<&2, List<&2, U32>>, ws => Mirror.Made(s, c, k, j, Spec.Request.Resolve{i, p, ws}))
+    )
+  )
+
+# Core.merge_resolved.at, with the version k (the entry x) that resolves
+def Core.merge_resolved.by(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +p: String,
+  +k: Nat,
+  +x: Types.Entry,
+  ha: {Lines.Line.at(s, c, k) == Some{x}: Maybe<&2, Types.Entry>},
+  w: Request.Resolves(i, p, Answers.Entry.request(x))
+) -> Core.Resolved(s, c, i, p):
+  (+ws, he) = w
+  (
+    k,
+    (
+      Lines.Entry.id(x),
+      (
+        ws,
+        Core.cast(
+          Spec.Request,
+          rq => Mirror.Made(s, c, k, Lines.Entry.id(x), rq),
+          Answers.Entry.request(x),
+          Spec.Request.Resolve{i, p, ws},
+          he,
+          Core.at_made(s, c, k, x)(ha)
+        )
+      )
+    )
+  )
+
+# a version among vs that resolves the path p of the merge i is a decided
+# Resolve of them
+def Core.merge_resolved.at(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +p: String,
+  +vs: List<&2, Types.Entry>,
+  ev: {Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>},
+  w: Exists(
+    Nat,
+    k => Exists(
+      Types.Entry,
+      x => {List.get(&2, Types.Entry, vs, k) == Some{x}: Maybe<&2, Types.Entry>} & {Answers.Entry.resolves(Answers.Clash{i, p}, x) == True{}: Bool}
+    )
+  )
+) -> Core.Resolved(s, c, i, p):
+  (+k, w1) = w
+  (+x, w2) = w1
+  (hg, hx) = w2
+  Core.merge_resolved.by(
+    s,
+    c,
+    i,
+    p,
+    k,
+    x,
+    Line.at_of(s, c, vs, k, x)(ev)(hg),
+    Request.resolves_is(i, p, Answers.Entry.request(x))(hx)
+  )
+
+# a reply of names comes from those names
+def Reply.names_some(m: Maybe<&2, List<&2, String>>, -ps: List<&2, String>) -> {
+  Answers.Reply.names(m) == Some{Spec.Reply.Names{ps}}: Maybe<&2, Spec.Reply>
+} -> {m == Some{ps}: Maybe<&2, List<&2, String>>}:
+  match m:
+    case None{}:
+      h => Empty.absurd(
+        {None{} == Some{ps}: Maybe<&2, List<&2, String>>},
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{ps}, h)
+      )
+    case Some{ns}:
+      h => Equal.cong(
+        Maybe<&2, Spec.Reply>,
+        Maybe<&2, List<&2, String>>,
+        x => Some{Reply.to_names(x, ps)},
+        Some{Spec.Reply.Names{ns}},
+        Some{Spec.Reply.Names{ps}},
+        h
+      )
+
+# Core.merge_resolved.of, with the facts of the found entry
+def Core.merge_resolved.in(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +f: Ledgers.Line,
+  +ps: List<&2, String>,
+  +p: String,
+  +vs: List<&2, Types.Entry>,
+  +n: Nat,
+  +e: Types.Entry,
+  ev: {Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>},
+  w: {List.get(&2, Types.Entry, vs, n) == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id},
+  hq: {Answers.Entry.request(e) == Spec.Request.Merge{f, c}: Spec.Request},
+  hs: {Answers.Status.of(s, c, vs, n, e) == Spec.Status.Written{}: Spec.Status},
+  hc: {Answers.Clashes.of(s, c, n, e) == Some{ps}: Maybe<&2, List<&2, String>>},
+  hp: {List.contains(~String, ~String.eq, ps, p) == True{}: Bool}
+) -> Core.Resolved(s, c, i, p):
+  (hg, hi) = w
+  Core.merge_resolved.at(
+    s,
+    c,
+    i,
+    p,
+    vs,
+    ev,
+    List.some_at(~Types.Entry, ~Answers.Clash, ~Answers.Entry.resolves, vs, Answers.Clash{i, p})(
+      Core.cast(
+        Ledgers.Id,
+        j => {Answers.Resolved.has(Answers.Resolved{vs, j}, p) == True{}: Bool},
+        Lines.Entry.id(e),
+        i,
+        hi,
+        Lists.List.holds_in(
+          ~String,
+          ~Answers.Resolved,
+          ~Answers.Resolved.has,
+          ~String.eq,
+          ~Texts.String.laws(),
+          ps,
+          Answers.Resolved{vs, Lines.Entry.id(e)},
+          p
+        )(
+          Status.pick_written(
+            Shared.List.holds(~String, ~Answers.Resolved, ~Answers.Resolved.has, ps, Answers.Resolved{vs, Lines.Entry.id(e)}),
+            Spec.Status.Conflicted{Lines.Entry.id(e)}
+          )({==})(
+            Core.cast(
+              Maybe<&2, List<&2, String>>,
+              cs => {Answers.Status.merge(vs, Lines.Entry.id(e), cs) == Spec.Status.Written{}: Spec.Status},
+              Answers.Clashes.of(s, c, n, e),
+              Some{ps},
+              hc,
+              Core.cast(
+                Spec.Request,
+                rq => {
+                  Answers.Status.by(vs, n, Lines.Entry.id(e), rq, Answers.Clashes.of(s, c, n, e)) == Spec.Status.Written{}: Spec.Status
+                },
+                Answers.Entry.request(e),
+                Spec.Request.Merge{f, c},
+                hq,
+                hs
+              )
+            )
+          )
+        )(hp)
+      )
+    )
+  )
+
+# Core.merge_resolved, once the versions of the line (vv) and the found entry
+# (fd) are known
+def Core.merge_resolved.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +f: Ledgers.Line,
+  +ps: List<&2, String>,
+  +p: String,
+  vv: Maybe<&2, List<&2, Types.Entry>>,
+  fd: Maybe<&2, Answers.Found>
+) -> {Lines.Line.versions(s, c) == vv: Maybe<&2, List<&2, Types.Entry>>} -> {
+  Answers.Line.find.of(i, vv) == fd: Maybe<&2, Answers.Found>
+} -> {
+  Answers.Reply.status(s, c, vv, fd) == Some{Spec.Reply.Status{Spec.Status.Written{}}}: Maybe<&2, Spec.Reply>
+} -> {Answers.Reply.ask(fd) == Some{Spec.Reply.Ask{Spec.Request.Merge{f, c}}}: Maybe<&2, Spec.Reply>} -> {
+  Answers.Reply.names(Answers.Found.then(List<&2, String>, fd, k => e => Answers.Clashes.of(s, c, k, e))) == Some{Spec.Reply.Names{ps}}: Maybe<&2, Spec.Reply>
+} -> {List.contains(~String, ~String.eq, ps, p) == True{}: Bool} -> Core.Resolved(s, c, i, p):
+  match vv fd:
+    case None{} None{}:
+      ev => ef => hs => hq => hc => hp => Empty.absurd(
+        Core.Resolved(s, c, i, p),
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Status{Spec.Status.Written{}}, hs)
+      )
+    case None{} Some{x}:
+      ev => ef => hs => hq => hc => hp => Empty.absurd(
+        Core.Resolved(s, c, i, p),
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Status{Spec.Status.Written{}}, hs)
+      )
+    case Some{vs} None{}:
+      ev => ef => hs => hq => hc => hp => Empty.absurd(
+        Core.Resolved(s, c, i, p),
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Status{Spec.Status.Written{}}, hs)
+      )
+    case Some{+vs} Some{Answers.Found{+n, +e}}:
+      ev => ef => hs => hq => hc => hp => Core.merge_resolved.in(
+        s,
+        c,
+        i,
+        f,
+        ps,
+        p,
+        vs,
+        n,
+        e,
+        ev,
+        Entries.find_id(vs, i, n, e)(ef),
+        Equal.cong(
+          Maybe<&2, Spec.Reply>,
+          Spec.Request,
+          x => Reply.to_ask(x, Spec.Request.Merge{f, c}),
+          Some{Spec.Reply.Ask{Answers.Entry.request(e)}},
+          Some{Spec.Reply.Ask{Spec.Request.Merge{f, c}}},
+          hq
+        ),
+        Equal.cong(
+          Maybe<&2, Spec.Reply>,
+          Spec.Status,
+          x => Reply.to_status(x, Spec.Status.Written{}),
+          Some{Spec.Reply.Status{Answers.Status.of(s, c, vs, n, e)}},
+          Some{Spec.Reply.Status{Spec.Status.Written{}}},
+          hs
+        ),
+        Reply.names_some(Answers.Clashes.of(s, c, n, e), ps)(hc),
+        hp
+      )
+
+# A merge turns Written only once each resource that clashed in it is
+# resolved.
+def Core.merge_resolved(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +i: Ledgers.Id,
+  +f: Ledgers.Line,
+  +ps: List<&2, String>,
+  +p: String
+) -> {
+  Answers.Answer.of(s, Spec.Question.Status{c, i}) == Some{Spec.Reply.Status{Spec.Status.Written{}}}: Maybe<&2, Spec.Reply>
+} -> {
+  Answers.Answer.of(s, Spec.Question.Request{c, i}) == Some{Spec.Reply.Ask{Spec.Request.Merge{f, c}}}: Maybe<&2, Spec.Reply>
+} -> {Answers.Answer.of(s, Spec.Question.Clashes{c, i}) == Some{Spec.Reply.Names{ps}}: Maybe<&2, Spec.Reply>} -> {
+  List.contains(~String, ~String.eq, ps, p) == True{}: Bool
+} -> Exists(
+  Nat,
+  k => Exists(
+    Ledgers.Id,
+    j => Exists(Maybe<&2, List<&2, U32>>, ws => Mirror.Made(s, c, k, j, Spec.Request.Resolve{i, p, ws}))
+  )
+):
+  hs => hq => hc => hp => Core.merge_resolved.of(s, c, i, f, ps, p, Lines.Line.versions(s, c), Answers.Line.find(s, c, i))({==})({==})(hs)(hq)(hc)(hp)
+
+# A majority decides
+# ------------------
+
+# the nodes os are within the nodes gs, more than half of them, and the facts
+# s hold a ballot of each of os
+def Core.Majority(s: Facts.Facts(), os: List<&2, String>, gs: List<&2, String>) -> Type:
+  {
+    Shared.List.within(~String, ~String.eq, os, gs) == True{}: Bool
+  }
+    & (
+      {
+        Nat.is_lt(
+          List.length(&2, String, gs),
+          Nat.add(List.length(&2, String, os), List.length(&2, String, os))
+        )
+          == True{}: Bool
+      }
+        & (
+          @v: String -> {
+            List.contains(~String, ~String.eq, os, v) == True{}: Bool
+          } -> Exists(
+            Types.Change,
+            ch => {
+              Facts.Facts.holds(s, ch) == True{}: Bool
+            }
+              & Exists(
+                List<&2, U32>,
+                st => Exists(
+                  List<&2, U32>,
+                  x => {Facts.Change.ballot(ch) == Some{Spec.Ballot{v, st, x}}: Maybe<&2, Spec.Ballot>}
+                )
+              )
+          )
+        )
+    )
+
+# a reply given when b holds is given only when b holds
+def When.some(b: Bool, -x: Spec.Reply, -r: Spec.Reply) -> {
+  Shared.Maybe.when(Spec.Reply, b, u => Some{x}) == Some{r}: Maybe<&2, Spec.Reply>
+} -> {b == True{}: Bool} & {Some{x} == Some{r}: Maybe<&2, Spec.Reply>}:
+  match b:
+    case True{}:
+      h => ({==}, h)
+    case False{}:
+      h => Empty.absurd(
+        {False{} == True{}: Bool} & {Some{x} == Some{r}: Maybe<&2, Spec.Reply>},
+        Shared.Maybe.none_ne_some(Spec.Reply, r, h)
+      )
+
+# the first majority of the nodes ns that all voted for the pick pk at the
+# slot k of the line c is a majority that decides
+def Core.majority_decides.by(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +os: List<&2, String>,
+  +gs: List<&2, String>,
+  +pk: Types.Pick,
+  +k: Nat,
+  +ns: List<&2, String>,
+  eg: {ns == gs: List<&2, String>},
+  w: {
+    Bool.and(
+      Bool.not(List.is_empty(&2, String, ns)),
+      Shared.List.holds(~String, ~Lines.Voting, ~Lines.Voting.voted, Lists.List.lead(String, ns), Lines.Voting{s, Types.Step.At{c, k}, pk})
+    )
+      == True{}: Bool
+  }
+    & {Some{Spec.Reply.Names{Lists.List.lead(String, ns)}} == Some{Spec.Reply.Names{os}}: Maybe<&2, Spec.Reply>}
+) -> Core.Majority(s, os, gs):
+  (+hb, hn) = w
+  Core.cast(
+    List<&2, String>,
+    x => Core.Majority(s, x, gs),
+    Lists.List.lead(String, ns),
+    os,
+    Equal.cong(
+      Maybe<&2, Spec.Reply>,
+      List<&2, String>,
+      x => Reply.to_names(x, os),
+      Some{Spec.Reply.Names{Lists.List.lead(String, ns)}},
+      Some{Spec.Reply.Names{os}},
+      hn
+    ),
+    Core.cast(
+      List<&2, String>,
+      y => Core.Majority(s, Lists.List.lead(String, ns), y),
+      ns,
+      gs,
+      eg,
+      (
+        Lists.List.lead_within(~String, ~String.eq, ~Texts.String.laws(), ns),
+        (
+          Lists.List.lead_most(String, ns)(
+            Shared.Bool.not_true(List.is_empty(&2, String, ns))(
+              Shared.Bool.and_true_left(
+                Bool.not(List.is_empty(&2, String, ns)),
+                Shared.List.holds(~String, ~Lines.Voting, ~Lines.Voting.voted, Lists.List.lead(String, ns), Lines.Voting{s, Types.Step.At{c, k}, pk})
+              )(hb)
+            )
+          ),
+          +v => hin => (
+            Types.Change.Fact{Types.Fact.Vote{v, Types.Step.At{c, k}, pk}},
+            (
+              Lists.List.holds_in(
+                ~String,
+                ~Lines.Voting,
+                ~Lines.Voting.voted,
+                ~String.eq,
+                ~Texts.String.laws(),
+                Lists.List.lead(String, ns),
+                Lines.Voting{s, Types.Step.At{c, k}, pk},
+                v
+              )(
+                Shared.Bool.and_true_right(
+                  Bool.not(List.is_empty(&2, String, ns)),
+                  Shared.List.holds(~String, ~Lines.Voting, ~Lines.Voting.voted, Lists.List.lead(String, ns), Lines.Voting{s, Types.Step.At{c, k}, pk})
+                )(hb)
+              )(hin),
+              (Coded.Step.words(Types.Step.At{c, k}), (Coded.Pick.words(pk), {==}))
+            )
+          )
+        )
+      )
+    )
+  )
+
+# Core.majority_decides, once the entry of the version (m) and its rule (u)
+# are known
+def Core.majority_decides.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +os: List<&2, String>,
+  +gs: List<&2, String>,
+  m: Maybe<&2, Types.Entry>,
+  u: Maybe<&2, Lines.Rule>
+) -> {Answers.Owners.of(s, c, m, u) == Some{Spec.Reply.Names{os}}: Maybe<&2, Spec.Reply>} -> {
+  Maybe.bind(&2, Lines.Rule, Spec.Reply, u, Answers.Rule.group) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+} -> Core.Majority(s, os, gs):
+  match m u:
+    case None{} None{}:
+      h1 => h2 => Empty.absurd(Core.Majority(s, os, gs), Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{os}, h1))
+    case None{} Some{x}:
+      h1 => h2 => Empty.absurd(Core.Majority(s, os, gs), Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{os}, h1))
+    case Some{e} None{}:
+      h1 => h2 => Empty.absurd(Core.Majority(s, os, gs), Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{os}, h1))
+    case Some{Types.Entry{pk, k}} Some{Lines.Rule{None{}, ns}}:
+      h1 => h2 => Empty.absurd(Core.Majority(s, os, gs), Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{gs}, h2))
+    case Some{Types.Entry{+pk, +k}} Some{Lines.Rule{Some{g}, +ns}}:
+      h1 => h2 => Core.majority_decides.by(
+        s,
+        c,
+        os,
+        gs,
+        pk,
+        k,
+        ns,
+        Equal.cong(
+          Maybe<&2, Spec.Reply>,
+          List<&2, String>,
+          x => Reply.to_names(x, gs),
+          Some{Spec.Reply.Names{ns}},
+          Some{Spec.Reply.Names{gs}},
+          h2
+        ),
+        When.some(
+          Bool.and(
+            Bool.not(List.is_empty(&2, String, ns)),
+            Shared.List.holds(~String, ~Lines.Voting, ~Lines.Voting.voted, Lists.List.lead(String, ns), Lines.Voting{s, Types.Step.At{c, k}, pk})
+          ),
+          Spec.Reply.Names{Lists.List.lead(String, ns)},
+          Spec.Reply.Names{os}
+        )(h1)
+      )
+
+# A version is decided by a majority of the nodes of its owner group, each by
+# a ballot that the node holds.
+def Core.majority_decides(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +os: List<&2, String>,
+  +gs: List<&2, String>
+) -> {Answers.Answer.of(s, Spec.Question.Owners{c, k}) == Some{Spec.Reply.Names{os}}: Maybe<&2, Spec.Reply>} -> {
+  Answers.Answer.of(s, Spec.Question.Group{c, k}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+} -> {
+  Shared.List.within(~String, ~String.eq, os, gs) == True{}: Bool
+}
+  & (
+    {
+      Nat.is_lt(
+        List.length(&2, String, gs),
+        Nat.add(List.length(&2, String, os), List.length(&2, String, os))
+      )
+        == True{}: Bool
+    }
+      & (
+        @v: String -> {
+          List.contains(~String, ~String.eq, os, v) == True{}: Bool
+        } -> Exists(
+          Types.Change,
+          ch => {
+            Facts.Facts.holds(s, ch) == True{}: Bool
+          }
+            & Exists(
+              List<&2, U32>,
+              st => Exists(
+                List<&2, U32>,
+                x => {Facts.Change.ballot(ch) == Some{Spec.Ballot{v, st, x}}: Maybe<&2, Spec.Ballot>}
+              )
+            )
+        )
+      )
+  ):
+  h1 => h2 => Core.majority_decides.of(s, c, os, gs, Lines.Line.at(s, c, k), Answers.Rule.for(s, c, k))(h1)(h2)
+
+# A branch is decided by its store
+# --------------------------------
+
+# a request that makes a group the owner of the line c
+def Request.Owns(c: Ledgers.Line, r: Spec.Request) -> Type:
+  Exists(String, g => {r == Spec.Request.Own{c, g}: Spec.Request})
+
+# a request that makes a group the owner of the line c is an Own of c
+def Request.owns_is(+c: Ledgers.Line, r: Spec.Request) -> {Lines.Request.owns(c, r) == True{}: Bool} -> Request.Owns(c, r):
+  match r:
+    case Spec.Request.Start{os}:
+      h => Empty.absurd(Request.Owns(c, Spec.Request.Start{os}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Write{b, q, ws}:
+      h => Empty.absurd(Request.Owns(c, Spec.Request.Write{b, q, ws}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Merge{f, x}:
+      h => Empty.absurd(Request.Owns(c, Spec.Request.Merge{f, x}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Resolve{m, q, w}:
+      h => Empty.absurd(Request.Owns(c, Spec.Request.Resolve{m, q, w}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Mark{b, name, v}:
+      h => Empty.absurd(Request.Owns(c, Spec.Request.Mark{b, name, v}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Move{b, t, v}:
+      h => Empty.absurd(Request.Owns(c, Spec.Request.Move{b, t, v}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Group{st, name, ms}:
+      h => Empty.absurd(Request.Owns(c, Spec.Request.Group{st, name, ms}), Shared.Bool.false_ne_true(h))
+    case Spec.Request.Own{+l, +g}:
+      h => (
+        g,
+        (
+          %Ledgers.Line.is_eq_sound(l, c)(h): {Spec.Request.Own{l, g} == Spec.Request.Own{_, g}: Spec.Request}
+          {==}
+        )
+      )
+
+# a version of the store of the root r is a decided Own of its branch b
+def Core.Owned(s: Facts.Facts(), r: Hashes.Hash, b: String) -> Type:
+  Exists(
+    Nat,
+    k => Exists(
+      Ledgers.Id,
+      i => Exists(
+        String,
+        g => Mirror.Made(s, Ledgers.Line{r, None{}}, k, i, Spec.Request.Own{Ledgers.Line{r, Some{b}}, g})
+      )
+    )
+  )
+
+# Core.branches_decided.at, with the version k (the entry e) that owns
+def Core.branches_decided.by(
+  +s: Facts.Facts(),
+  +r: Hashes.Hash,
+  +b: String,
+  +k: Nat,
+  +e: Types.Entry,
+  ha: {Lines.Line.at(s, Ledgers.Line{r, None{}}, k) == Some{e}: Maybe<&2, Types.Entry>},
+  w: Request.Owns(Ledgers.Line{r, Some{b}}, Answers.Entry.request(e))
+) -> Core.Owned(s, r, b):
+  (+g, he) = w
+  (
+    k,
+    (
+      Lines.Entry.id(e),
+      (
+        g,
+        Core.cast(
+          Spec.Request,
+          rq => Mirror.Made(s, Ledgers.Line{r, None{}}, k, Lines.Entry.id(e), rq),
+          Answers.Entry.request(e),
+          Spec.Request.Own{Ledgers.Line{r, Some{b}}, g},
+          he,
+          Core.at_made(s, Ledgers.Line{r, None{}}, k, e)(ha)
+        )
+      )
+    )
+  )
+
+# a version of the store that owns the branch is a decided Own of it
+def Core.branches_decided.at(
+  +s: Facts.Facts(),
+  +r: Hashes.Hash,
+  +b: String,
+  w: Exists(
+    List<&2, Types.Entry>,
+    R => {
+      Lines.Line.versions(s, Ledgers.Line{r, None{}}) == Some{R}: Maybe<&2, List<&2, Types.Entry>>
+    }
+      & Exists(
+        Nat,
+        k => Exists(
+          Types.Entry,
+          e => {
+            List.get(&2, Types.Entry, R, k) == Some{e}: Maybe<&2, Types.Entry>
+          }
+            & {Lines.Entry.owns(Ledgers.Line{r, Some{b}}, e) == True{}: Bool}
+        )
+      )
+  )
+) -> Core.Owned(s, r, b):
+  (+R, w1) = w
+  (hR, w2) = w1
+  (+k, w3) = w2
+  (+e, w4) = w3
+  (hg, ho) = w4
+  Core.branches_decided.by(
+    s,
+    r,
+    b,
+    k,
+    e,
+    Line.at_of(s, Ledgers.Line{r, None{}}, R, k, e)(hR)(hg),
+    Request.owns_is(Ledgers.Line{r, Some{b}}, Answers.Entry.request(e))(ho)
+  )
+
+# Core.branches_decided, once the versions of the branch (v) are known
+def Core.branches_decided.of(
+  +s: Facts.Facts(),
+  +r: Hashes.Hash,
+  +b: String,
+  -x: Spec.Reply,
+  v: Maybe<&2, List<&2, Types.Entry>>
+) -> {Lines.Line.versions(s, Ledgers.Line{r, Some{b}}) == v: Maybe<&2, List<&2, Types.Entry>>} -> {
+  Answers.Reply.count(v) == Some{x}: Maybe<&2, Spec.Reply>
+} -> Core.Owned(s, r, b):
+  match v:
+    case None{}:
+      ev => h => Empty.absurd(Core.Owned(s, r, b), Shared.Maybe.none_ne_some(Spec.Reply, x, h))
+    case Some{+vs}:
+      ev => h => Core.branches_decided.at(s, r, b, Versions.Line.branch_owned(s, r, b, vs)(ev))
+
+# A branch exists only when the owner group of its store decided it.
+def Core.branches_decided(+s: Facts.Facts(), +r: Hashes.Hash, +b: String, +x: Spec.Reply) -> {
+  Answers.Answer.of(s, Spec.Question.Count{Ledgers.Line{r, Some{b}}}) == Some{x}: Maybe<&2, Spec.Reply>
+} -> Exists(
+  Nat,
+  k => Exists(
+    Ledgers.Id,
+    i => Exists(
+      String,
+      g => Mirror.Made(s, Ledgers.Line{r, None{}}, k, i, Spec.Request.Own{Ledgers.Line{r, Some{b}}, g})
+    )
+  )
+):
+  h => Core.branches_decided.of(s, r, b, x, Lines.Line.versions(s, Ledgers.Line{r, Some{b}}))({==})(h)
+
+# The parents of a version
+# ------------------------
+
+# version 0 comes from no version
+def Core.parents_zero(c: Ledgers.Line, m: Maybe<&2, Types.Entry>, -ps: List<&2, Spec.Point>) -> {
+  Answers.Reply.parents(c, 0n, m) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+} -> {ps == []: List<&2, Spec.Point>}:
+  match m:
+    case None{}:
+      h => Empty.absurd({ps == []: List<&2, Spec.Point>}, Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Points{ps}, h))
+    case Some{e}:
+      h => Equal.sym(
+        List<&2, Spec.Point>,
+        [],
+        ps,
+        Equal.cong(
+          Maybe<&2, Spec.Reply>,
+          List<&2, Spec.Point>,
+          x => Reply.to_points(x, ps),
+          Some{Spec.Reply.Points{[]}},
+          Some{Spec.Reply.Points{ps}},
+          h
+        )
+      )
+
+# the version before and what the request r takes are the parents of a
+# version made by r
+def Request.takes_parents(r: Spec.Request, +from: Nat, +c: Ledgers.Line, +k: Nat, -ps: List<&2, Spec.Point>) -> {
+  Spec.Point{c, k} <> Shared.Maybe.cons(Spec.Point, Contents.Request.takes(r, from), []) == ps: List<&2, Spec.Point>
+} -> Mirror.Request.Parents(r, c, k, ps):
+  match r:
+    case Spec.Request.Start{os}:
+      h => Equal.sym(List<&2, Spec.Point>, [Spec.Point{c, k}], ps, h)
+    case Spec.Request.Write{b, q, ws}:
+      h => Equal.sym(List<&2, Spec.Point>, [Spec.Point{c, k}], ps, h)
+    case Spec.Request.Merge{f, x}:
+      h => (from, Equal.sym(List<&2, Spec.Point>, [Spec.Point{c, k}, Spec.Point{f, from}], ps, h))
+    case Spec.Request.Resolve{m, q, w}:
+      h => Equal.sym(List<&2, Spec.Point>, [Spec.Point{c, k}], ps, h)
+    case Spec.Request.Mark{b, name, v}:
+      h => Equal.sym(List<&2, Spec.Point>, [Spec.Point{c, k}], ps, h)
+    case Spec.Request.Move{b, t, v}:
+      h => Equal.sym(List<&2, Spec.Point>, [Spec.Point{c, k}, Spec.Point{t, v}], ps, h)
+    case Spec.Request.Group{st, name, ms}:
+      h => Equal.sym(List<&2, Spec.Point>, [Spec.Point{c, k}], ps, h)
+    case Spec.Request.Own{l, g}:
+      h => Equal.sym(List<&2, Spec.Point>, [Spec.Point{c, k}], ps, h)
+
+# the version before and what the entry e takes are the parents of a version
+# made by the request of e
+def Entry.parents_of(e: Types.Entry, +c: Ledgers.Line, +k: Nat, -ps: List<&2, Spec.Point>) -> {
+  Spec.Point{c, k} <> Shared.Maybe.cons(Spec.Point, Contents.Entry.takes(e), []) == ps: List<&2, Spec.Point>
+} -> Mirror.Request.Parents(Answers.Entry.request(e), c, k, ps):
+  match e:
+    case Types.Entry{Types.Pick{Types.Ask{i, n, r}, Types.Pins{era, from, base, ours, theirs}}, slot}:
+      Request.takes_parents(r, from, c, k, ps)
+
+# Core.parents_are, with the entry of the version
+def Core.parents_are.by(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  -i: Ledgers.Id,
+  -r: Spec.Request,
+  -ps: List<&2, Spec.Point>,
+  w: Exists(
+    Types.Entry,
+    e => {
+      Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>
+    }
+      & ({Lines.Entry.id(e) == i: Ledgers.Id} & {Answers.Entry.request(e) == r: Spec.Request})
+  ),
+  h: {Answers.Reply.parents(c, 1n+k, Lines.Line.at(s, c, 1n+k)) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>}
+) -> Mirror.Request.Parents(r, c, k, ps):
+  (+e, w1) = w
+  (ha, w2) = w1
+  (hi, hr) = w2
+  Core.cast(
+    Spec.Request,
+    x => Mirror.Request.Parents(x, c, k, ps),
+    Answers.Entry.request(e),
+    r,
+    hr,
+    Entry.parents_of(e, c, k, ps)(
+      Equal.cong(
+        Maybe<&2, Spec.Reply>,
+        List<&2, Spec.Point>,
+        x => Reply.to_points(x, ps),
+        Some{Spec.Reply.Points{Contents.Entry.parents(c, 1n+k, e)}},
+        Some{Spec.Reply.Points{ps}},
+        Core.cast(
+          Maybe<&2, Types.Entry>,
+          m => {Answers.Reply.parents(c, 1n+k, m) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>},
+          Lines.Line.at(s, c, 1n+k),
+          Some{e},
+          ha,
+          h
+        )
+      )
+    )
+  )
+
+# A version comes from the version before it, and also from the version that
+# a merge or a move takes; the first version comes from none.
+def Core.parents_are(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  +ps: List<&2, Spec.Point>
+) -> (
+  {
+    Answers.Answer.of(s, Spec.Question.Parents{c, 0n}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+  } -> {ps == []: List<&2, Spec.Point>}
+)
+  & (
+    Mirror.Made(
+      s,
+      c,
+      1n+k,
+      i,
+      r
+    ) -> {
+      Answers.Answer.of(s, Spec.Question.Parents{c, 1n+k}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+    } -> Mirror.Request.Parents(r, c, k, ps)
+  ):
+  (
+    h => Core.parents_zero(c, Lines.Line.at(s, c, 0n), ps)(h),
+    md => h => Core.parents_are.by(s, c, k, i, r, ps, Core.made_at(s, c, 1n+k, i, r)(md), h)
+  )

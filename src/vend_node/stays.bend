@@ -358,6 +358,139 @@ def Votes.decided_stays(+s: Facts.Facts(), +s2: Facts.Facts(), +st: Types.Step, 
     )
   )
 
+# Rules
+# -----
+
+# a number below another has its next number at most the other
+def Nat.lt_up(a: Nat, b: Nat) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Nat.is_le(1n+a, b) == True{}: Bool}:
+  match a b:
+    case 0n 0n:
+      h => Empty.absurd({Nat.is_le(1n, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case 0n 1n+q:
+      h => Shared.Nat.le_zero(q)
+    case 1n+p 0n:
+      h => Empty.absurd({Nat.is_le(2n+p, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case 1n+p 1n+q:
+      Nat.lt_up(p, q)
+
+# the versions m of a store with the versions zs after them; nothing for none
+def Store.grow(m: Maybe<&2, List<&2, Types.Entry>>, zs: List<&2, Types.Entry>) -> Maybe<&2, List<&2, Types.Entry>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{r}:
+      Some{List.append(&2, Types.Entry, r, zs)}
+
+# a store that has versions keeps the owners that it started with as it grows
+def Store.owners_append(R: List<&2, Types.Entry>, -zs: List<&2, Types.Entry>, +m: Nat) -> {
+  Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool
+} -> {Lines.Store.owners(R) == Lines.Store.owners(List.append(&2, Types.Entry, R, zs)): List<&2, String>}:
+  match R:
+    case Nil{}:
+      h => Lists.Bool.clash(
+        {Lines.Store.owners([]) == Lines.Store.owners(List.append(&2, Types.Entry, [], zs)): List<&2, String>},
+        Nat.is_lt(m, 0n),
+        Shared.Nat.le_nlt(0n, m)(Shared.Nat.le_zero(m)),
+        h
+      )
+    case Con{e, r}:
+      h => {==}
+
+# the rule of an owner group at an era is the same with more versions after
+# the era, when the store starts with the same owners
+def Rule.of_append(+R: List<&2, Types.Entry>, +A: List<&2, Types.Entry>, +c: Ledgers.Line, +m: Nat, g: Maybe<&2, String>) -> {
+  List.take(&2, Types.Entry, R, 1n+m) == List.take(&2, Types.Entry, A, 1n+m): List<&2, Types.Entry>
+} -> {Lines.Store.owners(R) == Lines.Store.owners(A): List<&2, String>} -> {
+  Lines.Rule.of(R, c, m, g) == Lines.Rule.of(A, c, m, g): Maybe<&2, Lines.Rule>
+}:
+  match g:
+    case Some{+name}:
+      et => eo => (
+        %Groups.Groups.nodes_take(R, A, Lines.Line.root(c), name, m, et): {
+          Maybe.map(&2, List<&2, String>, Lines.Rule, ns => Lines.Rule{Some{name}, ns}, Groups.Groups.nodes(R, Lines.Line.root(c), name, m)) == Maybe.map(&2, List<&2, String>, Lines.Rule, ns => Lines.Rule{Some{name}, ns}, _): Maybe<&2, Lines.Rule>
+        }
+        {==}
+      )
+    case None{}:
+      et => eo => (
+        %eo: {
+          Shared.Maybe.when(Lines.Rule, Lines.Line.is_root(c), u => Some{Lines.Rule{None{}, Lines.Store.owners(R)}}) == Shared.Maybe.when(Lines.Rule, Lines.Line.is_root(c), u => Some{Lines.Rule{None{}, _}}): Maybe<&2, Lines.Rule>
+        }
+        {==}
+      )
+
+# Rule.at_append, with what the first versions and the owners are
+def Rule.at_append.of(
+  +R: List<&2, Types.Entry>,
+  +zs: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +m: Nat,
+  -u: Lines.Rule,
+  el: {Nat.is_lt(m, List.length(&2, Types.Entry, List.append(&2, Types.Entry, R, zs))) == True{}: Bool},
+  +et: {List.take(&2, Types.Entry, R, 1n+m) == List.take(&2, Types.Entry, List.append(&2, Types.Entry, R, zs), 1n+m): List<&2, Types.Entry>},
+  eo: {Lines.Store.owners(R) == Lines.Store.owners(List.append(&2, Types.Entry, R, zs)): List<&2, String>},
+  e: {Lines.Rule.of(R, c, m, Groups.Groups.owner(R, c, m)) == Some{u}: Maybe<&2, Lines.Rule>}
+) -> {Lines.Rule.at(List.append(&2, Types.Entry, R, zs), c, m) == Some{u}: Maybe<&2, Lines.Rule>}:
+  %Equal.sym(Bool, Nat.is_lt(m, List.length(&2, Types.Entry, List.append(&2, Types.Entry, R, zs))), True{}, el): {
+    Shared.Maybe.when(
+      Lines.Rule,
+      _,
+      x => Lines.Rule.of(List.append(&2, Types.Entry, R, zs), c, m, Groups.Groups.owner(List.append(&2, Types.Entry, R, zs), c, m))
+    ) == Some{u}: Maybe<&2, Lines.Rule>
+  }
+  %Groups.Groups.owner_take(R, List.append(&2, Types.Entry, R, zs), c, m, et): {
+    Lines.Rule.of(List.append(&2, Types.Entry, R, zs), c, m, _) == Some{u}: Maybe<&2, Lines.Rule>
+  }
+  %Rule.of_append(R, List.append(&2, Types.Entry, R, zs), c, m, Groups.Groups.owner(R, c, m))(et)(eo): {
+    _ == Some{u}: Maybe<&2, Lines.Rule>
+  }
+  e
+
+# the rule that an era decides stays as the store grows
+def Rule.at_append(+R: List<&2, Types.Entry>, +zs: List<&2, Types.Entry>, +c: Ledgers.Line, +m: Nat, -u: Lines.Rule) -> {
+  Lines.Rule.at(R, c, m) == Some{u}: Maybe<&2, Lines.Rule>
+} -> {Lines.Rule.at(List.append(&2, Types.Entry, R, zs), c, m) == Some{u}: Maybe<&2, Lines.Rule>}:
+  Lists.Bool.by(
+    b => {
+      Shared.Maybe.when(Lines.Rule, b, x => Lines.Rule.of(R, c, m, Groups.Groups.owner(R, c, m))) == Some{u}: Maybe<&2, Lines.Rule>
+    } -> {Lines.Rule.at(List.append(&2, Types.Entry, R, zs), c, m) == Some{u}: Maybe<&2, Lines.Rule>},
+    Nat.is_lt(m, List.length(&2, Types.Entry, R)),
+    +el => e => Rule.at_append.of(
+      R,
+      zs,
+      c,
+      m,
+      u,
+      Shared.Nat.lt_le(
+        m,
+        List.length(&2, Types.Entry, R),
+        List.length(&2, Types.Entry, List.append(&2, Types.Entry, R, zs))
+      )(el)(Lists.List.length_append_le(Types.Entry, R, zs)),
+      Equal.sym(
+        List<&2, Types.Entry>,
+        List.take(&2, Types.Entry, List.append(&2, Types.Entry, R, zs), 1n+m),
+        List.take(&2, Types.Entry, R, 1n+m),
+        Lists.List.take_append(Types.Entry, R, zs, 1n+m)(Nat.lt_up(m, List.length(&2, Types.Entry, R))(el))
+      ),
+      Store.owners_append(R, zs, m)(el),
+      e
+    ),
+    ef => e => Empty.absurd(
+      {Lines.Rule.at(List.append(&2, Types.Entry, R, zs), c, m) == Some{u}: Maybe<&2, Lines.Rule>},
+      Shared.Maybe.none_ne_some(Lines.Rule, u, e)
+    )
+  )
+
+# the rule of the next version stays as the store of the line grows
+def Rule.grows(m: Maybe<&2, List<&2, Types.Entry>>, +zs: List<&2, Types.Entry>, +c: Ledgers.Line, +vs: List<&2, Types.Entry>, -u: Lines.Rule) -> {
+  Lines.Line.rule(m, c, vs) == Some{u}: Maybe<&2, Lines.Rule>
+} -> {Lines.Line.rule(Store.grow(m, zs), c, vs) == Some{u}: Maybe<&2, Lines.Rule>}:
+  match m:
+    case None{}:
+      e => e
+    case Some{+R}:
+      e => Rule.at_append(R, zs, c, Lines.Line.era(c, vs), u)(e)
+
 # the versions of a line stay: the larger set decides them, and maybe more
 # after them
 def Line.versions_stay(+name: String, +s: Facts.Facts(), +s2: Facts.Facts(), +c: Ledgers.Line, +vs: List<&2, Types.Entry>) -> {

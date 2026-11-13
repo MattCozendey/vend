@@ -1233,3 +1233,794 @@ def Bound.same(+d: Delta, +s: Facts.Facts(), +c: Ledgers.Line) -> {Delta.spares(
     )
   )
 
+# Version 0
+# ---------
+
+# a list is within itself
+def List.within_refl(~A: Data, ~same: A -> A -> Bool, ~laws: Shared.Eq.Laws(A, same), xs: List<&2, A>) -> {
+  Shared.List.within(~A, ~same, xs, xs) == True{}: Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Shared.Bool.and_both(List.contains(~A, ~same, x <> r, x), Shared.List.within(~A, ~same, r, x <> r))(
+        Lists.List.contains_head(~A, ~same, ~laws, x, r)
+      )(Lists.List.within_cons(~A, ~same, r, x, r)(List.within_refl(~A, ~same, ~laws, r)))
+
+# when List.pick gives nothing, p(g) holds of no member of xs
+def List.pick_miss(
+  ~A: Data,
+  ~V: Data,
+  ~p: V -> A -> Bool,
+  ~same: A -> A -> Bool,
+  ~laws: Shared.Eq.Laws(A, same),
+  xs: List<&2, A>,
+  +g: V,
+  +x: A
+) -> {Lists.List.pick(~A, ~V, ~p, xs, g) == None{}: Maybe<&2, A>} -> {
+  List.contains(~A, ~same, xs, x) == True{}: Bool
+} -> {p(g)(x) == False{}: Bool}:
+  match xs:
+    case Nil{}:
+      e => hin => Empty.absurd({p(g)(x) == False{}: Bool}, Shared.Bool.false_ne_true(hin))
+    case Con{+h, +r}:
+      Lists.Bool.by(
+        hit => {p(g)(h) == hit: Bool} -> {
+          List.find.if(A, h, u => Lists.List.pick(~A, ~V, ~p, r, g), hit) == None{}: Maybe<&2, A>
+        } -> {List.contains(~A, ~same, h <> r, x) == True{}: Bool} -> {p(g)(x) == False{}: Bool},
+        p(g)(h),
+        et => eh => e => hin => Empty.absurd({p(g)(x) == False{}: Bool}, Lists.Maybe.some_ne_none(A, h, e)),
+        ef => eh => e => hin => Lists.List.contains_cons_by(
+          ~A,
+          ~same,
+          ~laws,
+          {p(g)(x) == False{}: Bool},
+          h,
+          r,
+          x,
+          hin,
+          ex => (
+            %ex: {p(g)(_) == False{}: Bool}
+            eh
+          ),
+          cin => List.pick_miss(~A, ~V, ~p, ~same, ~laws, r, g, x)(e)(cin)
+        )
+      )({==})
+
+# a member of xs is a member of xs with x before it, when it is kept
+def Asks.put_contains(x: Types.Ask, xs: List<&2, Types.Ask>, keep: Bool, y: Types.Ask) -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, xs, y) == True{}: Bool
+} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, x, xs, keep), y) == True{}: Bool}:
+  match keep:
+    case False{}:
+      h => h
+    case True{}:
+      h => Shared.List.contains_cons(~Types.Ask, ~Coded.Ask.is_eq, x, xs, y)(h)
+
+# a start among r is a start among f <> r
+def Starts.cons(f: Types.Fact, +r: List<&2, Types.Fact>, +h: Hashes.Hash, +a: Types.Ask) -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(r, h), a) == True{}: Bool
+} -> {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(f <> r, h), a) == True{}: Bool}:
+  match f:
+    case Types.Fact.Vote{v, st, pk}:
+      e => e
+    case Types.Fact.Ask{+b}:
+      e => Asks.put_contains(b, Lines.Starts.of(r, h), Facts.Ask.starts(h, b), a)(e)
+
+# an ask among fs that starts the store of h is one of its starts
+def Starts.in(fs: List<&2, Types.Fact>, +h: Hashes.Hash, +a: Types.Ask) -> {
+  List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Ask{a}) == True{}: Bool
+} -> {Facts.Ask.starts(h, a) == True{}: Bool} -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(fs, h), a) == True{}: Bool
+}:
+  match fs:
+    case Nil{}:
+      hin => st => hin
+    case Con{+f, +r}:
+      hin => +st => Lists.List.contains_cons_by(
+        ~Types.Fact,
+        ~Coded.Fact.is_eq,
+        ~Coded.Fact.laws(),
+        {List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(f <> r, h), a) == True{}: Bool},
+        f,
+        r,
+        Types.Fact.Ask{a},
+        hin,
+        ef => (
+          %Equal.sym(Types.Fact, f, Types.Fact.Ask{a}, ef): {
+            List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(_ <> r, h), a) == True{}: Bool
+          }
+          %Equal.sym(Bool, Facts.Ask.starts(h, a), True{}, st): {
+            List.contains(
+              ~Types.Ask,
+              ~Coded.Ask.is_eq,
+              List.filter.put(Types.Ask, a, Lines.Starts.of(r, h), _),
+              a
+            )
+              == True{}: Bool
+          }
+          Lists.List.contains_head(~Types.Ask, ~Coded.Ask.is_eq, ~Coded.Ask.laws(), a, Lines.Starts.of(r, h))
+        ),
+        cin => Starts.cons(f, r, h, a)(Starts.in(r, h, a)(cin)(st))
+      )
+
+# Starts.out for f <> r, from Starts.out for r
+def Starts.out.up(
+  +f: Types.Fact,
+  +r: List<&2, Types.Fact>,
+  +h: Hashes.Hash,
+  +a: Types.Ask,
+  p: {
+    List.contains(~Types.Fact, ~Coded.Fact.is_eq, r, Types.Fact.Ask{a}) == True{}: Bool
+  }
+    & {Facts.Ask.starts(h, a) == True{}: Bool}
+) -> {
+  List.contains(~Types.Fact, ~Coded.Fact.is_eq, f <> r, Types.Fact.Ask{a}) == True{}: Bool
+}
+  & {Facts.Ask.starts(h, a) == True{}: Bool}:
+  (c, e) = p
+  (Shared.List.contains_cons(~Types.Fact, ~Coded.Fact.is_eq, f, r, Types.Fact.Ask{a})(c), e)
+
+# a start of the store of h among fs is an ask among fs that starts it
+def Starts.out(fs: List<&2, Types.Fact>, +h: Hashes.Hash, +a: Types.Ask) -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(fs, h), a) == True{}: Bool
+} -> {
+  List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Ask{a}) == True{}: Bool
+}
+  & {Facts.Ask.starts(h, a) == True{}: Bool}:
+  match fs:
+    case Nil{}:
+      hin => Empty.absurd(
+        {
+          List.contains(~Types.Fact, ~Coded.Fact.is_eq, [], Types.Fact.Ask{a}) == True{}: Bool
+        }
+          & {Facts.Ask.starts(h, a) == True{}: Bool},
+        Shared.Bool.false_ne_true(hin)
+      )
+    case Con{Types.Fact.Vote{+v, +st, +pk}, +r}:
+      hin => Starts.out.up(Types.Fact.Vote{v, st, pk}, r, h, a, Starts.out(r, h, a)(hin))
+    case Con{Types.Fact.Ask{+b}, +r}:
+      Lists.Bool.by(
+        hit => {Facts.Ask.starts(h, b) == hit: Bool} -> {
+          List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, b, Lines.Starts.of(r, h), hit), a) == True{}: Bool
+        } -> {
+          List.contains(~Types.Fact, ~Coded.Fact.is_eq, Types.Fact.Ask{b} <> r, Types.Fact.Ask{a}) == True{}: Bool
+        }
+          & {Facts.Ask.starts(h, a) == True{}: Bool},
+        Facts.Ask.starts(h, b),
+        et => es => hin => Lists.List.contains_cons_by(
+          ~Types.Ask,
+          ~Coded.Ask.is_eq,
+          ~Coded.Ask.laws(),
+          {
+            List.contains(~Types.Fact, ~Coded.Fact.is_eq, Types.Fact.Ask{b} <> r, Types.Fact.Ask{a}) == True{}: Bool
+          }
+            & {Facts.Ask.starts(h, a) == True{}: Bool},
+          b,
+          Lines.Starts.of(r, h),
+          a,
+          hin,
+          eb => (
+            %eb: {
+              List.contains(~Types.Fact, ~Coded.Fact.is_eq, Types.Fact.Ask{b} <> r, Types.Fact.Ask{_}) == True{}: Bool
+            }
+              & {Facts.Ask.starts(h, _) == True{}: Bool}
+            (Lists.List.contains_head(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), Types.Fact.Ask{b}, r), es)
+          ),
+          cin => Starts.out.up(Types.Fact.Ask{b}, r, h, a, Starts.out(r, h, a)(cin))
+        ),
+        ef => es => hin => Starts.out.up(Types.Fact.Ask{b}, r, h, a, Starts.out(r, h, a)(hin))
+      )({==})
+
+# Starts.kept, with p what Starts.out gives
+def Starts.kept.of(
+  +d: Delta,
+  +s: Facts.Facts(),
+  +f: Bool,
+  +h: Hashes.Hash,
+  +x: Types.Ask,
+  ok: {Delta.ok(d) == True{}: Bool},
+  p: {
+    List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(Delta.side(d, s, f)), Types.Fact.Ask{x}) == True{}: Bool
+  }
+    & {Facts.Ask.starts(h, x) == True{}: Bool}
+) -> {
+  List.contains(
+    ~Types.Ask,
+    ~Coded.Ask.is_eq,
+    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+    x
+  )
+    == True{}: Bool
+}:
+  (c, +st) = p
+  Starts.in(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h, x)(
+    Equal.trans(
+      Bool,
+      List.contains(
+        ~Types.Fact,
+        ~Coded.Fact.is_eq,
+        Facts.Facts.list(Delta.side(d, s, Bool.not(f))),
+        Types.Fact.Ask{x}
+      ),
+      Facts.Facts.has(Delta.side(d, s, Bool.not(f)), Types.Fact.Ask{x}),
+      True{},
+      Equal.sym(
+        Bool,
+        Facts.Facts.has(Delta.side(d, s, Bool.not(f)), Types.Fact.Ask{x}),
+        List.contains(
+          ~Types.Fact,
+          ~Coded.Fact.is_eq,
+          Facts.Facts.list(Delta.side(d, s, Bool.not(f))),
+          Types.Fact.Ask{x}
+        ),
+        Facts.Facts.has_list(Delta.side(d, s, Bool.not(f)), Types.Fact.Ask{x})
+      ),
+      Equal.trans(
+        Bool,
+        Facts.Facts.has(Delta.side(d, s, Bool.not(f)), Types.Fact.Ask{x}),
+        Facts.Facts.has(Delta.side(d, s, f), Types.Fact.Ask{x}),
+        True{},
+        Equal.sym(
+          Bool,
+          Facts.Facts.has(Delta.side(d, s, f), Types.Fact.Ask{x}),
+          Facts.Facts.has(Delta.side(d, s, Bool.not(f)), Types.Fact.Ask{x}),
+          Delta.asks_side(d, s, f, h, x)(ok)(st)
+        ),
+        Equal.trans(
+          Bool,
+          Facts.Facts.has(Delta.side(d, s, f), Types.Fact.Ask{x}),
+          List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(Delta.side(d, s, f)), Types.Fact.Ask{x}),
+          True{},
+          Facts.Facts.has_list(Delta.side(d, s, f), Types.Fact.Ask{x}),
+          c
+        )
+      )
+    )
+  )(st)
+
+# a start of the store of h on one side of a d that starts no store is a start
+# of it on the other side
+def Starts.kept(+d: Delta, +s: Facts.Facts(), +f: Bool, +h: Hashes.Hash, +x: Types.Ask) -> {
+  Delta.ok(d) == True{}: Bool
+} -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h), x) == True{}: Bool
+} -> {
+  List.contains(
+    ~Types.Ask,
+    ~Coded.Ask.is_eq,
+    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+    x
+  )
+    == True{}: Bool
+}:
+  ok => hin => Starts.kept.of(d, s, f, h, x, ok, Starts.out(Facts.Facts.list(Delta.side(d, s, f)), h, x)(hin))
+
+# a start of the store of h on the other side of a d that starts no store is
+# a start of it on this side
+def Starts.kept_back(+d: Delta, +s: Facts.Facts(), f: Bool, +h: Hashes.Hash, +x: Types.Ask) -> {
+  Delta.ok(d) == True{}: Bool
+} -> {
+  List.contains(
+    ~Types.Ask,
+    ~Coded.Ask.is_eq,
+    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+    x
+  )
+    == True{}: Bool
+} -> {
+  List.contains(~Types.Ask, ~Coded.Ask.is_eq, Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h), x) == True{}: Bool
+}:
+  match f:
+    case True{}:
+      ok => hin => Starts.kept(d, s, False{}, h, x)(ok)(hin)
+    case False{}:
+      ok => hin => Starts.kept(d, s, True{}, h, x)(ok)(hin)
+
+# no ask of ys stands against an ask that leads the starts of the store of h,
+# when ys is within the starts on the other side of a d that starts no store
+def Leads.kept.go(
+  ys: List<&2, Types.Ask>,
+  +d: Delta,
+  +s: Facts.Facts(),
+  +f: Bool,
+  +h: Hashes.Hash,
+  +x: Types.Ask
+) -> {Delta.ok(d) == True{}: Bool} -> {
+  Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h), x) == True{}: Bool
+} -> {
+  Shared.List.within(
+    ~Types.Ask,
+    ~Coded.Ask.is_eq,
+    ys,
+    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
+  )
+    == True{}: Bool
+} -> {Shared.List.holds(~Types.Ask, ~Types.Ask, ~Lines.Ask.led, ys, x) == True{}: Bool}:
+  match ys:
+    case Nil{}:
+      ok => l => w => {==}
+    case Con{+y, +r}:
+      +ok => +l => +w => Shared.List.all.if_both(
+        Lines.Ask.led(x, y),
+        u => Shared.List.holds(~Types.Ask, ~Types.Ask, ~Lines.Ask.led, r, x)
+      )(
+        Lists.List.holds_in(
+          ~Types.Ask,
+          ~Types.Ask,
+          ~Lines.Ask.led,
+          ~Coded.Ask.is_eq,
+          ~Coded.Ask.laws(),
+          Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+          x,
+          y
+        )(l)(
+          Starts.kept_back(d, s, f, h, y)(ok)(
+            Shared.Bool.and_true_left(
+              List.contains(
+                ~Types.Ask,
+                ~Coded.Ask.is_eq,
+                Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+                y
+              ),
+              Shared.List.within(
+                ~Types.Ask,
+                ~Coded.Ask.is_eq,
+                r,
+                Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
+              )
+            )(w)
+          )
+        )
+      )(
+        Leads.kept.go(r, d, s, f, h, x)(ok)(l)(
+          Shared.Bool.and_true_right(
+            List.contains(
+              ~Types.Ask,
+              ~Coded.Ask.is_eq,
+              Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+              y
+            ),
+            Shared.List.within(
+              ~Types.Ask,
+              ~Coded.Ask.is_eq,
+              r,
+              Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
+            )
+          )(w)
+        )
+      )
+
+# an ask that leads the starts of the store of h leads them on the other side
+# of a d that starts no store
+def Leads.kept(+d: Delta, +s: Facts.Facts(), +f: Bool, +h: Hashes.Hash, +x: Types.Ask) -> {
+  Delta.ok(d) == True{}: Bool
+} -> {Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h), x) == True{}: Bool} -> {
+  Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h), x) == True{}: Bool
+}:
+  ok => l => Leads.kept.go(Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h), d, s, f, h, x)(ok)(
+    l
+  )(
+    List.within_refl(
+      ~Types.Ask,
+      ~Coded.Ask.is_eq,
+      ~Coded.Ask.laws(),
+      Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
+    )
+  )
+
+# two asks that do not stand against each other give one version 0
+def Led.same(x: Types.Ask, y: Types.Ask) -> {Lines.Ask.led(x, y) == True{}: Bool} -> {
+  Lines.Ask.led(y, x) == True{}: Bool
+} -> {Lines.Store.first.of(Some{y}) == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>}:
+  match x y:
+    case Types.Ask{+i, +k, +r} Types.Ask{+j, +l, +q}:
+      h1 => h2 => Lists.Bool.by(
+        a => {Bool.or(a, Nat.is_lt(l, k)) == True{}: Bool} -> {
+          Bool.or(Bool.and(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r)), Nat.is_lt(k, l)) == True{}: Bool
+        } -> {Some{Lines.Entry.first(j, q, 0n)} == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>},
+        Bool.and(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q)),
+        +et => g1 => g2 => (
+          %Ledgers.Id.is_eq_sound(i, j)(
+            Shared.Bool.and_true_left(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))(et)
+          ): {Some{Lines.Entry.first(_, q, 0n)} == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>}
+          %Coded.Request.is_eq_sound(r, q)(
+            Shared.Bool.and_true_right(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))(et)
+          ): {Some{Lines.Entry.first(i, _, 0n)} == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>}
+          {==}
+        ),
+        ef => g1 => g2 => Lists.Bool.by(
+          b => {Bool.or(b, Nat.is_lt(k, l)) == True{}: Bool} -> {
+            Some{Lines.Entry.first(j, q, 0n)} == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>
+          },
+          Bool.and(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r)),
+          +et2 => g3 => (
+            %Ledgers.Id.is_eq_sound(j, i)(
+              Shared.Bool.and_true_left(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r))(et2)
+            ): {Some{Lines.Entry.first(j, q, 0n)} == Some{Lines.Entry.first(_, r, 0n)}: Maybe<&2, Types.Entry>}
+            %Coded.Request.is_eq_sound(q, r)(
+              Shared.Bool.and_true_right(Ledgers.Id.is_eq(j, i), Coded.Request.is_eq(q, r))(et2)
+            ): {Some{Lines.Entry.first(j, q, 0n)} == Some{Lines.Entry.first(j, _, 0n)}: Maybe<&2, Types.Entry>}
+            {==}
+          ),
+          ef2 => g3 => Lists.Bool.clash(
+            {Some{Lines.Entry.first(j, q, 0n)} == Some{Lines.Entry.first(i, r, 0n)}: Maybe<&2, Types.Entry>},
+            Nat.is_lt(k, l),
+            Shared.Nat.le_nlt(l, k)(Shared.Nat.lt_weak(l, k)(g1)),
+            g3
+          )
+        )(g2)
+      )(h1)(h2)
+
+# First.kept, with the ask x a start that leads on the other side of d
+def First.kept.of(
+  +d: Delta,
+  +s: Facts.Facts(),
+  +f: Bool,
+  +h: Hashes.Hash,
+  +x: Types.Ask,
+  +xin: {
+    List.contains(
+      ~Types.Ask,
+      ~Coded.Ask.is_eq,
+      Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+      x
+    )
+      == True{}: Bool
+  },
+  +xl: {Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h), x) == True{}: Bool}
+) -> {
+  Lines.Store.first(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h) == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>
+}:
+  Lists.Maybe.by(
+    Types.Ask,
+    m => {Lines.Store.first.of(m) == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>},
+    Lists.List.pick(
+      ~Types.Ask,
+      ~List<&2, Types.Ask>,
+      ~Lines.Ask.leads,
+      Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+      Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h)
+    ),
+    en => Lists.Bool.clash(
+      {None{} == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>},
+      Lines.Ask.leads(Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h), x),
+      List.pick_miss(
+        ~Types.Ask,
+        ~List<&2, Types.Ask>,
+        ~Lines.Ask.leads,
+        ~Coded.Ask.is_eq,
+        ~Coded.Ask.laws(),
+        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+        x
+      )(en)(xin),
+      xl
+    ),
+    +y => +ey => Led.same(x, y)(
+      Lists.List.holds_in(
+        ~Types.Ask,
+        ~Types.Ask,
+        ~Lines.Ask.led,
+        ~Coded.Ask.is_eq,
+        ~Coded.Ask.laws(),
+        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+        x,
+        y
+      )(xl)(
+        Lists.List.pick_in(
+          ~Types.Ask,
+          ~List<&2, Types.Ask>,
+          ~Lines.Ask.leads,
+          ~Coded.Ask.is_eq,
+          ~Coded.Ask.laws(),
+          Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+          Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+          y
+        )(ey)
+      )
+    )(
+      Lists.List.holds_in(
+        ~Types.Ask,
+        ~Types.Ask,
+        ~Lines.Ask.led,
+        ~Coded.Ask.is_eq,
+        ~Coded.Ask.laws(),
+        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+        y,
+        x
+      )(
+        Lists.List.pick_hit(
+          ~Types.Ask,
+          ~List<&2, Types.Ask>,
+          ~Lines.Ask.leads,
+          Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+          Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h),
+          y
+        )(ey)
+      )(xin)
+    )
+  )
+
+# the ask that gives version 0 of a store gives the version 0 that the store
+# has on the other side of a d that starts no store
+def First.kept(+d: Delta, +s: Facts.Facts(), +f: Bool, +h: Hashes.Hash, +x: Types.Ask) -> {
+  Delta.ok(d) == True{}: Bool
+} -> {
+  Lists.List.pick(
+    ~Types.Ask,
+    ~List<&2, Types.Ask>,
+    ~Lines.Ask.leads,
+    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+    Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h)
+  )
+    == Some{x}: Maybe<&2, Types.Ask>
+} -> {
+  Lines.Store.first(Facts.Facts.list(Delta.side(d, s, Bool.not(f))), h) == Lines.Store.first.of(Some{x}): Maybe<&2, Types.Entry>
+}:
+  +ok => +e => First.kept.of(
+    d,
+    s,
+    f,
+    h,
+    x,
+    Starts.kept(d, s, f, h, x)(ok)(
+      Lists.List.pick_in(
+        ~Types.Ask,
+        ~List<&2, Types.Ask>,
+        ~Lines.Ask.leads,
+        ~Coded.Ask.is_eq,
+        ~Coded.Ask.laws(),
+        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+        x
+      )(e)
+    ),
+    Leads.kept(d, s, f, h, x)(ok)(
+      Lists.List.pick_hit(
+        ~Types.Ask,
+        ~List<&2, Types.Ask>,
+        ~Lines.Ask.leads,
+        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+        Lines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h),
+        x
+      )(e)
+    )
+  )
+
+# after the node adds a d that starts no store, version 0 of a store is as
+# before
+def First.same(+d: Delta, +s: Facts.Facts(), +h: Hashes.Hash) -> {Delta.ok(d) == True{}: Bool} -> {
+  Lines.Store.first(Facts.Facts.list(Delta.to(d, s)), h) == Lines.Store.first(Facts.Facts.list(s), h): Maybe<&2, Types.Entry>
+}:
+  +ok => Lists.Maybe.by(
+    Types.Ask,
+    m => {
+      Lines.Store.first(Facts.Facts.list(Delta.to(d, s)), h) == Lines.Store.first.of(m): Maybe<&2, Types.Entry>
+    },
+    Lists.List.pick(
+      ~Types.Ask,
+      ~List<&2, Types.Ask>,
+      ~Lines.Ask.leads,
+      Lines.Starts.of(Facts.Facts.list(s), h),
+      Lines.Starts.of(Facts.Facts.list(s), h)
+    ),
+    +en => Lists.Maybe.by(
+      Types.Ask,
+      m => {Lines.Store.first.of(m) == None{}: Maybe<&2, Types.Entry>},
+      Lists.List.pick(
+        ~Types.Ask,
+        ~List<&2, Types.Ask>,
+        ~Lines.Ask.leads,
+        Lines.Starts.of(Facts.Facts.list(Delta.to(d, s)), h),
+        Lines.Starts.of(Facts.Facts.list(Delta.to(d, s)), h)
+      ),
+      en2 => {==},
+      +y => ey => Equal.trans(
+        Maybe<&2, Types.Entry>,
+        Lines.Store.first.of(Some{y}),
+        Lines.Store.first(Facts.Facts.list(s), h),
+        None{},
+        Equal.sym(
+          Maybe<&2, Types.Entry>,
+          Lines.Store.first(Facts.Facts.list(s), h),
+          Lines.Store.first.of(Some{y}),
+          First.kept(d, s, True{}, h, y)(ok)(ey)
+        ),
+        Equal.cong(
+          Maybe<&2, Types.Ask>,
+          Maybe<&2, Types.Entry>,
+          m => Lines.Store.first.of(m),
+          Lists.List.pick(
+            ~Types.Ask,
+            ~List<&2, Types.Ask>,
+            ~Lines.Ask.leads,
+            Lines.Starts.of(Facts.Facts.list(s), h),
+            Lines.Starts.of(Facts.Facts.list(s), h)
+          ),
+          None{},
+          en
+        )
+      )
+    ),
+    +x => ex => First.kept(d, s, False{}, h, x)(ok)(ex)
+  )
+
+# Lines that the new fact is no vote for
+# --------------------------------------
+
+# after the node adds d, the next slot of a line that d is no vote for a slot
+# of gives what it gave, once the rule u of the slot is known
+def Step.same.at(+d: Delta, +s: Facts.Facts(), +c: Ledgers.Line, +st: Lines.State, u: Maybe<&2, Lines.Rule>) -> {
+  Delta.spares(d, c) == True{}: Bool
+} -> {Lines.Line.step.at(Delta.to(d, s), c, st, u) == Lines.Line.step.at(s, c, st, u): Maybe<&2, Lines.State>}:
+  match u:
+    case None{}:
+      h => {==}
+    case Some{+rule}:
+      h => Equal.cong(
+        Maybe<&2, Types.Pick>,
+        Maybe<&2, Lines.State>,
+        m => Lines.Line.step.of(st, m),
+        Lines.Votes.decided(Delta.to(d, s), Types.Step.At{c, Lines.State.slot(st)}, Lines.Rule.nodes(rule)),
+        Lines.Votes.decided(s, Types.Step.At{c, Lines.State.slot(st)}, Lines.Rule.nodes(rule)),
+        Decided.same(d, s, c, Lines.State.slot(st), Lines.Rule.nodes(rule))(
+          Delta.spares_keeps(d, c, Lines.State.slot(st))(h)
+        )
+      )
+
+# after the node adds d, the next slot of a line that d is no vote for a slot
+# of gives what it gave
+def Step.same(
+  +d: Delta,
+  +s: Facts.Facts(),
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: Lines.State
+) -> {Delta.spares(d, c) == True{}: Bool} -> {
+  Lines.Line.step(Delta.to(d, s), R, c, st) == Lines.Line.step(s, R, c, st): Maybe<&2, Lines.State>
+}:
+  h => Step.same.at(d, s, c, st, Lines.Line.rule(R, c, Lines.State.versions(st)))(h)
+
+# after the node adds d, a run of a line that d is no vote for a slot of ends
+# where it ended
+def Run.same(
+  fuel: Nat,
+  +d: Delta,
+  +s: Facts.Facts(),
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: Lines.State,
+  m: Maybe<&2, Lines.State>
+) -> {Delta.spares(d, c) == True{}: Bool} -> {
+  Lines.Line.run(fuel, Delta.to(d, s), R, c, st, m) == Lines.Line.run(fuel, s, R, c, st, m): Lines.State
+}:
+  match fuel m:
+    case 0n _:
+      h => {==}
+    case 1n+f None{}:
+      h => {==}
+    case 1n+(+f) Some{+st2}:
+      +h => (
+        %Step.same(d, s, R, c, st2)(h): {
+          Lines.Line.run(f, Delta.to(d, s), R, c, st2, Lines.Line.step(Delta.to(d, s), R, c, st2))
+            == Lines.Line.run(f, s, R, c, st2, _): Lines.State
+        }
+        Run.same(f, d, s, R, c, st2, Lines.Line.step(Delta.to(d, s), R, c, st2))(h)
+      )
+
+# after the node adds d, a line that d is no vote for a slot of goes from a
+# state as far as before
+def Start.same(
+  +d: Delta,
+  +s: Facts.Facts(),
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: Lines.State
+) -> {Delta.spares(d, c) == True{}: Bool} -> {
+  Lines.Line.start(Delta.to(d, s), R, c, st) == Lines.Line.start(s, R, c, st): Lines.State
+}:
+  +h => (
+    %Bound.same(d, s, c)(h): {
+      Lines.Line.start(Delta.to(d, s), R, c, st) == Lines.Line.run(_, s, R, c, st, Lines.Line.step(s, R, c, st)): Lines.State
+    }
+    %Step.same(d, s, R, c, st)(h): {
+      Lines.Line.start(Delta.to(d, s), R, c, st)
+        == Lines.Line.run(Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c), s, R, c, st, _): Lines.State
+    }
+    Run.same(
+      Lines.Line.bound(Facts.Facts.list(Delta.to(d, s)), c),
+      d,
+      s,
+      R,
+      c,
+      st,
+      Lines.Line.step(Delta.to(d, s), R, c, st)
+    )(h)
+  )
+
+# after the node adds d, a line that d is no vote for a slot of goes from its
+# version 0 as far as before
+def From.same(
+  +d: Delta,
+  +s: Facts.Facts(),
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  m: Maybe<&2, Types.Entry>
+) -> {Delta.spares(d, c) == True{}: Bool} -> {
+  Lines.Line.from(Delta.to(d, s), R, c, m) == Lines.Line.from(s, R, c, m): Maybe<&2, Lines.State>
+}:
+  match m:
+    case None{}:
+      h => {==}
+    case Some{+e}:
+      h => Equal.cong(
+        Lines.State,
+        Maybe<&2, Lines.State>,
+        x => Some{x},
+        Lines.Line.start(Delta.to(d, s), R, c, Lines.State{[e], 1n}),
+        Lines.Line.start(s, R, c, Lines.State{[e], 1n}),
+        Start.same(d, s, R, c, Lines.State{[e], 1n})(h)
+      )
+
+# after the node adds a d that starts no store and is no vote for a slot of
+# the store of h, the state of that store is as before
+def Store.same(+d: Delta, +s: Facts.Facts(), +h: Hashes.Hash) -> {Delta.ok(d) == True{}: Bool} -> {
+  Delta.spares(d, Ledgers.Line{h, None{}}) == True{}: Bool
+} -> {Lines.Store.state(Delta.to(d, s), h) == Lines.Store.state(s, h): Maybe<&2, Lines.State>}:
+  ok => sp => (
+    %First.same(d, s, h)(ok): {
+      Lines.Store.state(Delta.to(d, s), h) == Lines.Line.from(s, None{}, Ledgers.Line{h, None{}}, _): Maybe<&2, Lines.State>
+    }
+    From.same(d, s, None{}, Ledgers.Line{h, None{}}, Lines.Store.first(Facts.Facts.list(Delta.to(d, s)), h))(sp)
+  )
+
+# after the node adds d, the state of a branch that d is no vote for a slot
+# of is as before, once the versions m of its store are known
+def Branch.same.at(+d: Delta, +s: Facts.Facts(), +c: Ledgers.Line, m: Maybe<&2, List<&2, Types.Entry>>) -> {
+  Delta.spares(d, c) == True{}: Bool
+} -> {Lines.Branch.state(Delta.to(d, s), c, m) == Lines.Branch.state(s, c, m): Maybe<&2, Lines.State>}:
+  match m:
+    case None{}:
+      h => {==}
+    case Some{+R}:
+      h => From.same(d, s, Some{R}, c, Lines.Branch.first(R, c))(h)
+
+# after the node adds a d that starts no store and is no vote for a slot of
+# a branch or of its store, the state of the branch is as before
+def Branch.same(+d: Delta, +s: Facts.Facts(), +h: Hashes.Hash, +b: String) -> {Delta.ok(d) == True{}: Bool} -> {
+  Delta.spares(d, Ledgers.Line{h, None{}}) == True{}: Bool
+} -> {Delta.spares(d, Ledgers.Line{h, Some{b}}) == True{}: Bool} -> {
+  Lines.Line.state(Delta.to(d, s), Ledgers.Line{h, Some{b}}) == Lines.Line.state(s, Ledgers.Line{h, Some{b}}): Maybe<&2, Lines.State>
+}:
+  ok => sp => sb => (
+    %Store.same(d, s, h)(ok)(sp): {
+      Lines.Line.state(Delta.to(d, s), Ledgers.Line{h, Some{b}})
+        == Lines.Branch.state(
+          s,
+          Ledgers.Line{h, Some{b}},
+          Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, _)
+        ): Maybe<&2, Lines.State>
+    }
+    Branch.same.at(d, s, Ledgers.Line{h, Some{b}}, Lines.Store.versions(Delta.to(d, s), h))(sb)
+  )
+
+# a node that takes in an ask that starts no store reads each line as before
+def Line.state_asked(+name: String, +s: Facts.Facts(), +a: Types.Ask, +c: Ledgers.Line) -> {
+  Facts.Request.is_start(Lines.Ask.request(a)) == False{}: Bool
+} -> {
+  Lines.Line.state(Facts.Facts.take(name, s, Types.Fact.Ask{a}), c) == Lines.Line.state(s, c): Maybe<&2, Lines.State>
+}:
+  match c:
+    case Ledgers.Line{+h, None{}}:
+      e => Store.same(Delta.Ask{name, a}, s, h)(
+        %Equal.sym(Bool, Facts.Request.is_start(Lines.Ask.request(a)), False{}, e): {Bool.not(_) == True{}: Bool}
+        {==}
+      )({==})
+    case Ledgers.Line{+h, Some{+b}}:
+      e => Branch.same(Delta.Ask{name, a}, s, h, b)(
+        %Equal.sym(Bool, Facts.Request.is_start(Lines.Ask.request(a)), False{}, e): {Bool.not(_) == True{}: Bool}
+        {==}
+      )({==})({==})
+

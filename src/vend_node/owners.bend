@@ -1404,3 +1404,920 @@ def Core.groups_decided(+s: Facts.Facts(), +h: Hashes.Hash, +g: String, +m: Nat,
     } -> @j: Nat -> @ms: List<&2, String> -> Mirror.Latest(s, Ledgers.Line{h, None{}}, j, m, Spec.Request.Group{h, g, ms}) -> Empty
   ):
   e => Core.groups_decided.open(s, h, g, m, y, IsGroup.some(s, h, g, m, y, e))
+
+# The rule of a version
+# ---------------------
+
+# the name of the owner group of a rule, if the rule has one
+def Rule.name_of(m: Maybe<&2, Lines.Rule>) -> Maybe<&2, String>:
+  match m:
+    case Some{Lines.Rule{Some{g}, ns}}:
+      Some{g}
+    case _:
+      None{}
+
+# the nodes of a rule
+def Rule.nodes_of(m: Maybe<&2, Lines.Rule>) -> Maybe<&2, List<&2, String>>:
+  match m:
+    case Some{Lines.Rule{g, ns}}:
+      Some{ns}
+    case _:
+      None{}
+
+# a rule of the nodes of a named group is the rule of g and ns only for the
+# name g and the nodes ns
+def Rule.named_some(-name: String, N: Maybe<&2, List<&2, String>>, -g: String, -ns: List<&2, String>) -> {
+  Maybe.map(&2, List<&2, String>, Lines.Rule, ns2 => Lines.Rule{Some{name}, ns2}, N) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+} -> {name == g: String} & {N == Some{ns}: Maybe<&2, List<&2, String>>}:
+  match N:
+    case None{}:
+      h => Empty.absurd(
+        {name == g: String} & {None{} == Some{ns}: Maybe<&2, List<&2, String>>},
+        Shared.Maybe.none_ne_some(Lines.Rule, Lines.Rule{Some{g}, ns}, h)
+      )
+    case Some{x}:
+      +h => (
+        Shared.Maybe.some_inj(
+          String,
+          name,
+          g,
+          Equal.cong(
+            Maybe<&2, Lines.Rule>,
+            Maybe<&2, String>,
+            Rule.name_of,
+            Some{Lines.Rule{Some{name}, x}},
+            Some{Lines.Rule{Some{g}, ns}},
+            h
+          )
+        ),
+        Equal.cong(
+          Maybe<&2, Lines.Rule>,
+          Maybe<&2, List<&2, String>>,
+          Rule.nodes_of,
+          Some{Lines.Rule{Some{name}, x}},
+          Some{Lines.Rule{Some{g}, ns}},
+          h
+        )
+      )
+
+# the rule of a store that named no owner group is the rule of no named group
+def Rule.plain_none(b: Bool, -os: List<&2, String>, -g: String, -ns: List<&2, String>) -> {
+  Shared.Maybe.when(Lines.Rule, b, u => Some{Lines.Rule{None{}, os}}) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+} -> Empty:
+  match b:
+    case True{}:
+      h => Shared.Maybe.none_ne_some(
+        String,
+        g,
+        Equal.cong(
+          Maybe<&2, Lines.Rule>,
+          Maybe<&2, String>,
+          Rule.name_of,
+          Some{Lines.Rule{None{}, os}},
+          Some{Lines.Rule{Some{g}, ns}},
+          h
+        )
+      )
+    case False{}:
+      h => Shared.Maybe.none_ne_some(Lines.Rule, Lines.Rule{Some{g}, ns}, h)
+
+# Rule.of_some, for the owner group name
+def Rule.of_some.at(
+  -R: List<&2, Types.Entry>,
+  -c: Ledgers.Line,
+  -m: Nat,
+  -name: String,
+  -g: String,
+  -ns: List<&2, String>,
+  p: {name == g: String} & {Groups.Groups.nodes(R, Lines.Line.root(c), name, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+) -> {
+  Some{name} == Some{g}: Maybe<&2, String>
+}
+  & {Groups.Groups.nodes(R, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
+  (+en, eN) = p
+  (
+    Equal.cong(String, Maybe<&2, String>, w => Some{w}, name, g, en),
+    Own.cast(
+      String,
+      w => {Groups.Groups.nodes(R, Lines.Line.root(c), w, m) == Some{ns}: Maybe<&2, List<&2, String>>},
+      name,
+      g,
+      en,
+      eN
+    )
+  )
+
+# a rule of the owner group g and the nodes ns: the owner group is g, and its
+# nodes at the era are ns
+def Rule.of_some(+R: List<&2, Types.Entry>, +c: Ledgers.Line, +m: Nat, og: Maybe<&2, String>, -g: String, -ns: List<&2, String>) -> {
+  Lines.Rule.of(R, c, m, og) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+} -> {
+  og == Some{g}: Maybe<&2, String>
+}
+  & {Groups.Groups.nodes(R, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
+  match og:
+    case None{}:
+      h => Empty.absurd(
+        {
+          None{} == Some{g}: Maybe<&2, String>
+        }
+          & {Groups.Groups.nodes(R, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>},
+        Rule.plain_none(Lines.Line.is_root(c), Lines.Store.owners(R), g, ns)(h)
+      )
+    case Some{+name}:
+      h => Rule.of_some.at(
+        R,
+        c,
+        m,
+        name,
+        g,
+        ns,
+        Rule.named_some(name, Groups.Groups.nodes(R, Lines.Line.root(c), name, m), g, ns)(h)
+      )
+
+# Rule.at_some, once the era is known to be a version of the store
+def Rule.at_some.of(
+  +R: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +m: Nat,
+  -g: String,
+  -ns: List<&2, String>,
+  p: {Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool} & {Lines.Rule.of(R, c, m, Groups.Groups.owner(R, c, m)) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+) -> {
+  Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool
+}
+  & (
+    {
+      Groups.Groups.owner(R, c, m) == Some{g}: Maybe<&2, String>
+    }
+      & {Groups.Groups.nodes(R, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+  ):
+  (lt, hr) = p
+  (lt, Rule.of_some(R, c, m, Groups.Groups.owner(R, c, m), g, ns)(hr))
+
+# the rule that the era m of the versions R of a store gives is of the owner
+# group g and the nodes ns: m is a version of R, where the owner group of the
+# line is g and its nodes are ns
+def Rule.at_some(
+  +R: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +m: Nat,
+  -g: String,
+  -ns: List<&2, String>,
+  h: {Lines.Rule.at(R, c, m) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+) -> {
+  Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool
+}
+  & (
+    {
+      Groups.Groups.owner(R, c, m) == Some{g}: Maybe<&2, String>
+    }
+      & {Groups.Groups.nodes(R, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+  ):
+  Rule.at_some.of(
+    R,
+    c,
+    m,
+    g,
+    ns,
+    When.some(
+      Lines.Rule,
+      Nat.is_lt(m, List.length(&2, Types.Entry, R)),
+      Lines.Rule.of(R, c, m, Groups.Groups.owner(R, c, m)),
+      Lines.Rule{Some{g}, ns},
+      h
+    )
+  )
+
+# a number below n is, with one more, at most n
+def Nat.lt_le_succ(a: Nat, n: Nat) -> {Nat.is_lt(a, n) == True{}: Bool} -> {Nat.is_le(1n+a, n) == True{}: Bool}:
+  match a n:
+    case 0n 0n:
+      h => h
+    case 0n 1n+q:
+      h => Shared.Nat.le_zero(q)
+    case 1n+p 0n:
+      h => h
+    case 1n+p 1n+q:
+      Nat.lt_le_succ(p, q)
+
+# Rule.at_take, with the facts of the first versions
+def Rule.at_take.of(
+  +vs: List<&2, Types.Entry>,
+  +j: Nat,
+  -c: Ledgers.Line,
+  +m: Nat,
+  -g: String,
+  -ns: List<&2, String>,
+  p: {
+    Nat.is_lt(m, List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, 1n+j))) == True{}: Bool
+  }
+    & (
+      {
+        Groups.Groups.owner(List.take(&2, Types.Entry, vs, 1n+j), c, m) == Some{g}: Maybe<&2, String>
+      }
+        & {Groups.Groups.nodes(List.take(&2, Types.Entry, vs, 1n+j), Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+    )
+) -> {
+  Nat.is_lt(m, List.length(&2, Types.Entry, vs)) == True{}: Bool
+}
+  & (
+    {
+      Groups.Groups.owner(vs, c, m) == Some{g}: Maybe<&2, String>
+    }
+      & {Groups.Groups.nodes(vs, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+  ):
+  (+lt, q) = p
+  (eo, en) = q
+  (
+    Shared.Nat.lt_le(
+      m,
+      List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, 1n+j)),
+      List.length(&2, Types.Entry, vs)
+    )(lt)(Lists.List.ext_length(Types.Entry, List.take(&2, Types.Entry, vs, 1n+j), vs)(Lists.List.take_ext(Types.Entry, vs, 1n+j))),
+    (
+      Equal.trans(
+        Maybe<&2, String>,
+        Groups.Groups.owner(vs, c, m),
+        Groups.Groups.owner(List.take(&2, Types.Entry, vs, 1n+j), c, m),
+        Some{g},
+        Groups.Groups.owner_take(
+          vs,
+          List.take(&2, Types.Entry, vs, 1n+j),
+          c,
+          m,
+          Lists.List.ext_take(Types.Entry, List.take(&2, Types.Entry, vs, 1n+j), vs, 1n+m)(Lists.List.take_ext(Types.Entry, vs, 1n+j))(
+            Nat.lt_le_succ(m, List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, 1n+j)))(lt)
+          )
+        ),
+        eo
+      ),
+      Equal.trans(
+        Maybe<&2, List<&2, String>>,
+        Groups.Groups.nodes(vs, Lines.Line.root(c), g, m),
+        Groups.Groups.nodes(List.take(&2, Types.Entry, vs, 1n+j), Lines.Line.root(c), g, m),
+        Some{ns},
+        Groups.Groups.nodes_take(
+          vs,
+          List.take(&2, Types.Entry, vs, 1n+j),
+          Lines.Line.root(c),
+          g,
+          m,
+          Lists.List.ext_take(Types.Entry, List.take(&2, Types.Entry, vs, 1n+j), vs, 1n+m)(Lists.List.take_ext(Types.Entry, vs, 1n+j))(
+            Nat.lt_le_succ(m, List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, 1n+j)))(lt)
+          )
+        ),
+        en
+      )
+    )
+  )
+
+# what the era m of the first versions of a store gives as the rule, m gives
+# of all the versions of the store
+def Rule.at_take(
+  +vs: List<&2, Types.Entry>,
+  +j: Nat,
+  +c: Ledgers.Line,
+  +m: Nat,
+  -g: String,
+  -ns: List<&2, String>,
+  h: {Lines.Rule.at(List.take(&2, Types.Entry, vs, 1n+j), c, m) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+) -> {
+  Nat.is_lt(m, List.length(&2, Types.Entry, vs)) == True{}: Bool
+}
+  & (
+    {
+      Groups.Groups.owner(vs, c, m) == Some{g}: Maybe<&2, String>
+    }
+      & {Groups.Groups.nodes(vs, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+  ):
+  Rule.at_take.of(vs, j, c, m, g, ns, Rule.at_some(List.take(&2, Types.Entry, vs, 1n+j), c, m, g, ns, h))
+
+# the store of the line c has versions R that reach m, where the owner group
+# of c is g and its nodes are ns
+def Owned(s: Facts.Facts(), c: Ledgers.Line, g: String, ns: List<&2, String>, m: Nat) -> Type:
+  Exists(
+    List<&2, Types.Entry>,
+    R => {
+      Lines.Store.versions(s, Spec.Line.store(c)) == Some{R}: Maybe<&2, List<&2, Types.Entry>>
+    }
+      & (
+        {
+          Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool
+        }
+          & (
+            {
+              Groups.Groups.owner(R, c, m) == Some{g}: Maybe<&2, String>
+            }
+              & {Groups.Groups.nodes(R, Spec.Line.store(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+          )
+      )
+  )
+
+# Before.some, once the line is known to have the version
+def Before.some.at(
+  +j: Nat,
+  +vs: List<&2, Types.Entry>,
+  -P: List<&2, Types.Entry>,
+  p: {Nat.is_lt(j, List.length(&2, Types.Entry, vs)) == True{}: Bool} & {Some{List.take(&2, Types.Entry, vs, 1n+j)} == Some{P}: Maybe<&2, List<&2, Types.Entry>>}
+) -> Exists(
+  List<&2, Types.Entry>,
+  ws => {
+    Some{vs} == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
+  }
+    & ({Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool} & {List.take(&2, Types.Entry, ws, 1n+j) == P: List<&2, Types.Entry>})
+):
+  (lt, e) = p
+  (vs, ({==}, (lt, Shared.Maybe.some_inj(List<&2, Types.Entry>, List.take(&2, Types.Entry, vs, 1n+j), P, e))))
+
+# the versions before version 1+j of a line are the first 1+j of its versions
+def Before.some(+j: Nat, mv: Maybe<&2, List<&2, Types.Entry>>, -P: List<&2, Types.Entry>) -> {
+  Answers.Line.before.of(j, mv) == Some{P}: Maybe<&2, List<&2, Types.Entry>>
+} -> Exists(
+  List<&2, Types.Entry>,
+  ws => {
+    mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
+  }
+    & ({Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool} & {List.take(&2, Types.Entry, ws, 1n+j) == P: List<&2, Types.Entry>})
+):
+  match mv:
+    case None{}:
+      h => Empty.absurd(
+        Exists(
+          List<&2, Types.Entry>,
+          ws => {
+            None{} == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
+          }
+            & ({Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool} & {List.take(&2, Types.Entry, ws, 1n+j) == P: List<&2, Types.Entry>})
+        ),
+        Shared.Maybe.none_ne_some(List<&2, Types.Entry>, P, h)
+      )
+    case Some{+vs}:
+      h => Before.some.at(
+        j,
+        vs,
+        P,
+        When.some(
+          List<&2, Types.Entry>,
+          Nat.is_lt(j, List.length(&2, Types.Entry, vs)),
+          Some{List.take(&2, Types.Entry, vs, 1n+j)},
+          P,
+          h
+        )
+      )
+
+# the rule after the versions P of a branch is of a named group: the store of
+# the branch has versions, and they give the rule at the era of P
+def Rule.after.of_some(+c: Ledgers.Line, +P: List<&2, Types.Entry>, mv: Maybe<&2, List<&2, Types.Entry>>, -u: Lines.Rule) -> {
+  Lines.Rule.after.of(c, P, mv) == Some{u}: Maybe<&2, Lines.Rule>
+} -> Exists(
+  List<&2, Types.Entry>,
+  R => {mv == Some{R}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Rule.at(R, c, Lines.Line.era(c, P)) == Some{u}: Maybe<&2, Lines.Rule>}
+):
+  match mv:
+    case None{}:
+      h => Empty.absurd(
+        Exists(
+          List<&2, Types.Entry>,
+          R => {None{} == Some{R}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Rule.at(R, c, Lines.Line.era(c, P)) == Some{u}: Maybe<&2, Lines.Rule>}
+        ),
+        Shared.Maybe.none_ne_some(Lines.Rule, u, h)
+      )
+    case Some{+R}:
+      h => (R, ({==}, h))
+
+# Rule.after_some, for a branch, with the versions of its store
+def Rule.after_some.branch(
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +b: String,
+  -P: List<&2, Types.Entry>,
+  -g: String,
+  -ns: List<&2, String>,
+  +m: Nat,
+  em: {Lines.Line.era(Ledgers.Line{h, Some{b}}, P) == m: Nat},
+  p: Exists(
+    List<&2, Types.Entry>,
+    R => {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Rule.at(R, Ledgers.Line{h, Some{b}}, Lines.Line.era(Ledgers.Line{h, Some{b}}, P)) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+  )
+) -> Owned(s, Ledgers.Line{h, Some{b}}, g, ns, m):
+  (+R, q) = p
+  (ev, ea) = q
+  (
+    R,
+    (
+      ev,
+      Rule.at_some(
+        R,
+        Ledgers.Line{h, Some{b}},
+        m,
+        g,
+        ns,
+        Own.cast(
+          Nat,
+          w => {Lines.Rule.at(R, Ledgers.Line{h, Some{b}}, w) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>},
+          Lines.Line.era(Ledgers.Line{h, Some{b}}, P),
+          m,
+          em,
+          ea
+        )
+      )
+    )
+  )
+
+# the rule after the first 1+j versions P of the line c, of the era m, is of
+# the owner group g and the nodes ns: the store of c gives them at m
+def Rule.after_some(
+  +s: Facts.Facts(),
+  c: Ledgers.Line,
+  +P: List<&2, Types.Entry>,
+  -g: String,
+  -ns: List<&2, String>,
+  +m: Nat,
+  +vs: List<&2, Types.Entry>,
+  +j: Nat
+) -> {
+  Lines.Rule.after(s, c, P) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+} -> {Lines.Line.era(c, P) == m: Nat} -> {Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>} -> {List.take(&2, Types.Entry, vs, 1n+j) == P: List<&2, Types.Entry>} -> Owned(s, c, g, ns, m):
+  match c:
+    case Ledgers.Line{+h, None{}}:
+      ea => em => ev => ep => (
+        vs,
+        (
+          ev,
+          Rule.at_take(
+            vs,
+            j,
+            Ledgers.Line{h, None{}},
+            m,
+            g,
+            ns,
+            Own.cast(
+              List<&2, Types.Entry>,
+              w => {Lines.Rule.at(w, Ledgers.Line{h, None{}}, m) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>},
+              P,
+              List.take(&2, Types.Entry, vs, 1n+j),
+              Equal.sym(List<&2, Types.Entry>, List.take(&2, Types.Entry, vs, 1n+j), P, ep),
+              Own.cast(
+                Nat,
+                w => {Lines.Rule.at(P, Ledgers.Line{h, None{}}, w) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>},
+                Lines.Line.era(Ledgers.Line{h, None{}}, P),
+                m,
+                em,
+                ea
+              )
+            )
+          )
+        )
+      )
+    case Ledgers.Line{+h, Some{+b}}:
+      ea => em => ev => ep => Rule.after_some.branch(
+        s,
+        h,
+        b,
+        P,
+        g,
+        ns,
+        m,
+        em,
+        Rule.after.of_some(Ledgers.Line{h, Some{b}}, P, Lines.Store.versions(s, h), Lines.Rule{Some{g}, ns})(ea)
+      )
+
+# Rule.for_some, with the versions P before the version, once the line is
+# known to have them
+def Rule.for_some.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +j: Nat,
+  -g: String,
+  -ns: List<&2, String>,
+  +m: Nat,
+  +P: List<&2, Types.Entry>,
+  ea: {Lines.Rule.after(s, c, P) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>},
+  em: {Lines.Line.era(c, P) == m: Nat},
+  p: Exists(
+    List<&2, Types.Entry>,
+    ws => {
+      Lines.Line.versions(s, c) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
+    }
+      & ({Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool} & {List.take(&2, Types.Entry, ws, 1n+j) == P: List<&2, Types.Entry>})
+  )
+) -> Owned(s, c, g, ns, m):
+  (+vs, q) = p
+  (ev, q2) = q
+  (lt, ep) = q2
+  Rule.after_some(s, c, P, g, ns, m, vs, j)(ea)(em)(ev)(ep)
+
+# the rule of version k of the line c is of the owner group g and the nodes
+# ns, and its era is m: the store of c has versions that reach m, where the
+# owner group of c is g and its nodes are ns
+def Rule.for_some(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, -g: String, -ns: List<&2, String>, +m: Nat) -> {
+  Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+} -> {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>} -> Owned(s, c, g, ns, m):
+  match k:
+    case 0n:
+      h1 => h2 => Empty.absurd(Owned(s, c, g, ns, m), Shared.Maybe.none_ne_some(Nat, m, h2))
+    case 1n+j:
+      +j = j
+      Lists.Maybe.by(
+        List<&2, Types.Entry>,
+        mb => {
+          Answers.Rule.for.of(s, c, mb) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+        } -> {Maybe.map(&2, List<&2, Types.Entry>, Nat, vs => Lines.Line.era(c, vs), mb) == Some{m}: Maybe<&2, Nat>} -> Owned(s, c, g, ns, m),
+        Answers.Line.before(s, c, j),
+        eb => h1 => h2 => Empty.absurd(Owned(s, c, g, ns, m), Shared.Maybe.none_ne_some(Nat, m, h2)),
+        +P => eb => h1 => h2 => Rule.for_some.of(
+          s,
+          c,
+          j,
+          g,
+          ns,
+          m,
+          P,
+          h1,
+          Shared.Maybe.some_inj(Nat, Lines.Line.era(c, P), m, h2),
+          Before.some(j, Lines.Line.versions(s, c), P)(eb)
+        )
+      )
+
+# The owner group of a line
+# -------------------------
+
+# a reply of the name g of the owner group of a rule comes from a rule of the
+# owner group g
+def Owner.some(u: Maybe<&2, Lines.Rule>, -g: String) -> {
+  Maybe.bind(&2, Lines.Rule, Spec.Reply, u, Answers.Rule.owner) == Some{Spec.Reply.Name{g}}: Maybe<&2, Spec.Reply>
+} -> Exists(List<&2, String>, ns => {u == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}):
+  match u:
+    case None{}:
+      h => Empty.absurd(
+        Exists(List<&2, String>, ns => {None{} == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}),
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Name{g}, h)
+      )
+    case Some{Lines.Rule{None{}, ns}}:
+      h => Empty.absurd(
+        Exists(List<&2, String>, ns2 => {Some{Lines.Rule{None{}, ns}} == Some{Lines.Rule{Some{g}, ns2}}: Maybe<&2, Lines.Rule>}),
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Name{g}, h)
+      )
+    case Some{Lines.Rule{Some{g2}, +ns}}:
+      h => (
+        ns,
+        Equal.cong(
+          String,
+          Maybe<&2, Lines.Rule>,
+          w => Some{Lines.Rule{Some{w}, ns}},
+          g2,
+          g,
+          Shared.Maybe.some_inj(
+            String,
+            g2,
+            g,
+            Equal.cong(
+              Maybe<&2, Spec.Reply>,
+              Maybe<&2, String>,
+              Reply.name_of,
+              Some{Spec.Reply.Name{g2}},
+              Some{Spec.Reply.Name{g}},
+              h
+            )
+          )
+        )
+      )
+
+# a reply of the names gs of the nodes of a rule comes from a rule of a named
+# owner group and the nodes gs
+def Group.some(u: Maybe<&2, Lines.Rule>, -gs: List<&2, String>) -> {
+  Maybe.bind(&2, Lines.Rule, Spec.Reply, u, Answers.Rule.group) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+} -> Exists(String, g => {u == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}):
+  match u:
+    case None{}:
+      h => Empty.absurd(
+        Exists(String, g => {None{} == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}),
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{gs}, h)
+      )
+    case Some{Lines.Rule{None{}, ns}}:
+      h => Empty.absurd(
+        Exists(String, g => {Some{Lines.Rule{None{}, ns}} == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}),
+        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{gs}, h)
+      )
+    case Some{Lines.Rule{Some{+g2}, ns}}:
+      h => (
+        g2,
+        Equal.cong(
+          List<&2, String>,
+          Maybe<&2, Lines.Rule>,
+          w => Some{Lines.Rule{Some{g2}, w}},
+          ns,
+          gs,
+          Shared.Maybe.some_inj(
+            List<&2, String>,
+            ns,
+            gs,
+            Equal.cong(
+              Maybe<&2, Spec.Reply>,
+              Maybe<&2, List<&2, String>>,
+              Reply.names_of,
+              Some{Spec.Reply.Names{ns}},
+              Some{Spec.Reply.Names{gs}},
+              h
+            )
+          )
+        )
+      )
+
+# Core.owner_decided, from the latest Own among the versions R of the store
+def Core.owner_decided.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  -g: String,
+  +m: Nat,
+  +R: List<&2, Types.Entry>,
+  +ev: {Lines.Store.versions(s, Spec.Line.store(c)) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
+  p: Exists(
+    Nat,
+    j => (Groups.Groups.At(R, j, Spec.Request.Own{c, g}) & {Nat.is_le(j, m) == True{}: Bool})
+      & (@j2: Nat -> @g2: String -> Groups.Groups.At(R, j2, Spec.Request.Own{c, g2}) -> {Nat.is_le(j2, m) == True{}: Bool} -> {Nat.is_le(j2, j) == True{}: Bool})
+  )
+) -> Exists(
+  Nat,
+  j => Mirror.Latest(s, c, j, m, Spec.Request.Own{c, g})
+    & (@j2: Nat -> @g2: String -> Mirror.Latest(s, c, j2, m, Spec.Request.Own{c, g2}) -> {Nat.is_le(j2, j) == True{}: Bool})
+):
+  (+j, q) = p
+  (hit, later) = q
+  (
+    j,
+    (
+      Latest.of_at(s, Spec.Line.store(c), R, j, m, Spec.Request.Own{c, g}, ev, hit),
+      +j2 => +g2 => l => Groups.Pair.use(
+        Groups.Groups.At(R, j2, Spec.Request.Own{c, g2}),
+        {Nat.is_le(j2, m) == True{}: Bool},
+        {Nat.is_le(j2, j) == True{}: Bool},
+        At.of_latest(s, Spec.Line.store(c), R, j2, m, Spec.Request.Own{c, g2}, ev, l),
+        a => le => later(j2)(g2)(a)(le)
+      )
+    )
+  )
+
+# Core.owner_decided, from what the store of the line gives at the era
+def Core.owner_decided.open(+s: Facts.Facts(), +c: Ledgers.Line, +g: String, -ns: List<&2, String>, +m: Nat, p: Owned(s, c, g, ns, m)) -> Exists(
+  Nat,
+  j => Mirror.Latest(s, c, j, m, Spec.Request.Own{c, g})
+    & (@j2: Nat -> @g2: String -> Mirror.Latest(s, c, j2, m, Spec.Request.Own{c, g2}) -> {Nat.is_le(j2, j) == True{}: Bool})
+):
+  (+R, q) = p
+  (ev, q2) = q
+  (lt, q3) = q2
+  (eo, en) = q3
+  Core.owner_decided.of(s, c, g, m, R, ev, Groups.Groups.owner_latest(R, c, m, g, eo))
+
+# Core.owner_decided, once the rule of the version is known
+def Core.owner_decided.rule(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +g: String,
+  +m: Nat,
+  e2: {Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m}}: Maybe<&2, Spec.Reply>},
+  p: Exists(List<&2, String>, ns => {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>})
+) -> Exists(
+  Nat,
+  j => Mirror.Latest(s, c, j, m, Spec.Request.Own{c, g})
+    & (@j2: Nat -> @g2: String -> Mirror.Latest(s, c, j2, m, Spec.Request.Own{c, g2}) -> {Nat.is_le(j2, j) == True{}: Bool})
+):
+  (ns, er) = p
+  Core.owner_decided.open(
+    s,
+    c,
+    g,
+    ns,
+    m,
+    Rule.for_some(s, c, k, g, ns, m)(er)(Reply.number_some(Answers.Era.for(s, c, k), m)(e2))
+  )
+
+# The owner group of a line is the one that the latest Own of the line, up to
+# the era, names.
+def Core.owner_decided(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +g: String, +m: Nat) -> {
+  Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g}}: Maybe<&2, Spec.Reply>
+} -> {Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m}}: Maybe<&2, Spec.Reply>} -> Exists(
+  Nat,
+  j => Mirror.Latest(s, c, j, m, Spec.Request.Own{c, g})
+    & (@j2: Nat -> @g2: String -> Mirror.Latest(s, c, j2, m, Spec.Request.Own{c, g2}) -> {Nat.is_le(j2, j) == True{}: Bool})
+):
+  e1 => e2 => Core.owner_decided.rule(s, c, k, g, m, e2, Owner.some(Answers.Rule.for(s, c, k), g)(e1))
+
+# The group that decides a version
+# --------------------------------
+
+# a version that has a rule has an era
+def Era.some(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, -u: Lines.Rule) -> {
+  Answers.Rule.for(s, c, k) == Some{u}: Maybe<&2, Lines.Rule>
+} -> Exists(Nat, m => {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>}):
+  match k:
+    case 0n:
+      h => Empty.absurd(
+        Exists(Nat, m => {None{} == Some{m}: Maybe<&2, Nat>}),
+        Shared.Maybe.none_ne_some(Lines.Rule, u, h)
+      )
+    case 1n+j:
+      +j = j
+      Lists.Maybe.by(
+        List<&2, Types.Entry>,
+        mb => {
+          Answers.Rule.for.of(s, c, mb) == Some{u}: Maybe<&2, Lines.Rule>
+        } -> Exists(Nat, m => {Maybe.map(&2, List<&2, Types.Entry>, Nat, vs => Lines.Line.era(c, vs), mb) == Some{m}: Maybe<&2, Nat>}),
+        Answers.Line.before(s, c, j),
+        eb => h => Empty.absurd(
+          Exists(Nat, m => {None{} == Some{m}: Maybe<&2, Nat>}),
+          Shared.Maybe.none_ne_some(Lines.Rule, u, h)
+        ),
+        +P => eb => h => (Lines.Line.era(c, P), {==})
+      )
+
+# Core.group_of_era, from what the store of the line gives at the era
+def Core.group_of_era.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +gs: List<&2, String>,
+  +g: String,
+  +m: Nat,
+  er: {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>},
+  em: {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>},
+  p: Owned(s, c, g, gs, m)
+) -> Exists(
+  String,
+  g2 => Exists(
+    Nat,
+    m2 => {
+      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
+    }
+      & (
+        {
+          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
+        }
+          & {
+            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g2, m2}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+          }
+      )
+  )
+):
+  (R, q) = p
+  (ev, q2) = q
+  (lt, q3) = q2
+  (eo, en) = q3
+  (
+    g,
+    (
+      m,
+      (
+        Equal.cong(
+          Maybe<&2, Lines.Rule>,
+          Maybe<&2, Spec.Reply>,
+          w => Maybe.bind(&2, Lines.Rule, Spec.Reply, w, Answers.Rule.owner),
+          Answers.Rule.for(s, c, k),
+          Some{Lines.Rule{Some{g}, gs}},
+          er
+        ),
+        (
+          Equal.cong(Maybe<&2, Nat>, Maybe<&2, Spec.Reply>, Answers.Reply.number, Answers.Era.for(s, c, k), Some{m}, em),
+          Nodes.make(s, Spec.Line.store(c), g, m, R, gs, ev, lt, en)
+        )
+      )
+    )
+  )
+
+# Core.group_of_era, with the rule and the era of the version
+def Core.group_of_era.at(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +gs: List<&2, String>,
+  +g: String,
+  +m: Nat,
+  +er: {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>},
+  +em: {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>}
+) -> Exists(
+  String,
+  g2 => Exists(
+    Nat,
+    m2 => {
+      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
+    }
+      & (
+        {
+          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
+        }
+          & {
+            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g2, m2}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+          }
+      )
+  )
+):
+  Core.group_of_era.of(s, c, k, gs, g, m, er, em, Rule.for_some(s, c, k, g, gs, m)(er)(em))
+
+# Core.group_of_era, once the era of the version is known
+def Core.group_of_era.era(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +gs: List<&2, String>,
+  +g: String,
+  +er: {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>},
+  p: Exists(Nat, m => {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>})
+) -> Exists(
+  String,
+  g2 => Exists(
+    Nat,
+    m2 => {
+      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
+    }
+      & (
+        {
+          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
+        }
+          & {
+            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g2, m2}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+          }
+      )
+  )
+):
+  (+m, em) = p
+  Core.group_of_era.at(s, c, k, gs, g, m, er, em)
+
+# Core.group_of_era, with the rule of the version
+def Core.group_of_era.named(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +gs: List<&2, String>,
+  +g: String,
+  +er: {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}
+) -> Exists(
+  String,
+  g2 => Exists(
+    Nat,
+    m2 => {
+      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
+    }
+      & (
+        {
+          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
+        }
+          & {
+            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g2, m2}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+          }
+      )
+  )
+):
+  Core.group_of_era.era(s, c, k, gs, g, er, Era.some(s, c, k, Lines.Rule{Some{g}, gs})(er))
+
+# Core.group_of_era, once the rule of the version is known
+def Core.group_of_era.rule(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +gs: List<&2, String>,
+  p: Exists(String, g => {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>})
+) -> Exists(
+  String,
+  g2 => Exists(
+    Nat,
+    m2 => {
+      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
+    }
+      & (
+        {
+          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
+        }
+          & {
+            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g2, m2}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+          }
+      )
+  )
+):
+  (+g, er) = p
+  Core.group_of_era.named(s, c, k, gs, g, er)
+
+# The group that decides a version is the owner group of the line, made of its
+# nodes at one version of the store: its era.
+def Core.group_of_era(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +gs: List<&2, String>) -> {
+  Answers.Answer.of(s, Spec.Question.Group{c, k}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+} -> Exists(
+  String,
+  g => Exists(
+    Nat,
+    m => {
+      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g}}: Maybe<&2, Spec.Reply>
+    }
+      & (
+        {
+          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m}}: Maybe<&2, Spec.Reply>
+        }
+          & {
+            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g, m}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+          }
+      )
+  )
+):
+  e => Core.group_of_era.rule(s, c, k, gs, Group.some(Answers.Rule.for(s, c, k), gs)(e))
