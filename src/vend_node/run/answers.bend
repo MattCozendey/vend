@@ -7,6 +7,7 @@ import ./content.bend as Contents
 import ./facts.bend as Facts
 import ../groups.bend as Groups
 import ./lines.bend as Lines
+import ./rounds.bend as Rounds
 import ./files.bend as Files
 import ../shared/format.bend as Formats
 import ../shared/lists.bend as Lists
@@ -260,7 +261,8 @@ def Rule.owner(u: Lines.Rule) -> Maybe<&2, Spec.Reply>:
       Some{Spec.Reply.Name{g}}
 
 # the first nodes of the rule u that are more than half of it, when the facts
-# hold the vote of each of them for the entry e of the line c
+# hold a sound vote of each of them, in one round, for the entry e of the
+# line c
 def Rule.voters(
   +s: Facts.Plain(),
   c: Ledgers.Line,
@@ -268,19 +270,13 @@ def Rule.voters(
   u: Lines.Rule
 ) -> Maybe<&2, Spec.Reply>:
   match e u:
-    case Types.Entry{pk, k} Lines.Rule{g, +ns}:
+    case Types.Entry{pk, +k} Lines.Rule{g, +ns}:
       +os = Lists.List.lead(String, ns)
       Shared.Maybe.when(
         Spec.Reply,
         Bool.and(
           Bool.not(List.is_empty(&2, String, ns)),
-          Shared.List.holds(
-            ~String,
-            ~Lines.Voting,
-            ~Lines.Voting.voted,
-            os,
-            Lines.Voting{s, Types.Step.At{c, k}, pk}
-          )
+          Rounds.Slot.backed(Rounds.Slot.ballots(Facts.Facts.list(s), c, k), ns, k, os, pk)
         ),
         u2 => Some{Spec.Reply.Names{os}}
       )

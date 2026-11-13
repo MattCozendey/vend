@@ -42,14 +42,14 @@ def Facts.fuel(s: Plain()) -> Nat:
 # Changes
 # -------
 
-# the ballot that the fact f is, if it is a vote: its step and its pick, as
+# the ballot that the fact f is, if it is one: its step and what it casts, as
 # words
 def Fact.ballot(f: Types.Fact) -> Maybe<&2, Spec.Ballot>:
   match f:
     case Types.Fact.Ask{a}:
       None{}
     case Types.Fact.Vote{v, st, pk}:
-      Some{Spec.Ballot{v, Coded.Step.words(st), Coded.Pick.words(pk)}}
+      Some{Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}}
 
 # the ballot that the change c is, if it is one
 def Change.ballot(c: Types.Change) -> Maybe<&2, Spec.Ballot>:
@@ -70,7 +70,7 @@ def Facts.holds(+s: Plain(), c: Types.Change) -> Bool:
           Facts.has(s, Types.Fact.Vote{v, st, one}),
           Facts.has(s, Types.Fact.Vote{v, st, two})
         ),
-        Bool.not(Coded.Pick.is_eq(one, two))
+        Bool.not(Coded.Cast.is_eq(one, two))
       )
 
 # Liars
@@ -156,20 +156,17 @@ def Trust.reserved(name: String) -> Bool:
     case SCon{c, rest}:
       Char.is_eq(c, '~')
 
-# a pick that is for nothing, of the number k
-def Trust.pick(k: Nat) -> Types.Pick:
-  Types.Pick{
-    Types.Ask{Ledgers.Id{"", ""}, k, Spec.Request.Start{[]}},
-    Types.Pins{0n, 0n, None{}, [], []}
-  }
+# a cast that is for nothing, of the number k
+def Trust.cast(k: Nat) -> Types.Cast:
+  Types.Cast.Pass{k}
 
 # the first vote of a broken trust
 def Trust.one(name: String) -> Types.Fact:
-  Types.Fact.Vote{Trust.voter(name), Types.Step.Broken{}, Trust.pick(0n)}
+  Types.Fact.Vote{Trust.voter(name), Types.Step.Broken{}, Trust.cast(0n)}
 
 # the second vote of a broken trust
 def Trust.two(name: String) -> Types.Fact:
-  Types.Fact.Vote{Trust.voter(name), Types.Step.Broken{}, Trust.pick(1n)}
+  Types.Fact.Vote{Trust.voter(name), Types.Step.Broken{}, Trust.cast(1n)}
 
 # s, where the trust of the node name broke
 def Trust.break(s: Plain(), +name: String) -> Plain():
@@ -259,7 +256,7 @@ def Facts.refuses(+name: String, s: Plain(), f: Types.Fact) -> Bool:
           ~Spec.Ballot,
           ~Fact.clashes,
           Facts.list(s),
-          Spec.Ballot{v, Coded.Step.words(st), Coded.Pick.words(pk)}
+          Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}
         )
       )
 
@@ -331,8 +328,10 @@ def Seq.peak(fs: List<&2, Types.Fact>) -> Nat:
       0n
     case Con{Types.Fact.Ask{a}, rest}:
       Nat.max(Ask.seq(a), Seq.peak(rest))
-    case Con{Types.Fact.Vote{v, st, Types.Pick{a, pins}}, rest}:
+    case Con{Types.Fact.Vote{v, st, Types.Cast.Vote{r, Types.Pick{a, pins}, b}}, rest}:
       Nat.max(Ask.seq(a), Seq.peak(rest))
+    case Con{Types.Fact.Vote{v, st, Types.Cast.Pass{r}}, rest}:
+      Seq.peak(rest)
 
 # the ask of the request r of the id i, as a node that holds s takes it in:
 # with a number above every number in s

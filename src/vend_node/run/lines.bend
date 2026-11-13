@@ -4,6 +4,7 @@ import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../codes.bend as Coded
 import ./facts.bend as Facts
+import ./rounds.bend as Rounds
 import ../groups.bend as Groups
 import ../shared/lists.bend as Lists
 import ../spec.bend as Spec
@@ -78,85 +79,15 @@ def Entry.first(i: Ledgers.Id, r: Spec.Request, m: Nat) -> Types.Entry:
 # Votes
 # -----
 
-# the picks that the votes among fs for the step st are for
-def Votes.picks(fs: List<&2, Types.Fact>, +st: Types.Step) -> List<&2, Types.Pick>:
-  match fs:
-    case Nil{}:
-      []
-    case Con{Types.Fact.Ask{a}, rest}:
-      Votes.picks(rest, st)
-    case Con{Types.Fact.Vote{v, st2, pk}, rest}:
-      List.filter.put(Types.Pick, pk, Votes.picks(rest, st), Coded.Step.is_eq(st2, st))
-
-# a vote that is counted: the facts, the step, and the pick
-type Voting is Data:
-  Voting{facts: Facts.Plain(), step: Types.Step, pick: Types.Pick}
-
-# the facts of the poll g hold the vote of v
-def Voting.voted(g: Voting, v: String) -> Bool:
-  match g:
-    case Voting{s, st, pk}:
-      Facts.Facts.has(s, Types.Fact.Vote{v, st, pk})
-
-# more than half of the nodes ds voted as the poll g
-def Voting.most(+ds: List<&2, String>, g: Voting) -> Bool:
-  Lists.Nat.most(
-    List.length(&2, String, ds),
-    Lists.List.count(~String, ~Voting, ~Voting.voted, ds, g)
-  )
-
-# a count of the votes for a step: the facts, the step, the nodes that decide
-# it, and the picks that the votes for it are for
-type Tally is Data:
-  Tally{
-    facts: Facts.Plain(),
-    step: Types.Step,
-    nodes: List<&2, String>,
-    picks: List<&2, Types.Pick>
-  }
-
-# more than half of the nodes of the tally t voted for the pick pk
-def Tally.most(t: Tally, pk: Types.Pick) -> Bool:
-  match t:
-    case Tally{s, st, ds, pks}:
-      Voting.most(ds, Voting{s, st, pk})
-
-# the picks of the tally t
-def Tally.picks(t: Tally) -> List<&2, Types.Pick>:
-  match t:
-    case Tally{s, st, ds, pks}:
-      pks
-
-# a pick that may win a tally
-type Rival is Data:
-  Rival{tally: Tally, pick: Types.Pick}
-
-# the pick other does not stand against the rival g: it is its pick, or it
-# does not have more than half of the votes
-def Rival.beats(g: Rival, other: Types.Pick) -> Bool:
-  match g:
-    case Rival{t, pk}:
-      +o = other
-      Bool.or(Coded.Pick.is_eq(o, pk), Bool.not(Tally.most(t, o)))
-
-# the pick pk wins the tally t: more than half of the nodes voted for it, and
-# for no other pick
-def Tally.wins(t: Tally, pk: Types.Pick) -> Bool:
-  +u = t
-  +p = pk
-  Bool.and(
-    Tally.most(u, p),
-    Shared.List.holds(~Types.Pick, ~Rival, ~Rival.beats, Tally.picks(u), Rival{u, p})
-  )
-
-# the pick that the nodes ds decided for the step st, in the facts s
+# the pick that the nodes ds decided for the slot k of the line c, in the
+# facts s
 def Votes.decided(
   +s: Facts.Plain(),
-  +st: Types.Step,
-  ds: List<&2, String>
+  c: Ledgers.Line,
+  +k: Nat,
+  +ds: List<&2, String>
 ) -> Maybe<&2, Types.Pick>:
-  +pks = Votes.picks(Facts.Facts.list(s), st)
-  Lists.List.pick(~Types.Pick, ~Tally, ~Tally.wins, pks, Tally{s, st, ds, pks})
+  Rounds.Slot.decided(Rounds.Slot.ballots(Facts.Facts.list(s), c, k), ds, k)
 
 # Who decides
 # -----------
@@ -324,7 +255,7 @@ def Line.step.at(
     case None{}:
       None{}
     case Some{rule}:
-      Line.step.of(st, Votes.decided(s, Types.Step.At{c, State.slot(st)}, Rule.nodes(rule)))
+      Line.step.of(st, Votes.decided(s, c, State.slot(st), Rule.nodes(rule)))
 
 # the state of the line c after the next slot of st (nothing while the slot is
 # not decided, or who decides it is not known)
@@ -372,7 +303,7 @@ def Line.bound(fs: List<&2, Types.Fact>, +c: Ledgers.Line) -> Nat:
       Line.bound(rest, c)
     case Con{Types.Fact.Vote{v, Types.Step.Broken{}, pk}, rest}:
       Line.bound(rest, c)
-    case Con{Types.Fact.Vote{v, Types.Step.At{c2, k}, pk}, rest}:
+    case Con{Types.Fact.Vote{v, Types.Step.At{c2, k, t}, pk}, rest}:
       Nat.max(Line.bound.at(Ledgers.Line.is_eq(c2, c), k), Line.bound(rest, c))
 
 # Version 0

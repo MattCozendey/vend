@@ -16,8 +16,8 @@ import ./types.bend as Types
 # The versions of a line are read from the facts. Version 0 needs no vote: of
 # a store, it is the request that started it; of a branch, the first request
 # of the store that owns it. Each later version is made by a slot of the line:
-# the pick that more than half of the nodes that decide the slot voted for,
-# when no other pick has as much. A slot whose request already made a version
+# the pick that more than half of the nodes that decide the slot voted for
+# in one round (run/rounds.bend). A slot whose request already made a version
 # of the line makes none, so a request counts once. Owners are trusted only
 # to cast no two votes for one slot: what a decided request does is read by
 # every node, from the versions.
@@ -30,13 +30,15 @@ import ./types.bend as Types
 # Votes
 # -----
 
-# the pick that the nodes ds decided for the step st, in the facts s
+# the pick that the nodes ds decided for the slot k of the line c, in the
+# facts s
 def Votes.decided(
   +s: Facts.Facts(),
-  +st: Types.Step,
-  ds: List<&2, String>
+  c: Ledgers.Line,
+  +k: Nat,
+  +ds: List<&2, String>
 ) -> Maybe<&2, Types.Pick>:
-  RLines.Votes.decided(Facts.Facts.crit(s), st, ds)
+  RLines.Votes.decided(Facts.Facts.crit(s), c, k, ds)
 
 # Slots
 # -----

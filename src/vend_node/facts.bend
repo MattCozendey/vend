@@ -469,7 +469,7 @@ def Facts.wider_holds(
           Facts.has(b, Types.Fact.Vote{v, st, one}),
           Facts.has(b, Types.Fact.Vote{v, st, two})
         ),
-        Bool.not(Coded.Pick.is_eq(one, two))
+        Bool.not(Coded.Cast.is_eq(one, two))
       )(
         Shared.Bool.and_both(
           Facts.has(b, Types.Fact.Vote{v, st, one}),
@@ -491,7 +491,7 @@ def Facts.wider_holds(
                   Facts.has(a, Types.Fact.Vote{v, st, one}),
                   Facts.has(a, Types.Fact.Vote{v, st, two})
                 ),
-                Bool.not(Coded.Pick.is_eq(one, two))
+                Bool.not(Coded.Cast.is_eq(one, two))
               )(hc)
             )
           )
@@ -512,7 +512,7 @@ def Facts.wider_holds(
                   Facts.has(a, Types.Fact.Vote{v, st, one}),
                   Facts.has(a, Types.Fact.Vote{v, st, two})
                 ),
-                Bool.not(Coded.Pick.is_eq(one, two))
+                Bool.not(Coded.Cast.is_eq(one, two))
               )(hc)
             )
           )
@@ -523,7 +523,7 @@ def Facts.wider_holds(
             Facts.has(a, Types.Fact.Vote{v, st, one}),
             Facts.has(a, Types.Fact.Vote{v, st, two})
           ),
-          Bool.not(Coded.Pick.is_eq(one, two))
+          Bool.not(Coded.Cast.is_eq(one, two))
         )(hc)
       )
 
@@ -635,10 +635,10 @@ def Fact.clashes_are(
     case Types.Fact.Ask{a}:
       h => Empty.absurd(Fact.Clashed(v, st, x, Types.Fact.Ask{a}), Shared.Bool.false_ne_true(h))
     case Types.Fact.Vote{+u, +st2, +pk2}:
-      +h => (Coded.Pick.words(pk2), ((
-            %Texts.String.eq_sound(v, u)(Shared.Bool.and_true_left(String.eq(v, u), Bool.and(RFacts.Words.is_eq(st, Coded.Step.words(st2)), Bool.not(RFacts.Words.is_eq(x, Coded.Pick.words(pk2)))))(h)): {Some{Spec.Ballot{_, Coded.Step.words(st2), Coded.Pick.words(pk2)}} == Some{Spec.Ballot{v, st, Coded.Pick.words(pk2)}}: Maybe<&2, Spec.Ballot>}
-            %Words.is_eq_sound(st, Coded.Step.words(st2))(Shared.Bool.and_second(String.eq(v, u), RFacts.Words.is_eq(st, Coded.Step.words(st2)), Bool.not(RFacts.Words.is_eq(x, Coded.Pick.words(pk2))))(h)): {Some{Spec.Ballot{v, _, Coded.Pick.words(pk2)}} == Some{Spec.Ballot{v, st, Coded.Pick.words(pk2)}}: Maybe<&2, Spec.Ballot>}
-            {==}), Shared.Bool.and_third(String.eq(v, u), RFacts.Words.is_eq(st, Coded.Step.words(st2)), Bool.not(RFacts.Words.is_eq(x, Coded.Pick.words(pk2))))(h)))
+      +h => (Coded.Cast.words(pk2), ((
+            %Texts.String.eq_sound(v, u)(Shared.Bool.and_true_left(String.eq(v, u), Bool.and(RFacts.Words.is_eq(st, Coded.Step.words(st2)), Bool.not(RFacts.Words.is_eq(x, Coded.Cast.words(pk2)))))(h)): {Some{Spec.Ballot{_, Coded.Step.words(st2), Coded.Cast.words(pk2)}} == Some{Spec.Ballot{v, st, Coded.Cast.words(pk2)}}: Maybe<&2, Spec.Ballot>}
+            %Words.is_eq_sound(st, Coded.Step.words(st2))(Shared.Bool.and_second(String.eq(v, u), RFacts.Words.is_eq(st, Coded.Step.words(st2)), Bool.not(RFacts.Words.is_eq(x, Coded.Cast.words(pk2))))(h)): {Some{Spec.Ballot{v, _, Coded.Cast.words(pk2)}} == Some{Spec.Ballot{v, st, Coded.Cast.words(pk2)}}: Maybe<&2, Spec.Ballot>}
+            {==}), Shared.Bool.and_third(String.eq(v, u), RFacts.Words.is_eq(st, Coded.Step.words(st2)), Bool.not(RFacts.Words.is_eq(x, Coded.Cast.words(pk2))))(h)))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the fact f is a vote of the voter v, and a member of all is a vote of v for
@@ -674,24 +674,24 @@ def Fact.liar_of.fin(
   +all: List<&2, Types.Fact>,
   +w: String,
   +st: Types.Step,
-  +pk: Types.Pick,
+  +pk: Types.Cast,
   +v: String,
   +g: Types.Fact,
   e: {w == v: String},
   hin: {List.contains(~Types.Fact, ~Coded.Fact.is_eq, all, g) == True{}: Bool},
-  cl: Fact.Clashed(w, Coded.Step.words(st), Coded.Pick.words(pk), g)
+  cl: Fact.Clashed(w, Coded.Step.words(st), Coded.Cast.words(pk), g)
 ) -> Fact.Lied(all, v, Types.Fact.Vote{w, st, pk}):
   (+y, q) = cl
   (+eb, +hn) = q
   %e: Fact.Lied(all, _, Types.Fact.Vote{w, st, pk})
-  (g, (hin, (Coded.Step.words(st), (Coded.Pick.words(pk), (y, ({==}, (eb, hn)))))))
+  (g, (hin, (Coded.Step.words(st), (Coded.Cast.words(pk), (y, ({==}, (eb, hn)))))))
 
 # Fact.liar_of for a vote of w, with the member of all that contradicts it
 def Fact.liar_of.at(
   +all: List<&2, Types.Fact>,
   +w: String,
   +st: Types.Step,
-  +pk: Types.Pick,
+  +pk: Types.Cast,
   +v: String,
   e: {w == v: String},
   r: Exists(
@@ -700,7 +700,7 @@ def Fact.liar_of.at(
       List.contains(~Types.Fact, ~Coded.Fact.is_eq, all, g) == True{}: Bool
     }
       & {
-        RFacts.Fact.clashes(Spec.Ballot{w, Coded.Step.words(st), Coded.Pick.words(pk)}, g) == True{}: Bool
+        RFacts.Fact.clashes(Spec.Ballot{w, Coded.Step.words(st), Coded.Cast.words(pk)}, g) == True{}: Bool
       }
   )
 ) -> Fact.Lied(all, v, Types.Fact.Vote{w, st, pk}):
@@ -715,7 +715,7 @@ def Fact.liar_of.at(
     g,
     e,
     hin,
-    Fact.clashes_are(w, Coded.Step.words(st), Coded.Pick.words(pk), g)(hc)
+    Fact.clashes_are(w, Coded.Step.words(st), Coded.Cast.words(pk), g)(hc)
   )
 
 # a fact whose voter is named a liar by all is a vote that a member of all
@@ -741,7 +741,7 @@ def Fact.liar_of(
           ~Spec.Ballot,
           ~RFacts.Fact.clashes,
           all,
-          Spec.Ballot{w, Coded.Step.words(st), Coded.Pick.words(pk)}
+          Spec.Ballot{w, Coded.Step.words(st), Coded.Cast.words(pk)}
         ),
         et => h => Fact.liar_of.at(
           all,
@@ -757,7 +757,7 @@ def Fact.liar_of(
             ~Coded.Fact.is_eq,
             ~Coded.Fact.laws(),
             all,
-            Spec.Ballot{w, Coded.Step.words(st), Coded.Pick.words(pk)}
+            Spec.Ballot{w, Coded.Step.words(st), Coded.Cast.words(pk)}
           )(et)
         ),
         ef => h => Empty.absurd(
@@ -1184,23 +1184,23 @@ def Facts.honest_one(
   +s: Facts(),
   +v: String,
   +st: Types.Step,
-  +p: Types.Pick,
-  +q: Types.Pick
+  +p: Types.Cast,
+  +q: Types.Cast
 ) -> {
   Facts.liars(s) == []: List<&2, String>
 } -> {
   Facts.has(s, Types.Fact.Vote{v, st, p}) == True{}: Bool
-} -> {Facts.has(s, Types.Fact.Vote{v, st, q}) == True{}: Bool} -> {p == q: Types.Pick}:
-  hn => hp => hq => Coded.Pick.words_inj(
+} -> {Facts.has(s, Types.Fact.Vote{v, st, q}) == True{}: Bool} -> {p == q: Types.Cast}:
+  hn => hp => hq => Coded.Cast.words_inj(
     p,
     q
   )(
     Words.is_eq_sound(
-      Coded.Pick.words(p),
-      Coded.Pick.words(q)
+      Coded.Cast.words(p),
+      Coded.Cast.words(q)
     )(
       Case.true_of(
-        RFacts.Words.is_eq(Coded.Pick.words(p), Coded.Pick.words(q))
+        RFacts.Words.is_eq(Coded.Cast.words(p), Coded.Cast.words(q))
       )(
         ef => Lists.List.in_not_nil(
           ~String,
@@ -1214,11 +1214,11 @@ def Facts.honest_one(
             Types.Fact.Vote{v, st, q},
             v,
             Coded.Step.words(st),
-            Coded.Pick.words(p),
-            Coded.Pick.words(q)
+            Coded.Cast.words(p),
+            Coded.Cast.words(q)
           )(
             hp
-          )(hq)({==})({==})(Case.not_of(RFacts.Words.is_eq(Coded.Pick.words(p), Coded.Pick.words(q)))(ef))
+          )(hq)({==})({==})(Case.not_of(RFacts.Words.is_eq(Coded.Cast.words(p), Coded.Cast.words(q)))(ef))
         )(hn)
       )
     )
@@ -1254,8 +1254,10 @@ def Fact.seq(f: Types.Fact) -> Nat:
   match f:
     case Types.Fact.Ask{a}:
       RFacts.Ask.seq(a)
-    case Types.Fact.Vote{v, st, Types.Pick{a, pins}}:
+    case Types.Fact.Vote{v, st, Types.Cast.Vote{r, Types.Pick{a, pins}, b}}:
       RFacts.Ask.seq(a)
+    case Types.Fact.Vote{v, st, Types.Cast.Pass{r}}:
+      0n
 
 # Seq.peak_ge for a list h <> t, where m is the greatest number of t
 def Seq.peak_ge.at(
@@ -1302,9 +1304,18 @@ def Seq.peak_ge(
       )
     case Con{Types.Fact.Ask{+a}, +rest}:
       hin => Seq.peak_ge.at(Types.Fact.Ask{a}, rest, f, RFacts.Seq.peak(rest), hin, Seq.peak_ge(rest, f))
-    case Con{Types.Fact.Vote{+v, +st, Types.Pick{+a, +pins}}, +rest}:
+    case Con{Types.Fact.Vote{+v, +st, Types.Cast.Vote{+r, Types.Pick{+a, +pins}, +b}}, +rest}:
       hin => Seq.peak_ge.at(
-        Types.Fact.Vote{v, st, Types.Pick{a, pins}},
+        Types.Fact.Vote{v, st, Types.Cast.Vote{r, Types.Pick{a, pins}, b}},
+        rest,
+        f,
+        RFacts.Seq.peak(rest),
+        hin,
+        Seq.peak_ge(rest, f)
+      )
+    case Con{Types.Fact.Vote{+v, +st, Types.Cast.Pass{+r}}, +rest}:
+      hin => Seq.peak_ge.at(
+        Types.Fact.Vote{v, st, Types.Cast.Pass{r}},
         rest,
         f,
         RFacts.Seq.peak(rest),
@@ -1328,15 +1339,17 @@ def Facts.seq_vote(
   +s: Facts(),
   +v: String,
   +st: Types.Step,
+  +r: Nat,
   +a: Types.Ask,
-  +pins: Types.Pins
+  +pins: Types.Pins,
+  +b: List<&2, Types.Ref>
 ) -> {
-  Facts.has(s, Types.Fact.Vote{v, st, Types.Pick{a, pins}}) == True{}: Bool
+  Facts.has(s, Types.Fact.Vote{v, st, Types.Cast.Vote{r, Types.Pick{a, pins}, b}}) == True{}: Bool
 } -> {Nat.is_le(RFacts.Ask.seq(a), RFacts.Seq.peak(Facts.list(s))) == True{}: Bool}:
   h => Seq.peak_ge(
     Facts.list(s),
-    Types.Fact.Vote{v, st, Types.Pick{a, pins}}
-  )(Facts.has_in(s, Types.Fact.Vote{v, st, Types.Pick{a, pins}})(h))
+    Types.Fact.Vote{v, st, Types.Cast.Vote{r, Types.Pick{a, pins}, b}}
+  )(Facts.has_in(s, Types.Fact.Vote{v, st, Types.Cast.Vote{r, Types.Pick{a, pins}, b}})(h))
 
 # Laws of taking in
 # -----------------
@@ -1391,7 +1404,7 @@ def Fact.is_slot(f: Types.Fact) -> Bool:
   match f:
     case Types.Fact.Ask{a}:
       False{}
-    case Types.Fact.Vote{v, Types.Step.At{c, k}, pk}:
+    case Types.Fact.Vote{v, Types.Step.At{c, k, t}, pk}:
       True{}
     case Types.Fact.Vote{v, Types.Step.Broken{}, pk}:
       False{}
@@ -1560,21 +1573,22 @@ def Facts.take_ask_votes(
   +v: String,
   +c: Ledgers.Line,
   +k: Nat,
-  +pk: Types.Pick
+  +n: Nat,
+  +pk: Types.Cast
 ) -> {
   Facts.has(
     Facts.take(name, s, Types.Fact.Ask{a}),
-    Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
+    Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}
   )
-    == Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}): Bool
+    == Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}): Bool
 }:
   Facts.take_by(
     t => {
       Facts.has(
         t,
-        Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
+        Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}
       )
-        == Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}): Bool
+        == Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}): Bool
     },
     name,
     s,
@@ -1583,9 +1597,9 @@ def Facts.take_ask_votes(
       {
         Facts.has(
           Trust.break(s, name),
-          Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
+          Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}
         )
-          == Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}): Bool
+          == Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}): Bool
       },
       Shared.Bool.false_ne_true(er)
     ),
@@ -1593,26 +1607,26 @@ def Facts.take_ask_votes(
       Bool,
       Facts.has(
         Trust.break(Facts.add(s, Types.Fact.Ask{a}), name),
-        Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
+        Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}
       ),
-      Facts.has(Facts.add(s, Types.Fact.Ask{a}), Types.Fact.Vote{v, Types.Step.At{c, k}, pk}),
-      Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}),
+      Facts.has(Facts.add(s, Types.Fact.Ask{a}), Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}),
+      Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}),
       Trust.break_same(
         Facts.add(s, Types.Fact.Ask{a}),
         name,
-        Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
+        Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}
       )(
-        Fact.slot_differs(Types.Fact.Vote{v, Types.Step.At{c, k}, pk}, RFacts.Trust.one(name))({==})({==})
+        Fact.slot_differs(Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}, RFacts.Trust.one(name))({==})({==})
       )(
-        Fact.slot_differs(Types.Fact.Vote{v, Types.Step.At{c, k}, pk}, RFacts.Trust.two(name))({==})({==})
+        Fact.slot_differs(Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}, RFacts.Trust.two(name))({==})({==})
       ),
       Facts.add_same(
         s,
         Types.Fact.Ask{a},
-        Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
+        Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}
       )(
         Fact.slot_differs(
-          Types.Fact.Vote{v, Types.Step.At{c, k}, pk},
+          Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk},
           Types.Fact.Ask{a}
         )({==})({==})
       )
@@ -1620,8 +1634,8 @@ def Facts.take_ask_votes(
     er => ec => Facts.add_same(
       s,
       Types.Fact.Ask{a},
-      Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
-    )(Fact.slot_differs(Types.Fact.Vote{v, Types.Step.At{c, k}, pk}, Types.Fact.Ask{a})({==})({==}))
+      Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}
+    )(Fact.slot_differs(Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}, Types.Fact.Ask{a})({==})({==}))
   )
 
 # a set that takes an ask in holds that ask, and the asks that it held
@@ -1742,7 +1756,7 @@ def Facts.refuses_other(
   +s: Facts(),
   +v: String,
   +st: Types.Step,
-  +pk: Types.Pick
+  +pk: Types.Cast
 ) -> {
   String.eq(v, name) == False{}: Bool
 } -> {Facts.refuses(name, s, Types.Fact.Vote{v, st, pk}) == False{}: Bool}:
@@ -1760,7 +1774,7 @@ def Facts.refuses_other(
           ~Spec.Ballot,
           ~RFacts.Fact.clashes,
           Facts.list(s),
-          Spec.Ballot{v, Coded.Step.words(st), Coded.Pick.words(pk)}
+          Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}
         )
       )
         == False{}: Bool
@@ -1801,11 +1815,11 @@ def Facts.refuses_of(
       ef => hg => eg => hn =>
         %Equal.sym(
           Spec.Ballot,
-          Spec.Ballot{v, Coded.Step.words(st1), Coded.Pick.words(pk)},
+          Spec.Ballot{v, Coded.Step.words(st1), Coded.Cast.words(pk)},
           Spec.Ballot{name, st, x},
           Shared.Maybe.some_inj(
             Spec.Ballot,
-            Spec.Ballot{v, Coded.Step.words(st1), Coded.Pick.words(pk)},
+            Spec.Ballot{v, Coded.Step.words(st1), Coded.Cast.words(pk)},
             Spec.Ballot{name, st, x},
             ef
           )
@@ -2030,7 +2044,7 @@ def Trust.break_no_liar(
         s,
         RFacts.Trust.voter(name),
         Types.Step.Broken{},
-        RFacts.Trust.pick(0n)
+        RFacts.Trust.cast(0n)
       )(Trust.voter_ne(name))
     )
   )(
@@ -2039,7 +2053,7 @@ def Trust.break_no_liar(
       Facts.add(s, RFacts.Trust.one(name)),
       RFacts.Trust.voter(name),
       Types.Step.Broken{},
-      RFacts.Trust.pick(1n)
+      RFacts.Trust.cast(1n)
     )(Trust.voter_ne(name))
   )
 
@@ -2089,9 +2103,9 @@ def Trust.wider_broken(
   )
 
 # the two votes of a broken trust are for two choices
-def Trust.picks_differ() -> {
+def Trust.casts_differ() -> {
   Bool.not(
-    RFacts.Words.is_eq(Coded.Pick.words(RFacts.Trust.pick(0n)), Coded.Pick.words(RFacts.Trust.pick(1n)))
+    RFacts.Words.is_eq(Coded.Cast.words(RFacts.Trust.cast(0n)), Coded.Cast.words(RFacts.Trust.cast(1n)))
   )
     == True{}: Bool
 }:
@@ -2110,13 +2124,13 @@ def Trust.broken_liar(
     RFacts.Trust.two(name),
     RFacts.Trust.voter(name),
     Coded.Step.words(Types.Step.Broken{}),
-    Coded.Pick.words(RFacts.Trust.pick(0n)),
-    Coded.Pick.words(RFacts.Trust.pick(1n))
+    Coded.Cast.words(RFacts.Trust.cast(0n)),
+    Coded.Cast.words(RFacts.Trust.cast(1n))
   )(
     Shared.Bool.and_true_left(Facts.has(s, RFacts.Trust.one(name)), Facts.has(s, RFacts.Trust.two(name)))(hb)
   )(
     Shared.Bool.and_true_right(Facts.has(s, RFacts.Trust.one(name)), Facts.has(s, RFacts.Trust.two(name)))(hb)
-  )({==})({==})(Trust.picks_differ())
+  )({==})({==})(Trust.casts_differ())
 
 # no set that names no liar says that the trust of a node broke
 def Trust.broken_never(
@@ -2871,7 +2885,7 @@ def Facts.take_all_holds(
           Facts.has(Facts.take_all(name, Facts.list(m), s), Types.Fact.Vote{v, st, one}),
           Facts.has(Facts.take_all(name, Facts.list(m), s), Types.Fact.Vote{v, st, two})
         ),
-        Bool.not(Coded.Pick.is_eq(one, two))
+        Bool.not(Coded.Cast.is_eq(one, two))
       )(
         Shared.Bool.and_both(
           Facts.has(Facts.take_all(name, Facts.list(m), s), Types.Fact.Vote{v, st, one}),
@@ -2898,7 +2912,7 @@ def Facts.take_all_holds(
                     Facts.has(m, Types.Fact.Vote{v, st, one}),
                     Facts.has(m, Types.Fact.Vote{v, st, two})
                   ),
-                  Bool.not(Coded.Pick.is_eq(one, two))
+                  Bool.not(Coded.Cast.is_eq(one, two))
                 )(hc)
               )
             )
@@ -2925,7 +2939,7 @@ def Facts.take_all_holds(
                     Facts.has(m, Types.Fact.Vote{v, st, one}),
                     Facts.has(m, Types.Fact.Vote{v, st, two})
                   ),
-                  Bool.not(Coded.Pick.is_eq(one, two))
+                  Bool.not(Coded.Cast.is_eq(one, two))
                 )(hc)
               )
             )
@@ -2937,7 +2951,7 @@ def Facts.take_all_holds(
             Facts.has(m, Types.Fact.Vote{v, st, one}),
             Facts.has(m, Types.Fact.Vote{v, st, two})
           ),
-          Bool.not(Coded.Pick.is_eq(one, two))
+          Bool.not(Coded.Cast.is_eq(one, two))
         )(hc)
       )
 
@@ -2949,10 +2963,10 @@ def Facts.take_all_holds(
 def Fact.clash_cast(
   +name: String,
   +st: Types.Step,
-  +pk: Types.Pick,
+  +pk: Types.Cast,
   g: Types.Fact
 ) -> {
-  RFacts.Fact.clashes(Spec.Ballot{name, Coded.Step.words(st), Coded.Pick.words(pk)}, g) == True{}: Bool
+  RFacts.Fact.clashes(Spec.Ballot{name, Coded.Step.words(st), Coded.Cast.words(pk)}, g) == True{}: Bool
 } -> {RFacts.Fact.is_cast(RFacts.Seat{name, st}, g) == True{}: Bool}:
   match g:
     case Types.Fact.Ask{a}:
@@ -2967,7 +2981,7 @@ def Fact.clash_cast(
             String.eq(name, u),
             Bool.and(
               RFacts.Words.is_eq(Coded.Step.words(st), Coded.Step.words(st2)),
-              Bool.not(RFacts.Words.is_eq(Coded.Pick.words(pk), Coded.Pick.words(pk2)))
+              Bool.not(RFacts.Words.is_eq(Coded.Cast.words(pk), Coded.Cast.words(pk2)))
             )
           )(h)
         ): {Bool.and(String.eq(_, name), Coded.Step.is_eq(st2, st)) == True{}: Bool}
@@ -2982,7 +2996,7 @@ def Fact.clash_cast(
             Shared.Bool.and_second(
               String.eq(name, u),
               RFacts.Words.is_eq(Coded.Step.words(st), Coded.Step.words(st2)),
-              Bool.not(RFacts.Words.is_eq(Coded.Pick.words(pk), Coded.Pick.words(pk2)))
+              Bool.not(RFacts.Words.is_eq(Coded.Cast.words(pk), Coded.Cast.words(pk2)))
             )(h)
           )
         ): {Bool.and(String.eq(name, name), Coded.Step.is_eq(_, st)) == True{}: Bool}
@@ -2997,7 +3011,7 @@ def Facts.cast_of.at(
   +name: String,
   +s: Facts(),
   +st: Types.Step,
-  +pk: Types.Pick,
+  +pk: Types.Cast,
   r: Exists(
     Types.Fact,
     g => {
@@ -3005,7 +3019,7 @@ def Facts.cast_of.at(
     }
       & {
         RFacts.Fact.clashes(
-          Spec.Ballot{name, Coded.Step.words(st), Coded.Pick.words(pk)},
+          Spec.Ballot{name, Coded.Step.words(st), Coded.Cast.words(pk)},
           g
         )
           == True{}: Bool
@@ -3031,7 +3045,7 @@ def Facts.cast_refuses(
   +name: String,
   +s: Facts(),
   +st: Types.Step,
-  +pk: Types.Pick
+  +pk: Types.Cast
 ) -> {
   Facts.cast(s, name, st) == False{}: Bool
 } -> {Facts.refuses(name, s, Types.Fact.Vote{name, st, pk}) == False{}: Bool}:
@@ -3043,7 +3057,7 @@ def Facts.cast_refuses(
         ~Spec.Ballot,
         ~RFacts.Fact.clashes,
         Facts.list(s),
-        Spec.Ballot{name, Coded.Step.words(st), Coded.Pick.words(pk)}
+        Spec.Ballot{name, Coded.Step.words(st), Coded.Cast.words(pk)}
       ),
       False{},
       Case.false_of(
@@ -3052,7 +3066,7 @@ def Facts.cast_refuses(
           ~Spec.Ballot,
           ~RFacts.Fact.clashes,
           Facts.list(s),
-          Spec.Ballot{name, Coded.Step.words(st), Coded.Pick.words(pk)}
+          Spec.Ballot{name, Coded.Step.words(st), Coded.Cast.words(pk)}
         )
       )(
         t => Lists.Bool.clash(
@@ -3071,7 +3085,7 @@ def Facts.cast_refuses(
               ~Coded.Fact.is_eq,
               ~Coded.Fact.laws(),
               Facts.list(s),
-              Spec.Ballot{name, Coded.Step.words(st), Coded.Pick.words(pk)}
+              Spec.Ballot{name, Coded.Step.words(st), Coded.Cast.words(pk)}
             )(t)
           )
         )
@@ -3085,7 +3099,7 @@ def Facts.add_cast_ok(
   +name: String,
   +s: Facts(),
   +st: Types.Step,
-  +pk: Types.Pick
+  +pk: Types.Cast
 ) -> {
   Facts.ok(name, s) == True{}: Bool
 } -> {

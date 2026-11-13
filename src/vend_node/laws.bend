@@ -14,7 +14,9 @@ import ./run/answers.bend as RAnswers
 import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
 import ./run/files.bend as Files
+import ./rounds.bend as Rounds
 import ./run/lines.bend as RLines
+import ./run/rounds.bend as RRounds
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
 import ./types.bend as Types
@@ -618,13 +620,7 @@ def Fit.owners(
         q,
         Bool.and(
           Bool.not(List.is_empty(&2, String, ns)),
-          Shared.List.holds(
-            ~String,
-            ~RLines.Voting,
-            ~RLines.Voting.voted,
-            Lists.List.lead(String, ns),
-            RLines.Voting{Facts.Facts.crit(s), Types.Step.At{c, k}, pk}
-          )
+          RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
         ),
         Spec.Reply.Names{Lists.List.lead(String, ns)},
         r
@@ -2035,6 +2031,41 @@ def When.some(
         Shared.Maybe.none_ne_some(Spec.Reply, r, h)
       )
 
+# the change that a ballot of the node v for the slot k of the line c is
+def Core.majority_decides.vote(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +v: String,
+  w0: Exists(
+    Nat,
+    t => Exists(
+      Types.Cast,
+      x => {Facts.Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k, t}, x}) == True{}: Bool}
+    )
+  )
+) -> Exists(
+  Types.Change,
+  ch => {
+    Facts.Facts.holds(s, ch) == True{}: Bool
+  }
+    & Exists(
+      List<&2, U32>,
+      st => Exists(
+        List<&2, U32>,
+        x => {
+          RFacts.Change.ballot(ch) == Some{Spec.Ballot{v, st, x}}: Maybe<&2, Spec.Ballot>
+        }
+      )
+    )
+):
+  (+t, w1) = w0
+  (+x, h) = w1
+  (
+    Types.Change.Fact{Types.Fact.Vote{v, Types.Step.At{c, k, t}, x}},
+    (h, (Coded.Step.words(Types.Step.At{c, k, t}), (Coded.Cast.words(x), {==})))
+  )
+
 # the first majority of the nodes ns that all voted for the pick pk at the
 # slot k of the line c is a majority that decides
 def Core.majority_decides.by(
@@ -2049,13 +2080,7 @@ def Core.majority_decides.by(
   w: {
     Bool.and(
       Bool.not(List.is_empty(&2, String, ns)),
-      Shared.List.holds(
-        ~String,
-        ~RLines.Voting,
-        ~RLines.Voting.voted,
-        Lists.List.lead(String, ns),
-        RLines.Voting{Facts.Facts.crit(s), Types.Step.At{c, k}, pk}
-      )
+      RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
     )
       == True{}: Bool
   }
@@ -2098,42 +2123,29 @@ def Core.majority_decides.by(
             )(
               Shared.Bool.and_true_left(
                 Bool.not(List.is_empty(&2, String, ns)),
-                Shared.List.holds(
-                  ~String,
-                  ~RLines.Voting,
-                  ~RLines.Voting.voted,
-                  Lists.List.lead(String, ns),
-                  RLines.Voting{Facts.Facts.crit(s), Types.Step.At{c, k}, pk}
-                )
+                RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
               )(hb)
             )
           ),
-          +v => hin => (
-            Types.Change.Fact{Types.Fact.Vote{v, Types.Step.At{c, k}, pk}},
-            (
-              Lists.List.holds_in(
-                ~String,
-                ~RLines.Voting,
-                ~RLines.Voting.voted,
-                ~String.eq,
-                ~Texts.String.laws(),
-                Lists.List.lead(String, ns),
-                RLines.Voting{Facts.Facts.crit(s), Types.Step.At{c, k}, pk},
-                v
-              )(
-                Shared.Bool.and_true_right(
-                  Bool.not(List.is_empty(&2, String, ns)),
-                  Shared.List.holds(
-                    ~String,
-                    ~RLines.Voting,
-                    ~RLines.Voting.voted,
-                    Lists.List.lead(String, ns),
-                    RLines.Voting{Facts.Facts.crit(s), Types.Step.At{c, k}, pk}
-                  )
-                )(hb)
-              )(hin),
-              (Coded.Step.words(Types.Step.At{c, k}), (Coded.Pick.words(pk), {==}))
-            )
+          +v => hin => Core.majority_decides.vote(
+            s,
+            c,
+            k,
+            v,
+            Rounds.Votes.backed_voted(
+              s,
+              c,
+              k,
+              ns,
+              Lists.List.lead(String, ns),
+              pk,
+              v
+            )(
+              Shared.Bool.and_true_right(
+                Bool.not(List.is_empty(&2, String, ns)),
+                RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
+              )(hb)
+            )(hin)
           )
         )
       )
@@ -2203,13 +2215,7 @@ def Core.majority_decides.of(
         When.some(
           Bool.and(
             Bool.not(List.is_empty(&2, String, ns)),
-            Shared.List.holds(
-              ~String,
-              ~RLines.Voting,
-              ~RLines.Voting.voted,
-              Lists.List.lead(String, ns),
-              RLines.Voting{Facts.Facts.crit(s), Types.Step.At{c, k}, pk}
-            )
+            RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
           ),
           Spec.Reply.Names{Lists.List.lead(String, ns)},
           Spec.Reply.Names{os}

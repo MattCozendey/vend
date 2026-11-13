@@ -4,40 +4,21 @@ import ../../shared/shared/shared/shared/shared.bend as Shared
 import ./content.bend as Contents
 import ./facts.bend as Facts
 import ./lines.bend as Lines
+import ./rounds.bend as Rounds
 import ../shared/lists.bend as Lists
 import ../spec.bend as Spec
 import ../types.bend as Types
 
 # Work
 # ----
-# What a node does by itself: it casts at most one vote per work, under its
-# own name, for the next slot of a line that it decides, and only when it
-# holds no vote of its own for that slot. So it never casts two votes for one
-# slot. The nodes of a slot take turns: the node whose turn it is proposes the
-# request that it took in last; the others vote as it did. So the votes of
-# nodes that follow this never split.
-
-# Turns
-# -----
-
-# the node whose turn is k steps after y, in the round of x then ns, where r
-# are the nodes after y
-def Turn.go(k: Nat, +x: String, +ns: List<&2, String>, y: String, r: List<&2, String>) -> String:
-  match k r:
-    case 0n _:
-      y
-    case 1n+j Nil{}:
-      Turn.go(j, x, ns, x, ns)
-    case 1n+j Con{z, r2}:
-      Turn.go(j, x, ns, z, r2)
-
-# the node among ns whose turn the slot k is
-def Turn.of(ns: List<&2, String>, k: Nat) -> String:
-  match ns:
-    case Nil{}:
-      ""
-    case Con{+x, +r}:
-      Turn.go(k, x, r, x, r)
+# What a node does by itself: it casts at most one ballot per work, under
+# its own name, for the next slot of a line that it decides, with the next
+# number of its own ballots for the slot. So it never casts two ballots with
+# one number. A slot is decided in rounds (Rounds): the node whose turn a
+# round is proposes the request that it took in last, or what the votes of
+# the rounds before bind it to; the others vote as it did. A node that has
+# nothing to vote for passes to a later round, so a lost node does not stop
+# a slot.
 
 # Where a request goes
 # --------------------
@@ -197,54 +178,17 @@ def Era.now(+s: Facts.Plain(), c: Ledgers.Line) -> Nat:
     case Ledgers.Line{h, b}:
       Era.now.of(Lines.Store.versions(s, h))
 
-# The next vote
-# -------------
+# The next ballot
+# ---------------
 
-# the node name may vote for the next slot of the line c, in the state st: it
-# is one of the nodes of the rule u, and holds no vote of its own for the slot
-def Work.free(
-  +s: Facts.Plain(),
-  +name: String,
-  +c: Ledgers.Line,
-  k: Nat,
-  ns: List<&2, String>
-) -> Bool:
-  Bool.and(
-    List.contains(~String, ~String.eq, ns, name),
-    Bool.not(Facts.Facts.cast(s, name, Types.Step.At{c, k}))
-  )
+# a ballot that the node may cast: where, and what
+type Plan is Data:
+  Plan{step: Types.Step, cast: Types.Cast}
 
-# the vote of the node name for the ask a at the next slot of the line c, in
-# the state m with the rule u, when it is its turn, it may vote, and the
-# request made no version of the line yet
-def Work.offer.at(
-  +s: Facts.Plain(),
-  +name: String,
-  +c: Ledgers.Line,
-  +a: Types.Ask,
-  m: Maybe<&2, Lines.State>,
-  u: Maybe<&2, Lines.Rule>
-) -> Maybe<&2, Types.Fact>:
-  match m u:
-    case Some{Lines.State{+vs, +k}} Some{Lines.Rule{g, +ns}}:
-      Shared.Maybe.when(
-        Types.Fact,
-        Bool.and(
-          Bool.and(String.eq(Turn.of(ns, k), name), Work.free(s, name, c, k, ns)),
-          Bool.not(
-            Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Ask.id(a))
-          )
-        ),
-        u2 => Some{
-          Types.Fact.Vote{
-            name,
-            Types.Step.At{c, k},
-            Types.Pick{a, Pins.for(s, c, vs, Era.now(s, c), Lines.Ask.request(a))}
-          }
-        }
-      )
-    case _ _:
-      None{}
+# the next slot of a line that a node decides: the versions of the line, the
+# slot, and the nodes that decide it
+type Open is Data:
+  Open{versions: List<&2, Types.Entry>, slot: Nat, nodes: List<&2, String>}
 
 # the rule of the next version of the line c, in the state m
 def Work.rule(
@@ -258,22 +202,94 @@ def Work.rule(
     case Some{Lines.State{vs, k}}:
       Lines.Rule.after(s, c, vs)
 
+# the next slot of a line in the state m with the rule u, when the node name
+# is one of the nodes that decide it
+def Work.open.at(
+  +name: String,
+  m: Maybe<&2, Lines.State>,
+  u: Maybe<&2, Lines.Rule>
+) -> Maybe<&2, Open>:
+  match m u:
+    case Some{Lines.State{vs, k}} Some{Lines.Rule{g, +ns}}:
+      Shared.Maybe.when(
+        Open,
+        List.contains(~String, ~String.eq, ns, name),
+        u2 => Some{Open{vs, k, ns}}
+      )
+    case _ _:
+      None{}
+
+# the next slot of the line c, when the node name is one of the nodes that
+# decide it
+def Work.open(+s: Facts.Plain(), +name: String, +c: Ledgers.Line) -> Maybe<&2, Open>:
+  +st = Lines.Line.state(s, c)
+  Work.open.at(name, st, Work.rule(s, c, st))
+
+# the ballots that s holds for the slot k of the line c
+def Work.ballots(s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> List<&2, Rounds.Ballot>:
+  Rounds.Slot.ballots(Facts.Facts.list(s), c, k)
+
+# the plan to cast the ballot m, if any, for the slot k of the line c
+def Plan.of(c: Ledgers.Line, k: Nat, m: Maybe<&2, Rounds.Draft>) -> Maybe<&2, Plan>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Rounds.Draft{t, x}}:
+      Some{Plan{Types.Step.At{c, k, t}, x}}
+
+# the vote for the pick that pk gives, when the chance m to lead a round
+# leaves the node free
+def Work.offer.of(pk: Unit -> Types.Pick, m: Maybe<&2, Rounds.Chance>) -> Maybe<&2, Rounds.Draft>:
+  match m:
+    case Some{Rounds.Chance{t, r, basis, Rounds.Force.Free{}}}:
+      Some{Rounds.Draft{t, Types.Cast.Vote{r, pk(Unit{}), basis}}}
+    case _:
+      None{}
+
+# the vote of the node name for the ask a at the next slot m of the line c:
+# when it is its turn, the votes of the rounds before leave it free, and the
+# request made no version of the line yet
+def Work.offer.at(
+  +s: Facts.Plain(),
+  +name: String,
+  +c: Ledgers.Line,
+  +a: Types.Ask,
+  m: Maybe<&2, Open>
+) -> Maybe<&2, Plan>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Open{+vs, +k, +ns}}:
+      Shared.Maybe.when(
+        Plan,
+        Bool.not(
+          Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Ask.id(a))
+        ),
+        u => Plan.of(
+          c,
+          k,
+          Work.offer.of(
+            u2 => Types.Pick{a, Pins.for(s, c, vs, Era.now(s, c), Lines.Ask.request(a))},
+            Rounds.Slot.chance(Work.ballots(s, c, k), ns, k, name)
+          )
+        )
+      )
+
 # the vote of the node name for the ask a, on the line m that it is for
 def Work.offer.on(
   +s: Facts.Plain(),
   +name: String,
   +a: Types.Ask,
   m: Maybe<&2, Ledgers.Line>
-) -> Maybe<&2, Types.Fact>:
+) -> Maybe<&2, Plan>:
   match m:
     case None{}:
       None{}
     case Some{+c}:
-      +st = Lines.Line.state(s, c)
-      Work.offer.at(s, name, c, a, st, Work.rule(s, c, st))
+      Work.offer.at(s, name, c, a, Work.open(s, name, c))
 
 # the vote that the node name may cast for the ask a
-def Work.offer(+s: Facts.Plain(), +name: String, +a: Types.Ask) -> Maybe<&2, Types.Fact>:
+def Work.offer(+s: Facts.Plain(), +name: String, +a: Types.Ask) -> Maybe<&2, Plan>:
   Work.offer.on(s, name, a, Request.line(Facts.Facts.list(s), Lines.Ask.request(a)))
 
 # the asks among fs that the node name may vote for
@@ -281,14 +297,14 @@ def Work.ready(+s: Facts.Plain(), +name: String, fs: List<&2, Types.Fact>) -> Li
   match fs:
     case Nil{}:
       []
-    case Con{Types.Fact.Vote{v, st, pk}, rest}:
+    case Con{Types.Fact.Vote{v, st, x}, rest}:
       Work.ready(s, name, rest)
     case Con{Types.Fact.Ask{+a}, rest}:
       List.filter.put(
         Types.Ask,
         a,
         Work.ready(s, name, rest),
-        Maybe.is_some(&2, Types.Fact, Work.offer(s, name, a))
+        Maybe.is_some(&2, Plan, Work.offer(s, name, a))
       )
 
 # the vote of the node name for the ask m, if any
@@ -296,7 +312,7 @@ def Work.propose.of(
   +s: Facts.Plain(),
   +name: String,
   m: Maybe<&2, Types.Ask>
-) -> Maybe<&2, Types.Fact>:
+) -> Maybe<&2, Plan>:
   match m:
     case None{}:
       None{}
@@ -305,84 +321,145 @@ def Work.propose.of(
 
 # the vote that the node name proposes: for the ask that it took in last,
 # among those that it may vote for
-def Work.propose(+s: Facts.Plain(), +name: String) -> Maybe<&2, Types.Fact>:
+def Work.propose(+s: Facts.Plain(), +name: String) -> Maybe<&2, Plan>:
   Work.propose.of(
     s,
     name,
     Lists.List.top(~Types.Ask, ~Facts.Ask.seq, Work.ready(s, name, Facts.Facts.list(s)))
   )
 
-# the vote of the node name that follows the vote of v for the pick pk at the
-# slot k of the line c, in the state m with the rule u: when the slot is the
-# next one, it was the turn of v, and the node may vote
+# the vote of the node name at the slot k of the line c, when it is the next
+# slot m of the line: as a sound vote that it holds, or as the votes of the
+# rounds before bind it
 def Work.follow.at(
   +s: Facts.Plain(),
   +name: String,
-  v: String,
   +c: Ledgers.Line,
   +k: Nat,
-  pk: Types.Pick,
-  m: Maybe<&2, Lines.State>,
-  u: Maybe<&2, Lines.Rule>
-) -> Maybe<&2, Types.Fact>:
-  match m u:
-    case Some{Lines.State{vs, k2}} Some{Lines.Rule{g, +ns}}:
-      Shared.Maybe.when(
-        Types.Fact,
-        Bool.and(
-          Bool.and(Nat.is_eq(k2, k), String.eq(Turn.of(ns, k), v)),
-          Work.free(s, name, c, k, ns)
-        ),
-        u2 => Some{Types.Fact.Vote{name, Types.Step.At{c, k}, pk}}
-      )
-    case _ _:
+  m: Maybe<&2, Open>
+) -> Maybe<&2, Plan>:
+  match m:
+    case None{}:
       None{}
+    case Some{Open{vs, k2, +ns}}:
+      Shared.Maybe.when(
+        Plan,
+        Nat.is_eq(k2, k),
+        u => Plan.of(c, k, Rounds.Slot.follow(Work.ballots(s, c, k), ns, k, name))
+      )
 
-# the vote of the node name that follows the fact f, if f is a vote to follow
-def Work.follow.of(+s: Facts.Plain(), +name: String, f: Types.Fact) -> Maybe<&2, Types.Fact>:
+# the vote of the node name at the slot of the fact f, if f is a ballot
+def Work.follow.of(+s: Facts.Plain(), +name: String, f: Types.Fact) -> Maybe<&2, Plan>:
   match f:
-    case Types.Fact.Vote{v, Types.Step.At{+c, k}, pk}:
-      +st = Lines.Line.state(s, c)
-      Work.follow.at(s, name, v, c, k, pk, st, Work.rule(s, c, st))
+    case Types.Fact.Vote{v, Types.Step.At{+c, +k, t}, x}:
+      Work.follow.at(s, name, c, k, Work.open(s, name, c))
     case _:
       None{}
 
-# the vote m, or else the one that rest gives
-def Work.follow.or(
-  m: Maybe<&2, Types.Fact>,
-  rest: Unit -> Maybe<&2, Types.Fact>
-) -> Maybe<&2, Types.Fact>:
+# the plan m, or else the one that rest gives
+def Work.follow.or(m: Maybe<&2, Plan>, rest: Unit -> Maybe<&2, Plan>) -> Maybe<&2, Plan>:
   match m:
     case Some{f}:
       Some{f}
     case None{}:
       rest(Unit{})
 
-# the first vote that the node name may cast to follow a vote among fs
-def Work.follow(
-  +s: Facts.Plain(),
-  +name: String,
-  fs: List<&2, Types.Fact>
-) -> Maybe<&2, Types.Fact>:
+# the first vote that the node name may cast at the slot of a ballot among fs
+def Work.follow(+s: Facts.Plain(), +name: String, fs: List<&2, Types.Fact>) -> Maybe<&2, Plan>:
   match fs:
     case Nil{}:
       None{}
     case Con{f, rest}:
       Work.follow.or(Work.follow.of(s, name, f), u => Work.follow(s, name, rest))
 
-# the vote that the node name casts next: the one that it proposes, else one
-# that follows a vote that it holds
-def Work.vote(+s: Facts.Plain(), +name: String) -> Maybe<&2, Types.Fact>:
-  Work.follow.or(Work.propose(s, name), u => Work.follow(s, name, Facts.Facts.list(s)))
+# the pass of the node name at the next slot m of the line c: when it is the
+# slot k, if any, and the request of the id i, if any, made no version of
+# the line yet
+def Work.pass.at(
+  +s: Facts.Plain(),
+  +name: String,
+  +c: Ledgers.Line,
+  k: Maybe<&2, Nat>,
+  i: Maybe<&2, Ledgers.Id>,
+  m: Maybe<&2, Open>
+) -> Maybe<&2, Plan>:
+  match k i m:
+    case _ _ None{}:
+      None{}
+    case Some{k1} _ Some{Open{vs, +k2, ns}}:
+      Shared.Maybe.when(
+        Plan,
+        Nat.is_eq(k2, k1),
+        u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(s, c, k2), name))
+      )
+    case None{} Some{id} Some{Open{vs, +k2, ns}}:
+      Shared.Maybe.when(
+        Plan,
+        Bool.not(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, id)),
+        u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(s, c, k2), name))
+      )
+    case None{} None{} _:
+      None{}
 
-# the facts s after a work of the node name
-def Work.does.of(s: Facts.Plain(), m: Maybe<&2, Types.Fact>) -> Facts.Plain():
+# the pass of the node name for the request of the id i, on the line m that
+# it is for
+def Work.pass.on(
+  +s: Facts.Plain(),
+  +name: String,
+  i: Ledgers.Id,
+  m: Maybe<&2, Ledgers.Line>
+) -> Maybe<&2, Plan>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+c}:
+      Work.pass.at(s, name, c, None{}, Some{i}, Work.open(s, name, c))
+
+# the pass of the node name at the slot that the fact f is about: the slot
+# of a ballot, or the next slot of the line of a request that waits
+def Work.pass.of(+s: Facts.Plain(), +name: String, f: Types.Fact) -> Maybe<&2, Plan>:
+  match f:
+    case Types.Fact.Vote{v, Types.Step.At{+c, k, t}, x}:
+      Work.pass.at(s, name, c, Some{k}, None{}, Work.open(s, name, c))
+    case Types.Fact.Vote{v, Types.Step.Broken{}, x}:
+      None{}
+    case Types.Fact.Ask{Types.Ask{i, n, +r}}:
+      Work.pass.on(s, name, i, Request.line(Facts.Facts.list(s), r))
+
+# the first pass that the node name may cast at the slot of a fact among fs
+def Work.pass(+s: Facts.Plain(), +name: String, fs: List<&2, Types.Fact>) -> Maybe<&2, Plan>:
+  match fs:
+    case Nil{}:
+      None{}
+    case Con{f, rest}:
+      Work.follow.or(Work.pass.of(s, name, f), u => Work.pass(s, name, rest))
+
+# the ballot that the node name casts next: the vote that it proposes, else
+# a vote at a slot that it holds a ballot for, else a pass at a slot that
+# waits
+def Work.plan(+s: Facts.Plain(), +name: String) -> Maybe<&2, Plan>:
+  Work.follow.or(
+    Work.propose(s, name),
+    u => Work.follow.or(
+      Work.follow(s, name, Facts.Facts.list(s)),
+      u2 => Work.pass(s, name, Facts.Facts.list(s))
+    )
+  )
+
+# the facts s with the ballot m, if any, of the node name: unless s holds a
+# ballot of the node with the same number
+def Work.cast(+s: Facts.Plain(), +name: String, m: Maybe<&2, Plan>) -> Facts.Plain():
   match m:
     case None{}:
       s
-    case Some{f}:
-      Facts.Facts.add(s, f)
+    case Some{Plan{+st, x}}:
+      Shared.Bool.when(
+        Facts.Plain(),
+        Facts.Facts.cast(s, name, st),
+        u => s,
+        u => Facts.Facts.add(s, Types.Fact.Vote{name, st, x})
+      )
 
 # the facts s after a work of the node name
 def Work.does(+s: Facts.Plain(), +name: String) -> Facts.Plain():
-  Work.does.of(s, Work.vote(s, name))
+  Work.cast(s, name, Work.plan(s, name))

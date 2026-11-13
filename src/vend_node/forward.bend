@@ -12,7 +12,9 @@ import ./reads.bend as Reads
 import ./run/answers.bend as RAnswers
 import ./run/content.bend as RContents
 import ./run/files.bend as Files
+import ./rounds.bend as Rounds
 import ./run/lines.bend as RLines
+import ./run/rounds.bend as RRounds
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
 import ./stays.bend as Stays
@@ -811,87 +813,6 @@ def Era.for_stays(
         )
       )(ha)
 
-# the votes that s holds, s2 holds
-def Votes.held_stay(
-  os: List<&2, String>,
-  +s: Facts.Facts(),
-  +s2: Facts.Facts(),
-  +st: Types.Step,
-  +pk: Types.Pick,
-  +hw: {Facts.Facts.wider(s, s2) == True{}: Bool}
-) -> {
-  Shared.List.holds(
-    ~String,
-    ~RLines.Voting,
-    ~RLines.Voting.voted,
-    os,
-    RLines.Voting{Facts.Facts.crit(s), st, pk}
-  )
-    == True{}: Bool
-} -> {
-  Shared.List.holds(
-    ~String,
-    ~RLines.Voting,
-    ~RLines.Voting.voted,
-    os,
-    RLines.Voting{Facts.Facts.crit(s2), st, pk}
-  )
-    == True{}: Bool
-}:
-  match os:
-    case Nil{}:
-      h => {==}
-    case Con{+o, +r}:
-      +h => Shared.List.all.if_both(
-        RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s2), st, pk}, o),
-        u => Shared.List.holds(
-          ~String,
-          ~RLines.Voting,
-          ~RLines.Voting.voted,
-          r,
-          RLines.Voting{Facts.Facts.crit(s2), st, pk}
-        )
-      )(
-        Facts.Facts.wider_has(
-          s,
-          s2,
-          Types.Fact.Vote{o, st, pk}
-        )(
-          hw
-        )(
-          Shared.List.all.if_hit(
-            RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s), st, pk}, o),
-            u => Shared.List.holds(
-              ~String,
-              ~RLines.Voting,
-              ~RLines.Voting.voted,
-              r,
-              RLines.Voting{Facts.Facts.crit(s), st, pk}
-            )
-          )(h)
-        )
-      )(
-        Votes.held_stay(
-          r,
-          s,
-          s2,
-          st,
-          pk,
-          hw
-        )(
-          Shared.List.all.if_rest(
-            RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s), st, pk}, o),
-            u => Shared.List.holds(
-              ~String,
-              ~RLines.Voting,
-              ~RLines.Voting.voted,
-              r,
-              RLines.Voting{Facts.Facts.crit(s), st, pk}
-            )
-          )(h)
-        )
-      )
-
 # the voters that decided a version stay
 def Rule.voters_stay(
   +name: String,
@@ -901,7 +822,8 @@ def Rule.voters_stay(
   e: Types.Entry,
   u: RLines.Rule,
   +a: Spec.Reply,
-  +hw: {Facts.Facts.wider(s, s2) == True{}: Bool}
+  +hw: {Facts.Facts.wider(s, s2) == True{}: Bool},
+  +hl: {Facts.Facts.liars(s2) == []: List<&2, String>}
 ) -> {
   Answers.Rule.voters(s, c, e, u) == Some{a}: Maybe<&2, Spec.Reply>
 } -> {Answers.Rule.voters(s2, c, e, u) == Some{a}: Maybe<&2, Spec.Reply>}:
@@ -913,13 +835,7 @@ def Rule.voters_stay(
             Spec.Reply,
             Bool.and(
               b,
-              Shared.List.holds(
-                ~String,
-                ~RLines.Voting,
-                ~RLines.Voting.voted,
-                Lists.List.lead(String, ns),
-                RLines.Voting{Facts.Facts.crit(s), Types.Step.At{c, k}, pk}
-              )
+              RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
             ),
             u2 => Some{Spec.Reply.Names{Lists.List.lead(String, ns)}}
           )
@@ -951,13 +867,7 @@ def Rule.voters_stay(
             )
               == Some{a}: Maybe<&2, Spec.Reply>
           },
-          Shared.List.holds(
-            ~String,
-            ~RLines.Voting,
-            ~RLines.Voting.voted,
-            Lists.List.lead(String, ns),
-            RLines.Voting{Facts.Facts.crit(s), Types.Step.At{c, k}, pk}
-          ),
+          RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk),
           +eh => +ha => Eq.up(
             Bool,
             b => {
@@ -965,13 +875,7 @@ def Rule.voters_stay(
                 Spec.Reply,
                 Bool.and(
                   b,
-                  Shared.List.holds(
-                    ~String,
-                    ~RLines.Voting,
-                    ~RLines.Voting.voted,
-                    Lists.List.lead(String, ns),
-                    RLines.Voting{Facts.Facts.crit(s2), Types.Step.At{c, k}, pk}
-                  )
+                  RRounds.Slot.backed(Rounds.Slot.ballots(s2, c, k), ns, k, Lists.List.lead(String, ns), pk)
                 ),
                 u2 => Some{Spec.Reply.Names{Lists.List.lead(String, ns)}}
               )
@@ -990,15 +894,9 @@ def Rule.voters_stay(
                 )
                   == Some{a}: Maybe<&2, Spec.Reply>
               },
-              Shared.List.holds(
-                ~String,
-                ~RLines.Voting,
-                ~RLines.Voting.voted,
-                Lists.List.lead(String, ns),
-                RLines.Voting{Facts.Facts.crit(s2), Types.Step.At{c, k}, pk}
-              ),
+              RRounds.Slot.backed(Rounds.Slot.ballots(s2, c, k), ns, k, Lists.List.lead(String, ns), pk),
               True{},
-              Votes.held_stay(Lists.List.lead(String, ns), s, s2, Types.Step.At{c, k}, pk, hw)(eh),
+              Rounds.Votes.backed_stays(s, s2, c, k, ns, Lists.List.lead(String, ns), pk)(hw)(hl)(eh),
               ha
             )
           ),
@@ -2212,7 +2110,7 @@ def Case.owners(
             Answers.Rule.for(s2, c, k),
             Some{u},
             Rule.for_stays(name, s, s2, c, k, u, hw, hl, ho)(eu),
-            Rule.voters_stay(name, s, s2, c, e, u, a, hw)(ha)
+            Rule.voters_stay(name, s, s2, c, e, u, a, hw, hl)(ha)
           )
         )
       )

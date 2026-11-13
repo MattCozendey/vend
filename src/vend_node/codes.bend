@@ -520,8 +520,8 @@ def Pick.codec() -> Codes.Codec(Types.Pick):
 # the step x, then r
 def Step.code(x: Types.Step, r: List<&2, U32>) -> List<&2, U32>:
   match x:
-    case Types.Step.At{x0, x1}:
-      0 <> Ledgers.Line.code(x0, Codes.Code.count(x1, r))
+    case Types.Step.At{x0, x1, x2}:
+      0 <> Ledgers.Line.code(x0, Codes.Code.count(x1, Codes.Code.count(x2, r)))
     case Types.Step.Broken{}:
       1 <> r
 
@@ -530,13 +530,15 @@ def Step.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.
   Shared.Bool.when(
     Maybe<&2, Codes.Read<Types.Step>>,
     U32.is_eq(x, 0),
-    u => Codes.Code.two.read(
+    u => Codes.Code.three.read(
       ~Ledgers.Line,
+      ~Nat,
       ~Nat,
       ~Types.Step,
       ~Ledgers.Line.code.read,
       ~Codes.Code.count.read,
-      a => b => Types.Step.At{a, b},
+      ~Codes.Code.count.read,
+      a => b => c => Types.Step.At{a, b, c},
       r
     ),
     u => Shared.Bool.when(
@@ -561,16 +563,19 @@ def Step.code_read(
   r: List<&2, U32>
 ) -> {Step.code.read(Step.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Step>>}:
   match x:
-    case Types.Step.At{x0, x1}:
-      Codes.Code.two_read(
+    case Types.Step.At{x0, x1, x2}:
+      Codes.Code.three_read(
         ~Ledgers.Line,
+        ~Nat,
         ~Nat,
         ~Types.Step,
         ~Ledgers.Line.codec(),
         ~Count.codec(),
-        a => b => Types.Step.At{a, b},
+        ~Count.codec(),
+        a => b => c => Types.Step.At{a, b, c},
         x0,
         x1,
+        x2,
         r
       )
     case Types.Step.Broken{}:
@@ -580,13 +585,140 @@ def Step.code_read(
 def Step.codec() -> Codes.Codec(Types.Step):
   (Step.code, (Step.code.read, x => r => Step.code_read(x, r)))
 
+# the ballots x of a voter, then r
+def Ref.code(x: Types.Ref, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Types.Ref{x0, x1}:
+      Codes.Code.text(x0, Codes.Code.count(x1, r))
+
+# the ballots of a voter
+def Ref.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.Ref>>:
+  Codes.Code.two.read(
+    ~String,
+    ~Nat,
+    ~Types.Ref,
+    ~Codes.Code.text.read,
+    ~Codes.Code.count.read,
+    a => b => Types.Ref{a, b},
+    ts
+  )
+
+# the ballots of a voter read back
+def Ref.code_read(
+  x: Types.Ref,
+  r: List<&2, U32>
+) -> {Ref.code.read(Ref.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Ref>>}:
+  match x:
+    case Types.Ref{x0, x1}:
+      Codes.Code.two_read(
+        ~String,
+        ~Nat,
+        ~Types.Ref,
+        ~Codes.Code.text.codec(),
+        ~Count.codec(),
+        a => b => Types.Ref{a, b},
+        x0,
+        x1,
+        r
+      )
+
+# the code of the ballots of a voter
+def Ref.codec() -> Codes.Codec(Types.Ref):
+  (Ref.code, (Ref.code.read, x => r => Ref.code_read(x, r)))
+
+# the basis x, then r
+def Refs.code(x: List<&2, Types.Ref>, r: List<&2, U32>) -> List<&2, U32>:
+  Codes.Code.list(~Types.Ref, ~Ref.code, x, r)
+
+# a basis
+def Refs.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<List<&2, Types.Ref>>>:
+  Codes.Code.list.read(~Types.Ref, ~Ref.code.read, ts)
+
+# the code of a basis
+def Refs.codec() -> Codes.Codec(List<&2, Types.Ref>):
+  Codes.Code.list.codec(~Types.Ref, ~Ref.codec())
+
+# the cast x, then r
+def Cast.code(x: Types.Cast, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Types.Cast.Vote{x0, x1, x2}:
+      0 <> Codes.Code.count(x0, Pick.code(x1, Refs.code(x2, r)))
+    case Types.Cast.Pass{x0}:
+      1 <> Codes.Code.count(x0, r)
+
+# a cast whose tag is x, from the tokens r after it
+def Cast.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.Cast>>:
+  Shared.Bool.when(
+    Maybe<&2, Codes.Read<Types.Cast>>,
+    U32.is_eq(x, 0),
+    u => Codes.Code.three.read(
+      ~Nat,
+      ~Types.Pick,
+      ~List<&2, Types.Ref>,
+      ~Types.Cast,
+      ~Codes.Code.count.read,
+      ~Pick.code.read,
+      ~Refs.code.read,
+      a => b => c => Types.Cast.Vote{a, b, c},
+      r
+    ),
+    u => Shared.Bool.when(
+      Maybe<&2, Codes.Read<Types.Cast>>,
+      U32.is_eq(x, 1),
+      u => Codes.Code.one.read(
+        ~Nat,
+        ~Types.Cast,
+        ~Codes.Code.count.read,
+        a => Types.Cast.Pass{a},
+        r
+      ),
+      u => None{}
+    )
+  )
+
+# a cast
+def Cast.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.Cast>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{x, r}:
+      Cast.code.read.of(x, r)
+
+# a cast reads back
+def Cast.code_read(
+  x: Types.Cast,
+  r: List<&2, U32>
+) -> {Cast.code.read(Cast.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Cast>>}:
+  match x:
+    case Types.Cast.Vote{x0, x1, x2}:
+      Codes.Code.three_read(
+        ~Nat,
+        ~Types.Pick,
+        ~List<&2, Types.Ref>,
+        ~Types.Cast,
+        ~Count.codec(),
+        ~Pick.codec(),
+        ~Refs.codec(),
+        a => b => c => Types.Cast.Vote{a, b, c},
+        x0,
+        x1,
+        x2,
+        r
+      )
+    case Types.Cast.Pass{x0}:
+      Codes.Code.one_read(~Nat, ~Types.Cast, ~Count.codec(), a => Types.Cast.Pass{a}, x0, r)
+
+# the code of casts
+def Cast.codec() -> Codes.Codec(Types.Cast):
+  (Cast.code, (Cast.code.read, x => r => Cast.code_read(x, r)))
+
 # the fact x, then r
 def Fact.code(x: Types.Fact, r: List<&2, U32>) -> List<&2, U32>:
   match x:
     case Types.Fact.Ask{x0}:
       0 <> Ask.code(x0, r)
     case Types.Fact.Vote{x0, x1, x2}:
-      1 <> Codes.Code.text(x0, Step.code(x1, Pick.code(x2, r)))
+      1 <> Codes.Code.text(x0, Step.code(x1, Cast.code(x2, r)))
 
 # a fact whose tag is x, from the tokens r after it
 def Fact.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.Fact>>:
@@ -600,11 +732,11 @@ def Fact.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.
       u => Codes.Code.three.read(
         ~String,
         ~Types.Step,
-        ~Types.Pick,
+        ~Types.Cast,
         ~Types.Fact,
         ~Codes.Code.text.read,
         ~Step.code.read,
-        ~Pick.code.read,
+        ~Cast.code.read,
         a => b => c => Types.Fact.Vote{a, b, c},
         r
       ),
@@ -632,11 +764,11 @@ def Fact.code_read(
       Codes.Code.three_read(
         ~String,
         ~Types.Step,
-        ~Types.Pick,
+        ~Types.Cast,
         ~Types.Fact,
         ~Codes.Code.text.codec(),
         ~Step.codec(),
-        ~Pick.codec(),
+        ~Cast.codec(),
         a => b => c => Types.Fact.Vote{a, b, c},
         x0,
         x1,
@@ -756,6 +888,36 @@ def Step.words_inj(
   +b: Types.Step
 ) -> {Step.words(a) == Step.words(b): List<&2, U32>} -> {a == b: Types.Step}:
   Ledgers.Book.code_value(~Types.Step, ~Step.codec(), a, b, [], [])
+
+# the words of the cast x: its code
+def Cast.words(x: Types.Cast) -> List<&2, U32>:
+  Cast.code(x, [])
+
+# a and b are the same cast: they have the same words
+def Cast.is_eq(a: Types.Cast, b: Types.Cast) -> Bool:
+  Codes.Code.is_eq(~Types.Cast, ~Cast.code, a, b)
+
+# the laws of Cast.is_eq
+def Cast.laws() -> Shared.Eq.Laws(Types.Cast, Cast.is_eq):
+  Codes.Code.eq_laws(~Types.Cast, ~Cast.codec())
+
+# Cast.is_eq is True for a cast and itself
+def Cast.is_eq_refl(a: Types.Cast) -> {Cast.is_eq(a, a) == True{}: Bool}:
+  Shared.Eq.refl(~Types.Cast, ~Cast.is_eq, Cast.laws(), a)
+
+# Cast.is_eq is True only for equal casts
+def Cast.is_eq_sound(
+  a: Types.Cast,
+  b: Types.Cast
+) -> {Cast.is_eq(a, b) == True{}: Bool} -> {a == b: Types.Cast}:
+  Shared.Eq.sound(~Types.Cast, ~Cast.is_eq, Cast.laws(), a, b)
+
+# two casts with the same words are the same
+def Cast.words_inj(
+  +a: Types.Cast,
+  +b: Types.Cast
+) -> {Cast.words(a) == Cast.words(b): List<&2, U32>} -> {a == b: Types.Cast}:
+  Ledgers.Book.code_value(~Types.Cast, ~Cast.codec(), a, b, [], [])
 
 # the words of the fact x: its code
 def Fact.words(x: Types.Fact) -> List<&2, U32>:

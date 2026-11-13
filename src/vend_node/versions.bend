@@ -6,6 +6,7 @@ import ../shared/shared/shared/text.bend as Texts
 import ./codes.bend as Coded
 import ./facts.bend as Facts
 import ./lines.bend as Lines
+import ./rounds.bend as Rounds
 import ./run/facts.bend as RFacts
 import ./run/lines.bend as RLines
 import ./shared/lists.bend as Lists
@@ -34,7 +35,8 @@ def Step.Made(
     pk => {
       Lines.Votes.decided(
         s,
-        Types.Step.At{c, RLines.State.slot(a)},
+        c,
+        RLines.State.slot(a),
         RLines.Rule.nodes(u)
       )
         == Some{pk}: Maybe<&2, Types.Pick>
@@ -99,7 +101,7 @@ def Step.at_inv(
           Step.of_inv(
             a,
             b,
-            Lines.Votes.decided(s, Types.Step.At{c, RLines.State.slot(a)}, RLines.Rule.nodes(u))
+            Lines.Votes.decided(s, c, RLines.State.slot(a), RLines.Rule.nodes(u))
           )(h)
         )
       )
@@ -118,7 +120,8 @@ def Step.at_by(
   } -> {
     Lines.Votes.decided(
       s,
-      Types.Step.At{c, RLines.State.slot(a)},
+      c,
+      RLines.State.slot(a),
       RLines.Rule.nodes(u)
     )
       == Some{pk}: Maybe<&2, Types.Pick>
@@ -144,7 +147,8 @@ def Run.keeps(
   } -> {
     Lines.Votes.decided(
       s,
-      Types.Step.At{c, RLines.State.slot(a)},
+      c,
+      RLines.State.slot(a),
       RLines.Rule.nodes(u)
     )
       == Some{pk}: Maybe<&2, Types.Pick>
@@ -219,7 +223,8 @@ def Run.ext_step(
 } -> {
   Lines.Votes.decided(
     s,
-    Types.Step.At{c, RLines.State.slot(a)},
+    c,
+    RLines.State.slot(a),
     RLines.Rule.nodes(u)
   )
     == Some{pk}: Maybe<&2, Types.Pick>
@@ -1185,7 +1190,8 @@ def Run.distinct_step(
 } -> {
   Lines.Votes.decided(
     s,
-    Types.Step.At{c, RLines.State.slot(a)},
+    c,
+    RLines.State.slot(a),
     RLines.Rule.nodes(u)
   )
     == Some{pk}: Maybe<&2, Types.Pick>
@@ -1242,91 +1248,12 @@ def Line.versions_index(
       Run.keeps(~Unit, ~Run.Distinct, ~Run.distinct_step, RLines.Line.bound(Facts.Facts.list(s), c), Unit{}, s, R, c, RLines.State{[e0], 1n}, Entries.distinct_one(e0))(k)(e))
   )(hg)
 
-# the facts s hold a vote for the pick pk at the step st
-def Votes.Voted(s: Facts.Facts(), st: Types.Step, pk: Types.Pick) -> Type:
-  Exists(String, v => {Facts.Facts.has(s, Types.Fact.Vote{v, st, pk}) == True{}: Bool})
-
-# Votes.decided_voted, from a node that voted
-def Votes.decided_voted.of(
-  -s: Facts.Facts(),
-  -st: Types.Step,
-  -ds: List<&2, String>,
-  -pk: Types.Pick,
-  r: Exists(
-    String,
-    x => {
-      List.contains(~String, ~String.eq, ds, x) == True{}: Bool
-    }
-      & {RLines.Voting.voted(RLines.Voting{Facts.Facts.crit(s), st, pk}, x) == True{}: Bool}
-  )
-) -> Votes.Voted(s, st, pk):
-  (x, w) = r
-  (hin, hv) = w
-  (x, hv)
-
-# the facts hold a vote for the pick that the nodes ds decided for a step
-def Votes.decided_voted(
-  +s: Facts.Facts(),
-  +st: Types.Step,
-  +ds: List<&2, String>,
-  +pk: Types.Pick
-) -> {Lines.Votes.decided(s, st, ds) == Some{pk}: Maybe<&2, Types.Pick>} -> Votes.Voted(s, st, pk):
-  hd => Votes.decided_voted.of(
-    s,
-    st,
-    ds,
-    pk,
-    Lists.List.count_pos(
-      ~String,
-      ~RLines.Voting,
-      ~RLines.Voting.voted,
-      ~String.eq,
-      ~Texts.String.laws(),
-      ds,
-      RLines.Voting{Facts.Facts.crit(s), st, pk}
-    )(
-      Lists.Nat.most_pos(
-        List.length(&2, String, ds),
-        Lists.List.count(~String, ~RLines.Voting, ~RLines.Voting.voted, ds, RLines.Voting{Facts.Facts.crit(s), st, pk})
-      )(
-        Shared.Bool.and_true_left(
-          Lists.Nat.most(
-            List.length(&2, String, ds),
-            Lists.List.count(
-              ~String,
-              ~RLines.Voting,
-              ~RLines.Voting.voted,
-              ds,
-              RLines.Voting{Facts.Facts.crit(s), st, pk}
-            )
-          ),
-          Shared.List.holds(
-            ~Types.Pick,
-            ~RLines.Rival,
-            ~RLines.Rival.beats,
-            RLines.Votes.picks(Facts.Facts.list(s), st),
-            RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)}, pk}
-          )
-        )(
-          Lists.List.pick_hit(
-            ~Types.Pick,
-            ~RLines.Tally,
-            ~RLines.Tally.wins,
-            RLines.Votes.picks(Facts.Facts.list(s), st),
-            RLines.Tally{Facts.Facts.crit(s), st, ds, RLines.Votes.picks(Facts.Facts.list(s), st)},
-            pk
-          )(hd)
-        )
-      )
-    )
-  )
-
 # the facts s hold a vote for each of the versions vs of the line c after the
 # first, for its pick at its slot
 def Entries.Voted(s: Facts.Facts(), c: Ledgers.Line, vs: List<&2, Types.Entry>) -> Type:
   @+j: Nat -> @+e: Types.Entry -> {
     List.get(&2, Types.Entry, vs, 1n+j) == Some{e}: Maybe<&2, Types.Entry>
-  } -> Votes.Voted(s, Types.Step.At{c, RLines.Entry.slot(e)}, RLines.Entry.pick(e))
+  } -> Rounds.Votes.Voted(s, c, RLines.Entry.slot(e), RLines.Entry.pick(e))
 
 # Entries.voted_snoc at one version, once it is known where it is
 def Entries.voted_snoc.at(
@@ -1341,14 +1268,14 @@ def Entries.voted_snoc.at(
   }
     | ({List.length(&2, Types.Entry, vs) == 1n+j: Nat} & {x == e: Types.Entry}),
   p: Entries.Voted(s, c, vs),
-  hx: Votes.Voted(s, Types.Step.At{c, RLines.Entry.slot(x)}, RLines.Entry.pick(x))
-) -> Votes.Voted(s, Types.Step.At{c, RLines.Entry.slot(e)}, RLines.Entry.pick(e)):
+  hx: Rounds.Votes.Voted(s, c, RLines.Entry.slot(x), RLines.Entry.pick(x))
+) -> Rounds.Votes.Voted(s, c, RLines.Entry.slot(e), RLines.Entry.pick(e)):
   match r:
     case Inl{hg}:
       p(j)(e)(hg)
     case Inr{w}:
       (el, ex) = w
-      %ex: Votes.Voted(s, Types.Step.At{c, RLines.Entry.slot(_)}, RLines.Entry.pick(_))
+      %ex: Rounds.Votes.Voted(s, c, RLines.Entry.slot(_), RLines.Entry.pick(_))
       hx
 
 # the versions after a decided slot keep Entries.Voted
@@ -1358,9 +1285,10 @@ def Put.voted(
   +vs: List<&2, Types.Entry>,
   +k: Nat,
   +pk: Types.Pick
-) -> Votes.Voted(
+) -> Rounds.Votes.Voted(
   s,
-  Types.Step.At{c, k},
+  c,
+  k,
   pk
 ) -> Entries.Voted(
   s,
@@ -1368,9 +1296,10 @@ def Put.voted(
   vs
 ) -> Entries.Voted(s, c, RLines.State.versions(RLines.State.put(vs, k, pk))):
   Lists.Bool.by(
-    d => Votes.Voted(
+    d => Rounds.Votes.Voted(
       s,
-      Types.Step.At{c, k},
+      c,
+      k,
       pk
     ) -> Entries.Voted(
       s,
@@ -1399,7 +1328,7 @@ def Entries.voted_one(
   -e0: Types.Entry
 ) -> Entries.Voted(s, c, [e0]):
   +j => +e => hg => Empty.absurd(
-    Votes.Voted(s, Types.Step.At{c, RLines.Entry.slot(e)}, RLines.Entry.pick(e)),
+    Rounds.Votes.Voted(s, c, RLines.Entry.slot(e), RLines.Entry.pick(e)),
     Shared.Maybe.none_ne_some(Types.Entry, e, hg)
   )
 
@@ -1427,7 +1356,8 @@ def Run.voted_step(
 } -> {
   Lines.Votes.decided(
     s,
-    Types.Step.At{c, RLines.State.slot(a)},
+    c,
+    RLines.State.slot(a),
     RLines.Rule.nodes(u)
   )
     == Some{pk}: Maybe<&2, Types.Pick>
@@ -1444,7 +1374,7 @@ def Run.voted_step(
     RLines.State.versions(a),
     RLines.State.slot(a),
     pk
-  )(Votes.decided_voted(s, Types.Step.At{c, RLines.State.slot(a)}, RLines.Rule.nodes(u), pk)(ed))(p)
+  )(Rounds.Votes.decided_voted(s, c, RLines.State.slot(a), RLines.Rule.nodes(u), pk)(ed))(p)
 
 # each version of a line after version 0 was voted for: the facts hold a vote
 # for its pick at its slot
@@ -1458,26 +1388,17 @@ def Line.versions_voted(
   Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
 } -> {
   List.get(&2, Types.Entry, vs, 1n+j) == Some{e}: Maybe<&2, Types.Entry>
-} -> Exists(
-  String,
-  v => {
-    Facts.Facts.has(
-      s,
-      Types.Fact.Vote{v, Types.Step.At{c, RLines.Entry.slot(e)}, RLines.Entry.pick(e)}
-    )
-      == True{}: Bool
-  }
-):
+} -> Rounds.Votes.Voted(s, c, RLines.Entry.slot(e), RLines.Entry.pick(e)):
   hv => hg => Line.versions_by(
     {
       List.get(&2, Types.Entry, vs, 1n+j) == Some{e}: Maybe<&2, Types.Entry>
-    } -> Votes.Voted(s, Types.Step.At{c, RLines.Entry.slot(e)}, RLines.Entry.pick(e)),
+    } -> Rounds.Votes.Voted(s, c, RLines.Entry.slot(e), RLines.Entry.pick(e)),
     s,
     c,
     vs,
     hv,
     +R => +e0 => ev => good => (
-      %ev: {List.get(&2, Types.Entry, _, 1n+j) == Some{e}: Maybe<&2, Types.Entry>} -> Votes.Voted(s, Types.Step.At{c, RLines.Entry.slot(e)}, RLines.Entry.pick(e))
+      %ev: {List.get(&2, Types.Entry, _, 1n+j) == Some{e}: Maybe<&2, Types.Entry>} -> Rounds.Votes.Voted(s, c, RLines.Entry.slot(e), RLines.Entry.pick(e))
       Run.keeps(~Unit, ~Run.Voted, ~Run.voted_step, RLines.Line.bound(Facts.Facts.list(s), c), Unit{}, s, R, c, RLines.State{[e0], 1n}, Entries.voted_one(s, c, e0))(j)(e))
   )(hg)
 
@@ -2490,7 +2411,7 @@ def Fact.reach(c: Ledgers.Line, f: Types.Fact) -> Nat:
       0n
     case Types.Fact.Vote{v, Types.Step.Broken{}, pk}:
       0n
-    case Types.Fact.Vote{v, Types.Step.At{c2, k}, pk}:
+    case Types.Fact.Vote{v, Types.Step.At{c2, k, t}, pk}:
       RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k)
 
 # the bound of a line is at least the reach of the first fact
@@ -2504,7 +2425,7 @@ def Bound.head(
       Shared.Nat.le_zero(RLines.Line.bound(rest, c))
     case Types.Fact.Vote{v, Types.Step.Broken{}, pk}:
       Shared.Nat.le_zero(RLines.Line.bound(rest, c))
-    case Types.Fact.Vote{v, Types.Step.At{+c2, +k}, pk}:
+    case Types.Fact.Vote{v, Types.Step.At{+c2, +k, t}, pk}:
       Lists.Nat.le_max_left(
         RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
         RLines.Line.bound(rest, c)
@@ -2521,7 +2442,7 @@ def Bound.tail(
       Shared.Nat.le_refl(RLines.Line.bound(rest, c))
     case Types.Fact.Vote{v, Types.Step.Broken{}, pk}:
       Shared.Nat.le_refl(RLines.Line.bound(rest, c))
-    case Types.Fact.Vote{v, Types.Step.At{+c2, +k}, pk}:
+    case Types.Fact.Vote{v, Types.Step.At{+c2, +k, t}, pk}:
       Lists.Nat.le_max_right(
         RLines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
         RLines.Line.bound(rest, c)
@@ -2532,8 +2453,9 @@ def Fact.reach_vote(
   +c: Ledgers.Line,
   -v: String,
   -k: Nat,
-  -pk: Types.Pick
-) -> {Fact.reach(c, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}) == 1n+k: Nat}:
+  -t: Nat,
+  -pk: Types.Cast
+) -> {Fact.reach(c, Types.Fact.Vote{v, Types.Step.At{c, k, t}, pk}) == 1n+k: Nat}:
   %Equal.sym(
     Bool,
     Ledgers.Line.is_eq(c, c),
@@ -2548,13 +2470,14 @@ def Bound.in(
   +c: Ledgers.Line,
   +v: String,
   +k: Nat,
-  +pk: Types.Pick
+  +t: Nat,
+  +pk: Types.Cast
 ) -> {
   List.contains(
     ~Types.Fact,
     ~Coded.Fact.is_eq,
     fs,
-    Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
+    Types.Fact.Vote{v, Types.Step.At{c, k, t}, pk}
   )
     == True{}: Bool
 } -> {Nat.is_lt(k, RLines.Line.bound(fs, c)) == True{}: Bool}:
@@ -2569,16 +2492,16 @@ def Bound.in(
         {Nat.is_lt(k, RLines.Line.bound(f <> rest, c)) == True{}: Bool},
         f,
         rest,
-        Types.Fact.Vote{v, Types.Step.At{c, k}, pk},
+        Types.Fact.Vote{v, Types.Step.At{c, k, t}, pk},
         hin,
         e => Shared.Nat.lt_le(k, 1n+k, RLines.Line.bound(f <> rest, c))(Shared.Nat.lt_succ(k))(
-          %Equal.trans(Nat, Fact.reach(c, f), Fact.reach(c, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}), 1n+k, Equal.cong(Types.Fact, Nat, z => Fact.reach(c, z), f, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}, e), Fact.reach_vote(c, v, k, pk)): {Nat.is_le(_, RLines.Line.bound(f <> rest, c)) == True{}: Bool}
+          %Equal.trans(Nat, Fact.reach(c, f), Fact.reach(c, Types.Fact.Vote{v, Types.Step.At{c, k, t}, pk}), 1n+k, Equal.cong(Types.Fact, Nat, z => Fact.reach(c, z), f, Types.Fact.Vote{v, Types.Step.At{c, k, t}, pk}, e), Fact.reach_vote(c, v, k, t, pk)): {Nat.is_le(_, RLines.Line.bound(f <> rest, c)) == True{}: Bool}
           Bound.head(f, rest, c)),
         cin => Shared.Nat.lt_le(
           k,
           RLines.Line.bound(rest, c),
           RLines.Line.bound(f <> rest, c)
-        )(Bound.in(rest, c, v, k, pk)(cin))(Bound.tail(f, rest, c))
+        )(Bound.in(rest, c, v, k, t, pk)(cin))(Bound.tail(f, rest, c))
       )
 
 # Votes.decided_lt, from the vote
@@ -2587,40 +2510,20 @@ def Votes.decided_lt.of(
   +c: Ledgers.Line,
   +k: Nat,
   +pk: Types.Pick,
-  r: Votes.Voted(s, Types.Step.At{c, k}, pk)
+  w0: Rounds.Votes.Voted(s, c, k, pk)
 ) -> {Nat.is_lt(k, RLines.Line.bound(Facts.Facts.list(s), c)) == True{}: Bool}:
-  (+v, hv) = r
+  (+v, w1) = w0
+  (+t, w2) = w1
+  (+r, w3) = w2
+  (+b, hv) = w3
   Bound.in(
     Facts.Facts.list(s),
     c,
     v,
     k,
-    pk
-  )(
-    Equal.trans(
-      Bool,
-      List.contains(
-        ~Types.Fact,
-        ~Coded.Fact.is_eq,
-        Facts.Facts.list(s),
-        Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
-      ),
-      Facts.Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}),
-      True{},
-      Equal.sym(
-        Bool,
-        Facts.Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}),
-        List.contains(
-          ~Types.Fact,
-          ~Coded.Fact.is_eq,
-          Facts.Facts.list(s),
-          Types.Fact.Vote{v, Types.Step.At{c, k}, pk}
-        ),
-        Facts.Facts.has_list(s, Types.Fact.Vote{v, Types.Step.At{c, k}, pk})
-      ),
-      hv
-    )
-  )
+    t,
+    Types.Cast.Vote{r, pk, b}
+  )(Facts.Facts.has_in(s, Types.Fact.Vote{v, Types.Step.At{c, k, t}, Types.Cast.Vote{r, pk, b}})(hv))
 
 # a decided slot of a line is below the bound of the line
 def Votes.decided_lt(
@@ -2630,9 +2533,9 @@ def Votes.decided_lt(
   +ds: List<&2, String>,
   +pk: Types.Pick
 ) -> {
-  Lines.Votes.decided(s, Types.Step.At{c, k}, ds) == Some{pk}: Maybe<&2, Types.Pick>
+  Lines.Votes.decided(s, c, k, ds) == Some{pk}: Maybe<&2, Types.Pick>
 } -> {Nat.is_lt(k, RLines.Line.bound(Facts.Facts.list(s), c)) == True{}: Bool}:
-  hd => Votes.decided_lt.of(s, c, k, pk, Votes.decided_voted(s, Types.Step.At{c, k}, ds, pk)(hd))
+  hd => Votes.decided_lt.of(s, c, k, pk, Rounds.Votes.decided_voted(s, c, k, ds, pk)(hd))
 
 # the slot after a decided slot is the next one
 def Put.slot(
