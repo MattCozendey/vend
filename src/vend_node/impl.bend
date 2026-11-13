@@ -224,3 +224,108 @@ def Spec.VendNode.does(n, d):
         },
         ok
       )
+
+# Laws of formats and names
+# -------------------------
+
+def Spec.Request.code_names(i, r, j, s):
+  Coded.Named.code_names(i, r, j, s)
+
+def Spec.Format.items_whole(p, ws):
+  Formats.Format.items_whole(p, ws)
+
+def Spec.Format.apply_diff(p, a, b):
+  Formats.Format.apply_diff(p, a, b)
+
+def Spec.Format.merge_theirs(p, base, theirs):
+  Formats.Format.merge_theirs(p, base, theirs)
+
+def Spec.Format.merge_ours(p, base, ours):
+  Formats.Format.merge_ours(p, base, ours)
+
+def Spec.Format.merge_same(p, base, both):
+  Formats.Format.merge_same(p, base, both)
+
+# Laws of what a node holds
+# -------------------------
+
+# the facts of a node are sound for its name
+def Node.ok(n: Spec.VendNode) -> {Facts.Facts.ok(Spec.VendNode.name(n), Node.facts(n)) == True{}: Bool}:
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
+      ok
+
+def Spec.VendNode.never_lies(n):
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
+      Facts.Facts.ok_never(name, fs)(ok)
+
+def Spec.VendNode.liars_are(n, v):
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
+      Facts.Facts.liars_are(fs, v)
+
+def Spec.VendNode.liars_found(n, a, b, v, s, x, y):
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
+      Facts.Facts.liars_found(fs, a, b, v, s, x, y)
+
+def Spec.VendNode.part_is(n, h, ws):
+  match n:
+    case Tuple{Nodes.Raw{name, ws2, ms, st, fs, ps}, ok}:
+      Parts.Parts.part_is(ps, h, ws)
+
+def Spec.VendNode.same_changes(n1, n2, q):
+  match n1 n2:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok} Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}:
+      h => Equal.cong(
+        Facts.Facts(),
+        Maybe<&2, Spec.Reply>,
+        s => Answers.Answer.of(s, q),
+        fs,
+        fs2,
+        Facts.Facts.same(fs, fs2)(h)
+      )
+
+def Spec.VendNode.reads_agree(n1, n2, c, k, p, x, y):
+  match n1 n2:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok} Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}:
+      h => hx => hy => Shared.Maybe.some_inj(
+        Maybe<&2, List<&2, U32>>,
+        x,
+        y,
+        Equal.trans(
+          Maybe<&2, Maybe<&2, List<&2, U32>>>,
+          Some{x},
+          Contents.Content.read(fs2, c, k, p),
+          Some{y},
+          Equal.trans(
+            Maybe<&2, Maybe<&2, List<&2, U32>>>,
+            Some{x},
+            Contents.Content.read(fs, c, k, p),
+            Contents.Content.read(fs2, c, k, p),
+            Equal.sym(Maybe<&2, Maybe<&2, List<&2, U32>>>, Contents.Content.read(fs, c, k, p), Some{x}, hx),
+            Equal.cong(
+              Facts.Facts(),
+              Maybe<&2, Maybe<&2, List<&2, U32>>>,
+              s => Contents.Content.read(s, c, k, p),
+              fs,
+              fs2,
+              Facts.Facts.same(fs, fs2)(h)
+            )
+          ),
+          hy
+        )
+      )
+
+def Spec.VendNode.views_agree(n1, n2, w, b, p):
+  match n1 n2:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok} Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}:
+      h => Equal.cong(
+        Facts.Facts(),
+        Maybe<&2, Maybe<&2, List<&2, U32>>>,
+        s => Answers.View.at(s, w, b, p),
+        fs,
+        fs2,
+        Facts.Facts.same(fs, fs2)(h)
+      )

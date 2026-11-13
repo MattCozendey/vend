@@ -685,6 +685,155 @@ def Line.start_zero(+s: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +c:
 # The versions of a line
 # ----------------------
 
+# the first version of the id of each of the versions vs is that version
+def Entries.Distinct(vs: List<&2, Types.Entry>) -> Type:
+  @+k: Nat -> @+e: Types.Entry -> {List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>} -> {
+    Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Entry.id(e)) == Some{k}: Maybe<&2, Nat>
+  }
+
+# no index of an id that none of the versions is of
+def Entries.index_none(vs: List<&2, Types.Entry>, +i: Ledgers.Id) -> {
+  Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, i) == False{}: Bool
+} -> {Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, i) == None{}: Maybe<&2, Nat>}:
+  match vs:
+    case Nil{}:
+      h => {==}
+    case Con{+x, +r}:
+      Lists.Bool.by(
+        d => {
+          List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, r, i), d) == False{}: Bool
+        } -> {Lists.List.index.if(u => Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, r, i), d) == None{}: Maybe<&2, Nat>},
+        Lines.Entry.is_of(i, x),
+        et => h => Empty.absurd({Some{0n} == None{}: Maybe<&2, Nat>}, Shared.Bool.true_ne_false(h)),
+        ef => h => (
+          %Equal.sym(Maybe<&2, Nat>, Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, r, i), None{}, Entries.index_none(r, i)(h)): {
+            Lists.List.index.up(_) == None{}: Maybe<&2, Nat>
+          }
+          {==}
+        )
+      )
+
+# Entries.get_snoc, one item further
+def Entries.get_snoc.up(
+  -y: Types.Entry,
+  -t: List<&2, Types.Entry>,
+  -x: Types.Entry,
+  -p: Nat,
+  -e: Types.Entry,
+  r: {List.get(&2, Types.Entry, t, p) == Some{e}: Maybe<&2, Types.Entry>}
+    | ({List.length(&2, Types.Entry, t) == p: Nat} & {x == e: Types.Entry})
+) -> {List.get(&2, Types.Entry, y <> t, 1n+p) == Some{e}: Maybe<&2, Types.Entry>}
+  | ({List.length(&2, Types.Entry, y <> t) == 1n+p: Nat} & {x == e: Types.Entry}):
+  match r:
+    case Inl{a}:
+      Inl{a}
+    case Inr{w}:
+      (el, ex) = w
+      Inr{(Equal.cong(Nat, Nat, z => 1n+z, List.length(&2, Types.Entry, t), p, el), ex)}
+
+# what xs with one more item x at its end holds at k: what xs holds at k, or x
+# when k is the length of xs
+def Entries.get_snoc(xs: List<&2, Types.Entry>, -x: Types.Entry, k: Nat, -e: Types.Entry) -> {
+  List.get(&2, Types.Entry, List.append(&2, Types.Entry, xs, [x]), k) == Some{e}: Maybe<&2, Types.Entry>
+} -> {List.get(&2, Types.Entry, xs, k) == Some{e}: Maybe<&2, Types.Entry>}
+  | ({List.length(&2, Types.Entry, xs) == k: Nat} & {x == e: Types.Entry}):
+  match xs k:
+    case Nil{} 0n:
+      h => Inr{({==}, Shared.Maybe.some_inj(Types.Entry, x, e, h))}
+    case Nil{} 1n+p:
+      h => Empty.absurd(
+        {None{} == Some{e}: Maybe<&2, Types.Entry>} | ({0n == 1n+p: Nat} & {x == e: Types.Entry}),
+        Shared.Maybe.none_ne_some(Types.Entry, e, h)
+      )
+    case Con{y, t} 0n:
+      h => Inl{h}
+    case Con{y, t} 1n+p:
+      h => Entries.get_snoc.up(y, t, x, p, e, Entries.get_snoc(t, x, p, e)(h))
+
+# the id of the entry of a pick is the id of the pick
+def Entry.id_pick(pk: Types.Pick, -k: Nat) -> {Lines.Pick.id(pk) == Lines.Entry.id(Types.Entry{pk, k}): Ledgers.Id}:
+  match pk:
+    case Types.Pick{a, pins}:
+      {==}
+
+# Entries.distinct_snoc at one version, once it is known where it is
+def Entries.distinct_snoc.at(
+  +vs: List<&2, Types.Entry>,
+  +x: Types.Entry,
+  +k: Nat,
+  +e: Types.Entry,
+  r: {List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>}
+    | ({List.length(&2, Types.Entry, vs) == k: Nat} & {x == e: Types.Entry}),
+  p: Entries.Distinct(vs),
+  en: {Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Entry.id(x)) == None{}: Maybe<&2, Nat>}
+) -> {Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, List.append(&2, Types.Entry, vs, [x]), Lines.Entry.id(e)) == Some{k}: Maybe<&2, Nat>}:
+  match r:
+    case Inl{hg}:
+      Lists.List.index_append(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, [x], Lines.Entry.id(e), k)(p(k)(e)(hg))
+    case Inr{w}:
+      (el, ex) = w
+      %ex: {Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, List.append(&2, Types.Entry, vs, [x]), Lines.Entry.id(_)) == Some{k}: Maybe<&2, Nat>}
+      %el: {Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, List.append(&2, Types.Entry, vs, [x]), Lines.Entry.id(x)) == Some{_}: Maybe<&2, Nat>}
+      Lists.List.index_snoc(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, x, Lines.Entry.id(x))(en)(
+        Ledgers.Id.is_eq_refl(Lines.Entry.id(x))
+      )
+
+# versions with one more, of an id that none of them is of, keep
+# Entries.Distinct
+def Entries.distinct_snoc(+vs: List<&2, Types.Entry>, +x: Types.Entry) -> {
+  Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Entry.id(x)) == None{}: Maybe<&2, Nat>
+} -> Entries.Distinct(vs) -> Entries.Distinct(List.append(&2, Types.Entry, vs, [x])):
+  +en => p => +k => +e => hg => Entries.distinct_snoc.at(vs, x, k, e, Entries.get_snoc(vs, x, k, e)(hg), p, en)
+
+# the versions after a decided slot keep Entries.Distinct
+def Put.distinct(+vs: List<&2, Types.Entry>, +k: Nat, +pk: Types.Pick) -> Entries.Distinct(vs) -> Entries.Distinct(
+  Lines.State.versions(Lines.State.put(vs, k, pk))
+):
+  Lists.Bool.by(
+    d => Entries.Distinct(vs) -> Entries.Distinct(Lines.State.versions(Lines.State.put.if(vs, k, pk, d))),
+    Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)),
+    et => p => p,
+    ef => p => Entries.distinct_snoc(vs, Types.Entry{pk, k})(
+      %Entry.id_pick(pk, k): {Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, _) == None{}: Maybe<&2, Nat>}
+      Entries.index_none(vs, Lines.Pick.id(pk))(ef)
+    )(p)
+  )
+
+# Entries.distinct_one at one index
+def Entries.distinct_one.at(+e0: Types.Entry, k: Nat, +e: Types.Entry) -> {
+  List.get(&2, Types.Entry, [e0], k) == Some{e}: Maybe<&2, Types.Entry>
+} -> {Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, [e0], Lines.Entry.id(e)) == Some{k}: Maybe<&2, Nat>}:
+  match k:
+    case 0n:
+      hg => (
+        %Shared.Maybe.some_inj(Types.Entry, e0, e, hg): {Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, [e0], Lines.Entry.id(_)) == Some{0n}: Maybe<&2, Nat>}
+        %Equal.sym(Bool, Lines.Entry.is_of(Lines.Entry.id(e0), e0), True{}, Ledgers.Id.is_eq_refl(Lines.Entry.id(e0))): {
+          Lists.List.index.if(u => None{}, _) == Some{0n}: Maybe<&2, Nat>
+        }
+        {==}
+      )
+    case 1n+j:
+      hg => Empty.absurd(
+        {Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, [e0], Lines.Entry.id(e)) == Some{1n+j}: Maybe<&2, Nat>},
+        Shared.Maybe.none_ne_some(Types.Entry, e, hg)
+      )
+
+# one version is Entries.Distinct
+def Entries.distinct_one(+e0: Types.Entry) -> Entries.Distinct([e0]):
+  +k => +e => hg => Entries.distinct_one.at(e0, k, e)(hg)
+
+# the versions of a state are Entries.Distinct
+def Run.Distinct(g: Unit, s: Facts.Facts(), R: Maybe<&2, List<&2, Types.Entry>>, c: Ledgers.Line, a: Lines.State) -> Type:
+  Entries.Distinct(Lines.State.versions(a))
+
+# a decided slot keeps Run.Distinct
+def Run.distinct_step(+g: Unit, +s: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +a: Lines.State, +u: Lines.Rule, +pk: Types.Pick) -> {
+  Lines.Line.rule(R, c, Lines.State.versions(a)) == Some{u}: Maybe<&2, Lines.Rule>
+} -> {
+  Lines.Votes.decided(s, Types.Step.At{c, Lines.State.slot(a)}, Lines.Rule.nodes(u)) == Some{pk}: Maybe<&2, Types.Pick>
+} -> Run.Distinct(g, s, R, c, a) -> Run.Distinct(g, s, R, c, Lines.State.put(Lines.State.versions(a), Lines.State.slot(a), pk)):
+  eu => ed => p => Put.distinct(Lines.State.versions(a), Lines.State.slot(a), pk)(p)
+
 # each version of a line is of its own id: the first version of the id of
 # version k is k
 def Line.versions_index(+s: Facts.Facts(), +c: Ledgers.Line, +vs: List<&2, Types.Entry>, +k: Nat, +e: Types.Entry) -> {
@@ -692,7 +841,180 @@ def Line.versions_index(+s: Facts.Facts(), +c: Ledgers.Line, +vs: List<&2, Types
 } -> {List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>} -> {
   Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Entry.id(e)) == Some{k}: Maybe<&2, Nat>
 }:
-  ?TODO
+  hv => hg => Line.versions_by(
+    {List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>} -> {
+      Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Entry.id(e)) == Some{k}: Maybe<&2, Nat>
+    },
+    s,
+    c,
+    vs,
+    hv,
+    +R => +e0 => ev => good => (
+      %ev: {List.get(&2, Types.Entry, _, k) == Some{e}: Maybe<&2, Types.Entry>} -> {
+        Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, _, Lines.Entry.id(e)) == Some{k}: Maybe<&2, Nat>
+      }
+      Run.keeps(
+        ~Unit,
+        ~Run.Distinct,
+        ~Run.distinct_step,
+        Lines.Line.bound(Facts.Facts.list(s), c),
+        Unit{},
+        s,
+        R,
+        c,
+        Lines.State{[e0], 1n},
+        Entries.distinct_one(e0)
+      )(k)(e)
+    )
+  )(hg)
+
+# the facts s hold a vote for the pick pk at the step st
+def Votes.Voted(s: Facts.Facts(), st: Types.Step, pk: Types.Pick) -> Type:
+  Exists(String, v => {Facts.Facts.has(s, Types.Fact.Vote{v, st, pk}) == True{}: Bool})
+
+# Votes.decided_voted, from a node that voted
+def Votes.decided_voted.of(
+  -s: Facts.Facts(),
+  -st: Types.Step,
+  -ds: List<&2, String>,
+  -pk: Types.Pick,
+  r: Exists(
+    String,
+    x => {
+      List.contains(~String, ~String.eq, ds, x) == True{}: Bool
+    }
+      & {Lines.Voting.voted(Lines.Voting{s, st, pk}, x) == True{}: Bool}
+  )
+) -> Votes.Voted(s, st, pk):
+  (x, w) = r
+  (hin, hv) = w
+  (x, hv)
+
+# the facts hold a vote for the pick that the nodes ds decided for a step
+def Votes.decided_voted(+s: Facts.Facts(), +st: Types.Step, +ds: List<&2, String>, +pk: Types.Pick) -> {
+  Lines.Votes.decided(s, st, ds) == Some{pk}: Maybe<&2, Types.Pick>
+} -> Votes.Voted(s, st, pk):
+  hd => Votes.decided_voted.of(
+    s,
+    st,
+    ds,
+    pk,
+    Lists.List.count_pos(
+      ~String,
+      ~Lines.Voting,
+      ~Lines.Voting.voted,
+      ~String.eq,
+      ~Texts.String.laws(),
+      ds,
+      Lines.Voting{s, st, pk}
+    )(
+      Lists.Nat.most_pos(
+        List.length(&2, String, ds),
+        Lists.List.count(~String, ~Lines.Voting, ~Lines.Voting.voted, ds, Lines.Voting{s, st, pk})
+      )(
+        Shared.Bool.and_true_left(
+          Lists.Nat.most(
+            List.length(&2, String, ds),
+            Lists.List.count(~String, ~Lines.Voting, ~Lines.Voting.voted, ds, Lines.Voting{s, st, pk})
+          ),
+          Shared.List.holds(
+            ~Types.Pick,
+            ~Lines.Rival,
+            ~Lines.Rival.beats,
+            Lines.Votes.picks(Facts.Facts.list(s), st),
+            Lines.Rival{Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)}, pk}
+          )
+        )(
+          Lists.List.pick_hit(
+            ~Types.Pick,
+            ~Lines.Tally,
+            ~Lines.Tally.wins,
+            Lines.Votes.picks(Facts.Facts.list(s), st),
+            Lines.Tally{s, st, ds, Lines.Votes.picks(Facts.Facts.list(s), st)},
+            pk
+          )(hd)
+        )
+      )
+    )
+  )
+
+# the facts s hold a vote for each of the versions vs of the line c after the
+# first, for its pick at its slot
+def Entries.Voted(s: Facts.Facts(), c: Ledgers.Line, vs: List<&2, Types.Entry>) -> Type:
+  @+j: Nat -> @+e: Types.Entry -> {List.get(&2, Types.Entry, vs, 1n+j) == Some{e}: Maybe<&2, Types.Entry>} -> Votes.Voted(
+    s,
+    Types.Step.At{c, Lines.Entry.slot(e)},
+    Lines.Entry.pick(e)
+  )
+
+# Entries.voted_snoc at one version, once it is known where it is
+def Entries.voted_snoc.at(
+  -s: Facts.Facts(),
+  -c: Ledgers.Line,
+  -vs: List<&2, Types.Entry>,
+  -x: Types.Entry,
+  +j: Nat,
+  +e: Types.Entry,
+  r: {List.get(&2, Types.Entry, vs, 1n+j) == Some{e}: Maybe<&2, Types.Entry>}
+    | ({List.length(&2, Types.Entry, vs) == 1n+j: Nat} & {x == e: Types.Entry}),
+  p: Entries.Voted(s, c, vs),
+  hx: Votes.Voted(s, Types.Step.At{c, Lines.Entry.slot(x)}, Lines.Entry.pick(x))
+) -> Votes.Voted(s, Types.Step.At{c, Lines.Entry.slot(e)}, Lines.Entry.pick(e)):
+  match r:
+    case Inl{hg}:
+      p(j)(e)(hg)
+    case Inr{w}:
+      (el, ex) = w
+      %ex: Votes.Voted(s, Types.Step.At{c, Lines.Entry.slot(_)}, Lines.Entry.pick(_))
+      hx
+
+# the versions after a decided slot keep Entries.Voted
+def Put.voted(+s: Facts.Facts(), +c: Ledgers.Line, +vs: List<&2, Types.Entry>, +k: Nat, +pk: Types.Pick) -> Votes.Voted(
+  s,
+  Types.Step.At{c, k},
+  pk
+) -> Entries.Voted(s, c, vs) -> Entries.Voted(s, c, Lines.State.versions(Lines.State.put(vs, k, pk))):
+  Lists.Bool.by(
+    d => Votes.Voted(s, Types.Step.At{c, k}, pk) -> Entries.Voted(s, c, vs) -> Entries.Voted(
+      s,
+      c,
+      Lines.State.versions(Lines.State.put.if(vs, k, pk, d))
+    ),
+    Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)),
+    et => hx => p => p,
+    ef => hx => p => +j => +e => hg => Entries.voted_snoc.at(
+      s,
+      c,
+      vs,
+      Types.Entry{pk, k},
+      j,
+      e,
+      Entries.get_snoc(vs, Types.Entry{pk, k}, 1n+j, e)(hg),
+      p,
+      hx
+    )
+  )
+
+# one version is Entries.Voted
+def Entries.voted_one(-s: Facts.Facts(), -c: Ledgers.Line, -e0: Types.Entry) -> Entries.Voted(s, c, [e0]):
+  +j => +e => hg => Empty.absurd(
+    Votes.Voted(s, Types.Step.At{c, Lines.Entry.slot(e)}, Lines.Entry.pick(e)),
+    Shared.Maybe.none_ne_some(Types.Entry, e, hg)
+  )
+
+# the versions of a state are Entries.Voted
+def Run.Voted(g: Unit, s: Facts.Facts(), R: Maybe<&2, List<&2, Types.Entry>>, c: Ledgers.Line, a: Lines.State) -> Type:
+  Entries.Voted(s, c, Lines.State.versions(a))
+
+# a decided slot keeps Run.Voted
+def Run.voted_step(+g: Unit, +s: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +a: Lines.State, +u: Lines.Rule, +pk: Types.Pick) -> {
+  Lines.Line.rule(R, c, Lines.State.versions(a)) == Some{u}: Maybe<&2, Lines.Rule>
+} -> {
+  Lines.Votes.decided(s, Types.Step.At{c, Lines.State.slot(a)}, Lines.Rule.nodes(u)) == Some{pk}: Maybe<&2, Types.Pick>
+} -> Run.Voted(g, s, R, c, a) -> Run.Voted(g, s, R, c, Lines.State.put(Lines.State.versions(a), Lines.State.slot(a), pk)):
+  eu => ed => p => Put.voted(s, c, Lines.State.versions(a), Lines.State.slot(a), pk)(
+    Votes.decided_voted(s, Types.Step.At{c, Lines.State.slot(a)}, Lines.Rule.nodes(u), pk)(ed)
+  )(p)
 
 # each version of a line after version 0 was voted for: the facts hold a vote
 # for its pick at its slot
@@ -704,7 +1026,36 @@ def Line.versions_voted(+s: Facts.Facts(), +c: Ledgers.Line, +vs: List<&2, Types
     Facts.Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, Lines.Entry.slot(e)}, Lines.Entry.pick(e)}) == True{}: Bool
   }
 ):
-  ?TODO
+  hv => hg => Line.versions_by(
+    {List.get(&2, Types.Entry, vs, 1n+j) == Some{e}: Maybe<&2, Types.Entry>} -> Votes.Voted(
+      s,
+      Types.Step.At{c, Lines.Entry.slot(e)},
+      Lines.Entry.pick(e)
+    ),
+    s,
+    c,
+    vs,
+    hv,
+    +R => +e0 => ev => good => (
+      %ev: {List.get(&2, Types.Entry, _, 1n+j) == Some{e}: Maybe<&2, Types.Entry>} -> Votes.Voted(
+        s,
+        Types.Step.At{c, Lines.Entry.slot(e)},
+        Lines.Entry.pick(e)
+      )
+      Run.keeps(
+        ~Unit,
+        ~Run.Voted,
+        ~Run.voted_step,
+        Lines.Line.bound(Facts.Facts.list(s), c),
+        Unit{},
+        s,
+        R,
+        c,
+        Lines.State{[e0], 1n},
+        Entries.voted_one(s, c, e0)
+      )(j)(e)
+    )
+  )(hg)
 
 # version 0 of a line is an ask of the number 0 whose request opens a line
 def Line.versions_zero(+s: Facts.Facts(), +c: Ledgers.Line, +vs: List<&2, Types.Entry>, +e: Types.Entry) -> {
@@ -875,8 +1226,234 @@ def Line.started(+name: String, +s: Facts.Facts(), +i: Ledgers.Id, +os: List<&2,
 }:
   ?TODO
 
+# Where a run stops
+# -----------------
+
+# how far the fact f makes the line c reach: one more than its slot, when it
+# is a vote for a slot of c
+def Fact.reach(c: Ledgers.Line, f: Types.Fact) -> Nat:
+  match f:
+    case Types.Fact.Ask{a}:
+      0n
+    case Types.Fact.Vote{v, Types.Step.Broken{}, pk}:
+      0n
+    case Types.Fact.Vote{v, Types.Step.At{c2, k}, pk}:
+      Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k)
+
+# the bound of a line is at least the reach of the first fact
+def Bound.head(f: Types.Fact, +rest: List<&2, Types.Fact>, +c: Ledgers.Line) -> {
+  Nat.is_le(Fact.reach(c, f), Lines.Line.bound(f <> rest, c)) == True{}: Bool
+}:
+  match f:
+    case Types.Fact.Ask{a}:
+      Shared.Nat.le_zero(Lines.Line.bound(rest, c))
+    case Types.Fact.Vote{v, Types.Step.Broken{}, pk}:
+      Shared.Nat.le_zero(Lines.Line.bound(rest, c))
+    case Types.Fact.Vote{v, Types.Step.At{+c2, +k}, pk}:
+      Lists.Nat.le_max_left(Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), Lines.Line.bound(rest, c))
+
+# the bound of a line is at least the bound in the facts after the first
+def Bound.tail(f: Types.Fact, +rest: List<&2, Types.Fact>, +c: Ledgers.Line) -> {
+  Nat.is_le(Lines.Line.bound(rest, c), Lines.Line.bound(f <> rest, c)) == True{}: Bool
+}:
+  match f:
+    case Types.Fact.Ask{a}:
+      Shared.Nat.le_refl(Lines.Line.bound(rest, c))
+    case Types.Fact.Vote{v, Types.Step.Broken{}, pk}:
+      Shared.Nat.le_refl(Lines.Line.bound(rest, c))
+    case Types.Fact.Vote{v, Types.Step.At{+c2, +k}, pk}:
+      Lists.Nat.le_max_right(Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), Lines.Line.bound(rest, c))
+
+# a vote for the slot k of the line c reaches one more than k
+def Fact.reach_vote(+c: Ledgers.Line, -v: String, -k: Nat, -pk: Types.Pick) -> {
+  Fact.reach(c, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}) == 1n+k: Nat
+}:
+  %Equal.sym(Bool, Ledgers.Line.is_eq(c, c), True{}, Ledgers.Line.is_eq_refl(c)): {
+    Lines.Line.bound.at(_, k) == 1n+k: Nat
+  }
+  {==}
+
+# the slot of a vote among fs for a slot of the line c is below the bound
+def Bound.in(fs: List<&2, Types.Fact>, +c: Ledgers.Line, +v: String, +k: Nat, +pk: Types.Pick) -> {
+  List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}) == True{}: Bool
+} -> {Nat.is_lt(k, Lines.Line.bound(fs, c)) == True{}: Bool}:
+  match fs:
+    case Nil{}:
+      hin => Empty.absurd({Nat.is_lt(k, 1n) == True{}: Bool}, Shared.Bool.false_ne_true(hin))
+    case Con{+f, +rest}:
+      hin => Lists.List.contains_cons_by(
+        ~Types.Fact,
+        ~Coded.Fact.is_eq,
+        ~Coded.Fact.laws(),
+        {Nat.is_lt(k, Lines.Line.bound(f <> rest, c)) == True{}: Bool},
+        f,
+        rest,
+        Types.Fact.Vote{v, Types.Step.At{c, k}, pk},
+        hin,
+        e => Shared.Nat.lt_le(k, 1n+k, Lines.Line.bound(f <> rest, c))(Shared.Nat.lt_succ(k))(
+          %Equal.trans(
+            Nat,
+            Fact.reach(c, f),
+            Fact.reach(c, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}),
+            1n+k,
+            Equal.cong(
+              Types.Fact,
+              Nat,
+              z => Fact.reach(c, z),
+              f,
+              Types.Fact.Vote{v, Types.Step.At{c, k}, pk},
+              e
+            ),
+            Fact.reach_vote(c, v, k, pk)
+          ): {Nat.is_le(_, Lines.Line.bound(f <> rest, c)) == True{}: Bool}
+          Bound.head(f, rest, c)
+        ),
+        cin => Shared.Nat.lt_le(k, Lines.Line.bound(rest, c), Lines.Line.bound(f <> rest, c))(
+          Bound.in(rest, c, v, k, pk)(cin)
+        )(Bound.tail(f, rest, c))
+      )
+
+# Votes.decided_lt, from the vote
+def Votes.decided_lt.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +pk: Types.Pick,
+  r: Votes.Voted(s, Types.Step.At{c, k}, pk)
+) -> {Nat.is_lt(k, Lines.Line.bound(Facts.Facts.list(s), c)) == True{}: Bool}:
+  (+v, hv) = r
+  Bound.in(Facts.Facts.list(s), c, v, k, pk)(
+    Equal.trans(
+      Bool,
+      List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), Types.Fact.Vote{v, Types.Step.At{c, k}, pk}),
+      Facts.Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}),
+      True{},
+      Equal.sym(
+        Bool,
+        Facts.Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}),
+        List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), Types.Fact.Vote{v, Types.Step.At{c, k}, pk}),
+        Facts.Facts.has_list(s, Types.Fact.Vote{v, Types.Step.At{c, k}, pk})
+      ),
+      hv
+    )
+  )
+
+# a decided slot of a line is below the bound of the line
+def Votes.decided_lt(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +ds: List<&2, String>, +pk: Types.Pick) -> {
+  Lines.Votes.decided(s, Types.Step.At{c, k}, ds) == Some{pk}: Maybe<&2, Types.Pick>
+} -> {Nat.is_lt(k, Lines.Line.bound(Facts.Facts.list(s), c)) == True{}: Bool}:
+  hd => Votes.decided_lt.of(s, c, k, pk, Votes.decided_voted(s, Types.Step.At{c, k}, ds, pk)(hd))
+
+# the slot after a decided slot is the next one
+def Put.slot(+vs: List<&2, Types.Entry>, +k: Nat, +pk: Types.Pick) -> {Lines.State.slot(Lines.State.put(vs, k, pk)) == 1n+k: Nat}:
+  Lists.Bool.by(
+    d => {Lines.State.slot(Lines.State.put.if(vs, k, pk, d)) == 1n+k: Nat},
+    Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)),
+    et => {==},
+    ef => {==}
+  )
+
+# a number is below itself plus one
+def Nat.lt_add_one(+b: Nat) -> {Nat.is_lt(b, Nat.add(b, 1n)) == True{}: Bool}:
+  %Equal.sym(Nat, Nat.add(b, 1n), 1n+Nat.add(b, 0n), Shared.Nat.add_succ(b, 0n)): {Nat.is_lt(b, _) == True{}: Bool}
+  %Equal.sym(Nat, Nat.add(b, 0n), b, Shared.Nat.add_zero(b)): {Nat.is_lt(b, 1n+_) == True{}: Bool}
+  Shared.Nat.lt_succ(b)
+
+# a run that may go past the bound of the line stops at a slot that is not
+# decided
+def Run.stops(f: Nat, +s: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +st: Lines.State) -> {
+  Nat.is_lt(Lines.Line.bound(Facts.Facts.list(s), c), Nat.add(f, Lines.State.slot(st))) == True{}: Bool
+} -> {
+  Lines.Line.step(s, R, c, Lines.Line.run(f, s, R, c, st, Lines.Line.step(s, R, c, st))) == None{}: Maybe<&2, Lines.State>
+}:
+  match f:
+    case 0n:
+      hb => Lists.Maybe.by(
+        Lines.State,
+        m => {m == None{}: Maybe<&2, Lines.State>},
+        Lines.Line.step(s, R, c, st),
+        en => {==},
+        +st2 => e => Step.at_by(
+          {Some{st2} == None{}: Maybe<&2, Lines.State>},
+          s,
+          c,
+          st,
+          st2,
+          Lines.Line.rule(R, c, Lines.State.versions(st)),
+          Step.at_inv(s, c, st, st2, Lines.Line.rule(R, c, Lines.State.versions(st)))(e),
+          +u => +pk => eu => ed => eb => Lists.Bool.clash(
+            {Some{st2} == None{}: Maybe<&2, Lines.State>},
+            Nat.is_lt(Lines.Line.bound(Facts.Facts.list(s), c), Lines.State.slot(st)),
+            Shared.Nat.le_nlt(Lines.State.slot(st), Lines.Line.bound(Facts.Facts.list(s), c))(
+              Shared.Nat.lt_weak(Lines.State.slot(st), Lines.Line.bound(Facts.Facts.list(s), c))(
+                Votes.decided_lt(s, c, Lines.State.slot(st), Lines.Rule.nodes(u), pk)(ed)
+              )
+            ),
+            hb
+          )
+        )
+      )
+    case 1n+(+p):
+      hb => Lists.Maybe.by(
+        Lines.State,
+        m => {
+          Lines.Line.step(s, R, c, Lines.Line.run(1n+p, s, R, c, st, m)) == None{}: Maybe<&2, Lines.State>
+        },
+        Lines.Line.step(s, R, c, st),
+        en => en,
+        +st2 => e => Step.at_by(
+          {
+            Lines.Line.step(s, R, c, Lines.Line.run(p, s, R, c, st2, Lines.Line.step(s, R, c, st2))) == None{}: Maybe<&2, Lines.State>
+          },
+          s,
+          c,
+          st,
+          st2,
+          Lines.Line.rule(R, c, Lines.State.versions(st)),
+          Step.at_inv(s, c, st, st2, Lines.Line.rule(R, c, Lines.State.versions(st)))(e),
+          +u => +pk => eu => ed => eb => (
+            %eb: {
+              Lines.Line.step(s, R, c, Lines.Line.run(p, s, R, c, _, Lines.Line.step(s, R, c, _))) == None{}: Maybe<&2, Lines.State>
+            }
+            Run.stops(p, s, R, c, Lines.State.put(Lines.State.versions(st), Lines.State.slot(st), pk))(
+              %Equal.sym(
+                Nat,
+                Lines.State.slot(Lines.State.put(Lines.State.versions(st), Lines.State.slot(st), pk)),
+                1n+Lines.State.slot(st),
+                Put.slot(Lines.State.versions(st), Lines.State.slot(st), pk)
+              ): {Nat.is_lt(Lines.Line.bound(Facts.Facts.list(s), c), Nat.add(p, _)) == True{}: Bool}
+              %Equal.sym(
+                Nat,
+                Nat.add(p, 1n+Lines.State.slot(st)),
+                1n+Nat.add(p, Lines.State.slot(st)),
+                Shared.Nat.add_succ(p, Lines.State.slot(st))
+              ): {Nat.is_lt(Lines.Line.bound(Facts.Facts.list(s), c), _) == True{}: Bool}
+              hb
+            )
+          )
+        )
+      )
+
 # the state of a line stops at a slot that is not decided
 def Line.state_open(+s: Facts.Facts(), +c: Ledgers.Line, +st: Lines.State) -> {
   Lines.Line.state(s, c) == Some{st}: Maybe<&2, Lines.State>
 } -> {Lines.Line.next(s, c, st) == None{}: Maybe<&2, Lines.State>}:
-  ?TODO
+  hs => Line.state_by(
+    {Lines.Line.next(s, c, st) == None{}: Maybe<&2, Lines.State>},
+    s,
+    c,
+    st,
+    Line.state_inv(s, c, st)(hs),
+    +R => +e0 => e1 => e3 => good => (
+      %Equal.sym(
+        Maybe<&2, Lines.Rule>,
+        Lines.Rule.after(s, c, Lines.State.versions(st)),
+        Lines.Line.rule(R, c, Lines.State.versions(st)),
+        e3
+      ): {Lines.Line.step.at(s, c, st, _) == None{}: Maybe<&2, Lines.State>}
+      %e1: {Lines.Line.step(s, R, c, _) == None{}: Maybe<&2, Lines.State>}
+      Run.stops(Lines.Line.bound(Facts.Facts.list(s), c), s, R, c, Lines.State{[e0], 1n})(
+        Nat.lt_add_one(Lines.Line.bound(Facts.Facts.list(s), c))
+      )
+    )
+  )
