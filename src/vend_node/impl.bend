@@ -7,6 +7,7 @@ import ./answers.bend as Answers
 import ./codes.bend as Coded
 import ./content.bend as Contents
 import ./facts.bend as Facts
+import ./lines.bend as Lines
 import ./live.bend as Live
 import ./node.bend as Nodes
 import ./shared/format.bend as Formats
@@ -14,6 +15,7 @@ import ./shared/lists.bend as Lists
 import ./shared/parts.bend as Parts
 import ./spec.bend as Spec
 import ./types.bend as Types
+import ./versions.bend as Versions
 import ./work.bend as Works
 
 # A Vend Node
@@ -830,3 +832,327 @@ def Spec.VendNode.stops(n, d):
       {==}
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Stop{f}:
       {==}
+
+# Laws of what a node does
+# ------------------------
+
+# the facts of a node that asks are wider
+def Node.asks_wider(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  go: Bool
+) -> {Facts.Facts.wider(fs, Node.facts(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, go))) == True{}: Bool}:
+  match go:
+    case False{}:
+      Facts.Facts.wider_refl(fs)
+    case True{}:
+      Facts.Facts.take_wider(name, fs, Types.Fact.Ask{Facts.Facts.asked(fs, i, r)})
+
+# the facts of a node that works are wider
+def Node.works_wider(
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+) -> {Facts.Facts.wider(fs, Node.facts(Node.works(name, ws, ms, st, fs, ps, ok))) == True{}: Bool}:
+  match st:
+    case True{}:
+      Facts.Facts.wider_refl(fs)
+    case False{}:
+      Live.Work.does_wider(name, fs)
+
+# the facts of a node are wider after any deed
+def Node.does_wider(n: Spec.VendNode, d: Spec.Deed) -> {
+  Facts.Facts.wider(Node.facts(n), Node.facts(Spec.VendNode.does(n, d))) == True{}: Bool
+}:
+  match n d:
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Connect{+w}:
+      Facts.Facts.wider_refl(fs)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Leave{+w}:
+      Facts.Facts.wider_refl(fs)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Ask{+i, +r}:
+      Node.asks_wider(
+        name,
+        ws,
+        ms,
+        st,
+        fs,
+        ps,
+        ok,
+        i,
+        r,
+        Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, +fs2, ps2}, ok2}}:
+      Facts.Facts.take_all_wider(name, Facts.Facts.list(fs2), fs)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
+      Node.asks_wider(
+        name,
+        ws,
+        Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+        st,
+        fs,
+        ps,
+        ok,
+        Nodes.Mount.id(name, a),
+        Spec.Request.Write{b, p, Some{held}},
+        Bool.not(st)
+      )
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Unmount{+a}:
+      Facts.Facts.wider_refl(fs)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Work{}:
+      Node.works_wider(name, ws, ms, st, fs, ps, ok)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Drop{}:
+      Facts.Facts.wider_refl(fs)
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Stop{f}:
+      Facts.Facts.wider_refl(fs)
+
+def Spec.VendNode.keeps(n, d, c):
+  h => Facts.Facts.wider_holds(Node.facts(n), Node.facts(Spec.VendNode.does(n, d)), c)(Node.does_wider(n, d))(h)
+
+def Spec.VendNode.sync_joins(n, m, c):
+  match n m:
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Tuple{Nodes.Raw{name2, ws2, ms2, st2, +fs2, ps2}, ok2}:
+      hn => hc => Facts.Facts.take_all_holds(name, fs2, fs, c)(hn)(hc)
+
+# hashes that differ in the words of the parts differ in the words of the spec
+def Node.distinct(hs: List<&2, Hashes.Hash>, d: Parts.Parts.Distinct(hs)) -> Spec.Distinct(hs):
+  match hs d:
+    case Nil{} u:
+      Unit{}
+    case Con{+h, +r} Tuple{e, rest}:
+      (e, Node.distinct(r, rest))
+
+# the parts ps are listed once, in the words of the spec
+def Node.parts_once.of(
+  +ps: Parts.Parts,
+  p: Parts.Parts.Distinct(Parts.Parts.list(ps))
+    & (
+      @h: Hashes.Hash -> {
+        Maybe.is_some(&2, List<&2, U32>, Parts.Parts.get(ps, h))
+          == List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, Parts.Parts.list(ps), h): Bool
+      }
+    )
+) -> Spec.Distinct(Parts.Parts.list(ps))
+  & (
+    @h: Hashes.Hash -> {
+      Maybe.is_some(&2, List<&2, U32>, Parts.Parts.get(ps, h))
+        == List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, Parts.Parts.list(ps), h): Bool
+    }
+  ):
+  match p:
+    case Tuple{d, f}:
+      (Node.distinct(Parts.Parts.list(ps), d), f)
+
+def Spec.VendNode.parts_once(n):
+  match n:
+    case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
+      Node.parts_once.of(ps, Parts.Parts.once(ps))
+
+# a node that has not stopped takes in what a connected writer asks
+def Node.gate(st: Bool, c: Bool) -> {st == False{}: Bool} -> {c == True{}: Bool} -> {
+  Bool.and(Bool.not(st), c) == True{}: Bool
+}:
+  match st:
+    case True{}:
+      hs => hc => Empty.absurd({Bool.and(Bool.not(True{}), c) == True{}: Bool}, Shared.Bool.true_ne_false(hs))
+    case False{}:
+      hs => hc => hc
+
+# a node that has not stopped may go
+def Node.gate_not(st: Bool) -> {st == False{}: Bool} -> {Bool.not(st) == True{}: Bool}:
+  match st:
+    case True{}:
+      hs => Empty.absurd({Bool.not(True{}) == True{}: Bool}, Shared.Bool.true_ne_false(hs))
+    case False{}:
+      hs => {==}
+
+# what holds of the facts with a request holds of the facts of a node that
+# takes it in
+def Node.asks_at(
+  -P: Facts.Facts() -> Type,
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  go: Bool
+) -> {go == True{}: Bool} -> P(Facts.Facts.ask(name, fs, i, r)) -> P(
+  Node.facts(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, go))
+):
+  match go:
+    case False{}:
+      h => p => Empty.absurd(
+        P(Node.facts(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, False{}))),
+        Shared.Bool.false_ne_true(h)
+      )
+    case True{}:
+      h => p => p
+
+# what holds of the facts with a request, after a work, holds of the facts of
+# a node that takes it in and works
+def Node.asks_works_at(
+  -P: Facts.Facts() -> Type,
+  +name: String,
+  +ws: List<&2, String>,
+  +ms: List<&2, Nodes.Mounted>,
+  +st: Bool,
+  +fs: Facts.Facts(),
+  +ps: Parts.Parts,
+  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  go: Bool
+) -> {st == False{}: Bool} -> {go == True{}: Bool} -> P(Works.Work.does(Facts.Facts.ask(name, fs, i, r), name)) -> P(
+  Node.facts(Spec.VendNode.does(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, go), Spec.Deed.Work{}))
+):
+  match st go:
+    case False{} True{}:
+      hs => hg => p => p
+    case True{} +go:
+      hs => hg => p => Empty.absurd(
+        P(Node.facts(Spec.VendNode.does(Node.asks(name, ws, ms, True{}, fs, ps, ok, i, r, go), Spec.Deed.Work{}))),
+        Shared.Bool.true_ne_false(hs)
+      )
+    case +st False{}:
+      hs => hg => p => Empty.absurd(
+        P(Node.facts(Spec.VendNode.does(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, False{}), Spec.Deed.Work{}))),
+        Shared.Bool.false_ne_true(hg)
+      )
+
+def Spec.VendNode.starts(n, i):
+  match n:
+    case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok}:
+      hs => hw => (
+        0n,
+        Node.asks_at(
+          s => {
+            Answers.Answer.of(
+              s,
+              Spec.Question.Version{
+                Ledgers.Line{Hashes.Sha.hash(Spec.Request.code(i, Spec.Request.Start{[name]})), None{}},
+                0n
+              }
+            )
+              == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
+          },
+          name,
+          ws,
+          ms,
+          st,
+          fs,
+          ps,
+          ok,
+          i,
+          Spec.Request.Start{[name]},
+          Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+        )(Node.gate(st, List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))(hs)(hw))(
+          Equal.cong(
+            Maybe<&2, Types.Entry>,
+            Maybe<&2, Spec.Reply>,
+            Answers.Reply.id,
+            Lines.Line.at(
+              Facts.Facts.ask(name, fs, i, Spec.Request.Start{[name]}),
+              Ledgers.Line{Facts.Start.root(i, Spec.Request.Start{[name]}), None{}},
+              0n
+            ),
+            Some{Lines.Entry.first(i, Spec.Request.Start{[name]}, 0n)},
+            Versions.Line.started(name, fs, i, [name])
+          )
+        )
+      )
+
+def Spec.VendNode.reads_own(n, i, b, p, ws):
+  match n:
+    case Tuple{Nodes.Raw{+name, +wrs, +ms, +st, +fs, +ps}, +ok}:
+      hs => hw => Node.asks_at(
+        s => {Answers.View.at(s, Spec.Id.writer(i), b, p) == Some{ws}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        name,
+        wrs,
+        ms,
+        st,
+        fs,
+        ps,
+        ok,
+        i,
+        Spec.Request.Write{b, p, ws},
+        Bool.and(Bool.not(st), List.contains(~String, ~String.eq, wrs, Spec.Id.writer(i)))
+      )(Node.gate(st, List.contains(~String, ~String.eq, wrs, Spec.Id.writer(i)))(hs)(hw))(
+        Live.View.reads_own(name, fs, i, b, p, ws)
+      )
+
+def Spec.VendNode.mount_records(n, a, b, p, ws):
+  match n:
+    case Tuple{Nodes.Raw{+name, +wrs, +ms, +st, +fs, +ps}, +ok}:
+      hs => Node.asks_at(
+        s => {Answers.View.at(s, name, b, p) == Some{Some{ws}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        name,
+        wrs,
+        Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+        st,
+        fs,
+        ps,
+        ok,
+        Nodes.Mount.id(name, a),
+        Spec.Request.Write{b, p, Some{ws}},
+        Bool.not(st)
+      )(Node.gate_not(st)(hs))(Live.View.reads_own(name, fs, Nodes.Mount.id(name, a), b, p, Some{ws}))
+
+def Spec.VendNode.decides_alone(n, b, k, i, p, ws):
+  match n:
+    case Tuple{Nodes.Raw{+name, +wrs, +ms, +st, +fs, +ps}, +ok}:
+      +hs => hw => h1 => h2 => h3 => (
+        1n,
+        (
+          Spec.VendNode.does(
+            Node.asks(
+              name,
+              wrs,
+              ms,
+              st,
+              fs,
+              ps,
+              ok,
+              i,
+              Spec.Request.Write{b, p, ws},
+              Bool.and(Bool.not(st), List.contains(~String, ~String.eq, wrs, Spec.Id.writer(i)))
+            ),
+            Spec.Deed.Work{}
+          ),
+          (
+            {==},
+            Node.asks_works_at(
+              s => {
+                Answers.Answer.of(s, Spec.Question.Status{b, i})
+                  == Some{Spec.Reply.Status{Spec.Status.Written{}}}: Maybe<&2, Spec.Reply>
+              },
+              name,
+              wrs,
+              ms,
+              st,
+              fs,
+              ps,
+              ok,
+              i,
+              Spec.Request.Write{b, p, ws},
+              Bool.and(Bool.not(st), List.contains(~String, ~String.eq, wrs, Spec.Id.writer(i)))
+            )(hs)(Node.gate(st, List.contains(~String, ~String.eq, wrs, Spec.Id.writer(i)))(hs)(hw))(
+              Live.Work.decides(name, fs, b, k, i, p, ws)(ok)(h1)(h2)(h3)
+            )
+          )
+        )
+      )

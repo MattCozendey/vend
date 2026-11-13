@@ -2321,3 +2321,210 @@ def Core.group_of_era(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +gs: List<&2
   )
 ):
   e => Core.group_of_era.rule(s, c, k, gs, Group.some(Answers.Rule.for(s, c, k), gs)(e))
+
+# Eras never go back
+# ------------------
+
+# the greater of a and x is at most the greater of a and y, when x is at most y
+def Nat.max_le_right(+a: Nat, +x: Nat, +y: Nat) -> {Nat.is_le(x, y) == True{}: Bool} -> {Nat.is_le(Nat.max(a, x), Nat.max(a, y)) == True{}: Bool}:
+  match a x y:
+    case 0n v w:
+      h => h
+    case 1n+p 0n 0n:
+      h => Shared.Nat.le_refl(p)
+    case 1n+p 0n 1n+q:
+      h => Lists.Nat.le_max_left(p, q)
+    case 1n+p 1n+v 0n:
+      h => Empty.absurd({Nat.is_le(Nat.max(p, v), p) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case 1n+p 1n+v 1n+q:
+      Nat.max_le_right(p, v, q)
+
+# one less than a is at most one less than b, when a is at most b
+def Nat.pred_le(+a: Nat, +b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {Nat.is_le(Nat.sub(a, 1n), Nat.sub(b, 1n)) == True{}: Bool}:
+  match a b:
+    case 0n w:
+      h => Shared.Nat.le_zero(Nat.sub(w, 1n))
+    case 1n+p 0n:
+      h => Empty.absurd({Nat.is_le(Nat.sub(p, 0n), 0n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case 1n+p 1n+q:
+      h => (
+        %Equal.sym(Nat, Nat.sub(p, 0n), p, Shared.Nat.sub_zero(p)): {Nat.is_le(_, Nat.sub(q, 0n)) == True{}: Bool}
+        %Equal.sym(Nat, Nat.sub(q, 0n), q, Shared.Nat.sub_zero(q)): {Nat.is_le(p, _) == True{}: Bool}
+        h
+      )
+
+# the first a of a list are no more than its first b, when a is at most b
+def Take.length_le(+vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {
+  Nat.is_le(List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, a)), List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, b))) == True{}: Bool
+}:
+  match vs a b:
+    case Nil{} p q:
+      h => {==}
+    case Con{x, t} 0n q:
+      h => Shared.Nat.le_zero(List.length(&2, Types.Entry, List.take(&2, Types.Entry, x <> t, q)))
+    case Con{x, t} 1n+p 0n:
+      h => Empty.absurd(
+        {Nat.is_le(1n+List.length(&2, Types.Entry, List.take(&2, Types.Entry, t, p)), 0n) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{x, t} 1n+p 1n+q:
+      Take.length_le(t, p, q)
+
+# the greatest era of the first a of a list is at most that of its first b,
+# when a is at most b
+def Take.peak_le(+vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {
+  Nat.is_le(
+    Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, vs, a)),
+    Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, vs, b))
+  )
+    == True{}: Bool
+}:
+  match vs a b:
+    case Nil{} p q:
+      h => {==}
+    case Con{x, t} 0n q:
+      h => Shared.Nat.le_zero(Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, x <> t, q)))
+    case Con{x, t} 1n+p 0n:
+      h => Empty.absurd(
+        {Nat.is_le(Nat.max(Lines.Entry.era(x), Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, t, p))), 0n) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Con{x, t} 1n+p 1n+q:
+      h => Nat.max_le_right(
+        Lines.Entry.era(x),
+        Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, t, p)),
+        Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, t, q))
+      )(Take.peak_le(t, p, q)(h))
+
+# the era after the first a versions of a line is at most that after its
+# first b, when a is at most b
+def Era.take_le(c: Ledgers.Line, +vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {
+  Nat.is_le(Lines.Line.era(c, List.take(&2, Types.Entry, vs, a)), Lines.Line.era(c, List.take(&2, Types.Entry, vs, b))) == True{}: Bool
+}:
+  match c:
+    case Ledgers.Line{r, None{}}:
+      h => Nat.pred_le(
+        List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, a)),
+        List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, b))
+      )(Take.length_le(vs, a, b)(h))
+    case Ledgers.Line{r, Some{br}}:
+      Take.peak_le(vs, a, b)
+
+# Era.at, once the line is known to have the version (b)
+def Era.at.if(-c: Ledgers.Line, b: Bool, -P: List<&2, Types.Entry>, -x: Nat) -> {
+  Maybe.map(
+    &2,
+    List<&2, Types.Entry>,
+    Nat,
+    vs => Lines.Line.era(c, vs),
+    Shared.Maybe.when(List<&2, Types.Entry>, b, u => Some{P})
+  )
+    == Some{x}: Maybe<&2, Nat>
+} -> {Lines.Line.era(c, P) == x: Nat}:
+  match b:
+    case True{}:
+      h => Shared.Maybe.some_inj(Nat, Lines.Line.era(c, P), x, h)
+    case False{}:
+      h => Empty.absurd({Lines.Line.era(c, P) == x: Nat}, Shared.Maybe.none_ne_some(Nat, x, h))
+
+# the era of version 1+i of a line: the line has versions, and it is the era
+# after the first 1+i of them
+def Era.at(+c: Ledgers.Line, +i: Nat, mv: Maybe<&2, List<&2, Types.Entry>>, -x: Nat) -> {
+  Maybe.map(&2, List<&2, Types.Entry>, Nat, vs => Lines.Line.era(c, vs), Answers.Line.before.of(i, mv)) == Some{x}: Maybe<&2, Nat>
+} -> Exists(
+  List<&2, Types.Entry>,
+  ws => {mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
+):
+  match mv:
+    case None{}:
+      h => Empty.absurd(
+        Exists(
+          List<&2, Types.Entry>,
+          ws => {None{} == Some{ws}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
+        ),
+        Shared.Maybe.none_ne_some(Nat, x, h)
+      )
+    case Some{+vs}:
+      h => (
+        vs,
+        (
+          {==},
+          Era.at.if(c, Nat.is_lt(i, List.length(&2, Types.Entry, vs)), List.take(&2, Types.Entry, vs, 1n+i), x)(h)
+        )
+      )
+
+# Era.grow, with the versions of the line as each era gives them
+def Era.grow.of(
+  +c: Ledgers.Line,
+  +i: Nat,
+  +j: Nat,
+  -mv: Maybe<&2, List<&2, Types.Entry>>,
+  -x: Nat,
+  -y: Nat,
+  l: {Nat.is_le(i, j) == True{}: Bool},
+  p: Exists(
+    List<&2, Types.Entry>,
+    ws => {mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
+  ),
+  q: Exists(
+    List<&2, Types.Entry>,
+    ws => {mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+j)) == y: Nat}
+  )
+) -> {Nat.is_le(x, y) == True{}: Bool}:
+  (+vs, p2) = p
+  (ev, ex) = p2
+  (ws, q2) = q
+  (ew, ey) = q2
+  %ex: {Nat.is_le(_, y) == True{}: Bool}
+  %ey: {Nat.is_le(Lines.Line.era(c, List.take(&2, Types.Entry, vs, 1n+i)), _) == True{}: Bool}
+  %Shared.Maybe.some_inj(
+    List<&2, Types.Entry>,
+    vs,
+    ws,
+    Equal.trans(
+      Maybe<&2, List<&2, Types.Entry>>,
+      Some{vs},
+      mv,
+      Some{ws},
+      Equal.sym(Maybe<&2, List<&2, Types.Entry>>, mv, Some{vs}, ev),
+      ew
+    )
+  ): {
+    Nat.is_le(Lines.Line.era(c, List.take(&2, Types.Entry, vs, 1n+i)), Lines.Line.era(c, List.take(&2, Types.Entry, _, 1n+j))) == True{}: Bool
+  }
+  Era.take_le(c, vs, 1n+i, 1n+j)(l)
+
+# the era of a version of a line is at most the era of a later version
+def Era.grow(+s: Facts.Facts(), +c: Ledgers.Line, a: Nat, b: Nat, -x: Nat, -y: Nat) -> {
+  Nat.is_le(a, b) == True{}: Bool
+} -> {Answers.Era.for(s, c, a) == Some{x}: Maybe<&2, Nat>} -> {Answers.Era.for(s, c, b) == Some{y}: Maybe<&2, Nat>} -> {
+  Nat.is_le(x, y) == True{}: Bool
+}:
+  match a b:
+    case 0n q:
+      l => e1 => e2 => Empty.absurd({Nat.is_le(x, y) == True{}: Bool}, Shared.Maybe.none_ne_some(Nat, x, e1))
+    case 1n+i 0n:
+      l => e1 => e2 => Empty.absurd({Nat.is_le(x, y) == True{}: Bool}, Shared.Maybe.none_ne_some(Nat, y, e2))
+    case 1n+i 1n+j:
+      +i = i
+      +j = j
+      l => e1 => e2 => Era.grow.of(
+        c,
+        i,
+        j,
+        Lines.Line.versions(s, c),
+        x,
+        y,
+        l,
+        Era.at(c, i, Lines.Line.versions(s, c), x)(e1),
+        Era.at(c, j, Lines.Line.versions(s, c), y)(e2)
+      )
+
+# Eras never go back: a later version of a line is decided by groups of the
+# same or a later version of the store.
+def Core.eras_grow(+s: Facts.Facts(), +c: Ledgers.Line, +a: Nat, +b: Nat, +x: Nat, +y: Nat) -> {
+  Nat.is_le(a, b) == True{}: Bool
+} -> {Answers.Answer.of(s, Spec.Question.Era{c, a}) == Some{Spec.Reply.Number{x}}: Maybe<&2, Spec.Reply>} -> {
+  Answers.Answer.of(s, Spec.Question.Era{c, b}) == Some{Spec.Reply.Number{y}}: Maybe<&2, Spec.Reply>
+} -> {Nat.is_le(x, y) == True{}: Bool}:
+  l => e1 => e2 => Era.grow(s, c, a, b, x, y)(l)(Reply.number_some(Answers.Era.for(s, c, a), x)(e1))(Reply.number_some(Answers.Era.for(s, c, b), y)(e2))

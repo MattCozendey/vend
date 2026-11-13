@@ -10,6 +10,7 @@ import ./lines.bend as Lines
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
 import ./types.bend as Types
+import ./versions.bend as Versions
 
 # What stays as the facts grow
 # ----------------------------
@@ -490,6 +491,304 @@ def Rule.grows(m: Maybe<&2, List<&2, Types.Entry>>, +zs: List<&2, Types.Entry>, 
       e => e
     case Some{+R}:
       e => Rule.at_append(R, zs, c, Lines.Line.era(c, vs), u)(e)
+
+# The run
+# -------
+
+# a decided slot stays decided in a wider set that names no liar, as the store
+# of the line grows
+def Step.stays(+s: Facts.Facts(), +s2: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +zs: List<&2, Types.Entry>, +c: Ledgers.Line, st: Lines.State, -st1: Lines.State) -> {
+  Facts.Facts.wider(s, s2) == True{}: Bool
+} -> {Facts.Facts.liars(s2) == []: List<&2, String>} -> {
+  Lines.Line.step(s, R, c, st) == Some{st1}: Maybe<&2, Lines.State>
+} -> {Lines.Line.step(s2, Store.grow(R, zs), c, st) == Some{st1}: Maybe<&2, Lines.State>}:
+  match st:
+    case Lines.State{+vs, +k}:
+      w => h => e => Versions.Step.at_by(
+        {Lines.Line.step(s2, Store.grow(R, zs), c, Lines.State{vs, k}) == Some{st1}: Maybe<&2, Lines.State>},
+        s,
+        c,
+        Lines.State{vs, k},
+        st1,
+        Lines.Line.rule(R, c, vs),
+        Versions.Step.at_inv(s, c, Lines.State{vs, k}, st1, Lines.Line.rule(R, c, vs))(e),
+        +u => +pk => eu => ed => eb => (
+          %Equal.sym(Maybe<&2, Lines.Rule>, Lines.Line.rule(Store.grow(R, zs), c, vs), Some{u}, Rule.grows(R, zs, c, vs, u)(eu)): {
+            Lines.Line.step.at(s2, c, Lines.State{vs, k}, _) == Some{st1}: Maybe<&2, Lines.State>
+          }
+          %Equal.sym(
+            Maybe<&2, Types.Pick>,
+            Lines.Votes.decided(s2, Types.Step.At{c, k}, Lines.Rule.nodes(u)),
+            Some{pk},
+            Votes.decided_stays(s, s2, Types.Step.At{c, k}, Lines.Rule.nodes(u), pk)(w)(h)(ed)
+          ): {Lines.Line.step.of(Lines.State{vs, k}, _) == Some{st1}: Maybe<&2, Lines.State>}
+          %eb: {Some{Lines.State.put(vs, k, pk)} == Some{_}: Maybe<&2, Lines.State>}
+          {==}
+        )
+      )
+
+# the versions after a run of any length extend the versions before it
+def Run.grows(f: Nat, +s: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +st: Lines.State) -> Lists.List.Ext(
+  Types.Entry,
+  Lines.State.versions(st),
+  Lines.State.versions(Lines.Line.run(f, s, R, c, st, Lines.Line.step(s, R, c, st)))
+):
+  Versions.Run.keeps(
+    ~List<&2, Types.Entry>,
+    ~Versions.Run.Ext,
+    ~Versions.Run.ext_step,
+    f,
+    Lines.State.versions(st),
+    s,
+    R,
+    c,
+    st,
+    Lists.List.ext_refl(Types.Entry, Lines.State.versions(st))
+  )
+
+# the versions after a run in a wider set that names no liar, with a store
+# that grew and at least as many slots, extend the versions after the run
+def Run.stays(f: Nat, f2: Nat, +s: Facts.Facts(), +s2: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +zs: List<&2, Types.Entry>, +c: Ledgers.Line, +st: Lines.State) -> {
+  Facts.Facts.wider(s, s2) == True{}: Bool
+} -> {Facts.Facts.liars(s2) == []: List<&2, String>} -> {Nat.is_le(f, f2) == True{}: Bool} -> Lists.List.Ext(
+  Types.Entry,
+  Lines.State.versions(Lines.Line.run(f, s, R, c, st, Lines.Line.step(s, R, c, st))),
+  Lines.State.versions(Lines.Line.run(f2, s2, Store.grow(R, zs), c, st, Lines.Line.step(s2, Store.grow(R, zs), c, st)))
+):
+  match f f2:
+    case 0n g:
+      w => h => l => Run.grows(g, s2, Store.grow(R, zs), c, st)
+    case 1n+p 0n:
+      w => h => l => Empty.absurd(
+        Lists.List.Ext(
+          Types.Entry,
+          Lines.State.versions(Lines.Line.run(1n+p, s, R, c, st, Lines.Line.step(s, R, c, st))),
+          Lines.State.versions(st)
+        ),
+        Shared.Bool.false_ne_true(l)
+      )
+    case 1n+(+p) 1n+(+p2):
+      +w => +h => l => Lists.Maybe.by(
+        Lines.State,
+        m => Lists.List.Ext(
+          Types.Entry,
+          Lines.State.versions(Lines.Line.run(1n+p, s, R, c, st, m)),
+          Lines.State.versions(Lines.Line.run(1n+p2, s2, Store.grow(R, zs), c, st, Lines.Line.step(s2, Store.grow(R, zs), c, st)))
+        ),
+        Lines.Line.step(s, R, c, st),
+        en => Run.grows(1n+p2, s2, Store.grow(R, zs), c, st),
+        +st1 => e1 => (
+          %Equal.sym(
+            Maybe<&2, Lines.State>,
+            Lines.Line.step(s2, Store.grow(R, zs), c, st),
+            Some{st1},
+            Step.stays(s, s2, R, zs, c, st, st1)(w)(h)(e1)
+          ): Lists.List.Ext(
+            Types.Entry,
+            Lines.State.versions(Lines.Line.run(p, s, R, c, st1, Lines.Line.step(s, R, c, st1))),
+            Lines.State.versions(Lines.Line.run(1n+p2, s2, Store.grow(R, zs), c, st, _))
+          )
+          Run.stays(p, p2, s, s2, R, zs, c, st1)(w)(h)(l)
+        )
+      )
+
+# The slots that are read
+# -----------------------
+
+# the greater of two numbers that are at most n is at most n
+def Nat.max_le(a: Nat, b: Nat, n: Nat) -> {Nat.is_le(a, n) == True{}: Bool} -> {Nat.is_le(b, n) == True{}: Bool} -> {
+  Nat.is_le(Nat.max(a, b), n) == True{}: Bool
+}:
+  match a b n:
+    case 0n y z:
+      ha => hb => hb
+    case 1n+x 0n z:
+      ha => hb => ha
+    case 1n+x 1n+y 0n:
+      ha => hb => ha
+    case 1n+x 1n+y 1n+z:
+      Nat.max_le(x, y, z)
+
+# a hit and a rest that are both true: the hit is
+def All.head(hit: Bool, -rest: Unit -> Bool) -> {List.all.if(rest, hit) == True{}: Bool} -> {hit == True{}: Bool}:
+  match hit:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => h
+
+# a hit and a rest that are both true: the rest is
+def All.tail(hit: Bool, -rest: Unit -> Bool) -> {List.all.if(rest, hit) == True{}: Bool} -> {rest(Unit{}) == True{}: Bool}:
+  match hit:
+    case True{}:
+      h => h
+    case False{}:
+      h => Empty.absurd({rest(Unit{}) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+
+# the bound of the slots of a line is at least 1
+def Line.bound_pos(fs: List<&2, Types.Fact>, +c: Ledgers.Line) -> {Nat.is_le(1n, Lines.Line.bound(fs, c)) == True{}: Bool}:
+  match fs:
+    case Nil{}:
+      {==}
+    case Con{Types.Fact.Ask{a}, rest}:
+      Line.bound_pos(rest, c)
+    case Con{Types.Fact.Vote{v, Types.Step.Broken{}, pk}, rest}:
+      Line.bound_pos(rest, c)
+    case Con{Types.Fact.Vote{v, Types.Step.At{+c2, +k}, pk}, +rest}:
+      Shared.Nat.le_trans(
+        1n,
+        Lines.Line.bound(rest, c),
+        Nat.max(Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), Lines.Line.bound(rest, c))
+      )(Line.bound_pos(rest, c))(
+        Lists.Nat.le_max_right(Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), Lines.Line.bound(rest, c))
+      )
+
+# the bound of the slots of a line does not shrink with one more fact
+def Line.bound_cons(g: Types.Fact, +rest: List<&2, Types.Fact>, +c: Ledgers.Line) -> {
+  Nat.is_le(Lines.Line.bound(rest, c), Lines.Line.bound(g <> rest, c)) == True{}: Bool
+}:
+  match g:
+    case Types.Fact.Ask{a}:
+      Shared.Nat.le_refl(Lines.Line.bound(rest, c))
+    case Types.Fact.Vote{v, Types.Step.Broken{}, pk}:
+      Shared.Nat.le_refl(Lines.Line.bound(rest, c))
+    case Types.Fact.Vote{v, Types.Step.At{+c2, +k}, pk}:
+      Lists.Nat.le_max_right(Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k), Lines.Line.bound(rest, c))
+
+# the bound of the slots of a line is above each slot that a vote among fs is for
+def Line.bound_ge(fs: List<&2, Types.Fact>, +c: Ledgers.Line, +v: String, +k: Nat, +pk: Types.Pick) -> {
+  List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}) == True{}: Bool
+} -> {Nat.is_le(1n+k, Lines.Line.bound(fs, c)) == True{}: Bool}:
+  match fs:
+    case Nil{}:
+      h => Empty.absurd({Nat.is_le(1n+k, 1n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Con{+g, +r}:
+      hin => Lists.List.contains_cons_by(
+        ~Types.Fact,
+        ~Coded.Fact.is_eq,
+        ~Coded.Fact.laws(),
+        {Nat.is_le(1n+k, Lines.Line.bound(g <> r, c)) == True{}: Bool},
+        g,
+        r,
+        Types.Fact.Vote{v, Types.Step.At{c, k}, pk},
+        hin,
+        eg => (
+          %Equal.sym(Types.Fact, g, Types.Fact.Vote{v, Types.Step.At{c, k}, pk}, eg): {
+            Nat.is_le(1n+k, Lines.Line.bound(_ <> r, c)) == True{}: Bool
+          }
+          %Equal.sym(Bool, Ledgers.Line.is_eq(c, c), True{}, Ledgers.Line.is_eq_refl(c)): {
+            Nat.is_le(1n+k, Nat.max(Lines.Line.bound.at(_, k), Lines.Line.bound(r, c))) == True{}: Bool
+          }
+          Lists.Nat.le_max_left(1n+k, Lines.Line.bound(r, c))
+        ),
+        cin => Shared.Nat.le_trans(1n+k, Lines.Line.bound(r, c), Lines.Line.bound(g <> r, c))(
+          Line.bound_ge(r, c, v, k, pk)(cin)
+        )(Line.bound_cons(g, r, c))
+      )
+
+# the bound of the slots of a line, from facts that a set holds, is at most
+# the bound from the facts of the set
+def Line.bound_mono(fs: List<&2, Types.Fact>, +s2: Facts.Facts(), +c: Ledgers.Line) -> {
+  Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, fs, s2) == True{}: Bool
+} -> {Nat.is_le(Lines.Line.bound(fs, c), Lines.Line.bound(Facts.Facts.list(s2), c)) == True{}: Bool}:
+  match fs:
+    case Nil{}:
+      h => Line.bound_pos(Facts.Facts.list(s2), c)
+    case Con{Types.Fact.Ask{+a}, +rest}:
+      h => Line.bound_mono(rest, s2, c)(
+        All.tail(
+          Facts.Facts.has(s2, Types.Fact.Ask{a}),
+          u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s2)
+        )(h)
+      )
+    case Con{Types.Fact.Vote{+v, Types.Step.Broken{}, +pk}, +rest}:
+      h => Line.bound_mono(rest, s2, c)(
+        All.tail(
+          Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.Broken{}, pk}),
+          u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s2)
+        )(h)
+      )
+    case Con{Types.Fact.Vote{+v, Types.Step.At{+c2, +k}, +pk}, +rest}:
+      +h => Nat.max_le(
+        Lines.Line.bound.at(Ledgers.Line.is_eq(c2, c), k),
+        Lines.Line.bound(rest, c),
+        Lines.Line.bound(Facts.Facts.list(s2), c)
+      )(
+        Lists.Bool.by(
+          b => {Nat.is_le(Lines.Line.bound.at(b, k), Lines.Line.bound(Facts.Facts.list(s2), c)) == True{}: Bool},
+          Ledgers.Line.is_eq(c2, c),
+          et => Line.bound_ge(Facts.Facts.list(s2), c, v, k, pk)(
+            Facts.Facts.has_in(s2, Types.Fact.Vote{v, Types.Step.At{c, k}, pk})(
+              (
+                %Ledgers.Line.is_eq_sound(c2, c)(et): {
+                  Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.At{_, k}, pk}) == True{}: Bool
+                }
+                All.head(
+                  Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.At{c2, k}, pk}),
+                  u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s2)
+                )(h)
+              )
+            )
+          ),
+          ef => Shared.Nat.le_zero(Lines.Line.bound(Facts.Facts.list(s2), c))
+        )
+      )(
+        Line.bound_mono(rest, s2, c)(
+          All.tail(
+            Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.At{c2, k}, pk}),
+            u => Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, rest, s2)
+          )(h)
+        )
+      )
+
+# the versions of a line from its version 0 on, in a wider set that names no
+# liar and with a store that grew, extend its versions from version 0 on
+def From.stays(+s: Facts.Facts(), +s2: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +zs: List<&2, Types.Entry>, +c: Ledgers.Line, +e0: Types.Entry, -vs: List<&2, Types.Entry>) -> {
+  Facts.Facts.wider(s, s2) == True{}: Bool
+} -> {Facts.Facts.liars(s2) == []: List<&2, String>} -> {
+  Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, Lines.Line.from(s, R, c, Some{e0})) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
+} -> Exists(
+  List<&2, Types.Entry>,
+  vs2 => {
+    Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, Lines.Line.from(s2, Store.grow(R, zs), c, Some{e0})) == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
+  }
+    & Lists.List.Ext(Types.Entry, vs, vs2)
+):
+  +w => hn => e => (
+    Lines.State.versions(Lines.Line.start(s2, Store.grow(R, zs), c, Lines.State{[e0], 1n})),
+    (
+      {==},
+      (
+        %Shared.Maybe.some_inj(
+          List<&2, Types.Entry>,
+          Lines.State.versions(Lines.Line.start(s, R, c, Lines.State{[e0], 1n})),
+          vs,
+          e
+        ): Lists.List.Ext(
+          Types.Entry,
+          _,
+          Lines.State.versions(Lines.Line.start(s2, Store.grow(R, zs), c, Lines.State{[e0], 1n}))
+        )
+        Run.stays(
+          Lines.Line.bound(Facts.Facts.list(s), c),
+          Lines.Line.bound(Facts.Facts.list(s2), c),
+          s,
+          s2,
+          R,
+          zs,
+          c,
+          Lines.State{[e0], 1n}
+        )(w)(hn)(
+          Line.bound_mono(Facts.Facts.list(s), s2, c)(
+            Shared.Bool.and_true_left(
+              Shared.List.holds(~Types.Fact, ~Facts.Facts(), ~Facts.Fact.held, Facts.Facts.list(s), s2),
+              Nat.is_le(Facts.Facts.fuel(s), Facts.Facts.fuel(s2))
+            )(w)
+          )
+        )
+      )
+    )
+  )
 
 # the versions of a line stay: the larger set decides them, and maybe more
 # after them
