@@ -26636,7 +26636,120 @@ def Mst.diff_differ(
 ) -> {Mst.diff.go(~S, ~fetch, f, s, runs) == Some{ks}: Maybe<&2, List<&2, List<&2, U32>>>} -> {Runs.sorted_all(runs) == True{}: Bool} -> {
   List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, k) == Runs.differ(~S, ~fetch, f, s, runs, k): Bool
 }:
-  ?TODO
+  match f runs:
+    case x Nil{}:
+      e => h =>
+        %Shared.Maybe.some_inj(List<&2, List<&2, U32>>, [], ks, e): {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), _, k) == False{}: Bool}
+        {==}
+    case 0n Con{x, rest}:
+      e => h => Empty.absurd({List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, k) == Runs.differ(~S, ~fetch, 0n, s, x <> rest, k): Bool}, Shared.Maybe.none_ne_some(List<&2, List<&2, U32>>, ks, e))
+    case 1n+(+q) Con{Runs{+a, +b}, +rest}:
+      e => +h => Maybe.bind_cases(
+        Round,
+        List<&2, List<&2, U32>>,
+        Mst.step(~S, ~fetch, s, Round.pairs(Mst.cut(a, b, [], []))),
+        +r => Maybe.bind(
+          &2,
+          List<&2, List<&2, U32>>,
+          List<&2, List<&2, U32>>,
+          Mst.diff.go(~S, ~fetch, q, s, Round.pairs(r)),
+          k3 => Maybe.map(
+            &2,
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            k4 => List.append(&2, List<&2, U32>, Round.keys(Mst.cut(a, b, [], [])), List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))),
+            Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+          )
+        ),
+        ks,
+        {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, k) == Runs.differ(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest, k): Bool},
+        +r => +er => e2 => Maybe.bind_cases(
+          List<&2, List<&2, U32>>,
+          List<&2, List<&2, U32>>,
+          Mst.diff.go(~S, ~fetch, q, s, Round.pairs(r)),
+          k3 => Maybe.map(
+            &2,
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            k4 => List.append(&2, List<&2, U32>, Round.keys(Mst.cut(a, b, [], [])), List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))),
+            Mst.diff.go(~S, ~fetch, 1n+q, s, rest)
+          ),
+          ks,
+          {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, k) == Runs.differ(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest, k): Bool},
+          +k3 => e3 => e4 => Maybe.map_cases(
+            List<&2, List<&2, U32>>,
+            List<&2, List<&2, U32>>,
+            Mst.diff.go(~S, ~fetch, 1n+q, s, rest),
+            k4 => List.append(&2, List<&2, U32>, Round.keys(Mst.cut(a, b, [], [])), List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))),
+            ks,
+            {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), ks, k) == Runs.differ(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest, k): Bool},
+            +k4 => e5 => e6 =>
+              +goodc = Mst.cut_good(a, b, [], [])(Shared.Bool.and_true_left(Pieces.sorted(a), Pieces.sorted(b))(Shared.Bool.and_true_left(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Runs.sorted_all(rest))(h)))(Shared.Bool.and_true_right(Pieces.sorted(a), Pieces.sorted(b))(Shared.Bool.and_true_left(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Runs.sorted_all(rest))(h)))({==})({==})({==})
+              %e6: {List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), _, k) == Runs.differ(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest, k): Bool}
+              %Equal.sym(
+                Bool,
+                List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), List.append(&2, List<&2, U32>, Round.keys(Mst.cut(a, b, [], [])), List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4))), k),
+                Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4)), k)),
+                Shared.List.contains_append(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4)), k)
+              ): {_ == Runs.differ(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest, k): Bool}
+              %Equal.sym(
+                Bool,
+                List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), List.append(&2, List<&2, U32>, Round.keys(r), List.append(&2, List<&2, U32>, k3, k4)), k),
+                Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), List.append(&2, List<&2, U32>, k3, k4), k)),
+                Shared.List.contains_append(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), List.append(&2, List<&2, U32>, k3, k4), k)
+              ): {Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), _) == Runs.differ(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest, k): Bool}
+              %Equal.sym(
+                Bool,
+                List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), List.append(&2, List<&2, U32>, k3, k4), k),
+                Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), k3, k), List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), k4, k)),
+                Shared.List.contains_append(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), k3, k4, k)
+              ): {Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), _)) == Runs.differ(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest, k): Bool}
+              %Equal.sym(Bool, List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), k3, k), Runs.differ(~S, ~fetch, q, s, Round.pairs(r), k), Mst.diff_differ(~S, ~fetch, q, s, Round.pairs(r), k3, k)(e3)(Mst.step_sorted(~S, ~fetch, s, Round.pairs(Mst.cut(a, b, [], [])), r)(er)(goodc))): {
+                Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), Bool.or(_, List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), k4, k)))) == Runs.differ(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest, k): Bool
+              }
+              %Equal.sym(
+                Bool,
+                List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), k4, k),
+                Runs.differ(~S, ~fetch, 1n+q, s, rest, k),
+                Mst.diff_differ(~S, ~fetch, 1n+q, s, rest, k4, k)(e5)(Shared.Bool.and_true_right(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Runs.sorted_all(rest))(h))
+              ): {Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), Bool.or(Runs.differ(~S, ~fetch, q, s, Round.pairs(r), k), _))) == Runs.differ(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest, k): Bool}
+              Equal.trans(
+                Bool,
+                Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), Bool.or(Runs.differ(~S, ~fetch, q, s, Round.pairs(r), k), Runs.differ(~S, ~fetch, 1n+q, s, rest, k)))),
+                Bool.or(Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), Runs.differ(~S, ~fetch, q, s, Round.pairs(r), k))), Runs.differ(~S, ~fetch, 1n+q, s, rest, k)),
+                Runs.differ(~S, ~fetch, 1n+q, s, Runs{a, b} <> rest, k),
+                Bool.or_assoc4(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), Runs.differ(~S, ~fetch, q, s, Round.pairs(r), k), Runs.differ(~S, ~fetch, 1n+q, s, rest, k)),
+                Equal.cong(
+                  Bool,
+                  Bool,
+                  z => Bool.or(z, Runs.differ(~S, ~fetch, 1n+q, s, rest, k)),
+                  Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), Runs.differ(~S, ~fetch, q, s, Round.pairs(r), k))),
+                  Mst.differ(Pieces.value(~S, ~fetch, 1n+q, s, a, k), Pieces.value(~S, ~fetch, 1n+q, s, b, k)),
+                  Equal.trans(
+                    Bool,
+                    Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), Runs.differ(~S, ~fetch, q, s, Round.pairs(r), k))),
+                    Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), Runs.differ(~S, ~fetch, 1n+q, s, Round.pairs(Mst.cut(a, b, [], [])), k)),
+                    Mst.differ(Pieces.value(~S, ~fetch, 1n+q, s, a, k), Pieces.value(~S, ~fetch, 1n+q, s, b, k)),
+                    Equal.cong(
+                      Bool,
+                      Bool,
+                      z => Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), z),
+                      Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), Runs.differ(~S, ~fetch, q, s, Round.pairs(r), k)),
+                      Runs.differ(~S, ~fetch, 1n+q, s, Round.pairs(Mst.cut(a, b, [], [])), k),
+                      Equal.sym(Bool, Runs.differ(~S, ~fetch, 1n+q, s, Round.pairs(Mst.cut(a, b, [], [])), k), Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(r), k), Runs.differ(~S, ~fetch, q, s, Round.pairs(r), k)), Mst.step_differ(~S, ~fetch, q, s, Round.pairs(Mst.cut(a, b, [], [])), r, k)(er)(goodc))
+                    ),
+                    Equal.sym(
+                      Bool,
+                      Mst.differ(Pieces.value(~S, ~fetch, 1n+q, s, a, k), Pieces.value(~S, ~fetch, 1n+q, s, b, k)),
+                      Bool.or(List.contains(~List<&2, U32>, ~Shared.List.is_eq(~U32, ~U32.is_eq), Round.keys(Mst.cut(a, b, [], [])), k), Runs.differ(~S, ~fetch, 1n+q, s, Round.pairs(Mst.cut(a, b, [], [])), k)),
+                      Mst.cut_differ(~S, ~fetch, 1n+q, s, a, b, [], [], k)(Shared.Bool.and_true_left(Pieces.sorted(a), Pieces.sorted(b))(Shared.Bool.and_true_left(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Runs.sorted_all(rest))(h)))(Shared.Bool.and_true_right(Pieces.sorted(a), Pieces.sorted(b))(Shared.Bool.and_true_left(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Runs.sorted_all(rest))(h)))
+                    )
+                  )
+                )
+              )
+          )(e4)
+        )(e2)
+      )(e)
 
 # a level below u, with fuel for u, leaves fuel for it one level down
 def Nat.fuel_down(l: Nat, u: Nat, p: Nat) -> {Nat.is_lt(l, u) == True{}: Bool} -> {Nat.is_le(u, 1n+p) == True{}: Bool} -> {
