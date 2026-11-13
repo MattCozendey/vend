@@ -8,6 +8,7 @@ import ./answers.bend as Answers
 import ./codes.bend as Coded
 import ./content.bend as Contents
 import ./facts.bend as Facts
+import ./forward.bend as Forward
 import ./laws.bend as Laws
 import ./lines.bend as Lines
 import ./live.bend as Live
@@ -1250,8 +1251,86 @@ def Spec.VendNode.majority_decides(n, c, k, os, gs):
 def Spec.VendNode.branches_decided(n, r, b, x):
   Laws.Core.branches_decided(Node.facts(n), r, b, x)
 
+# the parents of a version, in the words of the spec
+def Node.parents_of(
+  r: Spec.Request,
+  -c: Ledgers.Line,
+  -k: Nat,
+  -ps: List<&2, Spec.Point>,
+  m: Mirror.Request.Parents(r, c, k, ps)
+) -> Spec.Request.Parents(r, c, k, ps):
+  match r:
+    case Spec.Request.Start{os}:
+      m
+    case Spec.Request.Write{b, p, w}:
+      m
+    case Spec.Request.Merge{f, x}:
+      m
+    case Spec.Request.Resolve{g, p, w}:
+      m
+    case Spec.Request.Mark{b, x, v}:
+      m
+    case Spec.Request.Move{b, t, v}:
+      m
+    case Spec.Request.Group{h, x, ms}:
+      m
+    case Spec.Request.Own{l, g}:
+      m
+
+# the law of the parents of the core, in the words of the spec
+def Node.parents_are.of(
+  -n: Spec.VendNode,
+  -c: Ledgers.Line,
+  -k: Nat,
+  -i: Ledgers.Id,
+  r: Spec.Request,
+  -ps: List<&2, Spec.Point>,
+  m: (
+    {
+      Spec.VendNode.answer(n, Spec.Question.Parents{c, 0n}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+    } -> {ps == []: List<&2, Spec.Point>}
+  )
+    & (
+      Mirror.Made(Node.facts(n), c, 1n+k, i, r) -> {
+        Spec.VendNode.answer(n, Spec.Question.Parents{c, 1n+k}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+      } -> Mirror.Request.Parents(r, c, k, ps)
+    )
+) -> (
+    {
+      Spec.VendNode.answer(n, Spec.Question.Parents{c, 0n}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+    } -> {ps == []: List<&2, Spec.Point>}
+  )
+    & (
+      Mirror.Made(Node.facts(n), c, 1n+k, i, r) -> {
+        Spec.VendNode.answer(n, Spec.Question.Parents{c, 1n+k}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+      } -> Spec.Request.Parents(r, c, k, ps)
+    ):
+  match m:
+    case Tuple{z, f}:
+      (z, hm => he => Node.parents_of(r, c, k, ps, f(hm)(he)))
+
+# the law of the parents of a node
+def Node.parents_are(
+  n: Spec.VendNode,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  +ps: List<&2, Spec.Point>
+) -> (
+    {
+      Spec.VendNode.answer(n, Spec.Question.Parents{c, 0n}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+    } -> {ps == []: List<&2, Spec.Point>}
+  )
+    & (
+      Mirror.Made(Node.facts(n), c, 1n+k, i, r) -> {
+        Spec.VendNode.answer(n, Spec.Question.Parents{c, 1n+k}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+      } -> Spec.Request.Parents(r, c, k, ps)
+    ):
+  Node.parents_are.of(n, c, k, i, r, ps, Laws.Core.parents_are(Node.facts(n), c, k, i, r, ps))
+
 def Spec.VendNode.parents_are(n, c, k, i, r, ps):
-  Laws.Core.parents_are(Node.facts(n), c, k, i, r, ps)
+  Node.parents_are(n, c, k, i, r, ps)
 
 def Spec.VendNode.group_nodes(n, s, g, k, ms, v):
   Owners.Core.group_nodes(Node.facts(n), s, g, k, ms, v)
@@ -1397,3 +1476,51 @@ def Node.before_of(
   match m:
     case Tuple{+qs, r}:
       (qs, Node.back_of(qs, n, a, c, k, r))
+
+# the replies of a node only move forward, while it names no liar
+def Node.answer_moves(+n: Spec.VendNode, +d: Spec.Deed, +q: Spec.Question, +a: Spec.Reply) -> Spec.VendNode.Honest(
+  Spec.VendNode.does(n, d)
+) -> {Spec.VendNode.answer(n, q) == Some{a}: Maybe<&2, Spec.Reply>} -> Exists(
+  Spec.Reply,
+  b => {Spec.VendNode.answer(Spec.VendNode.does(n, d), q) == Some{b}: Maybe<&2, Spec.Reply>} & Spec.Reply.Moves(q, a, b)
+):
+  hl => h => Forward.Core.answer_moves(
+    Spec.VendNode.name(Spec.VendNode.does(n, d)),
+    Node.facts(n),
+    Node.facts(Spec.VendNode.does(n, d)),
+    q,
+    a
+  )(Node.does_wider(n, d))(hl)(Node.ok(Spec.VendNode.does(n, d)))(h)
+
+def Spec.VendNode.answer_moves_forward(n, d, q, a):
+  Node.answer_moves(n, d, q, a)
+
+# a read of a node never changes to other words, while it names no liar
+def Node.read_stays(
+  +n: Spec.VendNode,
+  +d: Spec.Deed,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +p: String,
+  +x: Maybe<&2, List<&2, U32>>
+) -> Spec.VendNode.Honest(Spec.VendNode.does(n, d)) -> {
+  Spec.VendNode.read(n, c, k, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+} -> {
+  Spec.VendNode.read(Spec.VendNode.does(n, d), c, k, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}
+  | {Spec.VendNode.read(Spec.VendNode.does(n, d), c, k, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+  hl => h => Reads.Core.read_stays(
+    Spec.VendNode.name(Spec.VendNode.does(n, d)),
+    Node.facts(n),
+    Node.facts(Spec.VendNode.does(n, d)),
+    c,
+    k,
+    p,
+    x
+  )(Node.does_wider(n, d))(hl)(Node.ok(Spec.VendNode.does(n, d)))(h)
+
+def Spec.VendNode.read_stays(n, d, c, k, p, x):
+  Node.read_stays(n, d, c, k, p, x)
+
+def Spec.VendNode.move_equals(n, c, k, i, t, v, h, h2):
+  Reads.Core.move_equals(Node.facts(n), c, k, i, t, v, h, h2)
