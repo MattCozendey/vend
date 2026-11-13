@@ -3986,6 +3986,30 @@ def Replica.Good(
         )
     )
 
+# s after the deeds xs, one after another
+def Kind.run(~mach: Machine(), ~d: Led(mach), ~k: Replica.Kind(mach, d), xs: List<&2, Deed<Machine.Q(mach)>>, s: Kind.R(mach, d, k)) -> Kind.R(mach, d, k):
+  match xs:
+    case Nil{}:
+      s
+    case Con{x, rest}:
+      Kind.run(~mach, ~d, ~k, rest, Kind.does(mach, d, k)(s)(x))
+
+# that the replica s came to be by deeds: some deeds take the replica of some
+# name and seed that holds nothing to s. A replica that restarts is the one
+# it was, so it came to be so too. Laws that speak of what a replica keeps
+# between deeds (its count, its tops, its votes) speak of these
+def Replica.Reached(-mach: Machine(), -d: Led(mach), -k: Replica.Kind(mach, d), -s: Kind.R(mach, d, k)) -> Type:
+  Exists(
+    String,
+    name => Exists(
+      Hashes.Hash,
+      seed => Exists(
+        List<&2, Deed<Machine.Q(mach)>>,
+        xs => {s == Kind.run(~mach, ~d, ~k, xs, Kind.empty(mach, d, k)(name)(seed)): Kind.R(mach, d, k)}
+      )
+    )
+  )
+
 # a replica that holds nothing has its name, its seed, an empty ledger and no
 # consent
 def Laws.Empty(-mach: Machine(), -d: Led(mach), -k: Replica.Kind(mach, d)) -> Type:
@@ -4117,8 +4141,9 @@ def Laws.Drops(
     )
 
 # a replica never signs twice with one key: the count of its ballots under a
-# root never falls, and each ballot of its own under a root is signed with the
-# key of a number below the count, one number for each ballot. A replica keeps
+# root never falls, and, in a replica that came to be by deeds, each ballot of
+# its own under a root is signed with the key of a number below the count,
+# one number for each ballot. A replica keeps
 # its count where it keeps its data, before a ballot leaves it, so a replica
 # that restarts never numbers a ballot again
 def Laws.Count(-mach: Machine(), -d: Led(mach), -k: Replica.Kind(mach, d)) -> Type:
@@ -4129,7 +4154,7 @@ def Laws.Count(-mach: Machine(), -d: Led(mach), -k: Replica.Kind(mach, d)) -> Ty
     }
   )
     & (
-      @s: Kind.R(mach, d, k) -> @b: Ledgers.Ballot -> {
+      @s: Kind.R(mach, d, k) -> @b: Ledgers.Ballot -> Replica.Reached(mach, d, k, s) -> {
         Led.has(~mach, ~d, Kind.ledger(mach, d, k)(s), Ledgers.Entry.Ballot{b}) == True{}: Bool
       } -> {
         String.eq(Ledgers.Ballot.voter(b), Kind.name(mach, d, k)(s)) == True{}: Bool
@@ -4144,7 +4169,7 @@ def Laws.Count(-mach: Machine(), -d: Led(mach), -k: Replica.Kind(mach, d)) -> Ty
       )
     )
     & (
-      @s: Kind.R(mach, d, k) -> @a: Ledgers.Ballot -> @b: Ledgers.Ballot -> @n: U32 -> {
+      @s: Kind.R(mach, d, k) -> @a: Ledgers.Ballot -> @b: Ledgers.Ballot -> @n: U32 -> Replica.Reached(mach, d, k, s) -> {
         Led.has(~mach, ~d, Kind.ledger(mach, d, k)(s), Ledgers.Entry.Ballot{a}) == True{}: Bool
       } -> {
         Led.has(~mach, ~d, Kind.ledger(mach, d, k)(s), Ledgers.Entry.Ballot{b}) == True{}: Bool
@@ -4155,40 +4180,16 @@ def Laws.Count(-mach: Machine(), -d: Led(mach), -k: Replica.Kind(mach, d)) -> Ty
       } -> {Hashes.Hash.is_eq(Ledgers.Ballot.root(a), Ledgers.Ballot.root(b)) == True{}: Bool} -> {a == b: Ledgers.Ballot}
     )
 
-# a replica that holds nothing is good, and a good replica stays good,
-# whatever it does and whatever is sent to it: it keeps nothing that does not
-# check, and casts no ballot that breaks a promise
+# a replica that came to be by deeds is good, whatever it did and whatever
+# was sent to it: it keeps nothing that does not check, and casts no ballot
+# that breaks a promise
 def Laws.Good(
   -mach: Machine(),
   -d: Led(mach),
   -kern: Kernel(mach, d),
   -k: Replica.Kind(mach, d)
 ) -> Type:
-  (
-    @name: String -> @seed: Hashes.Hash -> Replica.Good(
-      mach,
-      d,
-      kern,
-      k,
-      Kind.empty(mach, d, k)(name)(seed)
-    )
-  )
-    & (
-      @s: Kind.R(
-        mach,
-        d,
-        k
-      ) -> @x: Deed<
-        Machine.Q(
-          mach
-        )> -> Replica.Good(
-        mach,
-        d,
-        kern,
-        k,
-        s
-      ) -> Replica.Good(mach, d, kern, k, Kind.does(mach, d, k)(s)(x))
-    )
+  @s: Kind.R(mach, d, k) -> Replica.Reached(mach, d, k, s) -> Replica.Good(mach, d, kern, k, s)
 
 # a replica holds what it takes in: when the entries that a deed brings check
 # with all of them (Deed.checks), each of them that no other entry of the deed
@@ -4271,9 +4272,9 @@ def Laws.Detects(-mach: Machine(), -d: Led(mach), -k: Replica.Kind(mach, d)) -> 
       == True{}: Bool
   }
 
-# a replica that passes on a line is then in a higher round: at its top of a
-# line where it is a voter and has a key, after the deed of a pass, the round
-# that it is in is above the round that it was in
+# a replica that came to be by deeds and passes on a line is then in a higher
+# round: at its top of a line where it is a voter and has a key, after the
+# deed of a pass, the round that it is in is above the round that it was in
 def Laws.Passes(
   -mach: Machine(),
   -d: Led(mach),
@@ -4284,7 +4285,7 @@ def Laws.Passes(
     mach,
     d,
     k
-  ) -> @c: Ledgers.Line -> @h: U32 -> @t: Tip -> {
+  ) -> Replica.Reached(mach, d, k, s) -> @c: Ledgers.Line -> @h: U32 -> @t: Tip -> {
     Kind.top(mach, d, k)(s)(c) == Some{Top{h, t}}: Maybe<&2, Top>
   } -> {
     List.contains(~String, ~String.eq, Tip.voters(t), Kind.name(mach, d, k)(s)) == True{}: Bool
@@ -18952,4 +18953,17 @@ law Tops.under_has:
     -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Tops.under(ts, Ledgers.Line.root(c)), c) == True{}: Bool}
 
 def Tops.under_has(ts, c):
+  ?TODO
+
+# Rep obeys the laws of a replica, for a kernel that asks again only where
+# watch says
+law Rep.laws:
+  for ~mach: Machine()
+  for ~d: Led(mach)
+  for ~kern: Kernel(mach, d)
+  for ~watch: Tops() -> Led.L(mach, d) -> List<&2, Ledgers.Line> -> Maybe<&2, List<&2, Ledgers.Line>>
+  for ~watched: Kernel.Watched(mach, d, kern, watch)
+  Replica.Laws(mach, d, kern, Rep.kind(~mach, ~d, ~kern, ~watch))
+
+def Rep.laws(mach, d, kern, watch, watched):
   ?TODO
