@@ -25886,7 +25886,26 @@ def Pieces.binds_below_nil(xs: List<&2, Piece>) -> {Pieces.binds_below(xs, []) =
 def Pieces.below_not_key(xs: List<&2, Piece>, +k: List<&2, U32>, +v: List<&2, U32>, +ys: List<&2, Piece>) -> {
   Pieces.binds_below(xs, Piece.Bind{k, v} <> ys) == True{}: Bool
 } -> {Pieces.has_key(xs, k) == False{}: Bool}:
-  ?TODO
+  match xs:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{+k2, v2}, +rest}:
+      +h => Bool.or_false_of(
+        Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+        Pieces.has_key(rest, k)
+      )(
+        Key.lt_ne(
+          k2,
+          k
+        )(
+          Shared.Bool.and_true_left(
+            Key.is_lt(k2, k),
+            Pieces.keys_after(k2, ys)
+          )(Shared.Bool.and_true_left(Pieces.keys_after(k2, Piece.Bind{k, v} <> ys), Pieces.binds_below(rest, Piece.Bind{k, v} <> ys))(h))
+        )
+      )(Pieces.below_not_key(rest, k, v, ys)(Shared.Bool.and_true_right(Pieces.keys_after(k2, Piece.Bind{k, v} <> ys), Pieces.binds_below(rest, Piece.Bind{k, v} <> ys))(h)))
+    case Con{Piece.Sub{h2, u, lo, hi}, +rest}:
+      h => Pieces.below_not_key(rest, k, v, ys)(h)
 
 # pieces apart from others are apart from them after a subtree
 def Pieces.apart_sub(as: List<&2, Piece>, +h: Hashes.Hash, +u: Nat, +lo: Maybe<&2, List<&2, U32>>, +hi: Maybe<&2, List<&2, U32>>, +bs: List<&2, Piece>) -> {
