@@ -17575,15 +17575,19 @@ def Entry.checks_sound(mach, d, kern, l, e):
 # The replica
 # -----------
 # A replica of a machine whose kernel asks again only where watch says
-# (Kernel.Watched). It keeps, beside its ledger, what it needs to act fast:
-# the requests that a client asked for, the count and the place of its last
-# ballot under each root, the requests that wait on each line, and the lines
-# where it waits for data.
+# (Kernel.Watched). Beside its ledger it keeps what it needs to act in time
+# that grows with the change, not with the ledger: the requests that a client
+# asked for; the count and the place of its last ballot under each root; the
+# requests that wait on each line; the lines that wait for data; its tops; and
+# the lines whose work a deed left. A deed settles each line that it touches
+# once: it lands the steps decided there, votes, and asks what the kernel says
+# for the lines that read a line that moved. A line where it voted, or where a
+# request now waits, is left busy for the next deed.
 
 # a replica: its name and seed, its ledger, the hashes of the requests that a
 # client asked for, the count and the place of its last ballot under each
-# root, the requests that wait on each line (by line and hash), and the lines
-# where it waits for data to act
+# root, the requests that wait on each line (by line and hash), the lines
+# that wait for data, its tops, and its busy lines
 type Rep<-L: Data> is Data:
   Rep{
     name: String,
@@ -17593,8 +17597,26 @@ type Rep<-L: Data> is Data:
     counts: Crits.Dict(U32),
     lasts: Crits.Dict(Ledgers.Place),
     pending: Crits.Dict(Hashes.Hash),
-    waits: Crits.Dict(Ledgers.Line)
+    waits: Lines(),
+    tops: Tops(),
+    busy: Lines()
   }
+
+# a replica, and lines to settle
+type Rep.Work<-L: Data> is Data:
+  Rep.Work{rep: Rep<L>, lines: List<&2, Ledgers.Line>}
+
+# a replica, and whether it cast a ballot
+type Rep.Cast<-L: Data> is Data:
+  Rep.Cast{rep: Rep<L>, cast: Bool}
+
+# a ledger, and the tip that a step landed on, if one did
+type Landed<-L: Data> is Data:
+  Landed{ledger: L, tip: Maybe<&2, Tip>}
+
+# a ledger, and the top it lands a line on
+type Climb<-L: Data> is Data:
+  Climb{ledger: L, top: Top}
 
 # the key of the hash h in a dict of a replica
 def Rep.hash_key(h: Hashes.Hash) -> List<&2, U32>:
@@ -17604,123 +17626,290 @@ def Rep.hash_key(h: Hashes.Hash) -> List<&2, U32>:
 def Rep.pending_key(c: Ledgers.Line, a: Hashes.Hash) -> List<&2, U32>:
   Ledgers.Line.code(c, Hashes.Hash.code(a, []))
 
+# the replica of the name n and the seed sd that holds nothing
+def Rep.empty(~mach: Machine(), ~d: Led(mach), n: String, sd: Hashes.Hash) -> Rep<Led.L(mach, d)>:
+  Rep{
+    n,
+    sd,
+    Ledgers.Kind.empty(Machine.Q(mach), Led.kind(mach, d)),
+    Crits.Dict.new(~Unit),
+    Crits.Dict.new(~U32),
+    Crits.Dict.new(~Ledgers.Place),
+    Crits.Dict.new(~Hashes.Hash),
+    Crits.Dict.new(~Ledgers.Line),
+    Crits.Dict.new(~Top),
+    Crits.Dict.new(~Ledgers.Line)
+  }
+
 # the ledger of s
 def Rep.ledger(-L: Data, s: Rep<L>) -> L:
   match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
       l
-
-# s with the ledger l
-def Rep.with_ledger(-L: Data, s: Rep<L>, l: L) -> Rep<L>:
-  match s:
-    case Rep{n, sd, l0, cs, ct, ls, ps, ws}:
-      Rep{n, sd, l, cs, ct, ls, ps, ws}
 
 # the name of s
 def Rep.name(-L: Data, s: Rep<L>) -> String:
   match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
       n
 
 # the seed of s
 def Rep.seed(-L: Data, s: Rep<L>) -> Hashes.Hash:
   match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
       sd
+
+# the tops of s
+def Rep.tops(-L: Data, s: Rep<L>) -> Tops():
+  match s:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
+      ts
+
+# the busy lines of s
+def Rep.busy(-L: Data, s: Rep<L>) -> Lines():
+  match s:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
+      bz
 
 # a client of s asked for the request of the hash a
 def Rep.consented(-L: Data, s: Rep<L>, a: Hashes.Hash) -> Bool:
   match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
       Crits.Dict.has(Unit, cs, Rep.hash_key(a))
 
 # how many ballots s cast under the root r
 def Rep.count(-L: Data, s: Rep<L>, r: Hashes.Hash) -> U32:
   match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
       Maybe.default(&2, U32, Crits.Dict.get(U32, ct, Rep.hash_key(r)), 0)
-
-# s with the consent of a client to the request of the hash a
-def Rep.consent(~L: Data, s: Rep<L>, +a: Hashes.Hash) -> Rep<L>:
-  match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
-      Rep{n, sd, l, Crits.Dict.set(~Unit, cs, Rep.hash_key(a), Unit{}), ct, ls, ps, ws}
-
-# s with the request of the hash a waiting on the line c
-def Rep.pend(~L: Data, s: Rep<L>, c: Ledgers.Line, +a: Hashes.Hash) -> Rep<L>:
-  match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
-      Rep{n, sd, l, cs, ct, ls, Crits.Dict.set(~Hashes.Hash, ps, Rep.pending_key(c, a), a), ws}
 
 # the requests that wait on the line c, at s (some may have an outcome now)
 def Rep.pending(-L: Data, s: Rep<L>, +c: Ledgers.Line) -> List<&2, Hashes.Hash>:
   match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
       Crits.Binds.values(
         Hashes.Hash,
         Crits.Crit.entries(Hashes.Hash, Crits.Crit.under(Hashes.Hash, Crits.Dict.crit(Hashes.Hash, ps), Line.key(c)))
       )
 
-# s with the line c among the lines where it waits for data
-def Rep.wait(~L: Data, s: Rep<L>, +c: Ledgers.Line) -> Rep<L>:
-  match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
-      Rep{n, sd, l, cs, ct, ls, ps, Crits.Dict.set(~Ledgers.Line, ws, Line.key(c), c)}
-
-# the lines where s waits for data
+# the lines that wait for data, at s
 def Rep.waits(-L: Data, s: Rep<L>) -> List<&2, Ledgers.Line>:
   match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
       Crits.Dict.values(Ledgers.Line, ws)
 
-# s waiting for data on no line
-def Rep.unwait(~L: Data, s: Rep<L>) -> Rep<L>:
+# s with the ledger l
+def Rep.with_ledger(-L: Data, s: Rep<L>, l: L) -> Rep<L>:
   match s:
-    case Rep{n, sd, l, cs, ct, ls, ps, ws}:
-      Rep{n, sd, l, cs, ct, ls, ps, Crits.Dict.new(~Ledgers.Line)}
+    case Rep{n, sd, l0, cs, ct, ls, ps, ws, ts, bz}:
+      Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}
 
-# The top of a line
+# s with the consent of a client to the request of the hash a
+def Rep.consent(~L: Data, s: Rep<L>, +a: Hashes.Hash) -> Rep<L>:
+  match s:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
+      Rep{n, sd, l, Crits.Dict.set(~Unit, cs, Rep.hash_key(a), Unit{}), ct, ls, ps, ws, ts, bz}
 
-# Line.walk, with the height of the tip it ends at
-def Line.top.walk(
-  ~mach: Machine(),
-  ~d: Led(mach),
-  ~kern: Kernel(mach, d),
-  fuel: Nat,
-  +l: Led.L(mach, d),
-  +c: Ledgers.Line,
-  +h: U32,
-  t: Tip,
-  m: Maybe<&2, Tip>
-) -> Top:
-  match fuel m:
-    case 0n x:
-      Top{h, t}
-    case 1n+f None{}:
-      Top{h, t}
-    case 1n+f Some{+t2}:
-      Line.top.walk(~mach, ~d, ~kern, f, l, c, U32.inc(h), t2, Line.next(~mach, ~d, ~kern, l, c, U32.inc(h), t2))
+# s with the request of the hash a waiting on the line c
+def Rep.pend(~L: Data, s: Rep<L>, c: Ledgers.Line, +a: Hashes.Hash) -> Rep<L>:
+  match s:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
+      Rep{n, sd, l, cs, ct, ls, Crits.Dict.set(~Hashes.Hash, ps, Rep.pending_key(c, a), a), ws, ts, bz}
 
-# the height and the newest tip of the line c, in l (none: the line has no
-# start in l), as Line.head walks it
-def Line.top(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +c: Ledgers.Line) -> Maybe<&2, Top>:
-  Maybe.map(
-    &2,
-    Tip,
-    Top,
-    +t => Line.top.walk(
-      ~mach,
-      ~d,
-      ~kern,
-      1n+Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(l)(c),
-      l,
-      c,
-      0,
-      t,
-      Line.next(~mach, ~d, ~kern, l, c, 0, t)
-    ),
-    Line.start(~mach, ~d, ~kern, l, c)
+# s with the line c waiting for data (yes) or not
+def Rep.wait(~L: Data, s: Rep<L>, +c: Ledgers.Line, yes: Bool) -> Rep<L>:
+  match s:
+    case Rep{n, sd, l, cs, ct, ls, ps, +ws, ts, bz}:
+      Rep{
+        n,
+        sd,
+        l,
+        cs,
+        ct,
+        ls,
+        ps,
+        Shared.Bool.when(
+          Lines(),
+          yes,
+          u => Crits.Dict.set(~Ledgers.Line, ws, Line.key(c), c),
+          u => Crits.Dict.drop(~Ledgers.Line, ws, Line.key(c))
+        ),
+        ts,
+        bz
+      }
+
+# s with the top x of the line c
+def Rep.set_top(~L: Data, s: Rep<L>, c: Ledgers.Line, x: Top) -> Rep<L>:
+  match s:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
+      Rep{n, sd, l, cs, ct, ls, ps, ws, Crits.Dict.set(~Top, ts, Line.key(c), x), bz}
+
+# the lines ls with the lines cs
+def Lines.add(cs: List<&2, Ledgers.Line>, ls: Lines()) -> Lines():
+  match cs:
+    case Nil{}:
+      ls
+    case Con{+c, rest}:
+      Lines.add(rest, Crits.Dict.set(~Ledgers.Line, ls, Line.key(c), c))
+
+# s with the lines cs busy too
+def Rep.add_busy(~L: Data, s: Rep<L>, cs: List<&2, Ledgers.Line>) -> Rep<L>:
+  match s:
+    case Rep{n, sd, l, cs0, ct, ls, ps, ws, ts, bz}:
+      Rep{n, sd, l, cs0, ct, ls, ps, ws, ts, Lines.add(cs, bz)}
+
+# the busy lines of s, and s with none
+def Rep.take_busy(~L: Data, s: Rep<L>) -> Rep.Work<L>:
+  match s:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
+      Rep.Work{Rep{n, sd, l, cs, ct, ls, ps, ws, ts, Crits.Dict.new(~Ledgers.Line)}, Crits.Dict.values(Ledgers.Line, bz)}
+
+# Lines of entries
+
+# the line where a request of the hash a that arrives as x waits
+def Arrival.line(a: Hashes.Hash, x: Arrival) -> Ledgers.Line:
+  match x:
+    case Arrival.Starts{vs}:
+      Root.line(a)
+    case Arrival.Waits{c}:
+      c
+
+# the line where the request q of the hash a waits: the line it names, or the
+# root line that it starts
+def Ask.line(~mach: Machine(), a: Hashes.Hash, q: Machine.Q(mach)) -> Ledgers.Line:
+  Arrival.line(a, Machine.arrival(mach)(q))
+
+# the hash of the entry e
+def Entry.hash(~mach: Machine(), e: Entry(mach)) -> Hashes.Hash:
+  Ledgers.Name.hash(Entry.name(~mach, e))
+
+# the lines that the entries es touch: the line of each ballot, and the line
+# where each request waits
+def Entries.lines(~mach: Machine(), es: List<&2, Entry(mach)>) -> List<&2, Ledgers.Line>:
+  match es:
+    case Nil{}:
+      []
+    case Con{Ledgers.Entry.Ballot{b}, rest}:
+      Ballot.line(b) <> Entries.lines(~mach, rest)
+    case Con{Ledgers.Entry.Ask{i, t, +q}, rest}:
+      Ask.line(~mach, Entry.hash(~mach, Ledgers.Entry.Ask{i, t, q}), q) <> Entries.lines(~mach, rest)
+    case Con{e, rest}:
+      Entries.lines(~mach, rest)
+
+# the entries es hold data
+def Entries.data(-Q: Data, es: List<&2, Ledgers.Entry<Q>>) -> Bool:
+  match es:
+    case Nil{}:
+      False{}
+    case Con{Ledgers.Entry.Data{ws}, rest}:
+      True{}
+    case Con{e, rest}:
+      Entries.data(Q, rest)
+
+# Taking entries in
+
+# s with the request of each entry among es waiting on its line
+def Rep.pend_all(~mach: Machine(), ~d: Led(mach), es: List<&2, Entry(mach)>, s: Rep<Led.L(mach, d)>) -> Rep<Led.L(mach, d)>:
+  match es:
+    case Nil{}:
+      s
+    case Con{Ledgers.Entry.Ask{+i, +t, +q}, rest}:
+      +a = Entry.hash(~mach, Ledgers.Entry.Ask{i, t, q})
+      Rep.pend_all(~mach, ~d, rest, Rep.pend(~Led.L(mach, d), s, Ask.line(~mach, a, q), a))
+    case Con{e, rest}:
+      Rep.pend_all(~mach, ~d, rest, s)
+
+# l with each of the entries es that checks in it, one at a time: what a
+# replica takes when the entries do not check with each other
+def Led.take_each(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), es: List<&2, Entry(mach)>, +l: Led.L(mach, d)) -> Led.L(mach, d):
+  match es:
+    case Nil{}:
+      l
+    case Con{+e, rest}:
+      Led.take_each(
+        ~mach,
+        ~d,
+        ~kern,
+        rest,
+        Shared.Bool.when(
+          Led.L(mach, d),
+          Entry.checks(~mach, ~d, ~kern, l, e),
+          u => Led.add(~mach, ~d, l, e),
+          u => l
+        )
+      )
+
+# l with the proof of each lie of a ballot among es: a ballot that l holds,
+# other than b, whose key also seals b
+def Led.lies.of(~mach: Machine(), ~d: Led(mach), as: List<&2, Ledgers.Ballot>, +k: Hashes.Hash, +b: Ledgers.Ballot, +l: Led.L(mach, d)) -> Led.L(mach, d):
+  match as:
+    case Nil{}:
+      l
+    case Con{+a, rest}:
+      Led.lies.of(
+        ~mach,
+        ~d,
+        rest,
+        k,
+        b,
+        Shared.Bool.when(
+          Led.L(mach, d),
+          Ledgers.Ballot.is_eq(a, b),
+          u => l,
+          u => Led.add(~mach, ~d, l, Ledgers.Entry.Lie{Ledgers.Lie{k, a, b}})
+        )
+      )
+
+# l with the proof of each lie that a ballot among es shows: one read of the
+# ballots that the key of each ballot signs
+def Led.lies(~mach: Machine(), ~d: Led(mach), es: List<&2, Entry(mach)>, +l: Led.L(mach, d)) -> Led.L(mach, d):
+  match es:
+    case Nil{}:
+      l
+    case Con{Ledgers.Entry.Ballot{+b}, rest}:
+      Led.lies(
+        ~mach,
+        ~d,
+        rest,
+        Maybe.default(
+          &2,
+          Led.L(mach, d),
+          Maybe.map(
+            &2,
+            Hashes.Hash,
+            Led.L(mach, d),
+            +k => Led.lies.of(~mach, ~d, Ledgers.Kind.signed(Machine.Q(mach), Led.kind(mach, d))(l)(k), k, b, l),
+            Ledgers.Ballot.signer(b)
+          ),
+          l
+        )
+      )
+    case Con{e, rest}:
+      Led.lies(~mach, ~d, rest, l)
+
+# l after it takes in the entries es: all of them in one step when they check
+# with each other (Deed.checks), else each that checks, one at a time; then
+# the proof of each lie that they show
+def Led.take(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +es: List<&2, Entry(mach)>, +l: Led.L(mach, d)) -> Led.L(mach, d):
+  Led.lies(
+    ~mach,
+    ~d,
+    es,
+    Shared.Bool.when(
+      Led.L(mach, d),
+      Deed.checks(~mach, ~d, ~kern, l, Deed.Take{es}),
+      u => Led.adds(~mach, ~d, es, l),
+      u => Led.take_each(~mach, ~d, ~kern, es, l)
+    )
   )
+
+# l with the data that a run added
+def Led.keep(~mach: Machine(), ~d: Led(mach), ws: List<&2, List<&2, U32>>, l: Led.L(mach, d)) -> Led.L(mach, d):
+  match ws:
+    case Nil{}:
+      l
+    case Con{w, rest}:
+      Led.keep(~mach, ~d, rest, Led.add(~mach, ~d, l, Ledgers.Entry.Data{w}))
 
 # Ballots of the replica
 
@@ -17730,30 +17919,128 @@ def Place.line(w: Ledgers.Place) -> Ledgers.Line:
     case Ledgers.Place{c, h, r}:
       c
 
-# s with a ballot of its own that casts x at the place w: signed with the key
-# of the next number under the root of w, and linked to its last ballot there.
-# The count grows with the ballot, so no number signs twice
-def Rep.cast(~mach: Machine(), ~d: Led(mach), s: Rep<Led.L(mach, d)>, +w: Ledgers.Place, x: Ledgers.Cast) -> Rep<Led.L(mach, d)>:
+# s with a ballot of its own that casts x at the place w, in the ledger l:
+# signed with the key of the next number under the root of w, and linked to
+# its last ballot there. It casts it only when it checks (Entry.checks), and
+# the count grows with it, so no number signs twice
+def Rep.cast(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), s: Rep<Led.L(mach, d)>, +l: Led.L(mach, d), +w: Ledgers.Place, x: Ledgers.Cast) -> Rep.Cast<Led.L(mach, d)>:
   match s:
-    case Rep{+n, +sd, l, cs, +ct, +ls, ps, ws}:
+    case Rep{+n, +sd, l0, +cs, +ct, +ls, +ps, +ws, +ts, +bz}:
       +r = Ledgers.Line.root(Place.line(w))
       +k = Maybe.default(&2, U32, Crits.Dict.get(U32, ct, Rep.hash_key(r)), 0)
-      +b = Ledgers.Ballot.make(
-        Key.secret(sd, r, k),
-        Ledgers.Signed{w, n, x},
-        Crits.Dict.get(Ledgers.Place, ls, Rep.hash_key(r)),
-        Key.public(sd, r, U32.inc(k))
-      )
-      Rep{
-        n,
-        sd,
-        Led.add(~mach, ~d, l, Ledgers.Entry.Ballot{b}),
-        cs,
-        Crits.Dict.set(~U32, ct, Rep.hash_key(r), U32.inc(k)),
-        Crits.Dict.set(~Ledgers.Place, ls, Rep.hash_key(r), w),
-        ps,
-        ws
+      +e = Ledgers.Entry.Ballot{
+        Ledgers.Ballot.make(
+          Key.secret(sd, r, k),
+          Ledgers.Signed{w, n, x},
+          Crits.Dict.get(Ledgers.Place, ls, Rep.hash_key(r)),
+          Key.public(sd, r, U32.inc(k))
+        )
       }
+      Shared.Bool.when(
+        Rep.Cast<Led.L(mach, d)>,
+        Entry.checks(~mach, ~d, ~kern, l, e),
+        u => Rep.Cast{
+          Rep{
+            n,
+            sd,
+            Led.add(~mach, ~d, l, e),
+            cs,
+            Crits.Dict.set(~U32, ct, Rep.hash_key(r), U32.inc(k)),
+            Crits.Dict.set(~Ledgers.Place, ls, Rep.hash_key(r), w),
+            ps,
+            ws,
+            ts,
+            bz
+          },
+          True{}
+        },
+        u => Rep.Cast{Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}, False{}}
+      )
+
+# The top of a line
+
+# the run m, when it runs to the tip that after names
+def Run.names(~L: Data, m: Maybe<&2, Run<L>>, after: Maybe<&2, Hashes.Hash>) -> Maybe<&2, Run<L>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Run{l2, +t2, a}}:
+      Shared.Maybe.when(Run<L>, Tips.same(Some{Tip.hash(t2)}, after), u => Some{Run{l2, t2, a}})
+
+# the step v from the tip t of the line c names t and runs, in l, to the tip
+# that it names: the run (none: it does not)
+def Step.ready(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +c: Ledgers.Line, +t: Tip, v: Ledgers.Step) -> Maybe<&2, Run<Led.L(mach, d)>>:
+  match v:
+    case Ledgers.Step{before, qs, +after}:
+      Shared.Maybe.when(
+        Run<Led.L(mach, d)>,
+        Tips.same(before, Some{Tip.hash(t)}),
+        u => Run.names(~Led.L(mach, d), Step.run(~mach, ~d, ~kern, l, c, t, qs), after)
+      )
+
+# l with what the run m added, and its tip
+def Landed.of(~mach: Machine(), ~d: Led(mach), +l: Led.L(mach, d), m: Maybe<&2, Run<Led.L(mach, d)>>) -> Landed<Led.L(mach, d)>:
+  match m:
+    case None{}:
+      Landed{l, None{}}
+    case Some{Run{l2, t2, a}}:
+      Landed{Led.keep(~mach, ~d, a, l), Some{t2}}
+
+# Line.land, once the decided step m is known
+def Line.land.of(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +c: Ledgers.Line, +t: Tip, m: Maybe<&2, Ledgers.Step>) -> Landed<Led.L(mach, d)>:
+  match m:
+    case None{}:
+      Landed{l, None{}}
+    case Some{+v}:
+      Landed.of(~mach, ~d, l, Step.ready(~mach, ~d, ~kern, l, c, t, v))
+
+# the ledger l after it lands the step decided at the height h of the line c,
+# from the tip t, and the tip after it (none: no step is decided there, or it
+# does not run to the tip that it names, in l). The replica runs the step
+# itself and keeps what the run adds, so it lands without the data of another
+def Line.land(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +l: Led.L(mach, d), +c: Ledgers.Line, +h: U32, +t: Tip) -> Landed<Led.L(mach, d)>:
+  Line.land.of(
+    ~mach,
+    ~d,
+    ~kern,
+    l,
+    c,
+    t,
+    Height.decide(~mach, ~d, l, c, h, Tip.voters(t), Ledgers.Kind.rounds(Machine.Q(mach), Led.kind(mach, d))(l)(c)(h))
+  )
+
+# the top of the line c from the tip t at the height h, whose next step x
+# landed (Line.land), in at most fuel more steps, with the ledger that lands
+# them
+def Line.climb(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), fuel: Nat, +c: Ledgers.Line, +h: U32, +t: Tip, x: Landed<Led.L(mach, d)>) -> Climb<Led.L(mach, d)>:
+  match fuel x:
+    case 0n Landed{l, m}:
+      Climb{l, Top{h, t}}
+    case 1n+f Landed{l, None{}}:
+      Climb{l, Top{h, t}}
+    case 1n+f Landed{+l, Some{+t2}}:
+      Line.climb(~mach, ~d, ~kern, f, c, U32.inc(h), t2, Line.land(~mach, ~d, ~kern, l, c, U32.inc(h), t2))
+
+# steps enough to climb the line c in l: one more than the heights of its
+# ballots
+def Line.fuel(~mach: Machine(), ~d: Led(mach), l: Led.L(mach, d), c: Ledgers.Line) -> Nat:
+  1n+Ledgers.Kind.heights(Machine.Q(mach), Led.kind(mach, d))(l)(c)
+
+# the top of the line c in l, from the top m that the replica held (none: the
+# line has no start in l), with the ledger that lands it. Only the steps after
+# m run: no line is replayed
+def Line.top(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), m: Maybe<&2, Top>, +l: Led.L(mach, d), +c: Ledgers.Line) -> Maybe<&2, Climb<Led.L(mach, d)>>:
+  match m:
+    case None{}:
+      Maybe.map(
+        &2,
+        Tip,
+        Climb<Led.L(mach, d)>,
+        +t => Line.climb(~mach, ~d, ~kern, Line.fuel(~mach, ~d, l, c), c, 0, t, Line.land(~mach, ~d, ~kern, l, c, 0, t)),
+        Line.start(~mach, ~d, ~kern, l, c)
+      )
+    case Some{Top{+h, +t}}:
+      Some{Line.climb(~mach, ~d, ~kern, Line.fuel(~mach, ~d, l, c), c, h, t, Line.land(~mach, ~d, ~kern, l, c, h, t))}
 
 # a line that has a top among ts is among the lines under its root
 law Tops.under_has:
