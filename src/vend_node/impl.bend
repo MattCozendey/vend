@@ -917,8 +917,14 @@ def Node.does_wider(n: Spec.VendNode, d: Spec.Deed) -> {
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Stop{f}:
       Facts.Facts.wider_refl(fs)
 
-def Spec.VendNode.keeps(n, d, c):
+# a node holds after a deed each change that it held
+def Node.keeps(+n: Spec.VendNode, +d: Spec.Deed, +c: Types.Change) -> {
+  Facts.Facts.holds(Node.facts(n), c) == True{}: Bool
+} -> {Facts.Facts.holds(Node.facts(Spec.VendNode.does(n, d)), c) == True{}: Bool}:
   h => Facts.Facts.wider_holds(Node.facts(n), Node.facts(Spec.VendNode.does(n, d)), c)(Node.does_wider(n, d))(h)
+
+def Spec.VendNode.keeps(n, d, c):
+  Node.keeps(n, d, c)
 
 def Spec.VendNode.sync_joins(n, m, c):
   match n m:
@@ -1034,7 +1040,22 @@ def Node.asks_works_at(
         Shared.Bool.false_ne_true(hg)
       )
 
-def Spec.VendNode.starts(n, i):
+# a connected writer that starts a store owned by the node alone gets it
+def Node.starts(n: Spec.VendNode, +i: Ledgers.Id) -> {Spec.VendNode.stopped(n) == False{}: Bool} -> {
+  List.contains(~String, ~String.eq, Spec.VendNode.writers(n), Spec.Id.writer(i)) == True{}: Bool
+} -> Spec.Works(
+  Spec.VendNode.does(n, Spec.Deed.Ask{i, Spec.Request.Start{[Spec.VendNode.name(n)]}}),
+  m => {
+    Spec.VendNode.answer(
+      m,
+      Spec.Question.Version{
+        Ledgers.Line{Hashes.Sha.hash(Spec.Request.code(i, Spec.Request.Start{[Spec.VendNode.name(n)]})), None{}},
+        0n
+      }
+    )
+      == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
+  }
+):
   match n:
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok}:
       hs => hw => (
@@ -1076,7 +1097,16 @@ def Spec.VendNode.starts(n, i):
         )
       )
 
-def Spec.VendNode.reads_own(n, i, b, p, ws):
+def Spec.VendNode.starts(n, i):
+  Node.starts(n, i)
+
+# a writer reads its own write at once
+def Node.reads_own(n: Spec.VendNode, +i: Ledgers.Id, +b: Ledgers.Line, +p: String, +ws: Maybe<&2, List<&2, U32>>) -> {
+  Spec.VendNode.stopped(n) == False{}: Bool
+} -> {List.contains(~String, ~String.eq, Spec.VendNode.writers(n), Spec.Id.writer(i)) == True{}: Bool} -> {
+  Spec.VendNode.view(Spec.VendNode.does(n, Spec.Deed.Ask{i, Spec.Request.Write{b, p, ws}}), Spec.Id.writer(i), b, p)
+    == Some{ws}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
   match n:
     case Tuple{Nodes.Raw{+name, +wrs, +ms, +st, +fs, +ps}, +ok}:
       hs => hw => Node.asks_at(
@@ -1095,7 +1125,16 @@ def Spec.VendNode.reads_own(n, i, b, p, ws):
         Live.View.reads_own(name, fs, i, b, p, ws)
       )
 
-def Spec.VendNode.mount_records(n, a, b, p, ws):
+def Spec.VendNode.reads_own(n, i, b, p, ws):
+  Node.reads_own(n, i, b, p, ws)
+
+# the node reads what a mounted resource held
+def Node.mount_records(n: Spec.VendNode, +a: String, +b: Ledgers.Line, +p: String, +ws: List<&2, U32>) -> {
+  Spec.VendNode.stopped(n) == False{}: Bool
+} -> {
+  Spec.VendNode.view(Spec.VendNode.does(n, Spec.Deed.Mount{a, b, p, ws}), Spec.VendNode.name(n), b, p)
+    == Some{Some{ws}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
   match n:
     case Tuple{Nodes.Raw{+name, +wrs, +ms, +st, +fs, +ps}, +ok}:
       hs => Node.asks_at(
@@ -1112,7 +1151,29 @@ def Spec.VendNode.mount_records(n, a, b, p, ws):
         Bool.not(st)
       )(Node.gate_not(st)(hs))(Live.View.reads_own(name, fs, Nodes.Mount.id(name, a), b, p, Some{ws}))
 
-def Spec.VendNode.decides_alone(n, b, k, i, p, ws):
+def Spec.VendNode.mount_records(n, a, b, p, ws):
+  Node.mount_records(n, a, b, p, ws)
+
+# a node that alone decides writes a new request once it works
+def Node.decides_alone(
+  n: Spec.VendNode,
+  +b: Ledgers.Line,
+  +k: Nat,
+  +i: Ledgers.Id,
+  +p: String,
+  +ws: Maybe<&2, List<&2, U32>>
+) -> {Spec.VendNode.stopped(n) == False{}: Bool} -> {List.contains(~String, ~String.eq, Spec.VendNode.writers(n), Spec.Id.writer(i)) == True{}: Bool} -> {
+  Spec.VendNode.answer(n, Spec.Question.Count{b}) == Some{Spec.Reply.Number{k}}: Maybe<&2, Spec.Reply>
+} -> {
+  Spec.VendNode.answer(n, Spec.Question.Group{b, k})
+    == Some{Spec.Reply.Names{[Spec.VendNode.name(n)]}}: Maybe<&2, Spec.Reply>
+} -> {Spec.VendNode.answer(n, Spec.Question.Status{b, i}) == None{}: Maybe<&2, Spec.Reply>} -> Spec.Works(
+  Spec.VendNode.does(n, Spec.Deed.Ask{i, Spec.Request.Write{b, p, ws}}),
+  m => {
+    Spec.VendNode.answer(m, Spec.Question.Status{b, i})
+      == Some{Spec.Reply.Status{Spec.Status.Written{}}}: Maybe<&2, Spec.Reply>
+  }
+):
   match n:
     case Tuple{Nodes.Raw{+name, +wrs, +ms, +st, +fs, +ps}, +ok}:
       +hs => hw => h1 => h2 => h3 => (
@@ -1156,3 +1217,6 @@ def Spec.VendNode.decides_alone(n, b, k, i, p, ws):
           )
         )
       )
+
+def Spec.VendNode.decides_alone(n, b, k, i, p, ws):
+  Node.decides_alone(n, b, k, i, p, ws)
