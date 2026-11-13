@@ -25,7 +25,13 @@ def Request.Parents(r: Spec.Request, c: Ledgers.Line, k: Nat, ps: List<&2, Spec.
       {ps == [Spec.Point{c, k}]: List<&2, Spec.Point>}
 
 # qs is a chain of parents from the version c, k back to a
-def Back(s: Facts.Facts(), a: Spec.Point, qs: List<&2, Spec.Point>, c: Ledgers.Line, k: Nat) -> Type:
+def Back(
+  s: Facts.Facts(),
+  a: Spec.Point,
+  qs: List<&2, Spec.Point>,
+  c: Ledgers.Line,
+  k: Nat
+) -> Type:
   match qs:
     case Nil{}:
       {a == Spec.Point{c, k}: Spec.Point}
@@ -33,7 +39,11 @@ def Back(s: Facts.Facts(), a: Spec.Point, qs: List<&2, Spec.Point>, c: Ledgers.L
       Exists(
         List<&2, Spec.Point>,
         ps => {
-          Answers.Answer.of(s, Spec.Question.Parents{c, k}) == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
+          Answers.Answer.of(
+            s,
+            Spec.Question.Parents{c, k}
+          )
+            == Some{Spec.Reply.Points{ps}}: Maybe<&2, Spec.Reply>
         }
           & (
             {
@@ -50,9 +60,19 @@ def Before(s: Facts.Facts(), a: Spec.Point, c: Ledgers.Line, k: Nat) -> Type:
 # version k of c is the decision of the request i, which asked for r
 def Made(s: Facts.Facts(), c: Ledgers.Line, k: Nat, i: Ledgers.Id, r: Spec.Request) -> Type:
   {
-    Answers.Answer.of(s, Spec.Question.Version{c, k}) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
+    Answers.Answer.of(
+      s,
+      Spec.Question.Version{c, k}
+    )
+      == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
   }
-    & {Answers.Answer.of(s, Spec.Question.Request{c, i}) == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>}
+    & {
+      Answers.Answer.of(
+        s,
+        Spec.Question.Request{c, i}
+      )
+        == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
+    }
 
 # version j of the store of c is the latest that decides r among those up to m
 def Latest(s: Facts.Facts(), c: Ledgers.Line, j: Nat, m: Nat, r: Spec.Request) -> Type:
@@ -84,7 +104,13 @@ def Imports(
         }
           & (
             {
-              List.contains(~String, ~String.eq, Formats.Format.imports(a, ws, bs), q) == True{}: Bool
+              List.contains(
+                ~String,
+                ~String.eq,
+                Formats.Format.imports(a, ws, bs),
+                q
+              )
+                == True{}: Bool
             }
               & Imports(s, c, k, bs, q, rest, b)
           )

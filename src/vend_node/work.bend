@@ -1,9 +1,6 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
-import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
-import ./answers.bend as Answers
-import ./codes.bend as Coded
 import ./content.bend as Contents
 import ./facts.bend as Facts
 import ./lines.bend as Lines
@@ -91,7 +88,12 @@ type Took is Data:
   Took{at: Nat, version: Nat}
 
 # found, or the version k when it takes a version of the line c (m)
-def Takes.pick(c: Ledgers.Line, k: Nat, m: Maybe<&2, Spec.Point>, found: Maybe<&2, Took>) -> Maybe<&2, Took>:
+def Takes.pick(
+  c: Ledgers.Line,
+  k: Nat,
+  m: Maybe<&2, Spec.Point>,
+  found: Maybe<&2, Took>
+) -> Maybe<&2, Took>:
   match m:
     case None{}:
       found
@@ -100,7 +102,12 @@ def Takes.pick(c: Ledgers.Line, k: Nat, m: Maybe<&2, Spec.Point>, found: Maybe<&
 
 # the newest version among vs, from the version k on, that takes a version of
 # the line c: its number, and the version that it takes
-def Takes.last(vs: List<&2, Types.Entry>, +c: Ledgers.Line, +k: Nat, found: Maybe<&2, Took>) -> Maybe<&2, Took>:
+def Takes.last(
+  vs: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +k: Nat,
+  found: Maybe<&2, Took>
+) -> Maybe<&2, Took>:
   match vs:
     case Nil{}:
       found
@@ -110,18 +117,43 @@ def Takes.last(vs: List<&2, Types.Entry>, +c: Ledgers.Line, +k: Nat, found: Mayb
 # the pins of a merge of the line f into the line c: the newest version of f,
 # and as base the newest version of c that f took, else the newest version of
 # f that c took, else none
-def Pins.merge.of(m: Nat, +c: Ledgers.Line, +f: Ledgers.Line, from: Nat, theirs: Maybe<&2, Took>, ours: Maybe<&2, Took>) -> Types.Pins:
+def Pins.merge.of(
+  m: Nat,
+  +c: Ledgers.Line,
+  +f: Ledgers.Line,
+  from: Nat,
+  theirs: Maybe<&2, Took>,
+  ours: Maybe<&2, Took>
+) -> Types.Pins:
   match theirs ours:
     case Some{Took{+j, +v}} _:
-      Types.Pins{m, from, Some{Spec.Point{c, v}}, [Spec.Point{c, v}], [Spec.Point{f, j}, Spec.Point{c, v}]}
+      Types.Pins{
+        m,
+        from,
+        Some{Spec.Point{c, v}},
+        [Spec.Point{c, v}],
+        [Spec.Point{f, j}, Spec.Point{c, v}]
+      }
     case None{} Some{Took{+j, +v}}:
-      Types.Pins{m, from, Some{Spec.Point{f, v}}, [Spec.Point{c, j}, Spec.Point{f, v}], [Spec.Point{f, v}]}
+      Types.Pins{
+        m,
+        from,
+        Some{Spec.Point{f, v}},
+        [Spec.Point{c, j}, Spec.Point{f, v}],
+        [Spec.Point{f, v}]
+      }
     case None{} None{}:
       Types.Pins{m, from, None{}, [], []}
 
 # the pins of a merge of the line f, of the versions fv if known, into the
 # line c, of the versions vs
-def Pins.merge(m: Nat, +c: Ledgers.Line, +f: Ledgers.Line, +vs: List<&2, Types.Entry>, fv: Maybe<&2, List<&2, Types.Entry>>) -> Types.Pins:
+def Pins.merge(
+  m: Nat,
+  +c: Ledgers.Line,
+  +f: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  fv: Maybe<&2, List<&2, Types.Entry>>
+) -> Types.Pins:
   match fv:
     case None{}:
       Lines.Pins.plain(m)
@@ -137,7 +169,13 @@ def Pins.merge(m: Nat, +c: Ledgers.Line, +f: Ledgers.Line, +vs: List<&2, Types.E
 
 # the pins that the node gives the request r for the line c, of the versions
 # vs, at the era m
-def Pins.for(+s: Facts.Facts(), +c: Ledgers.Line, +vs: List<&2, Types.Entry>, m: Nat, r: Spec.Request) -> Types.Pins:
+def Pins.for(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  m: Nat,
+  r: Spec.Request
+) -> Types.Pins:
   match r:
     case Spec.Request.Merge{+f, x}:
       Pins.merge(m, c, f, vs, Lines.Line.versions(s, f))
@@ -164,7 +202,13 @@ def Era.now(+s: Facts.Facts(), c: Ledgers.Line) -> Nat:
 
 # the node name may vote for the next slot of the line c, in the state st: it
 # is one of the nodes of the rule u, and holds no vote of its own for the slot
-def Work.free(+s: Facts.Facts(), +name: String, +c: Ledgers.Line, k: Nat, ns: List<&2, String>) -> Bool:
+def Work.free(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  k: Nat,
+  ns: List<&2, String>
+) -> Bool:
   Bool.and(
     List.contains(~String, ~String.eq, ns, name),
     Bool.not(Facts.Facts.cast(s, name, Types.Step.At{c, k}))
@@ -173,14 +217,23 @@ def Work.free(+s: Facts.Facts(), +name: String, +c: Ledgers.Line, k: Nat, ns: Li
 # the vote of the node name for the ask a at the next slot of the line c, in
 # the state m with the rule u, when it is its turn, it may vote, and the
 # request made no version of the line yet
-def Work.offer.at(+s: Facts.Facts(), +name: String, +c: Ledgers.Line, +a: Types.Ask, m: Maybe<&2, Lines.State>, u: Maybe<&2, Lines.Rule>) -> Maybe<&2, Types.Fact>:
+def Work.offer.at(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +a: Types.Ask,
+  m: Maybe<&2, Lines.State>,
+  u: Maybe<&2, Lines.Rule>
+) -> Maybe<&2, Types.Fact>:
   match m u:
     case Some{Lines.State{+vs, +k}} Some{Lines.Rule{g, +ns}}:
       Shared.Maybe.when(
         Types.Fact,
         Bool.and(
           Bool.and(String.eq(Turn.of(ns, k), name), Work.free(s, name, c, k, ns)),
-          Bool.not(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Ask.id(a)))
+          Bool.not(
+            Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Ask.id(a))
+          )
         ),
         u2 => Some{
           Types.Fact.Vote{
@@ -194,7 +247,11 @@ def Work.offer.at(+s: Facts.Facts(), +name: String, +c: Ledgers.Line, +a: Types.
       None{}
 
 # the rule of the next version of the line c, in the state m
-def Work.rule(+s: Facts.Facts(), +c: Ledgers.Line, m: Maybe<&2, Lines.State>) -> Maybe<&2, Lines.Rule>:
+def Work.rule(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  m: Maybe<&2, Lines.State>
+) -> Maybe<&2, Lines.Rule>:
   match m:
     case None{}:
       None{}
@@ -202,7 +259,12 @@ def Work.rule(+s: Facts.Facts(), +c: Ledgers.Line, m: Maybe<&2, Lines.State>) ->
       Lines.Rule.after(s, c, vs)
 
 # the vote of the node name for the ask a, on the line m that it is for
-def Work.offer.on(+s: Facts.Facts(), +name: String, +a: Types.Ask, m: Maybe<&2, Ledgers.Line>) -> Maybe<&2, Types.Fact>:
+def Work.offer.on(
+  +s: Facts.Facts(),
+  +name: String,
+  +a: Types.Ask,
+  m: Maybe<&2, Ledgers.Line>
+) -> Maybe<&2, Types.Fact>:
   match m:
     case None{}:
       None{}
@@ -230,7 +292,11 @@ def Work.ready(+s: Facts.Facts(), +name: String, fs: List<&2, Types.Fact>) -> Li
       )
 
 # the vote of the node name for the ask m, if any
-def Work.propose.of(+s: Facts.Facts(), +name: String, m: Maybe<&2, Types.Ask>) -> Maybe<&2, Types.Fact>:
+def Work.propose.of(
+  +s: Facts.Facts(),
+  +name: String,
+  m: Maybe<&2, Types.Ask>
+) -> Maybe<&2, Types.Fact>:
   match m:
     case None{}:
       None{}
@@ -249,7 +315,16 @@ def Work.propose(+s: Facts.Facts(), +name: String) -> Maybe<&2, Types.Fact>:
 # the vote of the node name that follows the vote of v for the pick pk at the
 # slot k of the line c, in the state m with the rule u: when the slot is the
 # next one, it was the turn of v, and the node may vote
-def Work.follow.at(+s: Facts.Facts(), +name: String, v: String, +c: Ledgers.Line, +k: Nat, pk: Types.Pick, m: Maybe<&2, Lines.State>, u: Maybe<&2, Lines.Rule>) -> Maybe<&2, Types.Fact>:
+def Work.follow.at(
+  +s: Facts.Facts(),
+  +name: String,
+  v: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  pk: Types.Pick,
+  m: Maybe<&2, Lines.State>,
+  u: Maybe<&2, Lines.Rule>
+) -> Maybe<&2, Types.Fact>:
   match m u:
     case Some{Lines.State{vs, k2}} Some{Lines.Rule{g, +ns}}:
       Shared.Maybe.when(
@@ -273,7 +348,10 @@ def Work.follow.of(+s: Facts.Facts(), +name: String, f: Types.Fact) -> Maybe<&2,
       None{}
 
 # the vote m, or else the one that rest gives
-def Work.follow.or(m: Maybe<&2, Types.Fact>, rest: Unit -> Maybe<&2, Types.Fact>) -> Maybe<&2, Types.Fact>:
+def Work.follow.or(
+  m: Maybe<&2, Types.Fact>,
+  rest: Unit -> Maybe<&2, Types.Fact>
+) -> Maybe<&2, Types.Fact>:
   match m:
     case Some{f}:
       Some{f}
@@ -281,7 +359,11 @@ def Work.follow.or(m: Maybe<&2, Types.Fact>, rest: Unit -> Maybe<&2, Types.Fact>
       rest(Unit{})
 
 # the first vote that the node name may cast to follow a vote among fs
-def Work.follow(+s: Facts.Facts(), +name: String, fs: List<&2, Types.Fact>) -> Maybe<&2, Types.Fact>:
+def Work.follow(
+  +s: Facts.Facts(),
+  +name: String,
+  fs: List<&2, Types.Fact>
+) -> Maybe<&2, Types.Fact>:
   match fs:
     case Nil{}:
       None{}

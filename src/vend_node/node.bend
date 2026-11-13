@@ -1,12 +1,10 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/hash.bend as Hashes
-import ../shared/shared/shared/shared/shared.bend as Shared
 import ./answers.bend as Answers
 import ./facts.bend as Facts
 import ./shared/parts.bend as Parts
 import ./spec.bend as Spec
-import ./types.bend as Types
 
 # The state of a node
 # -------------------
@@ -56,7 +54,12 @@ def Mounts.remove(ms: List<&2, Mounted>, +a: String) -> List<&2, Mounted>:
     case Nil{}:
       []
     case Con{+m, rest}:
-      List.filter.put(Mounted, m, Mounts.remove(rest, a), Bool.not(String.eq(Mounted.address(m), a)))
+      List.filter.put(
+        Mounted,
+        m,
+        Mounts.remove(rest, a),
+        Bool.not(String.eq(Mounted.address(m), a))
+      )
 
 # the words that the request r brings, if any
 def Request.content(r: Spec.Request) -> Maybe<&2, List<&2, U32>>:
@@ -77,7 +80,10 @@ def Kept.with(ps: Parts.Parts, m: Maybe<&2, List<&2, U32>>) -> Parts.Parts:
       Parts.Parts.put(ps, ws)
 
 # the hash of the words m, if any, before rest
-def Needs.put(m: Maybe<&2, Maybe<&2, List<&2, U32>>>, rest: List<&2, Hashes.Hash>) -> List<&2, Hashes.Hash>:
+def Needs.put(
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>,
+  rest: List<&2, Hashes.Hash>
+) -> List<&2, Hashes.Hash>:
   match m:
     case Some{Some{ws}}:
       Hashes.Sha.hash(ws) <> rest

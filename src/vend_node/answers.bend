@@ -75,7 +75,11 @@ def Resolved.has(g: Resolved, p: String) -> Bool:
 
 # the status of the merge i, with the paths m that clash in it, if the node
 # knows them: Written once each is resolved
-def Status.merge(+vs: List<&2, Types.Entry>, +i: Ledgers.Id, m: Maybe<&2, List<&2, String>>) -> Spec.Status:
+def Status.merge(
+  +vs: List<&2, Types.Entry>,
+  +i: Ledgers.Id,
+  m: Maybe<&2, List<&2, String>>
+) -> Spec.Status:
   match m:
     case None{}:
       Spec.Status.Conflicted{i}
@@ -119,7 +123,12 @@ def Status.mark(vs: List<&2, Types.Entry>, m: String, k: Nat) -> Spec.Status:
 
 # the paths that clash in a merge that fits, of the contents base, ours and
 # theirs, when the node holds them
-def Clashes.at(fits: Bool, base: Maybe<&2, Files.Files()>, ours: Maybe<&2, Files.Files()>, theirs: Maybe<&2, Files.Files()>) -> Maybe<&2, List<&2, String>>:
+def Clashes.at(
+  fits: Bool,
+  base: Maybe<&2, Files.Files()>,
+  ours: Maybe<&2, Files.Files()>,
+  theirs: Maybe<&2, Files.Files()>
+) -> Maybe<&2, List<&2, String>>:
   match fits base ours theirs:
     case True{} Some{b} Some{o} Some{t}:
       Some{Contents.Merge.clashes(b, o, t)}
@@ -127,7 +136,12 @@ def Clashes.at(fits: Bool, base: Maybe<&2, Files.Files()>, ours: Maybe<&2, Files
       None{}
 
 # the paths that clash in the merge e, version k of the line c
-def Clashes.of(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, +e: Types.Entry) -> Maybe<&2, List<&2, String>>:
+def Clashes.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  k: Nat,
+  +e: Types.Entry
+) -> Maybe<&2, List<&2, String>>:
   match k:
     case 0n:
       None{}
@@ -152,7 +166,13 @@ def Base.of(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, +e: Types.Entry) -> May
 
 # the status of the request r of the id i, version k among vs, with the
 # paths cs that clash in it if it is a merge and the node knows them
-def Status.by(+vs: List<&2, Types.Entry>, k: Nat, +i: Ledgers.Id, r: Spec.Request, cs: Maybe<&2, List<&2, String>>) -> Spec.Status:
+def Status.by(
+  +vs: List<&2, Types.Entry>,
+  k: Nat,
+  +i: Ledgers.Id,
+  r: Spec.Request,
+  cs: Maybe<&2, List<&2, String>>
+) -> Spec.Status:
   match r:
     case Spec.Request.Merge{f, x}:
       Status.merge(vs, i, cs)
@@ -162,14 +182,23 @@ def Status.by(+vs: List<&2, Types.Entry>, k: Nat, +i: Ledgers.Id, r: Spec.Reques
       Spec.Status.Written{}
 
 # the status of the request r, version k of the line c
-def Status.of(+s: Facts.Facts(), +c: Ledgers.Line, +vs: List<&2, Types.Entry>, +k: Nat, +e: Types.Entry) -> Spec.Status:
+def Status.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +k: Nat,
+  +e: Types.Entry
+) -> Spec.Status:
   Status.by(vs, k, Lines.Entry.id(e), Entry.request(e), Clashes.of(s, c, k, e))
 
 # The rule of a version
 # ---------------------
 
 # Line.before, once the versions m of the line are known
-def Line.before.of(+j: Nat, m: Maybe<&2, List<&2, Types.Entry>>) -> Maybe<&2, List<&2, Types.Entry>>:
+def Line.before.of(
+  +j: Nat,
+  m: Maybe<&2, List<&2, Types.Entry>>
+) -> Maybe<&2, List<&2, Types.Entry>>:
   match m:
     case None{}:
       None{}
@@ -186,7 +215,11 @@ def Line.before(+s: Facts.Facts(), +c: Ledgers.Line, +j: Nat) -> Maybe<&2, List<
   Line.before.of(j, Lines.Line.versions(s, c))
 
 # Rule.for, once the versions m before the version are known
-def Rule.for.of(+s: Facts.Facts(), +c: Ledgers.Line, m: Maybe<&2, List<&2, Types.Entry>>) -> Maybe<&2, Lines.Rule>:
+def Rule.for.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  m: Maybe<&2, List<&2, Types.Entry>>
+) -> Maybe<&2, Lines.Rule>:
   match m:
     case None{}:
       None{}
@@ -228,7 +261,12 @@ def Rule.owner(u: Lines.Rule) -> Maybe<&2, Spec.Reply>:
 
 # the first nodes of the rule u that are more than half of it, when the facts
 # hold the vote of each of them for the entry e of the line c
-def Rule.voters(+s: Facts.Facts(), c: Ledgers.Line, e: Types.Entry, u: Lines.Rule) -> Maybe<&2, Spec.Reply>:
+def Rule.voters(
+  +s: Facts.Facts(),
+  c: Ledgers.Line,
+  e: Types.Entry,
+  u: Lines.Rule
+) -> Maybe<&2, Spec.Reply>:
   match e u:
     case Types.Entry{pk, k} Lines.Rule{g, +ns}:
       +os = Lists.List.lead(String, ns)
@@ -236,14 +274,25 @@ def Rule.voters(+s: Facts.Facts(), c: Ledgers.Line, e: Types.Entry, u: Lines.Rul
         Spec.Reply,
         Bool.and(
           Bool.not(List.is_empty(&2, String, ns)),
-          Shared.List.holds(~String, ~Lines.Voting, ~Lines.Voting.voted, os, Lines.Voting{s, Types.Step.At{c, k}, pk})
+          Shared.List.holds(
+            ~String,
+            ~Lines.Voting,
+            ~Lines.Voting.voted,
+            os,
+            Lines.Voting{s, Types.Step.At{c, k}, pk}
+          )
         ),
         u2 => Some{Spec.Reply.Names{os}}
       )
 
 # the nodes whose votes decided version k of the line c, once its entry m and
 # its rule u are known
-def Owners.of(+s: Facts.Facts(), c: Ledgers.Line, m: Maybe<&2, Types.Entry>, u: Maybe<&2, Lines.Rule>) -> Maybe<&2, Spec.Reply>:
+def Owners.of(
+  +s: Facts.Facts(),
+  c: Ledgers.Line,
+  m: Maybe<&2, Types.Entry>,
+  u: Maybe<&2, Lines.Rule>
+) -> Maybe<&2, Spec.Reply>:
   match m u:
     case Some{e} Some{rule}:
       Rule.voters(s, c, e, rule)
@@ -254,7 +303,12 @@ def Owners.of(+s: Facts.Facts(), c: Ledgers.Line, m: Maybe<&2, Types.Entry>, u: 
 # ------
 
 # Store.read, once the versions v of the store are known
-def Store.read.of(-A: Data, m: Nat, f: List<&2, Types.Entry> -> Maybe<&2, A>, v: Maybe<&2, List<&2, Types.Entry>>) -> Maybe<&2, A>:
+def Store.read.of(
+  -A: Data,
+  m: Nat,
+  f: List<&2, Types.Entry> -> Maybe<&2, A>,
+  v: Maybe<&2, List<&2, Types.Entry>>
+) -> Maybe<&2, A>:
   match v:
     case None{}:
       None{}
@@ -263,14 +317,24 @@ def Store.read.of(-A: Data, m: Nat, f: List<&2, Types.Entry> -> Maybe<&2, A>, v:
 
 # a read of the groups of the store h at its version m, when the node holds
 # that version
-def Store.read(-A: Data, +s: Facts.Facts(), +h: Hashes.Hash, +m: Nat, f: List<&2, Types.Entry> -> Maybe<&2, A>) -> Maybe<&2, A>:
+def Store.read(
+  -A: Data,
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +m: Nat,
+  f: List<&2, Types.Entry> -> Maybe<&2, A>
+) -> Maybe<&2, A>:
   Store.read.of(A, m, f, Lines.Store.versions(s, h))
 
 # What a writer is told
 # ---------------------
 
 # Reach.imports, once the words m of the resource are known
-def Reach.imports.of(p: String, bs: List<&2, String>, m: Maybe<&2, List<&2, U32>>) -> List<&2, String>:
+def Reach.imports.of(
+  p: String,
+  bs: List<&2, String>,
+  m: Maybe<&2, List<&2, U32>>
+) -> List<&2, String>:
   match m:
     case None{}:
       []
@@ -299,7 +363,12 @@ def Reach.add(qs: List<&2, String>, +seen: List<&2, String>) -> List<&2, String>
       )
 
 # seen with what each of the paths ps imports
-def Reach.grow(+b: Files.Files(), +bs: List<&2, String>, ps: List<&2, String>, seen: List<&2, String>) -> List<&2, String>:
+def Reach.grow(
+  +b: Files.Files(),
+  +bs: List<&2, String>,
+  ps: List<&2, String>,
+  seen: List<&2, String>
+) -> List<&2, String>:
   match ps:
     case Nil{}:
       seen
@@ -307,7 +376,12 @@ def Reach.grow(+b: Files.Files(), +bs: List<&2, String>, ps: List<&2, String>, s
       Reach.grow(b, bs, rest, Reach.add(Reach.imports(b, bs, p), seen))
 
 # seen after fuel rounds of growing by its imports
-def Reach.go(fuel: Nat, +b: Files.Files(), +bs: List<&2, String>, +seen: List<&2, String>) -> List<&2, String>:
+def Reach.go(
+  fuel: Nat,
+  +b: Files.Files(),
+  +bs: List<&2, String>,
+  +seen: List<&2, String>
+) -> List<&2, String>:
   match fuel:
     case 0n:
       seen
@@ -326,9 +400,18 @@ def Reached.closed(g: Reached, p: String) -> Bool:
 
 # the paths that the paths us reach through imports in the content b, in the
 # build of the conditions bs (nothing if the rounds were not enough)
-def Reach.of(+b: Files.Files(), +bs: List<&2, String>, us: List<&2, String>) -> Maybe<&2, List<&2, String>>:
+def Reach.of(
+  +b: Files.Files(),
+  +bs: List<&2, String>,
+  us: List<&2, String>
+) -> Maybe<&2, List<&2, String>>:
   +start = Reach.add(us, [])
-  +seen = Reach.go(1n+Nat.add(List.length(&2, String, start), List.length(&2, String, Files.Files.paths(b))), b, bs, start)
+  +seen = Reach.go(
+    1n+Nat.add(List.length(&2, String, start), List.length(&2, String, Files.Files.paths(b))),
+    b,
+    bs,
+    start
+  )
   Shared.Maybe.when(
     List<&2, String>,
     Shared.List.holds(~String, ~Reached, ~Reached.closed, seen, Reached{b, bs, seen}),
@@ -363,7 +446,11 @@ def Delta.changed(+g: Delta, ps: List<&2, String>) -> List<&2, String>:
 
 # the paths that changed from the content a to the content b among those that
 # us reaches in b, once the reached paths m are known
-def Affects.at(a: Files.Files(), b: Files.Files(), m: Maybe<&2, List<&2, String>>) -> Maybe<&2, Spec.Reply>:
+def Affects.at(
+  a: Files.Files(),
+  b: Files.Files(),
+  m: Maybe<&2, List<&2, String>>
+) -> Maybe<&2, Spec.Reply>:
   match m:
     case None{}:
       None{}
@@ -372,7 +459,12 @@ def Affects.at(a: Files.Files(), b: Files.Files(), m: Maybe<&2, List<&2, String>
 
 # the paths that changed between two contents, if the node holds both, among
 # those that us reaches in the newer
-def Affects.of(old: Maybe<&2, Files.Files()>, new: Maybe<&2, Files.Files()>, us: List<&2, String>, bs: List<&2, String>) -> Maybe<&2, Spec.Reply>:
+def Affects.of(
+  old: Maybe<&2, Files.Files()>,
+  new: Maybe<&2, Files.Files()>,
+  us: List<&2, String>,
+  bs: List<&2, String>
+) -> Maybe<&2, Spec.Reply>:
   match old new:
     case Some{a} Some{+b}:
       Affects.at(a, b, Reach.of(b, bs, us))
@@ -455,7 +547,11 @@ def Reply.parents(c: Ledgers.Line, k: Nat, m: Maybe<&2, Types.Entry>) -> Maybe<&
       Some{Spec.Reply.Points{Contents.Entry.parents(c, k, e)}}
 
 # what the found entry m of the line c, if any, answers by f
-def Found.then(-A: Data, m: Maybe<&2, Found>, f: Nat -> Types.Entry -> Maybe<&2, A>) -> Maybe<&2, A>:
+def Found.then(
+  -A: Data,
+  m: Maybe<&2, Found>,
+  f: Nat -> Types.Entry -> Maybe<&2, A>
+) -> Maybe<&2, A>:
   match m:
     case None{}:
       None{}
@@ -476,7 +572,12 @@ def Line.find(+s: Facts.Facts(), +c: Ledgers.Line, i: Ledgers.Id) -> Maybe<&2, F
 
 # the reply of the status of the found entry m of the line c, with the
 # versions v of the line
-def Reply.status(+s: Facts.Facts(), +c: Ledgers.Line, v: Maybe<&2, List<&2, Types.Entry>>, m: Maybe<&2, Found>) -> Maybe<&2, Spec.Reply>:
+def Reply.status(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  v: Maybe<&2, List<&2, Types.Entry>>,
+  m: Maybe<&2, Found>
+) -> Maybe<&2, Spec.Reply>:
   match v m:
     case Some{vs} Some{Found{k, e}}:
       Some{Spec.Reply.Status{Status.of(s, c, vs, k, e)}}
@@ -541,7 +642,9 @@ def Answer.of(+s: Facts.Facts(), q: Spec.Question) -> Maybe<&2, Spec.Reply>:
     case Spec.Question.Count{c}:
       Reply.count(Lines.Line.versions(s, c))
     case Spec.Question.Clashes{+c, i}:
-      Reply.names(Found.then(List<&2, String>, Line.find(s, c, i), k => e => Clashes.of(s, c, k, e)))
+      Reply.names(
+        Found.then(List<&2, String>, Line.find(s, c, i), k => e => Clashes.of(s, c, k, e))
+      )
     case Spec.Question.Affects{+c, a, b, us, bs}:
       Affects.of(Contents.Content.of(s, c, a), Contents.Content.of(s, c, b), us, bs)
     case Spec.Question.Parents{+c, +k}:
@@ -593,7 +696,12 @@ def Entry.made_by(a: Types.Ask, e: Types.Entry) -> Bool:
   Coded.Ask.is_eq(Lines.Entry.ask(e), a)
 
 # the words at the path p of the newest of the versions m of the branch b
-def View.newest(+s: Facts.Facts(), +b: Ledgers.Line, +p: String, m: Maybe<&2, List<&2, Types.Entry>>) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+def View.newest(
+  +s: Facts.Facts(),
+  +b: Ledgers.Line,
+  +p: String,
+  m: Maybe<&2, List<&2, Types.Entry>>
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   match m:
     case None{}:
       None{}
@@ -610,7 +718,12 @@ def View.decided(a: Types.Ask, m: Maybe<&2, List<&2, Types.Entry>>) -> Bool:
 
 # the view of a writer whose last write there is the ask m, if any: its words
 # while no version was made by it; else what the newest version holds
-def View.of(+s: Facts.Facts(), +b: Ledgers.Line, +p: String, m: Maybe<&2, Types.Ask>) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+def View.of(
+  +s: Facts.Facts(),
+  +b: Ledgers.Line,
+  +p: String,
+  m: Maybe<&2, Types.Ask>
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   match m:
     case None{}:
       View.newest(s, b, p, Lines.Line.versions(s, b))
@@ -624,5 +737,15 @@ def View.of(+s: Facts.Facts(), +b: Ledgers.Line, +p: String, m: Maybe<&2, Types.
 
 # the words that the writer w reads at the path p of the newest version of
 # the branch b, its own writes included
-def View.at(+s: Facts.Facts(), +w: String, +b: Ledgers.Line, +p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  View.of(s, b, p, Lists.List.top(~Types.Ask, ~Facts.Ask.seq, Writes.of(Facts.Facts.list(s), Place{w, b, p})))
+def View.at(
+  +s: Facts.Facts(),
+  +w: String,
+  +b: Ledgers.Line,
+  +p: String
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+  View.of(
+    s,
+    b,
+    p,
+    Lists.List.top(~Types.Ask, ~Facts.Ask.seq, Writes.of(Facts.Facts.list(s), Place{w, b, p}))
+  )

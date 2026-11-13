@@ -37,7 +37,9 @@ def Lines.after.put_whole(
   nl: Bool,
   c: U32,
   ls: List<&2, List<&2, U32>>
-) -> {List.concat(&2, U32, Lines.after.put(nl, c, ls)) == c <> List.concat(&2, U32, ls): List<&2, U32>}:
+) -> {
+  List.concat(&2, U32, Lines.after.put(nl, c, ls)) == c <> List.concat(&2, U32, ls): List<&2, U32>
+}:
   match nl ls:
     case True{} r:
       {==}
@@ -47,12 +49,24 @@ def Lines.after.put_whole(
       {==}
 
 # the lines of ws, put together, are ws
-def Lines.after_whole(ws: List<&2, U32>) -> {List.concat(&2, U32, Lines.after(ws)) == ws: List<&2, U32>}:
+def Lines.after_whole(
+  ws: List<&2, U32>
+) -> {List.concat(&2, U32, Lines.after(ws)) == ws: List<&2, U32>}:
   match ws:
     case Nil{}:
       {==}
     case Con{+c, +r}:
-      %Lines.after_whole(r): {List.concat(&2, U32, Lines.after.put(U32.is_eq(c, 10), c, Lines.after(r))) == c <> _: List<&2, U32>}
+      %Lines.after_whole(
+        r
+      ): {
+        List.concat(
+          &2,
+          U32,
+          Lines.after.put(U32.is_eq(c, 10), c, Lines.after(r))
+        )
+          == c
+          <> _: List<&2, U32>
+      }
       Lines.after.put_whole(U32.is_eq(c, 10), c, Lines.after(r))
 
 # the items of the words ws when they are text or not (text): lines, or one
@@ -161,7 +175,11 @@ def Blocks.put.on_whole(
   h: List<&2, U32>,
   t: List<&2, List<&2, U32>>
 ) -> {
-  List.concat(&2, U32, Blocks.put.on(starts, l, h, t))
+  List.concat(
+    &2,
+    U32,
+    Blocks.put.on(starts, l, h, t)
+  )
     == List.append(&2, U32, l, List.append(&2, U32, h, List.concat(&2, U32, t))): List<&2, U32>
 }:
   match starts:
@@ -175,7 +193,12 @@ def Blocks.put_whole(
   l: List<&2, U32>,
   g: List<&2, List<&2, U32>>
 ) -> {
-  List.concat(&2, U32, Blocks.put(l, g)) == List.append(&2, U32, l, List.concat(&2, U32, g)): List<&2, U32>
+  List.concat(
+    &2,
+    U32,
+    Blocks.put(l, g)
+  )
+    == List.append(&2, U32, l, List.concat(&2, U32, g)): List<&2, U32>
 }:
   match g:
     case Nil{}:
@@ -191,7 +214,16 @@ def Blocks.group_whole(
     case Nil{}:
       {==}
     case Con{+l, +r}:
-      %Blocks.group_whole(r): {List.concat(&2, U32, Blocks.put(l, Blocks.group(r))) == List.append(&2, U32, l, _): List<&2, U32>}
+      %Blocks.group_whole(
+        r
+      ): {
+        List.concat(
+          &2,
+          U32,
+          Blocks.put(l, Blocks.group(r))
+        )
+          == List.append(&2, U32, l, _): List<&2, U32>
+      }
       Blocks.put_whole(l, Blocks.group(r))
 
 # Items
@@ -219,7 +251,11 @@ def Items.close(closed: Bool, cl: List<&2, U32>) -> List<&2, List<&2, U32>>:
 # the items of the words ws in the format f, whose pieces are ps (Pieces.of):
 # the items of a leaf; the blocks of a language; and for an embedding the
 # items of each piece in its own format, with each marker as an item
-def Items.go(+f: Formats.Format, ps: List<&2, Formats.Piece>, +ws: List<&2, U32>) -> List<&2, List<&2, U32>>:
+def Items.go(
+  +f: Formats.Format,
+  ps: List<&2, Formats.Piece>,
+  +ws: List<&2, U32>
+) -> List<&2, List<&2, U32>>:
   match f ps:
     case Formats.Format.Leaf{k} q:
       Leaf.items(k, ws)
@@ -230,12 +266,13 @@ def Items.go(+f: Formats.Format, ps: List<&2, Formats.Piece>, +ws: List<&2, U32>
     case Formats.Format.Embed{o, op, cl, i} Con{Formats.Piece.Text{+t}, rest}:
       List.append(&2, List<&2, U32>, Items.go(o, Pieces.of(o, t), t), Items.go(f, rest, ws))
     case Formats.Format.Embed{o, op, cl, i} Con{Formats.Piece.Region{+c, closed}, rest}:
-      op <> List.append(
-        &2,
-        List<&2, U32>,
-        Items.go(i, Pieces.of(i, c), c),
-        List.append(&2, List<&2, U32>, Items.close(closed, cl), Items.go(f, rest, ws))
-      )
+      op
+        <> List.append(
+          &2,
+          List<&2, U32>,
+          Items.go(i, Pieces.of(i, c), c),
+          List.append(&2, List<&2, U32>, Items.close(closed, cl), Items.go(f, rest, ws))
+        )
 
 # the words that the items of Items.go hold: ws, or for an embedding its
 # pieces ps, joined
@@ -270,15 +307,32 @@ def Items.two_whole(
   ea: {List.concat(&2, U32, xs) == a: List<&2, U32>},
   eb: {List.concat(&2, U32, ys) == b: List<&2, U32>}
 ) -> {
-  List.concat(&2, U32, List.append(&2, List<&2, U32>, xs, ys)) == List.append(&2, U32, a, b): List<&2, U32>
+  List.concat(
+    &2,
+    U32,
+    List.append(&2, List<&2, U32>, xs, ys)
+  )
+    == List.append(&2, U32, a, b): List<&2, U32>
 }:
-  %ea: {List.concat(&2, U32, List.append(&2, List<&2, U32>, xs, ys)) == List.append(&2, U32, _, b): List<&2, U32>}
+  %ea: {
+    List.concat(
+      &2,
+      U32,
+      List.append(&2, List<&2, U32>, xs, ys)
+    )
+      == List.append(&2, U32, _, b): List<&2, U32>
+  }
   %eb: {
-    List.concat(&2, U32, List.append(&2, List<&2, U32>, xs, ys))
+    List.concat(
+      &2,
+      U32,
+      List.append(&2, List<&2, U32>, xs, ys)
+    )
       == List.append(&2, U32, List.concat(&2, U32, xs), _): List<&2, U32>
   }
   Shared.List.concat_append(U32, xs, ys)
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
 # the items of Items.go, put together, are the words that it reads
 def Items.go_whole(
   +f: Formats.Format,
@@ -393,6 +447,7 @@ def Items.go_whole(
           Items.go_whole(f, rest, ws)
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # the items that the words ws of the resource at the path p are read as, in
 # its format
@@ -439,7 +494,11 @@ def Hunks.fit(hs: List<&2, Formats.Hunk>, +n: Nat) -> Bool:
 
 # the hunks d from the items a to the items b when they fit a, else the one
 # hunk that drops all of a and puts b
-def Diff.check(+d: List<&2, Formats.Hunk>, +a: List<&2, List<&2, U32>>, b: List<&2, List<&2, U32>>) -> List<&2, Formats.Hunk>:
+def Diff.check(
+  +d: List<&2, Formats.Hunk>,
+  +a: List<&2, List<&2, U32>>,
+  b: List<&2, List<&2, U32>>
+) -> List<&2, Formats.Hunk>:
   Shared.Bool.when(
     List<&2, Formats.Hunk>,
     Hunks.fit(d, List.length(&2, List<&2, U32>, a)),
@@ -448,7 +507,11 @@ def Diff.check(+d: List<&2, Formats.Hunk>, +a: List<&2, List<&2, U32>>, b: List<
   )
 
 # the words of the items a after the hunks x, when they fit (fits)
-def Diff.apply.if(fits: Bool, x: List<&2, Formats.Hunk>, a: List<&2, List<&2, U32>>) -> Maybe<&2, List<&2, U32>>:
+def Diff.apply.if(
+  fits: Bool,
+  x: List<&2, Formats.Hunk>,
+  a: List<&2, List<&2, U32>>
+) -> Maybe<&2, List<&2, U32>>:
   match fits:
     case True{}:
       Some{List.concat(&2, U32, Formats.Lines.apply.all(x, a))}
@@ -478,50 +541,81 @@ def Diff.apply.if_fits(
   a: List<&2, List<&2, U32>>,
   e: {fits == True{}: Bool}
 ) -> {
-  Diff.apply.if(fits, x, a) == Some{List.concat(&2, U32, Formats.Lines.apply.all(x, a))}: Maybe<&2, List<&2, U32>>
+  Diff.apply.if(
+    fits,
+    x,
+    a
+  )
+    == Some{List.concat(&2, U32, Formats.Lines.apply.all(x, a))}: Maybe<&2, List<&2, U32>>
 }:
   match fits:
     case True{}:
       {==}
     case False{}:
       Empty.absurd(
-        {None{} == Some{List.concat(&2, U32, Formats.Lines.apply.all(x, a))}: Maybe<&2, List<&2, U32>>},
+        {
+          None{}
+            == Some{List.concat(&2, U32, Formats.Lines.apply.all(x, a))}: Maybe<&2, List<&2, U32>>
+        },
         Shared.Bool.false_ne_true(e)
       )
 
 # a list without all its elements is empty
-def List.drop_all(-A: Data, xs: List<&2, A>) -> {List.drop(&2, A, xs, List.length(&2, A, xs)) == []: List<&2, A>}:
+def List.drop_all(
+  -A: Data,
+  xs: List<&2, A>
+) -> {List.drop(&2, A, xs, List.length(&2, A, xs)) == []: List<&2, A>}:
   match xs:
     case Nil{}:
       {==}
     case Con{x, r}:
       List.drop_all(A, r)
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # the one hunk that drops all of a and puts b fits a
 def Diff.whole_fits(
   n: Nat,
   b: List<&2, List<&2, U32>>
 ) -> {Hunks.fit([Formats.Hunk{0n, n, b}], n) == True{}: Bool}:
-  %Equal.sym(Bool, Nat.is_le(n, n), True{}, Shared.Nat.le_refl(n)): {Bool.and(_, True{}) == True{}: Bool}
+  %Equal.sym(
+    Bool,
+    Nat.is_le(n, n),
+    True{},
+    Shared.Nat.le_refl(n)
+  ): {Bool.and(_, True{}) == True{}: Bool}
   {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the one hunk that drops all of a and puts b makes b of a
 def Diff.whole_apply(
   +a: List<&2, List<&2, U32>>,
   +b: List<&2, List<&2, U32>>
 ) -> {
-  Formats.Lines.apply.all([Formats.Hunk{0n, List.length(&2, List<&2, U32>, a), b}], a)
+  Formats.Lines.apply.all(
+    [Formats.Hunk{0n, List.length(&2, List<&2, U32>, a), b}],
+    a
+  )
     == b: List<&2, List<&2, U32>>
 }:
   Equal.trans(
     List<&2, List<&2, U32>>,
     Formats.Lines.apply.all([Formats.Hunk{0n, List.length(&2, List<&2, U32>, a), b}], a),
-    List.append(&2, List<&2, U32>, b, List.drop(&2, List<&2, U32>, a, List.length(&2, List<&2, U32>, a))),
+    List.append(
+      &2,
+      List<&2, U32>,
+      b,
+      List.drop(&2, List<&2, U32>, a, List.length(&2, List<&2, U32>, a))
+    ),
     b,
     Formats.Lines.apply.all_one(0n, a, List.length(&2, List<&2, U32>, a), b),
     Equal.trans(
       List<&2, List<&2, U32>>,
-      List.append(&2, List<&2, U32>, b, List.drop(&2, List<&2, U32>, a, List.length(&2, List<&2, U32>, a))),
+      List.append(
+        &2,
+        List<&2, U32>,
+        b,
+        List.drop(&2, List<&2, U32>, a, List.length(&2, List<&2, U32>, a))
+      ),
       List.append(&2, List<&2, U32>, b, []),
       b,
       Equal.cong(
@@ -553,7 +647,9 @@ def Diff.apply_check(
   +a: List<&2, List<&2, U32>>,
   +b: List<&2, List<&2, U32>>,
   h: {Formats.Lines.apply.all(d, a) == b: List<&2, List<&2, U32>>}
-) -> {Diff.apply(Diff.check(d, a, b), a) == Some{List.concat(&2, U32, b)}: Maybe<&2, List<&2, U32>>}:
+) -> {
+  Diff.apply(Diff.check(d, a, b), a) == Some{List.concat(&2, U32, b)}: Maybe<&2, List<&2, U32>>
+}:
   Shared.Bool.when_cases(
     List<&2, Formats.Hunk>,
     r => {Diff.apply(r, a) == Some{List.concat(&2, U32, b)}: Maybe<&2, List<&2, U32>>},
@@ -577,9 +673,21 @@ def Diff.apply_diff(
   +ib: List<&2, List<&2, U32>>,
   -ws: List<&2, U32>,
   e: {List.concat(&2, U32, ib) == ws: List<&2, U32>}
-) -> {Diff.apply(Diff.check(Formats.Lines.diff(ia, ib), ia, ib), ia) == Some{ws}: Maybe<&2, List<&2, U32>>}:
+) -> {
+  Diff.apply(
+    Diff.check(Formats.Lines.diff(ia, ib), ia, ib),
+    ia
+  )
+    == Some{ws}: Maybe<&2, List<&2, U32>>
+}:
   %e:
-    {Diff.apply(Diff.check(Formats.Lines.diff(ia, ib), ia, ib), ia) == Some{_}: Maybe<&2, List<&2, U32>>}
+    {
+      Diff.apply(
+        Diff.check(Formats.Lines.diff(ia, ib), ia, ib),
+        ia
+      )
+        == Some{_}: Maybe<&2, List<&2, U32>>
+    }
   Diff.apply_check(Formats.Lines.diff(ia, ib), ia, ib, Formats.Lines.apply_diff(ia, ib))
 
 # a diff applies: a after the diff from a to b is b
@@ -644,7 +752,14 @@ def Merge.both(
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   match ours theirs:
     case Some{x} Some{y}:
-      Merge.of(Formats.Format.merge(Formats.Format.guess(p), Maybe.default(&2, List<&2, U32>, base, []), x, y))
+      Merge.of(
+        Formats.Format.merge(
+          Formats.Format.guess(p),
+          Maybe.default(&2, List<&2, U32>, base, []),
+          x,
+          y
+        )
+      )
     case o t:
       None{}
 
@@ -700,14 +815,24 @@ def Merge.pick_theirs(
   ours: Maybe<&2, List<&2, U32>>,
   theirs: Maybe<&2, List<&2, U32>>,
   e: {ob == True{}: Bool}
-) -> {Merge.pick(ob, tb, ot, p, base, ours, theirs) == Some{theirs}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+) -> {
+  Merge.pick(ob, tb, ot, p, base, ours, theirs) == Some{theirs}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
   match ob:
     case True{}:
       {==}
     case False{}:
       Empty.absurd(
         {
-          Merge.pick(False{}, tb, ot, p, base, ours, theirs)
+          Merge.pick(
+            False{},
+            tb,
+            ot,
+            p,
+            base,
+            ours,
+            theirs
+          )
             == Some{theirs}: Maybe<&2, Maybe<&2, List<&2, U32>>>
         },
         Shared.Bool.false_ne_true(e)
@@ -725,7 +850,9 @@ def Merge.pick_ours(
   theirs: Maybe<&2, List<&2, U32>>,
   e: {tb == True{}: Bool},
   h: {ob == True{}: Bool} -> {theirs == ours: Maybe<&2, List<&2, U32>>}
-) -> {Merge.pick(ob, tb, ot, p, base, ours, theirs) == Some{ours}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+) -> {
+  Merge.pick(ob, tb, ot, p, base, ours, theirs) == Some{ours}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
   match ob tb:
     case True{} t:
       Equal.cong(
@@ -741,7 +868,15 @@ def Merge.pick_ours(
     case False{} False{}:
       Empty.absurd(
         {
-          Merge.pick(False{}, False{}, ot, p, base, ours, theirs)
+          Merge.pick(
+            False{},
+            False{},
+            ot,
+            p,
+            base,
+            ours,
+            theirs
+          )
             == Some{ours}: Maybe<&2, Maybe<&2, List<&2, U32>>>
         },
         Shared.Bool.false_ne_true(e)
@@ -756,7 +891,9 @@ def Merge.pick_same(
   base: Maybe<&2, List<&2, U32>>,
   both: Maybe<&2, List<&2, U32>>,
   e: {ot == True{}: Bool}
-) -> {Merge.pick(ob, tb, ot, p, base, both, both) == Some{both}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+) -> {
+  Merge.pick(ob, tb, ot, p, base, both, both) == Some{both}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
   match ob tb ot:
     case True{} t s:
       {==}
@@ -767,7 +904,15 @@ def Merge.pick_same(
     case False{} False{} False{}:
       Empty.absurd(
         {
-          Merge.pick(False{}, False{}, False{}, p, base, both, both)
+          Merge.pick(
+            False{},
+            False{},
+            False{},
+            p,
+            base,
+            both,
+            both
+          )
             == Some{both}: Maybe<&2, Maybe<&2, List<&2, U32>>>
         },
         Shared.Bool.false_ne_true(e)
@@ -844,7 +989,10 @@ def Format.merge_same(
 # the word x of a test stands between two names
 def Test.is_gap(+x: U32) -> Bool:
   Bool.or(
-    Bool.or(Bool.or(U32.is_eq(x, 32), U32.is_eq(x, 9)), Bool.or(U32.is_eq(x, 13), U32.is_eq(x, 10))),
+    Bool.or(
+      Bool.or(U32.is_eq(x, 32), U32.is_eq(x, 9)),
+      Bool.or(U32.is_eq(x, 13), U32.is_eq(x, 10))
+    ),
     Bool.or(
       Bool.or(U32.is_eq(x, 40), U32.is_eq(x, 41)),
       Bool.or(U32.is_eq(x, 33), Bool.or(U32.is_eq(x, 38), U32.is_eq(x, 124)))
@@ -883,9 +1031,15 @@ def Test.named(ns: List<&2, List<&2, U32>>, +bs: List<&2, List<&2, U32>>) -> Boo
 
 # the test t asks that a name is not defined: #ifndef, or !defined
 def Test.negates(+t: List<&2, U32>) -> Bool:
-  Bool.or(
+  Shared.Bool.when(
+    Bool,
     Formats.Bytes.starts([35, 105, 102, 110, 100, 101, 102], t),
-    Maybe.is_some(&2, Texts.Cut<List<&2, U32>>, Formats.Bytes.find([33, 100, 101, 102, 105, 110, 101, 100], t))
+    u => True{},
+    u => Maybe.is_some(
+      &2,
+      Texts.Cut<List<&2, U32>>,
+      Formats.Bytes.find([33, 100, 101, 102, 105, 110, 101, 100], t)
+    )
   )
 
 # the test t is taken in the build of the names bs: it names one of them, or
@@ -920,7 +1074,11 @@ def Names.paths(ns: List<&2, Resources.Name>, rest: List<&2, String>) -> List<&2
 
 # the paths that the imports xs of the resource at p may be, of those taken in
 # the build of the names bs
-def Imports.paths(xs: List<&2, Formats.Import>, +p: String, +bs: List<&2, List<&2, U32>>) -> List<&2, String>:
+def Imports.paths(
+  xs: List<&2, Formats.Import>,
+  +p: String,
+  +bs: List<&2, List<&2, U32>>
+) -> List<&2, String>:
   match xs:
     case Nil{}:
       []
@@ -929,7 +1087,11 @@ def Imports.paths(xs: List<&2, Formats.Import>, +p: String, +bs: List<&2, List<&
         List<&2, String>,
         Conds.taken(cs, bs),
         u => Names.paths(
-          Resources.Name.candidates(Resources.Name{String.append(":", p)}, fi, Texts.Bytes.to_text(t)),
+          Resources.Name.candidates(
+            Resources.Name{String.append(":", p)},
+            fi,
+            Texts.Bytes.to_text(t)
+          ),
           Imports.paths(rest, p, bs)
         ),
         u => Imports.paths(rest, p, bs)
@@ -946,18 +1108,26 @@ def Format.imports(p: String, ws: List<&2, U32>, bs: List<&2, String>) -> List<&
 
 # a C resource that includes one header in each part of a condition
 def Example.c() -> List<&2, U32>:
-  Texts.Bytes.of_text("#include \"a.h\"\n#ifdef FOO\n#include \"b.h\"\n#else\n#include \"../c.h\"\n#endif\nint f() {\n  return 1;\n}\n\nint g() {\n  return 2;\n}\n")
+  Texts.Bytes.of_text(
+    "#include \"a.h\"\n#ifdef FOO\n#include \"b.h\"\n#else\n#include \"../c.h\"\n#endif\nint f() {\n  return 1;\n}\n\nint g() {\n  return 2;\n}\n"
+  )
 
 # its imports in the build that defines FOO
-def Example.imports_foo() -> {Format.imports("src/x.c", Example.c(), ["FOO"]) == ["src/a.h", "src/b.h"]: List<&2, String>}:
+def Example.imports_foo() -> {
+  Format.imports("src/x.c", Example.c(), ["FOO"]) == ["src/a.h", "src/b.h"]: List<&2, String>
+}:
   {==}
 
 # its imports in the build that defines nothing
-def Example.imports_none() -> {Format.imports("src/x.c", Example.c(), []) == ["src/a.h", "c.h"]: List<&2, String>}:
+def Example.imports_none() -> {
+  Format.imports("src/x.c", Example.c(), []) == ["src/a.h", "c.h"]: List<&2, String>
+}:
   {==}
 
 # its items: each line of its head that starts at the margin, then each function
-def Example.items() -> {List.length(&2, List<&2, U32>, Format.items("src/x.c", Example.c())) == 8n: Nat}:
+def Example.items() -> {
+  List.length(&2, List<&2, U32>, Format.items("src/x.c", Example.c())) == 8n: Nat
+}:
   {==}
 
 # two changes of two functions merge
@@ -986,21 +1156,33 @@ def Example.clash() -> {
 
 # the diff of a change of one line keeps the lines around it
 def Example.diff() -> {
-  Format.diff("x.txt", Texts.Bytes.of_text("a\nb\nc\n"), Texts.Bytes.of_text("a\nB\nc\n"))
+  Format.diff(
+    "x.txt",
+    Texts.Bytes.of_text("a\nb\nc\n"),
+    Texts.Bytes.of_text("a\nB\nc\n")
+  )
     == [Formats.Hunk{1n, 1n, [[66, 10]]}]: Diff()
 }:
   {==}
 
 # a diff does not apply to a content that is too short for it
 def Example.apply_none() -> {
-  Format.apply("x.txt", [97, 10], [Formats.Hunk{1n, 1n, [[66, 10]]}]) == None{}: Maybe<&2, List<&2, U32>>
+  Format.apply(
+    "x.txt",
+    [97, 10],
+    [Formats.Hunk{1n, 1n, [[66, 10]]}]
+  )
+    == None{}: Maybe<&2, List<&2, U32>>
 }:
   {==}
 
 # the items of a Markdown resource: its lines, the markers of its code, and
 # the lines of the code
 def Example.nested() -> {
-  Format.items("a.md", Texts.Bytes.of_text("t\n```x\ny\n```z"))
+  Format.items(
+    "a.md",
+    Texts.Bytes.of_text("t\n```x\ny\n```z")
+  )
     == [[116, 10], [96, 96, 96], [120, 10], [121, 10], [96, 96, 96], [122]]: List<&2, List<&2, U32>>
 }:
   {==}

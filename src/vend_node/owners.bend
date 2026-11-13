@@ -2,9 +2,7 @@ import Base
 import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
-import ../shared/shared/shared/text.bend as Texts
 import ./answers.bend as Answers
-import ./codes.bend as Coded
 import ./facts.bend as Facts
 import ./groups.bend as Groups
 import ./lines.bend as Lines
@@ -76,7 +74,10 @@ def Reply.ask_of(m: Maybe<&2, Spec.Reply>) -> Maybe<&2, Spec.Request>:
       None{}
 
 # a reply of the names ns comes from the names ns
-def Reply.names_some(m: Maybe<&2, List<&2, String>>, -ns: List<&2, String>) -> {
+def Reply.names_some(
+  m: Maybe<&2, List<&2, String>>,
+  -ns: List<&2, String>
+) -> {
   Answers.Reply.names(m) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
 } -> {m == Some{ns}: Maybe<&2, List<&2, String>>}:
   match m:
@@ -96,7 +97,10 @@ def Reply.names_some(m: Maybe<&2, List<&2, String>>, -ns: List<&2, String>) -> {
       )
 
 # a reply of yes or no comes from that
-def Reply.yes_some(m: Maybe<&2, Bool>, -y: Bool) -> {
+def Reply.yes_some(
+  m: Maybe<&2, Bool>,
+  -y: Bool
+) -> {
   Answers.Reply.yes(m) == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>
 } -> {m == Some{y}: Maybe<&2, Bool>}:
   match m:
@@ -116,7 +120,10 @@ def Reply.yes_some(m: Maybe<&2, Bool>, -y: Bool) -> {
       )
 
 # a reply of the number k comes from the number k
-def Reply.number_some(m: Maybe<&2, Nat>, -k: Nat) -> {
+def Reply.number_some(
+  m: Maybe<&2, Nat>,
+  -k: Nat
+) -> {
   Answers.Reply.number(m) == Some{Spec.Reply.Number{k}}: Maybe<&2, Spec.Reply>
 } -> {m == Some{k}: Maybe<&2, Nat>}:
   match m:
@@ -139,26 +146,44 @@ def Reply.number_some(m: Maybe<&2, Nat>, -k: Nat) -> {
 # ----------------
 
 # an answer given when b holds is given: b holds, and it is the answer
-def When.some(-A: Data, b: Bool, -y: Maybe<&2, A>, -x: A, h: {Shared.Maybe.when(A, b, u => y) == Some{x}: Maybe<&2, A>}) -> {
-  b == True{}: Bool
-}
+def When.some(
+  -A: Data,
+  b: Bool,
+  -y: Maybe<&2, A>,
+  -x: A,
+  h: {Shared.Maybe.when(A, b, u => y) == Some{x}: Maybe<&2, A>}
+) -> {b == True{}: Bool}
   & {y == Some{x}: Maybe<&2, A>}:
   match b:
     case True{}:
       ({==}, h)
     case False{}:
-      Empty.absurd({False{} == True{}: Bool} & {y == Some{x}: Maybe<&2, A>}, Shared.Maybe.none_ne_some(A, x, h))
+      Empty.absurd(
+        {False{} == True{}: Bool} & {y == Some{x}: Maybe<&2, A>},
+        Shared.Maybe.none_ne_some(A, x, h)
+      )
 
 # a read of a store that answers: the store has versions, and the version read
 # is one of them
-def Read.some(-A: Data, +m: Nat, -f: List<&2, Types.Entry> -> Maybe<&2, A>, v: Maybe<&2, List<&2, Types.Entry>>, -x: A) -> {
+def Read.some(
+  -A: Data,
+  +m: Nat,
+  -f: List<&2, Types.Entry> -> Maybe<&2, A>,
+  v: Maybe<&2, List<&2, Types.Entry>>,
+  -x: A
+) -> {
   Answers.Store.read.of(A, m, f, v) == Some{x}: Maybe<&2, A>
 } -> Exists(
   List<&2, Types.Entry>,
   R => {
     v == Some{R}: Maybe<&2, List<&2, Types.Entry>>
   }
-    & ({Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool} & {f(R) == Some{x}: Maybe<&2, A>})
+    & (
+      {
+        Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool
+      }
+        & {f(R) == Some{x}: Maybe<&2, A>}
+    )
 ):
   match v:
     case None{}:
@@ -168,214 +193,325 @@ def Read.some(-A: Data, +m: Nat, -f: List<&2, Types.Entry> -> Maybe<&2, A>, v: M
           R => {
             None{} == Some{R}: Maybe<&2, List<&2, Types.Entry>>
           }
-            & ({Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool} & {f(R) == Some{x}: Maybe<&2, A>})
+            & (
+              {
+                Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool
+              }
+                & {f(R) == Some{x}: Maybe<&2, A>}
+            )
         ),
         Shared.Maybe.none_ne_some(A, x, h)
       )
     case Some{+R}:
       h => (R, ({==}, When.some(A, Nat.is_lt(m, List.length(&2, Types.Entry, R)), f(R), x, h)))
 
-# a read of a store of the versions R that answers: the version read is one of
-# R, and the answer is the read of R
+# a read of a store of the versions r that answers: the version read is one of
+# r, and the answer is the read of r
 def Read.at(
   -A: Data,
   +m: Nat,
   -f: List<&2, Types.Entry> -> Maybe<&2, A>,
   -v: Maybe<&2, List<&2, Types.Entry>>,
-  +R: List<&2, Types.Entry>,
+  +r: List<&2, Types.Entry>,
   -x: A,
-  ev: {v == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
+  ev: {v == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
   e: {Answers.Store.read.of(A, m, f, v) == Some{x}: Maybe<&2, A>}
 ) -> {
-  Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool
+  Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool
 }
-  & {f(R) == Some{x}: Maybe<&2, A>}:
+  & {f(r) == Some{x}: Maybe<&2, A>}:
   When.some(
     A,
-    Nat.is_lt(m, List.length(&2, Types.Entry, R)),
-    f(R),
+    Nat.is_lt(m, List.length(&2, Types.Entry, r)),
+    f(r),
     x,
     Own.cast(
       Maybe<&2, List<&2, Types.Entry>>,
       w => {Answers.Store.read.of(A, m, f, w) == Some{x}: Maybe<&2, A>},
       v,
-      Some{R},
+      Some{r},
       ev,
       e
     )
   )
 
-# a read of a store of the versions R answers the read of R, when the version
-# read is one of R
+# a read of a store of the versions r answers the read of r, when the version
+# read is one of r
 def Read.make(
   -A: Data,
   -m: Nat,
   -f: List<&2, Types.Entry> -> Maybe<&2, A>,
   -v: Maybe<&2, List<&2, Types.Entry>>,
-  -R: List<&2, Types.Entry>,
+  -r: List<&2, Types.Entry>,
   -x: A,
-  ev: {v == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  lt: {Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool},
-  ef: {f(R) == Some{x}: Maybe<&2, A>}
+  ev: {v == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  lt: {Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool},
+  ef: {f(r) == Some{x}: Maybe<&2, A>}
 ) -> {Answers.Store.read.of(A, m, f, v) == Some{x}: Maybe<&2, A>}:
-  %Equal.sym(Maybe<&2, List<&2, Types.Entry>>, v, Some{R}, ev): {Answers.Store.read.of(A, m, f, _) == Some{x}: Maybe<&2, A>}
-  %Equal.sym(Bool, Nat.is_lt(m, List.length(&2, Types.Entry, R)), True{}, lt): {Shared.Maybe.when(A, _, u => f(R)) == Some{x}: Maybe<&2, A>}
+  %Equal.sym(
+    Maybe<&2, List<&2, Types.Entry>>,
+    v,
+    Some{r},
+    ev
+  ): {Answers.Store.read.of(A, m, f, _) == Some{x}: Maybe<&2, A>}
+  %Equal.sym(
+    Bool,
+    Nat.is_lt(m, List.length(&2, Types.Entry, r)),
+    True{},
+    lt
+  ): {Shared.Maybe.when(A, _, u => f(r)) == Some{x}: Maybe<&2, A>}
   ef
 
 # The nodes of a group
 # --------------------
 
 # the reply of the nodes of the group g of the store h at its version m, when
-# the versions R of the store reach m: the nodes that R gives
+# the versions r of the store reach m: the nodes that r gives
 def Nodes.make(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +g: String,
   +m: Nat,
-  -R: List<&2, Types.Entry>,
+  -r: List<&2, Types.Entry>,
   -ns: List<&2, String>,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  lt: {Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool},
-  en: {Groups.Groups.nodes(R, h, g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
-) -> {Answers.Answer.of(s, Spec.Question.Nodes{h, g, m}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>}:
+  ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  lt: {Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool},
+  en: {Groups.Groups.nodes(r, h, g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+) -> {
+  Answers.Answer.of(
+    s,
+    Spec.Question.Nodes{h, g, m}
+  )
+    == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+}:
   Equal.cong(
     Maybe<&2, List<&2, String>>,
     Maybe<&2, Spec.Reply>,
     Answers.Reply.names,
-    Answers.Store.read.of(List<&2, String>, m, R2 => Groups.Groups.nodes(R2, h, g, m), Lines.Store.versions(s, h)),
+    Answers.Store.read.of(
+      List<&2, String>,
+      m,
+      R2 => Groups.Groups.nodes(R2, h, g, m),
+      Lines.Store.versions(s, h)
+    ),
     Some{ns},
-    Read.make(List<&2, String>, m, R2 => Groups.Groups.nodes(R2, h, g, m), Lines.Store.versions(s, h), R, ns, ev, lt, en)
+    Read.make(
+      List<&2, String>,
+      m,
+      R2 => Groups.Groups.nodes(R2, h, g, m),
+      Lines.Store.versions(s, h),
+      r,
+      ns,
+      ev,
+      lt,
+      en
+    )
   )
 
 # the reply of the members of the group g of the store h at its version m,
-# when the versions R of the store reach m: the members that R gives
+# when the versions r of the store reach m: the members that r gives
 def Members.make(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +g: String,
   +m: Nat,
-  -R: List<&2, Types.Entry>,
+  -r: List<&2, Types.Entry>,
   -ms: List<&2, String>,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  lt: {Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool},
-  em: {Groups.Groups.members(R, h, g, m) == Some{ms}: Maybe<&2, List<&2, String>>}
-) -> {Answers.Answer.of(s, Spec.Question.Members{h, g, m}) == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>}:
+  ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  lt: {Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool},
+  em: {Groups.Groups.members(r, h, g, m) == Some{ms}: Maybe<&2, List<&2, String>>}
+) -> {
+  Answers.Answer.of(
+    s,
+    Spec.Question.Members{h, g, m}
+  )
+    == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
+}:
   Equal.cong(
     Maybe<&2, List<&2, String>>,
     Maybe<&2, Spec.Reply>,
     Answers.Reply.names,
-    Answers.Store.read.of(List<&2, String>, m, R2 => Groups.Groups.members(R2, h, g, m), Lines.Store.versions(s, h)),
+    Answers.Store.read.of(
+      List<&2, String>,
+      m,
+      R2 => Groups.Groups.members(R2, h, g, m),
+      Lines.Store.versions(s, h)
+    ),
     Some{ms},
-    Read.make(List<&2, String>, m, R2 => Groups.Groups.members(R2, h, g, m), Lines.Store.versions(s, h), R, ms, ev, lt, em)
+    Read.make(
+      List<&2, String>,
+      m,
+      R2 => Groups.Groups.members(R2, h, g, m),
+      Lines.Store.versions(s, h),
+      r,
+      ms,
+      ev,
+      lt,
+      em
+    )
   )
 
 # the reply of whether g is a group of the store h at its version m, when the
-# versions R of the store reach m: what R gives
+# versions r of the store reach m: what r gives
 def IsGroup.make(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +g: String,
   +m: Nat,
-  -R: List<&2, Types.Entry>,
+  -r: List<&2, Types.Entry>,
   -y: Bool,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  lt: {Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool},
-  ey: {Groups.Groups.is_group(R, h, g, m) == Some{y}: Maybe<&2, Bool>}
-) -> {Answers.Answer.of(s, Spec.Question.IsGroup{h, g, m}) == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>}:
+  ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  lt: {Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool},
+  ey: {Groups.Groups.is_group(r, h, g, m) == Some{y}: Maybe<&2, Bool>}
+) -> {
+  Answers.Answer.of(
+    s,
+    Spec.Question.IsGroup{h, g, m}
+  )
+    == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>
+}:
   Equal.cong(
     Maybe<&2, Bool>,
     Maybe<&2, Spec.Reply>,
     Answers.Reply.yes,
-    Answers.Store.read.of(Bool, m, R2 => Groups.Groups.is_group(R2, h, g, m), Lines.Store.versions(s, h)),
+    Answers.Store.read.of(
+      Bool,
+      m,
+      R2 => Groups.Groups.is_group(R2, h, g, m),
+      Lines.Store.versions(s, h)
+    ),
     Some{y},
-    Read.make(Bool, m, R2 => Groups.Groups.is_group(R2, h, g, m), Lines.Store.versions(s, h), R, y, ev, lt, ey)
+    Read.make(
+      Bool,
+      m,
+      R2 => Groups.Groups.is_group(R2, h, g, m),
+      Lines.Store.versions(s, h),
+      r,
+      y,
+      ev,
+      lt,
+      ey
+    )
   )
 
-# a reply of the nodes of a group of a store of the versions R is the nodes
-# that R gives
+# a reply of the nodes of a group of a store of the versions r is the nodes
+# that r gives
 def Nodes.at(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +g: String,
   +m: Nat,
-  +R: List<&2, Types.Entry>,
+  +r: List<&2, Types.Entry>,
   -ns: List<&2, String>,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  e: {Answers.Answer.of(s, Spec.Question.Nodes{h, g, m}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>}
-) -> {Groups.Groups.nodes(R, h, g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
+  ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  e: {
+    Answers.Answer.of(
+      s,
+      Spec.Question.Nodes{h, g, m}
+    )
+      == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+  }
+) -> {Groups.Groups.nodes(r, h, g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
   Pair.snd(
-    {Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool},
-    {Groups.Groups.nodes(R, h, g, m) == Some{ns}: Maybe<&2, List<&2, String>>},
+    {Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool},
+    {Groups.Groups.nodes(r, h, g, m) == Some{ns}: Maybe<&2, List<&2, String>>},
     Read.at(
       List<&2, String>,
       m,
       R2 => Groups.Groups.nodes(R2, h, g, m),
       Lines.Store.versions(s, h),
-      R,
+      r,
       ns,
       ev,
       Reply.names_some(
-        Answers.Store.read.of(List<&2, String>, m, R2 => Groups.Groups.nodes(R2, h, g, m), Lines.Store.versions(s, h)),
+        Answers.Store.read.of(
+          List<&2, String>,
+          m,
+          R2 => Groups.Groups.nodes(R2, h, g, m),
+          Lines.Store.versions(s, h)
+        ),
         ns
       )(e)
     )
   )
 
-# a reply of the members of a group of a store of the versions R is the
-# members that R gives
+# a reply of the members of a group of a store of the versions r is the
+# members that r gives
 def Members.at(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +g: String,
   +m: Nat,
-  +R: List<&2, Types.Entry>,
+  +r: List<&2, Types.Entry>,
   -ms: List<&2, String>,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  e: {Answers.Answer.of(s, Spec.Question.Members{h, g, m}) == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>}
-) -> {Groups.Groups.members(R, h, g, m) == Some{ms}: Maybe<&2, List<&2, String>>}:
+  ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  e: {
+    Answers.Answer.of(
+      s,
+      Spec.Question.Members{h, g, m}
+    )
+      == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
+  }
+) -> {Groups.Groups.members(r, h, g, m) == Some{ms}: Maybe<&2, List<&2, String>>}:
   Pair.snd(
-    {Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool},
-    {Groups.Groups.members(R, h, g, m) == Some{ms}: Maybe<&2, List<&2, String>>},
+    {Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool},
+    {Groups.Groups.members(r, h, g, m) == Some{ms}: Maybe<&2, List<&2, String>>},
     Read.at(
       List<&2, String>,
       m,
       R2 => Groups.Groups.members(R2, h, g, m),
       Lines.Store.versions(s, h),
-      R,
+      r,
       ms,
       ev,
       Reply.names_some(
-        Answers.Store.read.of(List<&2, String>, m, R2 => Groups.Groups.members(R2, h, g, m), Lines.Store.versions(s, h)),
+        Answers.Store.read.of(
+          List<&2, String>,
+          m,
+          R2 => Groups.Groups.members(R2, h, g, m),
+          Lines.Store.versions(s, h)
+        ),
         ms
       )(e)
     )
   )
 
-# a reply of whether a name is a group of a store of the versions R is what R
+# a reply of whether a name is a group of a store of the versions r is what r
 # gives
 def IsGroup.at(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +g: String,
   +m: Nat,
-  +R: List<&2, Types.Entry>,
+  +r: List<&2, Types.Entry>,
   -y: Bool,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  e: {Answers.Answer.of(s, Spec.Question.IsGroup{h, g, m}) == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>}
-) -> {Groups.Groups.is_group(R, h, g, m) == Some{y}: Maybe<&2, Bool>}:
+  ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  e: {
+    Answers.Answer.of(
+      s,
+      Spec.Question.IsGroup{h, g, m}
+    )
+      == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>
+  }
+) -> {Groups.Groups.is_group(r, h, g, m) == Some{y}: Maybe<&2, Bool>}:
   Pair.snd(
-    {Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool},
-    {Groups.Groups.is_group(R, h, g, m) == Some{y}: Maybe<&2, Bool>},
+    {Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool},
+    {Groups.Groups.is_group(r, h, g, m) == Some{y}: Maybe<&2, Bool>},
     Read.at(
       Bool,
       m,
       R2 => Groups.Groups.is_group(R2, h, g, m),
       Lines.Store.versions(s, h),
-      R,
+      r,
       y,
       ev,
       Reply.yes_some(
-        Answers.Store.read.of(Bool, m, R2 => Groups.Groups.is_group(R2, h, g, m), Lines.Store.versions(s, h)),
+        Answers.Store.read.of(
+          Bool,
+          m,
+          R2 => Groups.Groups.is_group(R2, h, g, m),
+          Lines.Store.versions(s, h)
+        ),
         y
       )(e)
     )
@@ -389,7 +525,13 @@ def Members.some(
   +g: String,
   +m: Nat,
   -ms: List<&2, String>,
-  e: {Answers.Answer.of(s, Spec.Question.Members{h, g, m}) == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>}
+  e: {
+    Answers.Answer.of(
+      s,
+      Spec.Question.Members{h, g, m}
+    )
+      == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
+  }
 ) -> Exists(
   List<&2, Types.Entry>,
   R => {
@@ -402,9 +544,20 @@ def Members.some(
         & {Groups.Groups.members(R, h, g, m) == Some{ms}: Maybe<&2, List<&2, String>>}
     )
 ):
-  Read.some(List<&2, String>, m, R2 => Groups.Groups.members(R2, h, g, m), Lines.Store.versions(s, h), ms)(
+  Read.some(
+    List<&2, String>,
+    m,
+    R2 => Groups.Groups.members(R2, h, g, m),
+    Lines.Store.versions(s, h),
+    ms
+  )(
     Reply.names_some(
-      Answers.Store.read.of(List<&2, String>, m, R2 => Groups.Groups.members(R2, h, g, m), Lines.Store.versions(s, h)),
+      Answers.Store.read.of(
+        List<&2, String>,
+        m,
+        R2 => Groups.Groups.members(R2, h, g, m),
+        Lines.Store.versions(s, h)
+      ),
       ms
     )(e)
   )
@@ -417,7 +570,13 @@ def Nodes.some(
   +g: String,
   +m: Nat,
   -ns: List<&2, String>,
-  e: {Answers.Answer.of(s, Spec.Question.Nodes{h, g, m}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>}
+  e: {
+    Answers.Answer.of(
+      s,
+      Spec.Question.Nodes{h, g, m}
+    )
+      == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+  }
 ) -> Exists(
   List<&2, Types.Entry>,
   R => {
@@ -430,9 +589,20 @@ def Nodes.some(
         & {Groups.Groups.nodes(R, h, g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
     )
 ):
-  Read.some(List<&2, String>, m, R2 => Groups.Groups.nodes(R2, h, g, m), Lines.Store.versions(s, h), ns)(
+  Read.some(
+    List<&2, String>,
+    m,
+    R2 => Groups.Groups.nodes(R2, h, g, m),
+    Lines.Store.versions(s, h),
+    ns
+  )(
     Reply.names_some(
-      Answers.Store.read.of(List<&2, String>, m, R2 => Groups.Groups.nodes(R2, h, g, m), Lines.Store.versions(s, h)),
+      Answers.Store.read.of(
+        List<&2, String>,
+        m,
+        R2 => Groups.Groups.nodes(R2, h, g, m),
+        Lines.Store.versions(s, h)
+      ),
       ns
     )(e)
   )
@@ -445,7 +615,13 @@ def IsGroup.some(
   +g: String,
   +m: Nat,
   -y: Bool,
-  e: {Answers.Answer.of(s, Spec.Question.IsGroup{h, g, m}) == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>}
+  e: {
+    Answers.Answer.of(
+      s,
+      Spec.Question.IsGroup{h, g, m}
+    )
+      == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>
+  }
 ) -> Exists(
   List<&2, Types.Entry>,
   R => {
@@ -458,37 +634,55 @@ def IsGroup.some(
         & {Groups.Groups.is_group(R, h, g, m) == Some{y}: Maybe<&2, Bool>}
     )
 ):
-  Read.some(Bool, m, R2 => Groups.Groups.is_group(R2, h, g, m), Lines.Store.versions(s, h), y)(
+  Read.some(
+    Bool,
+    m,
+    R2 => Groups.Groups.is_group(R2, h, g, m),
+    Lines.Store.versions(s, h),
+    y
+  )(
     Reply.yes_some(
-      Answers.Store.read.of(Bool, m, R2 => Groups.Groups.is_group(R2, h, g, m), Lines.Store.versions(s, h)),
+      Answers.Store.read.of(
+        Bool,
+        m,
+        R2 => Groups.Groups.is_group(R2, h, g, m),
+        Lines.Store.versions(s, h)
+      ),
       y
     )(e)
   )
 
-# a node that R gives to the group g is in the reply of the nodes of g
+# a node that r gives to the group g is in the reply of the nodes of g
 def Nodes.reply(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +g: String,
   +m: Nat,
-  -R: List<&2, Types.Entry>,
+  -r: List<&2, Types.Entry>,
   -x: String,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  lt: {Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool},
+  ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  lt: {Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool},
   p: Exists(
     List<&2, String>,
-    ns => {Groups.Groups.nodes(R, h, g, m) == Some{ns}: Maybe<&2, List<&2, String>>} & {List.contains(~String, ~String.eq, ns, x) == True{}: Bool}
+    ns => {
+      Groups.Groups.nodes(r, h, g, m) == Some{ns}: Maybe<&2, List<&2, String>>
+    }
+      & {List.contains(~String, ~String.eq, ns, x) == True{}: Bool}
   )
 ) -> Exists(
   List<&2, String>,
   ns => {
-    Answers.Answer.of(s, Spec.Question.Nodes{h, g, m}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+    Answers.Answer.of(
+      s,
+      Spec.Question.Nodes{h, g, m}
+    )
+      == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
   }
     & {List.contains(~String, ~String.eq, ns, x) == True{}: Bool}
 ):
   (ns, q) = p
   (en, c) = q
-  (ns, (Nodes.make(s, h, g, m, R, ns, ev, lt, en), c))
+  (ns, (Nodes.make(s, h, g, m, r, ns, ev, lt, en), c))
 
 # Core.group_nodes, for a member that is a group, with its premises as
 # arguments
@@ -499,24 +693,38 @@ def Core.group_nodes.nested(
   +k: Nat,
   +ms: List<&2, String>,
   +v: String,
-  +R: List<&2, Types.Entry>,
+  +r: List<&2, Types.Entry>,
   +x: String,
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  lt: {Nat.is_lt(k, List.length(&2, Types.Entry, R)) == True{}: Bool},
-  em: {Groups.Groups.members(R, h, g, k) == Some{ms}: Maybe<&2, List<&2, String>>},
+  +ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  lt: {Nat.is_lt(k, List.length(&2, Types.Entry, r)) == True{}: Bool},
+  em: {Groups.Groups.members(r, h, g, k) == Some{ms}: Maybe<&2, List<&2, String>>},
   e2: {List.contains(~String, ~String.eq, ms, v) == True{}: Bool},
-  e4: {Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>},
+  e4: {
+    Answers.Answer.of(
+      s,
+      Spec.Question.IsGroup{h, v, k}
+    )
+      == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
+  },
   p: Exists(
     List<&2, String>,
     vs => {
-      Answers.Answer.of(s, Spec.Question.Nodes{h, v, k}) == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.Nodes{h, v, k}
+      )
+        == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
     }
       & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}
   )
 ) -> Exists(
   List<&2, String>,
   ns => {
-    Answers.Answer.of(s, Spec.Question.Nodes{h, g, k}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+    Answers.Answer.of(
+      s,
+      Spec.Question.Nodes{h, g, k}
+    )
+      == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
   }
     & {List.contains(~String, ~String.eq, ns, x) == True{}: Bool}
 ):
@@ -527,12 +735,12 @@ def Core.group_nodes.nested(
     h,
     g,
     k,
-    R,
+    r,
     x,
     ev,
     lt,
     Groups.Groups.nodes_nested(
-      R,
+      r,
       h,
       g,
       k,
@@ -542,8 +750,8 @@ def Core.group_nodes.nested(
       vs,
       em,
       e2,
-      IsGroup.at(s, h, v, k, R, True{}, ev, e4),
-      Nodes.at(s, h, v, k, R, vs, ev, en),
+      IsGroup.at(s, h, v, k, r, True{}, ev, e4),
+      Nodes.at(s, h, v, k, r, vs, ev, en),
       c
     )
   )
@@ -556,35 +764,55 @@ def Core.group_nodes.of(
   +k: Nat,
   +ms: List<&2, String>,
   +v: String,
-  +R: List<&2, Types.Entry>,
+  +r: List<&2, Types.Entry>,
   +e2: {List.contains(~String, ~String.eq, ms, v) == True{}: Bool},
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  +lt: {Nat.is_lt(k, List.length(&2, Types.Entry, R)) == True{}: Bool},
-  +em: {Groups.Groups.members(R, h, g, k) == Some{ms}: Maybe<&2, List<&2, String>>}
+  +ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  +lt: {Nat.is_lt(k, List.length(&2, Types.Entry, r)) == True{}: Bool},
+  +em: {Groups.Groups.members(r, h, g, k) == Some{ms}: Maybe<&2, List<&2, String>>}
 ) -> (
   {
-    Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
+    Answers.Answer.of(
+      s,
+      Spec.Question.IsGroup{h, v, k}
+    )
+      == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
   } -> Exists(
     List<&2, String>,
     ns => {
-      Answers.Answer.of(s, Spec.Question.Nodes{h, g, k}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.Nodes{h, g, k}
+      )
+        == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
     }
       & {List.contains(~String, ~String.eq, ns, v) == True{}: Bool}
   )
 )
   & (
     {
-      Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.IsGroup{h, v, k}
+      )
+        == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
     } -> @x: String -> Exists(
       List<&2, String>,
       vs => {
-        Answers.Answer.of(s, Spec.Question.Nodes{h, v, k}) == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
+        Answers.Answer.of(
+          s,
+          Spec.Question.Nodes{h, v, k}
+        )
+          == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
       }
         & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}
     ) -> Exists(
       List<&2, String>,
       ns => {
-        Answers.Answer.of(s, Spec.Question.Nodes{h, g, k}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+        Answers.Answer.of(
+          s,
+          Spec.Question.Nodes{h, g, k}
+        )
+          == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
       }
         & {List.contains(~String, ~String.eq, ns, x) == True{}: Bool}
     )
@@ -595,13 +823,23 @@ def Core.group_nodes.of(
       h,
       g,
       k,
-      R,
+      r,
       v,
       ev,
       lt,
-      Groups.Groups.nodes_member(R, h, g, k, ms, v, em, e2, IsGroup.at(s, h, v, k, R, False{}, ev, e3))
+      Groups.Groups.nodes_member(
+        r,
+        h,
+        g,
+        k,
+        ms,
+        v,
+        em,
+        e2,
+        IsGroup.at(s, h, v, k, r, False{}, ev, e3)
+      )
     ),
-    e4 => +x => px => Core.group_nodes.nested(s, h, g, k, ms, v, R, x, ev, lt, em, e2, e4, px)
+    e4 => +x => px => Core.group_nodes.nested(s, h, g, k, ms, v, r, x, ev, lt, em, e2, e4, px)
   )
 
 # Core.group_nodes, once the store is known to have versions
@@ -627,28 +865,48 @@ def Core.group_nodes.open(
   )
 ) -> (
   {
-    Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
+    Answers.Answer.of(
+      s,
+      Spec.Question.IsGroup{h, v, k}
+    )
+      == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
   } -> Exists(
     List<&2, String>,
     ns => {
-      Answers.Answer.of(s, Spec.Question.Nodes{h, g, k}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.Nodes{h, g, k}
+      )
+        == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
     }
       & {List.contains(~String, ~String.eq, ns, v) == True{}: Bool}
   )
 )
   & (
     {
-      Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.IsGroup{h, v, k}
+      )
+        == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
     } -> @x: String -> Exists(
       List<&2, String>,
       vs => {
-        Answers.Answer.of(s, Spec.Question.Nodes{h, v, k}) == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
+        Answers.Answer.of(
+          s,
+          Spec.Question.Nodes{h, v, k}
+        )
+          == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
       }
         & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}
     ) -> Exists(
       List<&2, String>,
       ns => {
-        Answers.Answer.of(s, Spec.Question.Nodes{h, g, k}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+        Answers.Answer.of(
+          s,
+          Spec.Question.Nodes{h, g, k}
+        )
+          == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
       }
         & {List.contains(~String, ~String.eq, ns, x) == True{}: Bool}
     )
@@ -660,63 +918,127 @@ def Core.group_nodes.open(
 
 # The nodes of a group are the members that are nodes, and the nodes of the
 # members that are groups.
-def Core.group_nodes(+s: Facts.Facts(), +h: Hashes.Hash, +g: String, +k: Nat, +ms: List<&2, String>, +v: String) -> {
-  Answers.Answer.of(s, Spec.Question.Members{h, g, k}) == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
-} -> {List.contains(~String, ~String.eq, ms, v) == True{}: Bool} -> (
+def Core.group_nodes(
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +g: String,
+  +k: Nat,
+  +ms: List<&2, String>,
+  +v: String
+) -> {
+  Answers.Answer.of(
+    s,
+    Spec.Question.Members{h, g, k}
+  )
+    == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
+} -> {
+  List.contains(~String, ~String.eq, ms, v) == True{}: Bool
+} -> (
   {
-    Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
+    Answers.Answer.of(
+      s,
+      Spec.Question.IsGroup{h, v, k}
+    )
+      == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
   } -> Exists(
     List<&2, String>,
     ns => {
-      Answers.Answer.of(s, Spec.Question.Nodes{h, g, k}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.Nodes{h, g, k}
+      )
+        == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
     }
       & {List.contains(~String, ~String.eq, ns, v) == True{}: Bool}
   )
 )
   & (
     {
-      Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.IsGroup{h, v, k}
+      )
+        == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
     } -> @x: String -> Exists(
       List<&2, String>,
       vs => {
-        Answers.Answer.of(s, Spec.Question.Nodes{h, v, k}) == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
+        Answers.Answer.of(
+          s,
+          Spec.Question.Nodes{h, v, k}
+        )
+          == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
       }
         & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}
     ) -> Exists(
       List<&2, String>,
       ns => {
-        Answers.Answer.of(s, Spec.Question.Nodes{h, g, k}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+        Answers.Answer.of(
+          s,
+          Spec.Question.Nodes{h, g, k}
+        )
+          == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
       }
         & {List.contains(~String, ~String.eq, ns, x) == True{}: Bool}
     )
   ):
   e1 => e2 => Core.group_nodes.open(s, h, g, k, ms, v, e2, Members.some(s, h, g, k, ms, e1))
 
-# Core.group_nodes_only, for the member v: what R says of v, the replies say
+# Core.group_nodes_only, for the member v: what store says of v, the replies say
 def Core.group_nodes_only.case(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +k: Nat,
-  -R: List<&2, Types.Entry>,
+  -store: List<&2, Types.Entry>,
   +v: String,
   -x: String,
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  +lt: {Nat.is_lt(k, List.length(&2, Types.Entry, R)) == True{}: Bool},
-  d: ({String.eq(v, x) == True{}: Bool} & {Groups.Groups.is_group(R, h, v, k) == Some{False{}}: Maybe<&2, Bool>}) | ({Groups.Groups.is_group(R, h, v, k) == Some{True{}}: Maybe<&2, Bool>} & Exists(List<&2, String>, vs => {Groups.Groups.nodes(R, h, v, k) == Some{vs}: Maybe<&2, List<&2, String>>} & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}))
+  +ev: {Lines.Store.versions(s, h) == Some{store}: Maybe<&2, List<&2, Types.Entry>>},
+  +lt: {Nat.is_lt(k, List.length(&2, Types.Entry, store)) == True{}: Bool},
+  d: (
+    {
+      String.eq(v, x) == True{}: Bool
+    }
+      & {Groups.Groups.is_group(store, h, v, k) == Some{False{}}: Maybe<&2, Bool>}
+  )
+    | (
+      {
+        Groups.Groups.is_group(store, h, v, k) == Some{True{}}: Maybe<&2, Bool>
+      }
+        & Exists(
+          List<&2, String>,
+          vs => {
+            Groups.Groups.nodes(store, h, v, k) == Some{vs}: Maybe<&2, List<&2, String>>
+          }
+            & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}
+        )
+    )
 ) -> (
   {
     String.eq(v, x) == True{}: Bool
   }
-    & {Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>}
+    & {
+      Answers.Answer.of(
+        s,
+        Spec.Question.IsGroup{h, v, k}
+      )
+        == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
+    }
 )
   | (
     {
-      Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.IsGroup{h, v, k}
+      )
+        == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
     }
       & Exists(
         List<&2, String>,
         vs => {
-          Answers.Answer.of(s, Spec.Question.Nodes{h, v, k}) == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
+          Answers.Answer.of(
+            s,
+            Spec.Question.Nodes{h, v, k}
+          )
+            == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
         }
           & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}
       )
@@ -724,33 +1046,66 @@ def Core.group_nodes_only.case(
   match d:
     case Inl{p}:
       (e, n) = p
-      Inl{(e, IsGroup.make(s, h, v, k, R, False{}, ev, lt, n))}
+      Inl{(e, IsGroup.make(s, h, v, k, store, False{}, ev, lt, n))}
     case Inr{q}:
       (y, r) = q
-      Inr{(IsGroup.make(s, h, v, k, R, True{}, ev, lt, y), Nodes.reply(s, h, v, k, R, x, ev, lt, r))}
+      Inr{
+        (
+          IsGroup.make(s, h, v, k, store, True{}, ev, lt, y),
+          Nodes.reply(s, h, v, k, store, x, ev, lt, r)
+        )
+      }
 
-# Core.group_nodes_only, from what the versions R of the store say
+# Core.group_nodes_only, from what the versions r of the store say
 def Core.group_nodes_only.of(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +g: String,
   +k: Nat,
   -x: String,
-  -R: List<&2, Types.Entry>,
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  +lt: {Nat.is_lt(k, List.length(&2, Types.Entry, R)) == True{}: Bool},
+  -r: List<&2, Types.Entry>,
+  +ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  +lt: {Nat.is_lt(k, List.length(&2, Types.Entry, r)) == True{}: Bool},
   p: Exists(
     List<&2, String>,
-    ms => {Groups.Groups.members(R, h, g, k) == Some{ms}: Maybe<&2, List<&2, String>>}
+    ms => {
+      Groups.Groups.members(r, h, g, k) == Some{ms}: Maybe<&2, List<&2, String>>
+    }
       & Exists(
         String,
-        v => {List.contains(~String, ~String.eq, ms, v) == True{}: Bool} & (({String.eq(v, x) == True{}: Bool} & {Groups.Groups.is_group(R, h, v, k) == Some{False{}}: Maybe<&2, Bool>}) | ({Groups.Groups.is_group(R, h, v, k) == Some{True{}}: Maybe<&2, Bool>} & Exists(List<&2, String>, vs => {Groups.Groups.nodes(R, h, v, k) == Some{vs}: Maybe<&2, List<&2, String>>} & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool})))
+        v => {
+          List.contains(~String, ~String.eq, ms, v) == True{}: Bool
+        }
+          & (
+            (
+              {
+                String.eq(v, x) == True{}: Bool
+              }
+                & {Groups.Groups.is_group(r, h, v, k) == Some{False{}}: Maybe<&2, Bool>}
+            )
+              | (
+                {
+                  Groups.Groups.is_group(r, h, v, k) == Some{True{}}: Maybe<&2, Bool>
+                }
+                  & Exists(
+                    List<&2, String>,
+                    vs => {
+                      Groups.Groups.nodes(r, h, v, k) == Some{vs}: Maybe<&2, List<&2, String>>
+                    }
+                      & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}
+                  )
+              )
+          )
       )
   )
 ) -> Exists(
   List<&2, String>,
   ms => {
-    Answers.Answer.of(s, Spec.Question.Members{h, g, k}) == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
+    Answers.Answer.of(
+      s,
+      Spec.Question.Members{h, g, k}
+    )
+      == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
   }
     & Exists(
       String,
@@ -763,17 +1118,29 @@ def Core.group_nodes_only.of(
               String.eq(v, x) == True{}: Bool
             }
               & {
-                Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
+                Answers.Answer.of(
+                  s,
+                  Spec.Question.IsGroup{h, v, k}
+                )
+                  == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
               }
           )
             | (
               {
-                Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
+                Answers.Answer.of(
+                  s,
+                  Spec.Question.IsGroup{h, v, k}
+                )
+                  == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
               }
                 & Exists(
                   List<&2, String>,
                   vs => {
-                    Answers.Answer.of(s, Spec.Question.Nodes{h, v, k}) == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
+                    Answers.Answer.of(
+                      s,
+                      Spec.Question.Nodes{h, v, k}
+                    )
+                      == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
                   }
                     & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}
                 )
@@ -785,7 +1152,13 @@ def Core.group_nodes_only.of(
   (em, q2) = q
   (+v, q3) = q2
   (c, d) = q3
-  (ms, (Members.make(s, h, g, k, R, ms, ev, lt, em), (v, (c, Core.group_nodes_only.case(s, h, k, R, v, x, ev, lt, d)))))
+  (
+    ms,
+    (
+      Members.make(s, h, g, k, r, ms, ev, lt, em),
+      (v, (c, Core.group_nodes_only.case(s, h, k, r, v, x, ev, lt, d)))
+    )
+  )
 
 # Core.group_nodes_only, once the store is known to have versions
 def Core.group_nodes_only.open(
@@ -811,7 +1184,11 @@ def Core.group_nodes_only.open(
 ) -> Exists(
   List<&2, String>,
   ms => {
-    Answers.Answer.of(s, Spec.Question.Members{h, g, k}) == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
+    Answers.Answer.of(
+      s,
+      Spec.Question.Members{h, g, k}
+    )
+      == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
   }
     & Exists(
       String,
@@ -824,17 +1201,29 @@ def Core.group_nodes_only.open(
               String.eq(v, x) == True{}: Bool
             }
               & {
-                Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
+                Answers.Answer.of(
+                  s,
+                  Spec.Question.IsGroup{h, v, k}
+                )
+                  == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
               }
           )
             | (
               {
-                Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
+                Answers.Answer.of(
+                  s,
+                  Spec.Question.IsGroup{h, v, k}
+                )
+                  == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
               }
                 & Exists(
                   List<&2, String>,
                   vs => {
-                    Answers.Answer.of(s, Spec.Question.Nodes{h, v, k}) == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
+                    Answers.Answer.of(
+                      s,
+                      Spec.Question.Nodes{h, v, k}
+                    )
+                      == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
                   }
                     & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}
                 )
@@ -845,15 +1234,42 @@ def Core.group_nodes_only.open(
   (+R, q) = p
   (ev, q2) = q
   (lt, en) = q2
-  Core.group_nodes_only.of(s, h, g, k, x, R, ev, lt, Groups.Groups.nodes_only(R, h, g, k, ns, x, en, e2))
+  Core.group_nodes_only.of(
+    s,
+    h,
+    g,
+    k,
+    x,
+    R,
+    ev,
+    lt,
+    Groups.Groups.nodes_only(R, h, g, k, ns, x, en, e2)
+  )
 
 # And a group has no other nodes.
-def Core.group_nodes_only(+s: Facts.Facts(), +h: Hashes.Hash, +g: String, +k: Nat, +ns: List<&2, String>, +x: String) -> {
-  Answers.Answer.of(s, Spec.Question.Nodes{h, g, k}) == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
-} -> {List.contains(~String, ~String.eq, ns, x) == True{}: Bool} -> Exists(
+def Core.group_nodes_only(
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +g: String,
+  +k: Nat,
+  +ns: List<&2, String>,
+  +x: String
+) -> {
+  Answers.Answer.of(
+    s,
+    Spec.Question.Nodes{h, g, k}
+  )
+    == Some{Spec.Reply.Names{ns}}: Maybe<&2, Spec.Reply>
+} -> {
+  List.contains(~String, ~String.eq, ns, x) == True{}: Bool
+} -> Exists(
   List<&2, String>,
   ms => {
-    Answers.Answer.of(s, Spec.Question.Members{h, g, k}) == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
+    Answers.Answer.of(
+      s,
+      Spec.Question.Members{h, g, k}
+    )
+      == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
   }
     & Exists(
       String,
@@ -866,17 +1282,29 @@ def Core.group_nodes_only(+s: Facts.Facts(), +h: Hashes.Hash, +g: String, +k: Na
               String.eq(v, x) == True{}: Bool
             }
               & {
-                Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
+                Answers.Answer.of(
+                  s,
+                  Spec.Question.IsGroup{h, v, k}
+                )
+                  == Some{Spec.Reply.Yes{False{}}}: Maybe<&2, Spec.Reply>
               }
           )
             | (
               {
-                Answers.Answer.of(s, Spec.Question.IsGroup{h, v, k}) == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
+                Answers.Answer.of(
+                  s,
+                  Spec.Question.IsGroup{h, v, k}
+                )
+                  == Some{Spec.Reply.Yes{True{}}}: Maybe<&2, Spec.Reply>
               }
                 & Exists(
                   List<&2, String>,
                   vs => {
-                    Answers.Answer.of(s, Spec.Question.Nodes{h, v, k}) == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
+                    Answers.Answer.of(
+                      s,
+                      Spec.Question.Nodes{h, v, k}
+                    )
+                      == Some{Spec.Reply.Names{vs}}: Maybe<&2, Spec.Reply>
                   }
                     & {List.contains(~String, ~String.eq, vs, x) == True{}: Bool}
                 )
@@ -890,19 +1318,30 @@ def Core.group_nodes_only(+s: Facts.Facts(), +h: Hashes.Hash, +g: String, +k: Na
 # ---------------------------
 
 # the two readings of the request of an entry agree
-def Entry.request_same(e: Types.Entry) -> {Answers.Entry.request(e) == Groups.Entry.request(e): Spec.Request}:
+def Entry.request_same(
+  e: Types.Entry
+) -> {Answers.Entry.request(e) == Groups.Entry.request(e): Spec.Request}:
   match e:
     case Types.Entry{Types.Pick{Types.Ask{i, q, r}, pins}, k}:
       {==}
 
 # a reply of the id i comes from an entry of the id i
-def Reply.id_some(m: Maybe<&2, Types.Entry>, -i: Ledgers.Id) -> {
+def Reply.id_some(
+  m: Maybe<&2, Types.Entry>,
+  -i: Ledgers.Id
+) -> {
   Answers.Reply.id(m) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
-} -> Exists(Types.Entry, e => {m == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}):
+} -> Exists(
+  Types.Entry,
+  e => {m == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}
+):
   match m:
     case None{}:
       h => Empty.absurd(
-        Exists(Types.Entry, e => {None{} == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}),
+        Exists(
+          Types.Entry,
+          e => {None{} == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}
+        ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Id{i}, h)
       )
     case Some{+x}:
@@ -931,16 +1370,35 @@ def Reply.id_some(m: Maybe<&2, Types.Entry>, -i: Ledgers.Id) -> {
 def Version.make(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
-  -R: List<&2, Types.Entry>,
+  -r: List<&2, Types.Entry>,
   +j: Nat,
   -e: Types.Entry,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  eg: {List.get(&2, Types.Entry, R, j) == Some{e}: Maybe<&2, Types.Entry>}
+  ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  eg: {List.get(&2, Types.Entry, r, j) == Some{e}: Maybe<&2, Types.Entry>}
 ) -> {
-  Answers.Answer.of(s, Spec.Question.Version{Ledgers.Line{h, None{}}, j}) == Some{Spec.Reply.Id{Lines.Entry.id(e)}}: Maybe<&2, Spec.Reply>
+  Answers.Answer.of(
+    s,
+    Spec.Question.Version{Ledgers.Line{h, None{}}, j}
+  )
+    == Some{Spec.Reply.Id{Lines.Entry.id(e)}}: Maybe<&2, Spec.Reply>
 }:
-  %Equal.sym(Maybe<&2, List<&2, Types.Entry>>, Lines.Store.versions(s, h), Some{R}, ev): {Answers.Reply.id(Lines.Line.at.of(_, j)) == Some{Spec.Reply.Id{Lines.Entry.id(e)}}: Maybe<&2, Spec.Reply>}
-  %Equal.sym(Maybe<&2, Types.Entry>, List.get(&2, Types.Entry, R, j), Some{e}, eg): {Answers.Reply.id(_) == Some{Spec.Reply.Id{Lines.Entry.id(e)}}: Maybe<&2, Spec.Reply>}
+  %Equal.sym(
+    Maybe<&2, List<&2, Types.Entry>>,
+    Lines.Store.versions(s, h),
+    Some{r},
+    ev
+  ): {
+    Answers.Reply.id(
+      Lines.Line.at.of(_, j)
+    )
+      == Some{Spec.Reply.Id{Lines.Entry.id(e)}}: Maybe<&2, Spec.Reply>
+  }
+  %Equal.sym(
+    Maybe<&2, Types.Entry>,
+    List.get(&2, Types.Entry, r, j),
+    Some{e},
+    eg
+  ): {Answers.Reply.id(_) == Some{Spec.Reply.Id{Lines.Entry.id(e)}}: Maybe<&2, Spec.Reply>}
   {==}
 
 # the reply of the request of the id of entry j of the versions of a store:
@@ -948,90 +1406,155 @@ def Version.make(
 def Request.make(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
-  -R: List<&2, Types.Entry>,
+  -r: List<&2, Types.Entry>,
   +j: Nat,
   -e: Types.Entry,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  eg: {List.get(&2, Types.Entry, R, j) == Some{e}: Maybe<&2, Types.Entry>},
-  ei: {Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, R, Lines.Entry.id(e)) == Some{j}: Maybe<&2, Nat>}
+  ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  eg: {List.get(&2, Types.Entry, r, j) == Some{e}: Maybe<&2, Types.Entry>},
+  ei: {
+    Lists.List.index(
+      ~Types.Entry,
+      ~Ledgers.Id,
+      ~Lines.Entry.is_of,
+      r,
+      Lines.Entry.id(e)
+    )
+      == Some{j}: Maybe<&2, Nat>
+  }
 ) -> {
-  Answers.Answer.of(s, Spec.Question.Request{Ledgers.Line{h, None{}}, Lines.Entry.id(e)}) == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
+  Answers.Answer.of(
+    s,
+    Spec.Question.Request{Ledgers.Line{h, None{}}, Lines.Entry.id(e)}
+  )
+    == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
 }:
-  %Equal.sym(Maybe<&2, List<&2, Types.Entry>>, Lines.Store.versions(s, h), Some{R}, ev): {Answers.Reply.ask(Answers.Line.find.of(Lines.Entry.id(e), _)) == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>}
-  %Equal.sym(Maybe<&2, Nat>, Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, R, Lines.Entry.id(e)), Some{j}, ei): {Answers.Reply.ask(Answers.Versions.find.at(R, _)) == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>}
-  %Equal.sym(Maybe<&2, Types.Entry>, List.get(&2, Types.Entry, R, j), Some{e}, eg): {Answers.Reply.ask(Maybe.map(&2, Types.Entry, Answers.Found, e2 => Answers.Found{j, e2}, _)) == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>}
+  %Equal.sym(
+    Maybe<&2, List<&2, Types.Entry>>,
+    Lines.Store.versions(s, h),
+    Some{r},
+    ev
+  ): {
+    Answers.Reply.ask(
+      Answers.Line.find.of(Lines.Entry.id(e), _)
+    )
+      == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
+  }
+  %Equal.sym(
+    Maybe<&2, Nat>,
+    Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, r, Lines.Entry.id(e)),
+    Some{j},
+    ei
+  ): {
+    Answers.Reply.ask(
+      Answers.Versions.find.at(r, _)
+    )
+      == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
+  }
+  %Equal.sym(
+    Maybe<&2, Types.Entry>,
+    List.get(&2, Types.Entry, r, j),
+    Some{e},
+    eg
+  ): {
+    Answers.Reply.ask(
+      Maybe.map(&2, Types.Entry, Answers.Found, e2 => Answers.Found{j, e2}, _)
+    )
+      == Some{Spec.Reply.Ask{Answers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
+  }
   {==}
 
 # Made.of_at, for the entry e of the version
 def Made.of_at.of(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
-  +R: List<&2, Types.Entry>,
+  +store: List<&2, Types.Entry>,
   +j: Nat,
   -r: Spec.Request,
   +e: Types.Entry,
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  +eg: {List.get(&2, Types.Entry, R, j) == Some{e}: Maybe<&2, Types.Entry>},
+  +ev: {Lines.Store.versions(s, h) == Some{store}: Maybe<&2, List<&2, Types.Entry>>},
+  +eg: {List.get(&2, Types.Entry, store, j) == Some{e}: Maybe<&2, Types.Entry>},
   er: {Groups.Entry.request(e) == r: Spec.Request}
 ) -> Mirror.Made(s, Ledgers.Line{h, None{}}, j, Lines.Entry.id(e), r):
   (
-    Version.make(s, h, R, j, e, ev, eg),
+    Version.make(s, h, store, j, e, ev, eg),
     Own.cast(
       Spec.Request,
       w => {
-        Answers.Answer.of(s, Spec.Question.Request{Ledgers.Line{h, None{}}, Lines.Entry.id(e)}) == Some{Spec.Reply.Ask{w}}: Maybe<&2, Spec.Reply>
+        Answers.Answer.of(
+          s,
+          Spec.Question.Request{Ledgers.Line{h, None{}}, Lines.Entry.id(e)}
+        )
+          == Some{Spec.Reply.Ask{w}}: Maybe<&2, Spec.Reply>
       },
       Answers.Entry.request(e),
       r,
-      Equal.trans(Spec.Request, Answers.Entry.request(e), Groups.Entry.request(e), r, Entry.request_same(e), er),
+      Equal.trans(
+        Spec.Request,
+        Answers.Entry.request(e),
+        Groups.Entry.request(e),
+        r,
+        Entry.request_same(e),
+        er
+      ),
       Request.make(
         s,
         h,
-        R,
+        store,
         j,
         e,
         ev,
         eg,
-        Versions.Line.versions_index(s, Ledgers.Line{h, None{}}, R, j, e)(ev)(eg)
+        Versions.Line.versions_index(s, Ledgers.Line{h, None{}}, store, j, e)(ev)(eg)
       )
     )
   )
 
-# a version of the versions R of a store, made by the request r, is the
+# a version of the versions store of a store, made by the request r, is the
 # decision of a request that asked for r
 def Made.of_at(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
-  +R: List<&2, Types.Entry>,
+  +store: List<&2, Types.Entry>,
   +j: Nat,
   -r: Spec.Request,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  a: Groups.Groups.At(R, j, r)
+  ev: {Lines.Store.versions(s, h) == Some{store}: Maybe<&2, List<&2, Types.Entry>>},
+  a: Groups.Groups.At(store, j, r)
 ) -> Exists(Ledgers.Id, i => Mirror.Made(s, Ledgers.Line{h, None{}}, j, i, r)):
   (+e, p) = a
   (eg, er) = p
-  (Lines.Entry.id(e), Made.of_at.of(s, h, R, j, r, e, ev, eg, er))
+  (Lines.Entry.id(e), Made.of_at.of(s, h, store, j, r, e, ev, eg, er))
 
 # At.of_made, for the entry e of the version
 def At.of_made.of(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
-  +R: List<&2, Types.Entry>,
+  +store: List<&2, Types.Entry>,
   +j: Nat,
   -i: Ledgers.Id,
   -r: Spec.Request,
   +e: Types.Entry,
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  +eg: {List.get(&2, Types.Entry, R, j) == Some{e}: Maybe<&2, Types.Entry>},
+  +ev: {Lines.Store.versions(s, h) == Some{store}: Maybe<&2, List<&2, Types.Entry>>},
+  +eg: {List.get(&2, Types.Entry, store, j) == Some{e}: Maybe<&2, Types.Entry>},
   ei: {Lines.Entry.id(e) == i: Ledgers.Id},
-  e2: {Answers.Answer.of(s, Spec.Question.Request{Ledgers.Line{h, None{}}, i}) == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>}
+  e2: {
+    Answers.Answer.of(
+      s,
+      Spec.Question.Request{Ledgers.Line{h, None{}}, i}
+    )
+      == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
+  }
 ) -> {Groups.Entry.request(e) == r: Spec.Request}:
   Equal.trans(
     Spec.Request,
     Groups.Entry.request(e),
     Answers.Entry.request(e),
     r,
-    Equal.sym(Spec.Request, Answers.Entry.request(e), Groups.Entry.request(e), Entry.request_same(e)),
+    Equal.sym(
+      Spec.Request,
+      Answers.Entry.request(e),
+      Groups.Entry.request(e),
+      Entry.request_same(e)
+    ),
     Shared.Maybe.some_inj(
       Spec.Request,
       Answers.Entry.request(e),
@@ -1045,29 +1568,49 @@ def At.of_made.of(
         Own.cast(
           Maybe<&2, Types.Entry>,
           w => {
-            Answers.Reply.ask(Maybe.map(&2, Types.Entry, Answers.Found, e3 => Answers.Found{j, e3}, w)) == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
+            Answers.Reply.ask(
+              Maybe.map(&2, Types.Entry, Answers.Found, e3 => Answers.Found{j, e3}, w)
+            )
+              == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
           },
-          List.get(&2, Types.Entry, R, j),
+          List.get(&2, Types.Entry, store, j),
           Some{e},
           eg,
           Own.cast(
             Maybe<&2, Nat>,
-            w => {Answers.Reply.ask(Answers.Versions.find.at(R, w)) == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>},
-            Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, R, Lines.Entry.id(e)),
+            w => {
+              Answers.Reply.ask(
+                Answers.Versions.find.at(store, w)
+              )
+                == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
+            },
+            Lists.List.index(
+              ~Types.Entry,
+              ~Ledgers.Id,
+              ~Lines.Entry.is_of,
+              store,
+              Lines.Entry.id(e)
+            ),
             Some{j},
-            Versions.Line.versions_index(s, Ledgers.Line{h, None{}}, R, j, e)(ev)(eg),
+            Versions.Line.versions_index(s, Ledgers.Line{h, None{}}, store, j, e)(ev)(eg),
             Own.cast(
               Maybe<&2, List<&2, Types.Entry>>,
               w => {
-                Answers.Reply.ask(Answers.Line.find.of(Lines.Entry.id(e), w)) == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
+                Answers.Reply.ask(
+                  Answers.Line.find.of(Lines.Entry.id(e), w)
+                )
+                  == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
               },
               Lines.Store.versions(s, h),
-              Some{R},
+              Some{store},
               ev,
               Own.cast(
                 Ledgers.Id,
                 w => {
-                  Answers.Reply.ask(Answers.Line.find.of(w, Lines.Store.versions(s, h))) == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
+                  Answers.Reply.ask(
+                    Answers.Line.find.of(w, Lines.Store.versions(s, h))
+                  )
+                    == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
                 },
                 i,
                 Lines.Entry.id(e),
@@ -1085,45 +1628,62 @@ def At.of_made.of(
 def At.of_made.open(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
-  +R: List<&2, Types.Entry>,
+  +store: List<&2, Types.Entry>,
   +j: Nat,
   -i: Ledgers.Id,
   -r: Spec.Request,
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  p: Exists(Types.Entry, e => {List.get(&2, Types.Entry, R, j) == Some{e}: Maybe<&2, Types.Entry>} & {Lines.Entry.id(e) == i: Ledgers.Id}),
-  e2: {Answers.Answer.of(s, Spec.Question.Request{Ledgers.Line{h, None{}}, i}) == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>}
-) -> Groups.Groups.At(R, j, r):
+  +ev: {Lines.Store.versions(s, h) == Some{store}: Maybe<&2, List<&2, Types.Entry>>},
+  p: Exists(
+    Types.Entry,
+    e => {
+      List.get(&2, Types.Entry, store, j) == Some{e}: Maybe<&2, Types.Entry>
+    }
+      & {Lines.Entry.id(e) == i: Ledgers.Id}
+  ),
+  e2: {
+    Answers.Answer.of(
+      s,
+      Spec.Question.Request{Ledgers.Line{h, None{}}, i}
+    )
+      == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
+  }
+) -> Groups.Groups.At(store, j, r):
   (+e, q) = p
   (+eg, ei) = q
-  (e, (eg, At.of_made.of(s, h, R, j, i, r, e, ev, eg, ei, e2)))
+  (e, (eg, At.of_made.of(s, h, store, j, i, r, e, ev, eg, ei, e2)))
 
 # a version of a store that is the decision of a request that asked for r is
-# a version of its versions R made by r
+# a version of its versions store made by r
 def At.of_made(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
-  +R: List<&2, Types.Entry>,
+  +store: List<&2, Types.Entry>,
   +j: Nat,
   -i: Ledgers.Id,
   -r: Spec.Request,
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
+  +ev: {Lines.Store.versions(s, h) == Some{store}: Maybe<&2, List<&2, Types.Entry>>},
   mk: Mirror.Made(s, Ledgers.Line{h, None{}}, j, i, r)
-) -> Groups.Groups.At(R, j, r):
+) -> Groups.Groups.At(store, j, r):
   (e1, e2) = mk
   At.of_made.open(
     s,
     h,
-    R,
+    store,
     j,
     i,
     r,
     ev,
-    Reply.id_some(List.get(&2, Types.Entry, R, j), i)(
+    Reply.id_some(
+      List.get(&2, Types.Entry, store, j),
+      i
+    )(
       Own.cast(
         Maybe<&2, List<&2, Types.Entry>>,
-        w => {Answers.Reply.id(Lines.Line.at.of(w, j)) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>},
+        w => {
+          Answers.Reply.id(Lines.Line.at.of(w, j)) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
+        },
         Lines.Store.versions(s, h),
-        Some{R},
+        Some{store},
         ev,
         e1
       )
@@ -1132,40 +1692,41 @@ def At.of_made(
   )
 
 # the latest version of the store h up to m that decides r is a version of
-# its versions R made by r, at most m
+# its versions store made by r, at most m
 def At.of_latest(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
-  +R: List<&2, Types.Entry>,
+  +store: List<&2, Types.Entry>,
   +j: Nat,
   -m: Nat,
   -r: Spec.Request,
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
+  +ev: {Lines.Store.versions(s, h) == Some{store}: Maybe<&2, List<&2, Types.Entry>>},
   l: Mirror.Latest(s, Ledgers.Line{h, None{}}, j, m, r)
-) -> Groups.Groups.At(R, j, r) & {Nat.is_le(j, m) == True{}: Bool}:
+) -> Groups.Groups.At(store, j, r)
+  & {Nat.is_le(j, m) == True{}: Bool}:
   (ex, le) = l
   (i, mk) = ex
-  (At.of_made(s, h, R, j, i, r, ev, mk), le)
+  (At.of_made(s, h, store, j, i, r, ev, mk), le)
 
-# a version of the versions R of the store h made by r, at most m, is one
+# a version of the versions store of the store h made by r, at most m, is one
 # that decides r up to m
 def Latest.of_at(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
-  +R: List<&2, Types.Entry>,
+  +store: List<&2, Types.Entry>,
   +j: Nat,
   -m: Nat,
   -r: Spec.Request,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  p: Groups.Groups.At(R, j, r) & {Nat.is_le(j, m) == True{}: Bool}
+  ev: {Lines.Store.versions(s, h) == Some{store}: Maybe<&2, List<&2, Types.Entry>>},
+  p: Groups.Groups.At(store, j, r) & {Nat.is_le(j, m) == True{}: Bool}
 ) -> Mirror.Latest(s, Ledgers.Line{h, None{}}, j, m, r):
   (a, le) = p
-  (Made.of_at(s, h, R, j, r, ev, a), le)
+  (Made.of_at(s, h, store, j, r, ev, a), le)
 
 # The members of a group
 # ----------------------
 
-# Core.members_decided, from the latest Group among the versions R of the
+# Core.members_decided, from the latest Group among the versions r of the
 # store
 def Core.members_decided.of(
   +s: Facts.Facts(),
@@ -1173,18 +1734,36 @@ def Core.members_decided.of(
   +g: String,
   +m: Nat,
   -ms: List<&2, String>,
-  +R: List<&2, Types.Entry>,
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
+  +r: List<&2, Types.Entry>,
+  +ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
   p: Exists(
     Nat,
-    j => (Groups.Groups.At(R, j, Spec.Request.Group{h, g, ms}) & {Nat.is_le(j, m) == True{}: Bool})
-      & (@j2: Nat -> @ms2: List<&2, String> -> Groups.Groups.At(R, j2, Spec.Request.Group{h, g, ms2}) -> {Nat.is_le(j2, m) == True{}: Bool} -> {Nat.is_le(j2, j) == True{}: Bool})
+    j => (
+      Groups.Groups.At(r, j, Spec.Request.Group{h, g, ms}) & {Nat.is_le(j, m) == True{}: Bool}
+    )
+      & (
+        @j2: Nat -> @ms2: List<
+          &2,
+          String> -> Groups.Groups.At(
+          r,
+          j2,
+          Spec.Request.Group{h, g, ms2}
+        ) -> {Nat.is_le(j2, m) == True{}: Bool} -> {Nat.is_le(j2, j) == True{}: Bool}
+      )
   )
 ) -> Exists(
   Nat,
-  j => Mirror.Latest(s, Ledgers.Line{h, None{}}, j, m, Spec.Request.Group{h, g, ms})
+  j => Mirror.Latest(
+    s,
+    Ledgers.Line{h, None{}},
+    j,
+    m,
+    Spec.Request.Group{h, g, ms}
+  )
     & (
-      @j2: Nat -> @ms2: List<&2, String> -> Mirror.Latest(
+      @j2: Nat -> @ms2: List<
+        &2,
+        String> -> Mirror.Latest(
         s,
         Ledgers.Line{h, None{}},
         j2,
@@ -1198,12 +1777,12 @@ def Core.members_decided.of(
   (
     j,
     (
-      Latest.of_at(s, h, R, j, m, Spec.Request.Group{h, g, ms}, ev, hit),
+      Latest.of_at(s, h, r, j, m, Spec.Request.Group{h, g, ms}, ev, hit),
       +j2 => +ms2 => l => Groups.Pair.use(
-        Groups.Groups.At(R, j2, Spec.Request.Group{h, g, ms2}),
+        Groups.Groups.At(r, j2, Spec.Request.Group{h, g, ms2}),
         {Nat.is_le(j2, m) == True{}: Bool},
         {Nat.is_le(j2, j) == True{}: Bool},
-        At.of_latest(s, h, R, j2, m, Spec.Request.Group{h, g, ms2}, ev, l),
+        At.of_latest(s, h, r, j2, m, Spec.Request.Group{h, g, ms2}, ev, l),
         a => le => later(j2)(ms2)(a)(le)
       )
     )
@@ -1230,9 +1809,17 @@ def Core.members_decided.open(
   )
 ) -> Exists(
   Nat,
-  j => Mirror.Latest(s, Ledgers.Line{h, None{}}, j, m, Spec.Request.Group{h, g, ms})
+  j => Mirror.Latest(
+    s,
+    Ledgers.Line{h, None{}},
+    j,
+    m,
+    Spec.Request.Group{h, g, ms}
+  )
     & (
-      @j2: Nat -> @ms2: List<&2, String> -> Mirror.Latest(
+      @j2: Nat -> @ms2: List<
+        &2,
+        String> -> Mirror.Latest(
         s,
         Ledgers.Line{h, None{}},
         j2,
@@ -1248,13 +1835,31 @@ def Core.members_decided.open(
 
 # The members of a group are those that the latest Group of its name, up to that
 # version of the store, names.
-def Core.members_decided(+s: Facts.Facts(), +h: Hashes.Hash, +g: String, +m: Nat, +ms: List<&2, String>) -> {
-  Answers.Answer.of(s, Spec.Question.Members{h, g, m}) == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
+def Core.members_decided(
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +g: String,
+  +m: Nat,
+  +ms: List<&2, String>
+) -> {
+  Answers.Answer.of(
+    s,
+    Spec.Question.Members{h, g, m}
+  )
+    == Some{Spec.Reply.Names{ms}}: Maybe<&2, Spec.Reply>
 } -> Exists(
   Nat,
-  j => Mirror.Latest(s, Ledgers.Line{h, None{}}, j, m, Spec.Request.Group{h, g, ms})
+  j => Mirror.Latest(
+    s,
+    Ledgers.Line{h, None{}},
+    j,
+    m,
+    Spec.Request.Group{h, g, ms}
+  )
     & (
-      @j2: Nat -> @ms2: List<&2, String> -> Mirror.Latest(
+      @j2: Nat -> @ms2: List<
+        &2,
+        String> -> Mirror.Latest(
         s,
         Ledgers.Line{h, None{}},
         j2,
@@ -1266,15 +1871,21 @@ def Core.members_decided(+s: Facts.Facts(), +h: Hashes.Hash, +g: String, +m: Nat
   e => Core.members_decided.open(s, h, g, m, ms, Members.some(s, h, g, m, ms, e))
 
 # Core.groups_decided, for a name that is a group, from a Group among the
-# versions R of the store
+# versions r of the store
 def Core.groups_decided.yes(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +g: String,
   +m: Nat,
-  +R: List<&2, Types.Entry>,
-  ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  p: Exists(Nat, j => Exists(List<&2, String>, ms => Groups.Groups.At(R, j, Spec.Request.Group{h, g, ms}) & {Nat.is_le(j, m) == True{}: Bool}))
+  +r: List<&2, Types.Entry>,
+  ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  p: Exists(
+    Nat,
+    j => Exists(
+      List<&2, String>,
+      ms => Groups.Groups.At(r, j, Spec.Request.Group{h, g, ms}) & {Nat.is_le(j, m) == True{}: Bool}
+    )
+  )
 ) -> Exists(
   Nat,
   j => Exists(
@@ -1284,18 +1895,18 @@ def Core.groups_decided.yes(
 ):
   (+j, q) = p
   (ms, hit) = q
-  (j, (ms, Latest.of_at(s, h, R, j, m, Spec.Request.Group{h, g, ms}, ev, hit)))
+  (j, (ms, Latest.of_at(s, h, r, j, m, Spec.Request.Group{h, g, ms}, ev, hit)))
 
-# Core.groups_decided, with the versions R of the store
+# Core.groups_decided, with the versions r of the store
 def Core.groups_decided.of(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +g: String,
   +m: Nat,
   +y: Bool,
-  +R: List<&2, Types.Entry>,
-  +ev: {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
-  +ey: {Groups.Groups.is_group(R, h, g, m) == Some{y}: Maybe<&2, Bool>}
+  +r: List<&2, Types.Entry>,
+  +ev: {Lines.Store.versions(s, h) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
+  +ey: {Groups.Groups.is_group(r, h, g, m) == Some{y}: Maybe<&2, Bool>}
 ) -> (
   {
     y == True{}: Bool
@@ -1310,7 +1921,15 @@ def Core.groups_decided.of(
   & (
     {
       y == False{}: Bool
-    } -> @j: Nat -> @ms: List<&2, String> -> Mirror.Latest(s, Ledgers.Line{h, None{}}, j, m, Spec.Request.Group{h, g, ms}) -> Empty
+    } -> @j: Nat -> @ms: List<
+      &2,
+      String> -> Mirror.Latest(
+      s,
+      Ledgers.Line{h, None{}},
+      j,
+      m,
+      Spec.Request.Group{h, g, ms}
+    ) -> Empty
   ):
   (
     ty => Core.groups_decided.yes(
@@ -1318,27 +1937,41 @@ def Core.groups_decided.of(
       h,
       g,
       m,
-      R,
+      r,
       ev,
       Groups.Groups.is_group_yes(
-        R,
+        r,
         h,
         g,
         m,
-        Own.cast(Bool, w => {Groups.Groups.is_group(R, h, g, m) == Some{w}: Maybe<&2, Bool>}, y, True{}, ty, ey)
+        Own.cast(
+          Bool,
+          w => {Groups.Groups.is_group(r, h, g, m) == Some{w}: Maybe<&2, Bool>},
+          y,
+          True{},
+          ty,
+          ey
+        )
       )
     ),
     fy => +j => +ms => l => Groups.Pair.use(
-      Groups.Groups.At(R, j, Spec.Request.Group{h, g, ms}),
+      Groups.Groups.At(r, j, Spec.Request.Group{h, g, ms}),
       {Nat.is_le(j, m) == True{}: Bool},
       Empty,
-      At.of_latest(s, h, R, j, m, Spec.Request.Group{h, g, ms}, ev, l),
+      At.of_latest(s, h, r, j, m, Spec.Request.Group{h, g, ms}, ev, l),
       a => le => Groups.Groups.is_group_no(
-        R,
+        r,
         h,
         g,
         m,
-        Own.cast(Bool, w => {Groups.Groups.is_group(R, h, g, m) == Some{w}: Maybe<&2, Bool>}, y, False{}, fy, ey)
+        Own.cast(
+          Bool,
+          w => {Groups.Groups.is_group(r, h, g, m) == Some{w}: Maybe<&2, Bool>},
+          y,
+          False{},
+          fy,
+          ey
+        )
       )(j)(ms)(a)(le)
     )
   )
@@ -1376,7 +2009,15 @@ def Core.groups_decided.open(
   & (
     {
       y == False{}: Bool
-    } -> @j: Nat -> @ms: List<&2, String> -> Mirror.Latest(s, Ledgers.Line{h, None{}}, j, m, Spec.Request.Group{h, g, ms}) -> Empty
+    } -> @j: Nat -> @ms: List<
+      &2,
+      String> -> Mirror.Latest(
+      s,
+      Ledgers.Line{h, None{}},
+      j,
+      m,
+      Spec.Request.Group{h, g, ms}
+    ) -> Empty
   ):
   (+R, q) = p
   (ev, q2) = q
@@ -1385,8 +2026,18 @@ def Core.groups_decided.open(
 
 # A name is a group at a version of the store exactly when a Group of that name
 # was decided up to it.
-def Core.groups_decided(+s: Facts.Facts(), +h: Hashes.Hash, +g: String, +m: Nat, +y: Bool) -> {
-  Answers.Answer.of(s, Spec.Question.IsGroup{h, g, m}) == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>
+def Core.groups_decided(
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +g: String,
+  +m: Nat,
+  +y: Bool
+) -> {
+  Answers.Answer.of(
+    s,
+    Spec.Question.IsGroup{h, g, m}
+  )
+    == Some{Spec.Reply.Yes{y}}: Maybe<&2, Spec.Reply>
 } -> (
   {
     y == True{}: Bool
@@ -1401,7 +2052,15 @@ def Core.groups_decided(+s: Facts.Facts(), +h: Hashes.Hash, +g: String, +m: Nat,
   & (
     {
       y == False{}: Bool
-    } -> @j: Nat -> @ms: List<&2, String> -> Mirror.Latest(s, Ledgers.Line{h, None{}}, j, m, Spec.Request.Group{h, g, ms}) -> Empty
+    } -> @j: Nat -> @ms: List<
+      &2,
+      String> -> Mirror.Latest(
+      s,
+      Ledgers.Line{h, None{}},
+      j,
+      m,
+      Spec.Request.Group{h, g, ms}
+    ) -> Empty
   ):
   e => Core.groups_decided.open(s, h, g, m, y, IsGroup.some(s, h, g, m, y, e))
 
@@ -1426,10 +2085,23 @@ def Rule.nodes_of(m: Maybe<&2, Lines.Rule>) -> Maybe<&2, List<&2, String>>:
 
 # a rule of the nodes of a named group is the rule of g and ns only for the
 # name g and the nodes ns
-def Rule.named_some(-name: String, N: Maybe<&2, List<&2, String>>, -g: String, -ns: List<&2, String>) -> {
-  Maybe.map(&2, List<&2, String>, Lines.Rule, ns2 => Lines.Rule{Some{name}, ns2}, N) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
-} -> {name == g: String} & {N == Some{ns}: Maybe<&2, List<&2, String>>}:
-  match N:
+def Rule.named_some(
+  -name: String,
+  n: Maybe<&2, List<&2, String>>,
+  -g: String,
+  -ns: List<&2, String>
+) -> {
+  Maybe.map(
+    &2,
+    List<&2, String>,
+    Lines.Rule,
+    ns2 => Lines.Rule{Some{name}, ns2},
+    n
+  )
+    == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+} -> {name == g: String}
+  & {n == Some{ns}: Maybe<&2, List<&2, String>>}:
+  match n:
     case None{}:
       h => Empty.absurd(
         {name == g: String} & {None{} == Some{ns}: Maybe<&2, List<&2, String>>},
@@ -1461,8 +2133,18 @@ def Rule.named_some(-name: String, N: Maybe<&2, List<&2, String>>, -g: String, -
       )
 
 # the rule of a store that named no owner group is the rule of no named group
-def Rule.plain_none(b: Bool, -os: List<&2, String>, -g: String, -ns: List<&2, String>) -> {
-  Shared.Maybe.when(Lines.Rule, b, u => Some{Lines.Rule{None{}, os}}) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+def Rule.plain_none(
+  b: Bool,
+  -os: List<&2, String>,
+  -g: String,
+  -ns: List<&2, String>
+) -> {
+  Shared.Maybe.when(
+    Lines.Rule,
+    b,
+    u => Some{Lines.Rule{None{}, os}}
+  )
+    == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
 } -> Empty:
   match b:
     case True{}:
@@ -1483,114 +2165,148 @@ def Rule.plain_none(b: Bool, -os: List<&2, String>, -g: String, -ns: List<&2, St
 
 # Rule.of_some, for the owner group name
 def Rule.of_some.at(
-  -R: List<&2, Types.Entry>,
+  -r: List<&2, Types.Entry>,
   -c: Ledgers.Line,
   -m: Nat,
   -name: String,
   -g: String,
   -ns: List<&2, String>,
-  p: {name == g: String} & {Groups.Groups.nodes(R, Lines.Line.root(c), name, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+  p: {
+    name == g: String
+  }
+    & {Groups.Groups.nodes(r, Lines.Line.root(c), name, m) == Some{ns}: Maybe<&2, List<&2, String>>}
 ) -> {
   Some{name} == Some{g}: Maybe<&2, String>
 }
-  & {Groups.Groups.nodes(R, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
-  (+en, eN) = p
+  & {Groups.Groups.nodes(r, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
+  (+en, e_n) = p
   (
     Equal.cong(String, Maybe<&2, String>, w => Some{w}, name, g, en),
     Own.cast(
       String,
-      w => {Groups.Groups.nodes(R, Lines.Line.root(c), w, m) == Some{ns}: Maybe<&2, List<&2, String>>},
+      w => {
+        Groups.Groups.nodes(r, Lines.Line.root(c), w, m) == Some{ns}: Maybe<&2, List<&2, String>>
+      },
       name,
       g,
       en,
-      eN
+      e_n
     )
   )
 
 # a rule of the owner group g and the nodes ns: the owner group is g, and its
 # nodes at the era are ns
-def Rule.of_some(+R: List<&2, Types.Entry>, +c: Ledgers.Line, +m: Nat, og: Maybe<&2, String>, -g: String, -ns: List<&2, String>) -> {
-  Lines.Rule.of(R, c, m, og) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+def Rule.of_some(
+  +r: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +m: Nat,
+  og: Maybe<&2, String>,
+  -g: String,
+  -ns: List<&2, String>
+) -> {
+  Lines.Rule.of(r, c, m, og) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
 } -> {
   og == Some{g}: Maybe<&2, String>
 }
-  & {Groups.Groups.nodes(R, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
+  & {Groups.Groups.nodes(r, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}:
   match og:
     case None{}:
       h => Empty.absurd(
         {
           None{} == Some{g}: Maybe<&2, String>
         }
-          & {Groups.Groups.nodes(R, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>},
-        Rule.plain_none(Lines.Line.is_root(c), Lines.Store.owners(R), g, ns)(h)
+          & {
+            Groups.Groups.nodes(
+              r,
+              Lines.Line.root(c),
+              g,
+              m
+            )
+              == Some{ns}: Maybe<&2, List<&2, String>>
+          },
+        Rule.plain_none(Lines.Line.is_root(c), Lines.Store.owners(r), g, ns)(h)
       )
     case Some{+name}:
       h => Rule.of_some.at(
-        R,
+        r,
         c,
         m,
         name,
         g,
         ns,
-        Rule.named_some(name, Groups.Groups.nodes(R, Lines.Line.root(c), name, m), g, ns)(h)
+        Rule.named_some(name, Groups.Groups.nodes(r, Lines.Line.root(c), name, m), g, ns)(h)
       )
 
 # Rule.at_some, once the era is known to be a version of the store
 def Rule.at_some.of(
-  +R: List<&2, Types.Entry>,
+  +r: List<&2, Types.Entry>,
   +c: Ledgers.Line,
   +m: Nat,
   -g: String,
   -ns: List<&2, String>,
-  p: {Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool} & {Lines.Rule.of(R, c, m, Groups.Groups.owner(R, c, m)) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+  p: {
+    Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool
+  }
+    & {
+      Lines.Rule.of(
+        r,
+        c,
+        m,
+        Groups.Groups.owner(r, c, m)
+      )
+        == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+    }
 ) -> {
-  Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool
+  Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool
 }
   & (
     {
-      Groups.Groups.owner(R, c, m) == Some{g}: Maybe<&2, String>
+      Groups.Groups.owner(r, c, m) == Some{g}: Maybe<&2, String>
     }
-      & {Groups.Groups.nodes(R, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+      & {Groups.Groups.nodes(r, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
   ):
   (lt, hr) = p
-  (lt, Rule.of_some(R, c, m, Groups.Groups.owner(R, c, m), g, ns)(hr))
+  (lt, Rule.of_some(r, c, m, Groups.Groups.owner(r, c, m), g, ns)(hr))
 
-# the rule that the era m of the versions R of a store gives is of the owner
-# group g and the nodes ns: m is a version of R, where the owner group of the
+# the rule that the era m of the versions r of a store gives is of the owner
+# group g and the nodes ns: m is a version of r, where the owner group of the
 # line is g and its nodes are ns
 def Rule.at_some(
-  +R: List<&2, Types.Entry>,
+  +r: List<&2, Types.Entry>,
   +c: Ledgers.Line,
   +m: Nat,
   -g: String,
   -ns: List<&2, String>,
-  h: {Lines.Rule.at(R, c, m) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+  h: {Lines.Rule.at(r, c, m) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
 ) -> {
-  Nat.is_lt(m, List.length(&2, Types.Entry, R)) == True{}: Bool
+  Nat.is_lt(m, List.length(&2, Types.Entry, r)) == True{}: Bool
 }
   & (
     {
-      Groups.Groups.owner(R, c, m) == Some{g}: Maybe<&2, String>
+      Groups.Groups.owner(r, c, m) == Some{g}: Maybe<&2, String>
     }
-      & {Groups.Groups.nodes(R, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+      & {Groups.Groups.nodes(r, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
   ):
   Rule.at_some.of(
-    R,
+    r,
     c,
     m,
     g,
     ns,
     When.some(
       Lines.Rule,
-      Nat.is_lt(m, List.length(&2, Types.Entry, R)),
-      Lines.Rule.of(R, c, m, Groups.Groups.owner(R, c, m)),
+      Nat.is_lt(m, List.length(&2, Types.Entry, r)),
+      Lines.Rule.of(r, c, m, Groups.Groups.owner(r, c, m)),
       Lines.Rule{Some{g}, ns},
       h
     )
   )
 
 # a number below n is, with one more, at most n
-def Nat.lt_le_succ(a: Nat, n: Nat) -> {Nat.is_lt(a, n) == True{}: Bool} -> {Nat.is_le(1n+a, n) == True{}: Bool}:
+def Nat.lt_le_succ(
+  a: Nat,
+  n: Nat
+) -> {Nat.is_lt(a, n) == True{}: Bool} -> {Nat.is_le(1n+a, n) == True{}: Bool}:
   match a n:
     case 0n 0n:
       h => h
@@ -1614,9 +2330,22 @@ def Rule.at_take.of(
   }
     & (
       {
-        Groups.Groups.owner(List.take(&2, Types.Entry, vs, 1n+j), c, m) == Some{g}: Maybe<&2, String>
+        Groups.Groups.owner(
+          List.take(&2, Types.Entry, vs, 1n+j),
+          c,
+          m
+        )
+          == Some{g}: Maybe<&2, String>
       }
-        & {Groups.Groups.nodes(List.take(&2, Types.Entry, vs, 1n+j), Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+        & {
+          Groups.Groups.nodes(
+            List.take(&2, Types.Entry, vs, 1n+j),
+            Lines.Line.root(c),
+            g,
+            m
+          )
+            == Some{ns}: Maybe<&2, List<&2, String>>
+        }
     )
 ) -> {
   Nat.is_lt(m, List.length(&2, Types.Entry, vs)) == True{}: Bool
@@ -1634,7 +2363,15 @@ def Rule.at_take.of(
       m,
       List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, 1n+j)),
       List.length(&2, Types.Entry, vs)
-    )(lt)(Lists.List.ext_length(Types.Entry, List.take(&2, Types.Entry, vs, 1n+j), vs)(Lists.List.take_ext(Types.Entry, vs, 1n+j))),
+    )(
+      lt
+    )(
+      Lists.List.ext_length(
+        Types.Entry,
+        List.take(&2, Types.Entry, vs, 1n+j),
+        vs
+      )(Lists.List.take_ext(Types.Entry, vs, 1n+j))
+    ),
     (
       Equal.trans(
         Maybe<&2, String>,
@@ -1646,8 +2383,18 @@ def Rule.at_take.of(
           List.take(&2, Types.Entry, vs, 1n+j),
           c,
           m,
-          Lists.List.ext_take(Types.Entry, List.take(&2, Types.Entry, vs, 1n+j), vs, 1n+m)(Lists.List.take_ext(Types.Entry, vs, 1n+j))(
-            Nat.lt_le_succ(m, List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, 1n+j)))(lt)
+          Lists.List.ext_take(
+            Types.Entry,
+            List.take(&2, Types.Entry, vs, 1n+j),
+            vs,
+            1n+m
+          )(
+            Lists.List.take_ext(Types.Entry, vs, 1n+j)
+          )(
+            Nat.lt_le_succ(
+              m,
+              List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, 1n+j))
+            )(lt)
           )
         ),
         eo
@@ -1663,8 +2410,18 @@ def Rule.at_take.of(
           Lines.Line.root(c),
           g,
           m,
-          Lists.List.ext_take(Types.Entry, List.take(&2, Types.Entry, vs, 1n+j), vs, 1n+m)(Lists.List.take_ext(Types.Entry, vs, 1n+j))(
-            Nat.lt_le_succ(m, List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, 1n+j)))(lt)
+          Lists.List.ext_take(
+            Types.Entry,
+            List.take(&2, Types.Entry, vs, 1n+j),
+            vs,
+            1n+m
+          )(
+            Lists.List.take_ext(Types.Entry, vs, 1n+j)
+          )(
+            Nat.lt_le_succ(
+              m,
+              List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, 1n+j))
+            )(lt)
           )
         ),
         en
@@ -1681,7 +2438,14 @@ def Rule.at_take(
   +m: Nat,
   -g: String,
   -ns: List<&2, String>,
-  h: {Lines.Rule.at(List.take(&2, Types.Entry, vs, 1n+j), c, m) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+  h: {
+    Lines.Rule.at(
+      List.take(&2, Types.Entry, vs, 1n+j),
+      c,
+      m
+    )
+      == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+  }
 ) -> {
   Nat.is_lt(m, List.length(&2, Types.Entry, vs)) == True{}: Bool
 }
@@ -1691,7 +2455,15 @@ def Rule.at_take(
     }
       & {Groups.Groups.nodes(vs, Lines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
   ):
-  Rule.at_take.of(vs, j, c, m, g, ns, Rule.at_some(List.take(&2, Types.Entry, vs, 1n+j), c, m, g, ns, h))
+  Rule.at_take.of(
+    vs,
+    j,
+    c,
+    m,
+    g,
+    ns,
+    Rule.at_some(List.take(&2, Types.Entry, vs, 1n+j), c, m, g, ns, h)
+  )
 
 # the store of the line c has versions R that reach m, where the owner group
 # of c is g and its nodes are ns
@@ -1709,7 +2481,15 @@ def Owned(s: Facts.Facts(), c: Ledgers.Line, g: String, ns: List<&2, String>, m:
             {
               Groups.Groups.owner(R, c, m) == Some{g}: Maybe<&2, String>
             }
-              & {Groups.Groups.nodes(R, Spec.Line.store(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+              & {
+                Groups.Groups.nodes(
+                  R,
+                  Spec.Line.store(c),
+                  g,
+                  m
+                )
+                  == Some{ns}: Maybe<&2, List<&2, String>>
+              }
           )
       )
   )
@@ -1718,27 +2498,53 @@ def Owned(s: Facts.Facts(), c: Ledgers.Line, g: String, ns: List<&2, String>, m:
 def Before.some.at(
   +j: Nat,
   +vs: List<&2, Types.Entry>,
-  -P: List<&2, Types.Entry>,
-  p: {Nat.is_lt(j, List.length(&2, Types.Entry, vs)) == True{}: Bool} & {Some{List.take(&2, Types.Entry, vs, 1n+j)} == Some{P}: Maybe<&2, List<&2, Types.Entry>>}
+  -prev: List<&2, Types.Entry>,
+  p: {
+    Nat.is_lt(j, List.length(&2, Types.Entry, vs)) == True{}: Bool
+  }
+    & {Some{List.take(&2, Types.Entry, vs, 1n+j)} == Some{prev}: Maybe<&2, List<&2, Types.Entry>>}
 ) -> Exists(
   List<&2, Types.Entry>,
   ws => {
     Some{vs} == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
   }
-    & ({Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool} & {List.take(&2, Types.Entry, ws, 1n+j) == P: List<&2, Types.Entry>})
+    & (
+      {
+        Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool
+      }
+        & {List.take(&2, Types.Entry, ws, 1n+j) == prev: List<&2, Types.Entry>}
+    )
 ):
   (lt, e) = p
-  (vs, ({==}, (lt, Shared.Maybe.some_inj(List<&2, Types.Entry>, List.take(&2, Types.Entry, vs, 1n+j), P, e))))
+  (
+    vs,
+    (
+      {==},
+      (
+        lt,
+        Shared.Maybe.some_inj(List<&2, Types.Entry>, List.take(&2, Types.Entry, vs, 1n+j), prev, e)
+      )
+    )
+  )
 
 # the versions before version 1+j of a line are the first 1+j of its versions
-def Before.some(+j: Nat, mv: Maybe<&2, List<&2, Types.Entry>>, -P: List<&2, Types.Entry>) -> {
-  Answers.Line.before.of(j, mv) == Some{P}: Maybe<&2, List<&2, Types.Entry>>
+def Before.some(
+  +j: Nat,
+  mv: Maybe<&2, List<&2, Types.Entry>>,
+  -p: List<&2, Types.Entry>
+) -> {
+  Answers.Line.before.of(j, mv) == Some{p}: Maybe<&2, List<&2, Types.Entry>>
 } -> Exists(
   List<&2, Types.Entry>,
   ws => {
     mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
   }
-    & ({Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool} & {List.take(&2, Types.Entry, ws, 1n+j) == P: List<&2, Types.Entry>})
+    & (
+      {
+        Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool
+      }
+        & {List.take(&2, Types.Entry, ws, 1n+j) == p: List<&2, Types.Entry>}
+    )
 ):
   match mv:
     case None{}:
@@ -1748,38 +2554,54 @@ def Before.some(+j: Nat, mv: Maybe<&2, List<&2, Types.Entry>>, -P: List<&2, Type
           ws => {
             None{} == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
           }
-            & ({Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool} & {List.take(&2, Types.Entry, ws, 1n+j) == P: List<&2, Types.Entry>})
+            & (
+              {
+                Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool
+              }
+                & {List.take(&2, Types.Entry, ws, 1n+j) == p: List<&2, Types.Entry>}
+            )
         ),
-        Shared.Maybe.none_ne_some(List<&2, Types.Entry>, P, h)
+        Shared.Maybe.none_ne_some(List<&2, Types.Entry>, p, h)
       )
     case Some{+vs}:
       h => Before.some.at(
         j,
         vs,
-        P,
+        p,
         When.some(
           List<&2, Types.Entry>,
           Nat.is_lt(j, List.length(&2, Types.Entry, vs)),
           Some{List.take(&2, Types.Entry, vs, 1n+j)},
-          P,
+          p,
           h
         )
       )
 
 # the rule after the versions P of a branch is of a named group: the store of
 # the branch has versions, and they give the rule at the era of P
-def Rule.after.of_some(+c: Ledgers.Line, +P: List<&2, Types.Entry>, mv: Maybe<&2, List<&2, Types.Entry>>, -u: Lines.Rule) -> {
-  Lines.Rule.after.of(c, P, mv) == Some{u}: Maybe<&2, Lines.Rule>
+def Rule.after.of_some(
+  +c: Ledgers.Line,
+  +p: List<&2, Types.Entry>,
+  mv: Maybe<&2, List<&2, Types.Entry>>,
+  -u: Lines.Rule
+) -> {
+  Lines.Rule.after.of(c, p, mv) == Some{u}: Maybe<&2, Lines.Rule>
 } -> Exists(
   List<&2, Types.Entry>,
-  R => {mv == Some{R}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Rule.at(R, c, Lines.Line.era(c, P)) == Some{u}: Maybe<&2, Lines.Rule>}
+  R => {
+    mv == Some{R}: Maybe<&2, List<&2, Types.Entry>>
+  }
+    & {Lines.Rule.at(R, c, Lines.Line.era(c, p)) == Some{u}: Maybe<&2, Lines.Rule>}
 ):
   match mv:
     case None{}:
       h => Empty.absurd(
         Exists(
           List<&2, Types.Entry>,
-          R => {None{} == Some{R}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Rule.at(R, c, Lines.Line.era(c, P)) == Some{u}: Maybe<&2, Lines.Rule>}
+          R => {
+            None{} == Some{R}: Maybe<&2, List<&2, Types.Entry>>
+          }
+            & {Lines.Rule.at(R, c, Lines.Line.era(c, p)) == Some{u}: Maybe<&2, Lines.Rule>}
         ),
         Shared.Maybe.none_ne_some(Lines.Rule, u, h)
       )
@@ -1791,14 +2613,24 @@ def Rule.after_some.branch(
   +s: Facts.Facts(),
   +h: Hashes.Hash,
   +b: String,
-  -P: List<&2, Types.Entry>,
+  -prev: List<&2, Types.Entry>,
   -g: String,
   -ns: List<&2, String>,
   +m: Nat,
-  em: {Lines.Line.era(Ledgers.Line{h, Some{b}}, P) == m: Nat},
+  em: {Lines.Line.era(Ledgers.Line{h, Some{b}}, prev) == m: Nat},
   p: Exists(
     List<&2, Types.Entry>,
-    R => {Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Rule.at(R, Ledgers.Line{h, Some{b}}, Lines.Line.era(Ledgers.Line{h, Some{b}}, P)) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+    R => {
+      Lines.Store.versions(s, h) == Some{R}: Maybe<&2, List<&2, Types.Entry>>
+    }
+      & {
+        Lines.Rule.at(
+          R,
+          Ledgers.Line{h, Some{b}},
+          Lines.Line.era(Ledgers.Line{h, Some{b}}, prev)
+        )
+          == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+      }
   )
 ) -> Owned(s, Ledgers.Line{h, Some{b}}, g, ns, m):
   (+R, q) = p
@@ -1815,8 +2647,15 @@ def Rule.after_some.branch(
         ns,
         Own.cast(
           Nat,
-          w => {Lines.Rule.at(R, Ledgers.Line{h, Some{b}}, w) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>},
-          Lines.Line.era(Ledgers.Line{h, Some{b}}, P),
+          w => {
+            Lines.Rule.at(
+              R,
+              Ledgers.Line{h, Some{b}},
+              w
+            )
+              == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+          },
+          Lines.Line.era(Ledgers.Line{h, Some{b}}, prev),
           m,
           em,
           ea
@@ -1830,15 +2669,19 @@ def Rule.after_some.branch(
 def Rule.after_some(
   +s: Facts.Facts(),
   c: Ledgers.Line,
-  +P: List<&2, Types.Entry>,
+  +p: List<&2, Types.Entry>,
   -g: String,
   -ns: List<&2, String>,
   +m: Nat,
   +vs: List<&2, Types.Entry>,
   +j: Nat
 ) -> {
-  Lines.Rule.after(s, c, P) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
-} -> {Lines.Line.era(c, P) == m: Nat} -> {Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>} -> {List.take(&2, Types.Entry, vs, 1n+j) == P: List<&2, Types.Entry>} -> Owned(s, c, g, ns, m):
+  Lines.Rule.after(s, c, p) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+} -> {
+  Lines.Line.era(c, p) == m: Nat
+} -> {
+  Lines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
+} -> {List.take(&2, Types.Entry, vs, 1n+j) == p: List<&2, Types.Entry>} -> Owned(s, c, g, ns, m):
   match c:
     case Ledgers.Line{+h, None{}}:
       ea => em => ev => ep => (
@@ -1854,14 +2697,28 @@ def Rule.after_some(
             ns,
             Own.cast(
               List<&2, Types.Entry>,
-              w => {Lines.Rule.at(w, Ledgers.Line{h, None{}}, m) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>},
-              P,
+              w => {
+                Lines.Rule.at(
+                  w,
+                  Ledgers.Line{h, None{}},
+                  m
+                )
+                  == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+              },
+              p,
               List.take(&2, Types.Entry, vs, 1n+j),
-              Equal.sym(List<&2, Types.Entry>, List.take(&2, Types.Entry, vs, 1n+j), P, ep),
+              Equal.sym(List<&2, Types.Entry>, List.take(&2, Types.Entry, vs, 1n+j), p, ep),
               Own.cast(
                 Nat,
-                w => {Lines.Rule.at(P, Ledgers.Line{h, None{}}, w) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>},
-                Lines.Line.era(Ledgers.Line{h, None{}}, P),
+                w => {
+                  Lines.Rule.at(
+                    p,
+                    Ledgers.Line{h, None{}},
+                    w
+                  )
+                    == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
+                },
+                Lines.Line.era(Ledgers.Line{h, None{}}, p),
                 m,
                 em,
                 ea
@@ -1875,12 +2732,17 @@ def Rule.after_some(
         s,
         h,
         b,
-        P,
+        p,
         g,
         ns,
         m,
         em,
-        Rule.after.of_some(Ledgers.Line{h, Some{b}}, P, Lines.Store.versions(s, h), Lines.Rule{Some{g}, ns})(ea)
+        Rule.after.of_some(
+          Ledgers.Line{h, Some{b}},
+          p,
+          Lines.Store.versions(s, h),
+          Lines.Rule{Some{g}, ns}
+        )(ea)
       )
 
 # Rule.for_some, with the versions P before the version, once the line is
@@ -1892,26 +2754,38 @@ def Rule.for_some.of(
   -g: String,
   -ns: List<&2, String>,
   +m: Nat,
-  +P: List<&2, Types.Entry>,
-  ea: {Lines.Rule.after(s, c, P) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>},
-  em: {Lines.Line.era(c, P) == m: Nat},
+  +prev: List<&2, Types.Entry>,
+  ea: {Lines.Rule.after(s, c, prev) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>},
+  em: {Lines.Line.era(c, prev) == m: Nat},
   p: Exists(
     List<&2, Types.Entry>,
     ws => {
       Lines.Line.versions(s, c) == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
     }
-      & ({Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool} & {List.take(&2, Types.Entry, ws, 1n+j) == P: List<&2, Types.Entry>})
+      & (
+        {
+          Nat.is_lt(j, List.length(&2, Types.Entry, ws)) == True{}: Bool
+        }
+          & {List.take(&2, Types.Entry, ws, 1n+j) == prev: List<&2, Types.Entry>}
+      )
   )
 ) -> Owned(s, c, g, ns, m):
   (+vs, q) = p
   (ev, q2) = q
   (lt, ep) = q2
-  Rule.after_some(s, c, P, g, ns, m, vs, j)(ea)(em)(ev)(ep)
+  Rule.after_some(s, c, prev, g, ns, m, vs, j)(ea)(em)(ev)(ep)
 
 # the rule of version k of the line c is of the owner group g and the nodes
 # ns, and its era is m: the store of c has versions that reach m, where the
 # owner group of c is g and its nodes are ns
-def Rule.for_some(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, -g: String, -ns: List<&2, String>, +m: Nat) -> {
+def Rule.for_some(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  k: Nat,
+  -g: String,
+  -ns: List<&2, String>,
+  +m: Nat
+) -> {
   Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
 } -> {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>} -> Owned(s, c, g, ns, m):
   match k:
@@ -1923,9 +2797,21 @@ def Rule.for_some(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, -g: String, -ns: 
         List<&2, Types.Entry>,
         mb => {
           Answers.Rule.for.of(s, c, mb) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>
-        } -> {Maybe.map(&2, List<&2, Types.Entry>, Nat, vs => Lines.Line.era(c, vs), mb) == Some{m}: Maybe<&2, Nat>} -> Owned(s, c, g, ns, m),
+        } -> {
+          Maybe.map(
+            &2,
+            List<&2, Types.Entry>,
+            Nat,
+            vs => Lines.Line.era(c, vs),
+            mb
+          )
+            == Some{m}: Maybe<&2, Nat>
+        } -> Owned(s, c, g, ns, m),
         Answers.Line.before(s, c, j),
-        eb => h1 => h2 => Empty.absurd(Owned(s, c, g, ns, m), Shared.Maybe.none_ne_some(Nat, m, h2)),
+        eb => h1 => h2 => Empty.absurd(
+          Owned(s, c, g, ns, m),
+          Shared.Maybe.none_ne_some(Nat, m, h2)
+        ),
         +P => eb => h1 => h2 => Rule.for_some.of(
           s,
           c,
@@ -1945,18 +2831,36 @@ def Rule.for_some(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, -g: String, -ns: 
 
 # a reply of the name g of the owner group of a rule comes from a rule of the
 # owner group g
-def Owner.some(u: Maybe<&2, Lines.Rule>, -g: String) -> {
-  Maybe.bind(&2, Lines.Rule, Spec.Reply, u, Answers.Rule.owner) == Some{Spec.Reply.Name{g}}: Maybe<&2, Spec.Reply>
+def Owner.some(
+  u: Maybe<&2, Lines.Rule>,
+  -g: String
+) -> {
+  Maybe.bind(
+    &2,
+    Lines.Rule,
+    Spec.Reply,
+    u,
+    Answers.Rule.owner
+  )
+    == Some{Spec.Reply.Name{g}}: Maybe<&2, Spec.Reply>
 } -> Exists(List<&2, String>, ns => {u == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}):
   match u:
     case None{}:
       h => Empty.absurd(
-        Exists(List<&2, String>, ns => {None{} == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}),
+        Exists(
+          List<&2, String>,
+          ns => {None{} == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+        ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Name{g}, h)
       )
     case Some{Lines.Rule{None{}, ns}}:
       h => Empty.absurd(
-        Exists(List<&2, String>, ns2 => {Some{Lines.Rule{None{}, ns}} == Some{Lines.Rule{Some{g}, ns2}}: Maybe<&2, Lines.Rule>}),
+        Exists(
+          List<&2, String>,
+          ns2 => {
+            Some{Lines.Rule{None{}, ns}} == Some{Lines.Rule{Some{g}, ns2}}: Maybe<&2, Lines.Rule>
+          }
+        ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Name{g}, h)
       )
     case Some{Lines.Rule{Some{g2}, +ns}}:
@@ -1986,8 +2890,18 @@ def Owner.some(u: Maybe<&2, Lines.Rule>, -g: String) -> {
 
 # a reply of the names gs of the nodes of a rule comes from a rule of a named
 # owner group and the nodes gs
-def Group.some(u: Maybe<&2, Lines.Rule>, -gs: List<&2, String>) -> {
-  Maybe.bind(&2, Lines.Rule, Spec.Reply, u, Answers.Rule.group) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+def Group.some(
+  u: Maybe<&2, Lines.Rule>,
+  -gs: List<&2, String>
+) -> {
+  Maybe.bind(
+    &2,
+    Lines.Rule,
+    Spec.Reply,
+    u,
+    Answers.Rule.group
+  )
+    == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
 } -> Exists(String, g => {u == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}):
   match u:
     case None{}:
@@ -1997,7 +2911,12 @@ def Group.some(u: Maybe<&2, Lines.Rule>, -gs: List<&2, String>) -> {
       )
     case Some{Lines.Rule{None{}, ns}}:
       h => Empty.absurd(
-        Exists(String, g => {Some{Lines.Rule{None{}, ns}} == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}),
+        Exists(
+          String,
+          g => {
+            Some{Lines.Rule{None{}, ns}} == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>
+          }
+        ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{gs}, h)
       )
     case Some{Lines.Rule{Some{+g2}, ns}}:
@@ -2025,45 +2944,88 @@ def Group.some(u: Maybe<&2, Lines.Rule>, -gs: List<&2, String>) -> {
         )
       )
 
-# Core.owner_decided, from the latest Own among the versions R of the store
+# Core.owner_decided, from the latest Own among the versions r of the store
 def Core.owner_decided.of(
   +s: Facts.Facts(),
   +c: Ledgers.Line,
   -g: String,
   +m: Nat,
-  +R: List<&2, Types.Entry>,
-  +ev: {Lines.Store.versions(s, Spec.Line.store(c)) == Some{R}: Maybe<&2, List<&2, Types.Entry>>},
+  +r: List<&2, Types.Entry>,
+  +ev: {Lines.Store.versions(s, Spec.Line.store(c)) == Some{r}: Maybe<&2, List<&2, Types.Entry>>},
   p: Exists(
     Nat,
-    j => (Groups.Groups.At(R, j, Spec.Request.Own{c, g}) & {Nat.is_le(j, m) == True{}: Bool})
-      & (@j2: Nat -> @g2: String -> Groups.Groups.At(R, j2, Spec.Request.Own{c, g2}) -> {Nat.is_le(j2, m) == True{}: Bool} -> {Nat.is_le(j2, j) == True{}: Bool})
+    j => (
+      Groups.Groups.At(r, j, Spec.Request.Own{c, g}) & {Nat.is_le(j, m) == True{}: Bool}
+    )
+      & (
+        @j2: Nat -> @g2: String -> Groups.Groups.At(
+          r,
+          j2,
+          Spec.Request.Own{c, g2}
+        ) -> {Nat.is_le(j2, m) == True{}: Bool} -> {Nat.is_le(j2, j) == True{}: Bool}
+      )
   )
 ) -> Exists(
   Nat,
-  j => Mirror.Latest(s, c, j, m, Spec.Request.Own{c, g})
-    & (@j2: Nat -> @g2: String -> Mirror.Latest(s, c, j2, m, Spec.Request.Own{c, g2}) -> {Nat.is_le(j2, j) == True{}: Bool})
+  j => Mirror.Latest(
+    s,
+    c,
+    j,
+    m,
+    Spec.Request.Own{c, g}
+  )
+    & (
+      @j2: Nat -> @g2: String -> Mirror.Latest(
+        s,
+        c,
+        j2,
+        m,
+        Spec.Request.Own{c, g2}
+      ) -> {Nat.is_le(j2, j) == True{}: Bool}
+    )
 ):
   (+j, q) = p
   (hit, later) = q
   (
     j,
     (
-      Latest.of_at(s, Spec.Line.store(c), R, j, m, Spec.Request.Own{c, g}, ev, hit),
+      Latest.of_at(s, Spec.Line.store(c), r, j, m, Spec.Request.Own{c, g}, ev, hit),
       +j2 => +g2 => l => Groups.Pair.use(
-        Groups.Groups.At(R, j2, Spec.Request.Own{c, g2}),
+        Groups.Groups.At(r, j2, Spec.Request.Own{c, g2}),
         {Nat.is_le(j2, m) == True{}: Bool},
         {Nat.is_le(j2, j) == True{}: Bool},
-        At.of_latest(s, Spec.Line.store(c), R, j2, m, Spec.Request.Own{c, g2}, ev, l),
+        At.of_latest(s, Spec.Line.store(c), r, j2, m, Spec.Request.Own{c, g2}, ev, l),
         a => le => later(j2)(g2)(a)(le)
       )
     )
   )
 
 # Core.owner_decided, from what the store of the line gives at the era
-def Core.owner_decided.open(+s: Facts.Facts(), +c: Ledgers.Line, +g: String, -ns: List<&2, String>, +m: Nat, p: Owned(s, c, g, ns, m)) -> Exists(
+def Core.owner_decided.open(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +g: String,
+  -ns: List<&2, String>,
+  +m: Nat,
+  p: Owned(s, c, g, ns, m)
+) -> Exists(
   Nat,
-  j => Mirror.Latest(s, c, j, m, Spec.Request.Own{c, g})
-    & (@j2: Nat -> @g2: String -> Mirror.Latest(s, c, j2, m, Spec.Request.Own{c, g2}) -> {Nat.is_le(j2, j) == True{}: Bool})
+  j => Mirror.Latest(
+    s,
+    c,
+    j,
+    m,
+    Spec.Request.Own{c, g}
+  )
+    & (
+      @j2: Nat -> @g2: String -> Mirror.Latest(
+        s,
+        c,
+        j2,
+        m,
+        Spec.Request.Own{c, g2}
+      ) -> {Nat.is_le(j2, j) == True{}: Bool}
+    )
 ):
   (+R, q) = p
   (ev, q2) = q
@@ -2078,12 +3040,35 @@ def Core.owner_decided.rule(
   +k: Nat,
   +g: String,
   +m: Nat,
-  e2: {Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m}}: Maybe<&2, Spec.Reply>},
-  p: Exists(List<&2, String>, ns => {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>})
+  e2: {
+    Answers.Answer.of(
+      s,
+      Spec.Question.Era{c, k}
+    )
+      == Some{Spec.Reply.Number{m}}: Maybe<&2, Spec.Reply>
+  },
+  p: Exists(
+    List<&2, String>,
+    ns => {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, ns}}: Maybe<&2, Lines.Rule>}
+  )
 ) -> Exists(
   Nat,
-  j => Mirror.Latest(s, c, j, m, Spec.Request.Own{c, g})
-    & (@j2: Nat -> @g2: String -> Mirror.Latest(s, c, j2, m, Spec.Request.Own{c, g2}) -> {Nat.is_le(j2, j) == True{}: Bool})
+  j => Mirror.Latest(
+    s,
+    c,
+    j,
+    m,
+    Spec.Request.Own{c, g}
+  )
+    & (
+      @j2: Nat -> @g2: String -> Mirror.Latest(
+        s,
+        c,
+        j2,
+        m,
+        Spec.Request.Own{c, g2}
+      ) -> {Nat.is_le(j2, j) == True{}: Bool}
+    )
 ):
   (ns, er) = p
   Core.owner_decided.open(
@@ -2097,20 +3082,55 @@ def Core.owner_decided.rule(
 
 # The owner group of a line is the one that the latest Own of the line, up to
 # the era, names.
-def Core.owner_decided(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +g: String, +m: Nat) -> {
+def Core.owner_decided(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +g: String,
+  +m: Nat
+) -> {
   Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g}}: Maybe<&2, Spec.Reply>
-} -> {Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m}}: Maybe<&2, Spec.Reply>} -> Exists(
+} -> {
+  Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m}}: Maybe<&2, Spec.Reply>
+} -> Exists(
   Nat,
-  j => Mirror.Latest(s, c, j, m, Spec.Request.Own{c, g})
-    & (@j2: Nat -> @g2: String -> Mirror.Latest(s, c, j2, m, Spec.Request.Own{c, g2}) -> {Nat.is_le(j2, j) == True{}: Bool})
+  j => Mirror.Latest(
+    s,
+    c,
+    j,
+    m,
+    Spec.Request.Own{c, g}
+  )
+    & (
+      @j2: Nat -> @g2: String -> Mirror.Latest(
+        s,
+        c,
+        j2,
+        m,
+        Spec.Request.Own{c, g2}
+      ) -> {Nat.is_le(j2, j) == True{}: Bool}
+    )
 ):
-  e1 => e2 => Core.owner_decided.rule(s, c, k, g, m, e2, Owner.some(Answers.Rule.for(s, c, k), g)(e1))
+  e1 => e2 => Core.owner_decided.rule(
+    s,
+    c,
+    k,
+    g,
+    m,
+    e2,
+    Owner.some(Answers.Rule.for(s, c, k), g)(e1)
+  )
 
 # The group that decides a version
 # --------------------------------
 
 # a version that has a rule has an era
-def Era.some(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, -u: Lines.Rule) -> {
+def Era.some(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  k: Nat,
+  -u: Lines.Rule
+) -> {
   Answers.Rule.for(s, c, k) == Some{u}: Maybe<&2, Lines.Rule>
 } -> Exists(Nat, m => {Answers.Era.for(s, c, k) == Some{m}: Maybe<&2, Nat>}):
   match k:
@@ -2125,7 +3145,19 @@ def Era.some(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, -u: Lines.Rule) -> {
         List<&2, Types.Entry>,
         mb => {
           Answers.Rule.for.of(s, c, mb) == Some{u}: Maybe<&2, Lines.Rule>
-        } -> Exists(Nat, m => {Maybe.map(&2, List<&2, Types.Entry>, Nat, vs => Lines.Line.era(c, vs), mb) == Some{m}: Maybe<&2, Nat>}),
+        } -> Exists(
+          Nat,
+          m => {
+            Maybe.map(
+              &2,
+              List<&2, Types.Entry>,
+              Nat,
+              vs => Lines.Line.era(c, vs),
+              mb
+            )
+              == Some{m}: Maybe<&2, Nat>
+          }
+        ),
         Answers.Line.before(s, c, j),
         eb => h => Empty.absurd(
           Exists(Nat, m => {None{} == Some{m}: Maybe<&2, Nat>}),
@@ -2150,14 +3182,26 @@ def Core.group_of_era.of(
   g2 => Exists(
     Nat,
     m2 => {
-      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.Owner{c, k}
+      )
+        == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
     }
       & (
         {
-          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
+          Answers.Answer.of(
+            s,
+            Spec.Question.Era{c, k}
+          )
+            == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
         }
           & {
-            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g2, m2}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+            Answers.Answer.of(
+              s,
+              Spec.Question.Nodes{Spec.Line.store(c), g2, m2}
+            )
+              == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
           }
       )
   )
@@ -2180,7 +3224,14 @@ def Core.group_of_era.of(
           er
         ),
         (
-          Equal.cong(Maybe<&2, Nat>, Maybe<&2, Spec.Reply>, Answers.Reply.number, Answers.Era.for(s, c, k), Some{m}, em),
+          Equal.cong(
+            Maybe<&2, Nat>,
+            Maybe<&2, Spec.Reply>,
+            Answers.Reply.number,
+            Answers.Era.for(s, c, k),
+            Some{m},
+            em
+          ),
           Nodes.make(s, Spec.Line.store(c), g, m, R, gs, ev, lt, en)
         )
       )
@@ -2202,14 +3253,26 @@ def Core.group_of_era.at(
   g2 => Exists(
     Nat,
     m2 => {
-      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.Owner{c, k}
+      )
+        == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
     }
       & (
         {
-          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
+          Answers.Answer.of(
+            s,
+            Spec.Question.Era{c, k}
+          )
+            == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
         }
           & {
-            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g2, m2}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+            Answers.Answer.of(
+              s,
+              Spec.Question.Nodes{Spec.Line.store(c), g2, m2}
+            )
+              == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
           }
       )
   )
@@ -2230,14 +3293,26 @@ def Core.group_of_era.era(
   g2 => Exists(
     Nat,
     m2 => {
-      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.Owner{c, k}
+      )
+        == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
     }
       & (
         {
-          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
+          Answers.Answer.of(
+            s,
+            Spec.Question.Era{c, k}
+          )
+            == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
         }
           & {
-            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g2, m2}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+            Answers.Answer.of(
+              s,
+              Spec.Question.Nodes{Spec.Line.store(c), g2, m2}
+            )
+              == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
           }
       )
   )
@@ -2258,14 +3333,26 @@ def Core.group_of_era.named(
   g2 => Exists(
     Nat,
     m2 => {
-      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.Owner{c, k}
+      )
+        == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
     }
       & (
         {
-          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
+          Answers.Answer.of(
+            s,
+            Spec.Question.Era{c, k}
+          )
+            == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
         }
           & {
-            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g2, m2}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+            Answers.Answer.of(
+              s,
+              Spec.Question.Nodes{Spec.Line.store(c), g2, m2}
+            )
+              == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
           }
       )
   )
@@ -2278,20 +3365,35 @@ def Core.group_of_era.rule(
   +c: Ledgers.Line,
   +k: Nat,
   +gs: List<&2, String>,
-  p: Exists(String, g => {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>})
+  p: Exists(
+    String,
+    g => {Answers.Rule.for(s, c, k) == Some{Lines.Rule{Some{g}, gs}}: Maybe<&2, Lines.Rule>}
+  )
 ) -> Exists(
   String,
   g2 => Exists(
     Nat,
     m2 => {
-      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.Owner{c, k}
+      )
+        == Some{Spec.Reply.Name{g2}}: Maybe<&2, Spec.Reply>
     }
       & (
         {
-          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
+          Answers.Answer.of(
+            s,
+            Spec.Question.Era{c, k}
+          )
+            == Some{Spec.Reply.Number{m2}}: Maybe<&2, Spec.Reply>
         }
           & {
-            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g2, m2}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+            Answers.Answer.of(
+              s,
+              Spec.Question.Nodes{Spec.Line.store(c), g2, m2}
+            )
+              == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
           }
       )
   )
@@ -2301,21 +3403,42 @@ def Core.group_of_era.rule(
 
 # The group that decides a version is the owner group of the line, made of its
 # nodes at one version of the store: its era.
-def Core.group_of_era(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +gs: List<&2, String>) -> {
-  Answers.Answer.of(s, Spec.Question.Group{c, k}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+def Core.group_of_era(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +gs: List<&2, String>
+) -> {
+  Answers.Answer.of(
+    s,
+    Spec.Question.Group{c, k}
+  )
+    == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
 } -> Exists(
   String,
   g => Exists(
     Nat,
     m => {
-      Answers.Answer.of(s, Spec.Question.Owner{c, k}) == Some{Spec.Reply.Name{g}}: Maybe<&2, Spec.Reply>
+      Answers.Answer.of(
+        s,
+        Spec.Question.Owner{c, k}
+      )
+        == Some{Spec.Reply.Name{g}}: Maybe<&2, Spec.Reply>
     }
       & (
         {
-          Answers.Answer.of(s, Spec.Question.Era{c, k}) == Some{Spec.Reply.Number{m}}: Maybe<&2, Spec.Reply>
+          Answers.Answer.of(
+            s,
+            Spec.Question.Era{c, k}
+          )
+            == Some{Spec.Reply.Number{m}}: Maybe<&2, Spec.Reply>
         }
           & {
-            Answers.Answer.of(s, Spec.Question.Nodes{Spec.Line.store(c), g, m}) == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
+            Answers.Answer.of(
+              s,
+              Spec.Question.Nodes{Spec.Line.store(c), g, m}
+            )
+              == Some{Spec.Reply.Names{gs}}: Maybe<&2, Spec.Reply>
           }
       )
   )
@@ -2326,7 +3449,11 @@ def Core.group_of_era(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +gs: List<&2
 # ------------------
 
 # the greater of a and x is at most the greater of a and y, when x is at most y
-def Nat.max_le_right(+a: Nat, +x: Nat, +y: Nat) -> {Nat.is_le(x, y) == True{}: Bool} -> {Nat.is_le(Nat.max(a, x), Nat.max(a, y)) == True{}: Bool}:
+def Nat.max_le_right(
+  +a: Nat,
+  +x: Nat,
+  +y: Nat
+) -> {Nat.is_le(x, y) == True{}: Bool} -> {Nat.is_le(Nat.max(a, x), Nat.max(a, y)) == True{}: Bool}:
   match a x y:
     case 0n v w:
       h => h
@@ -2340,22 +3467,39 @@ def Nat.max_le_right(+a: Nat, +x: Nat, +y: Nat) -> {Nat.is_le(x, y) == True{}: B
       Nat.max_le_right(p, v, q)
 
 # one less than a is at most one less than b, when a is at most b
-def Nat.pred_le(+a: Nat, +b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {Nat.is_le(Nat.sub(a, 1n), Nat.sub(b, 1n)) == True{}: Bool}:
+def Nat.pred_le(
+  +a: Nat,
+  +b: Nat
+) -> {
+  Nat.is_le(a, b) == True{}: Bool
+} -> {Nat.is_le(Nat.sub(a, 1n), Nat.sub(b, 1n)) == True{}: Bool}:
   match a b:
     case 0n w:
       h => Shared.Nat.le_zero(Nat.sub(w, 1n))
     case 1n+p 0n:
-      h => Empty.absurd({Nat.is_le(Nat.sub(p, 0n), 0n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Nat.is_le(Nat.sub(p, 0n), 0n) == True{}: Bool},
+        Shared.Bool.false_ne_true(h)
+      )
     case 1n+p 1n+q:
       h => (
         %Equal.sym(Nat, Nat.sub(p, 0n), p, Shared.Nat.sub_zero(p)): {Nat.is_le(_, Nat.sub(q, 0n)) == True{}: Bool}
         %Equal.sym(Nat, Nat.sub(q, 0n), q, Shared.Nat.sub_zero(q)): {Nat.is_le(p, _) == True{}: Bool}
-        h
-      )
+        h)
 
 # the first a of a list are no more than its first b, when a is at most b
-def Take.length_le(+vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {
-  Nat.is_le(List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, a)), List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, b))) == True{}: Bool
+def Take.length_le(
+  +vs: List<&2, Types.Entry>,
+  +a: Nat,
+  +b: Nat
+) -> {
+  Nat.is_le(a, b) == True{}: Bool
+} -> {
+  Nat.is_le(
+    List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, a)),
+    List.length(&2, Types.Entry, List.take(&2, Types.Entry, vs, b))
+  )
+    == True{}: Bool
 }:
   match vs a b:
     case Nil{} p q:
@@ -2364,7 +3508,13 @@ def Take.length_le(+vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -> {Nat.is_le(a
       h => Shared.Nat.le_zero(List.length(&2, Types.Entry, List.take(&2, Types.Entry, x <> t, q)))
     case Con{x, t} 1n+p 0n:
       h => Empty.absurd(
-        {Nat.is_le(1n+List.length(&2, Types.Entry, List.take(&2, Types.Entry, t, p)), 0n) == True{}: Bool},
+        {
+          Nat.is_le(
+            1n+List.length(&2, Types.Entry, List.take(&2, Types.Entry, t, p)),
+            0n
+          )
+            == True{}: Bool
+        },
         Shared.Bool.false_ne_true(h)
       )
     case Con{x, t} 1n+p 1n+q:
@@ -2372,7 +3522,13 @@ def Take.length_le(+vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -> {Nat.is_le(a
 
 # the greatest era of the first a of a list is at most that of its first b,
 # when a is at most b
-def Take.peak_le(+vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {
+def Take.peak_le(
+  +vs: List<&2, Types.Entry>,
+  +a: Nat,
+  +b: Nat
+) -> {
+  Nat.is_le(a, b) == True{}: Bool
+} -> {
   Nat.is_le(
     Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, vs, a)),
     Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, vs, b))
@@ -2383,10 +3539,21 @@ def Take.peak_le(+vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -> {Nat.is_le(a, 
     case Nil{} p q:
       h => {==}
     case Con{x, t} 0n q:
-      h => Shared.Nat.le_zero(Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, x <> t, q)))
+      h => Shared.Nat.le_zero(
+        Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, x <> t, q))
+      )
     case Con{x, t} 1n+p 0n:
       h => Empty.absurd(
-        {Nat.is_le(Nat.max(Lines.Entry.era(x), Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, t, p))), 0n) == True{}: Bool},
+        {
+          Nat.is_le(
+            Nat.max(
+              Lines.Entry.era(x),
+              Lists.List.peak(~Types.Entry, ~Lines.Entry.era, List.take(&2, Types.Entry, t, p))
+            ),
+            0n
+          )
+            == True{}: Bool
+        },
         Shared.Bool.false_ne_true(h)
       )
     case Con{x, t} 1n+p 1n+q:
@@ -2398,8 +3565,19 @@ def Take.peak_le(+vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -> {Nat.is_le(a, 
 
 # the era after the first a versions of a line is at most that after its
 # first b, when a is at most b
-def Era.take_le(c: Ledgers.Line, +vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -> {Nat.is_le(a, b) == True{}: Bool} -> {
-  Nat.is_le(Lines.Line.era(c, List.take(&2, Types.Entry, vs, a)), Lines.Line.era(c, List.take(&2, Types.Entry, vs, b))) == True{}: Bool
+def Era.take_le(
+  c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +a: Nat,
+  +b: Nat
+) -> {
+  Nat.is_le(a, b) == True{}: Bool
+} -> {
+  Nat.is_le(
+    Lines.Line.era(c, List.take(&2, Types.Entry, vs, a)),
+    Lines.Line.era(c, List.take(&2, Types.Entry, vs, b))
+  )
+    == True{}: Bool
 }:
   match c:
     case Ledgers.Line{r, None{}}:
@@ -2411,36 +3589,59 @@ def Era.take_le(c: Ledgers.Line, +vs: List<&2, Types.Entry>, +a: Nat, +b: Nat) -
       Take.peak_le(vs, a, b)
 
 # Era.at, once the line is known to have the version (b)
-def Era.at.if(-c: Ledgers.Line, b: Bool, -P: List<&2, Types.Entry>, -x: Nat) -> {
+def Era.at.if(
+  -c: Ledgers.Line,
+  b: Bool,
+  -p: List<&2, Types.Entry>,
+  -x: Nat
+) -> {
   Maybe.map(
     &2,
     List<&2, Types.Entry>,
     Nat,
     vs => Lines.Line.era(c, vs),
-    Shared.Maybe.when(List<&2, Types.Entry>, b, u => Some{P})
+    Shared.Maybe.when(List<&2, Types.Entry>, b, u => Some{p})
   )
     == Some{x}: Maybe<&2, Nat>
-} -> {Lines.Line.era(c, P) == x: Nat}:
+} -> {Lines.Line.era(c, p) == x: Nat}:
   match b:
     case True{}:
-      h => Shared.Maybe.some_inj(Nat, Lines.Line.era(c, P), x, h)
+      h => Shared.Maybe.some_inj(Nat, Lines.Line.era(c, p), x, h)
     case False{}:
-      h => Empty.absurd({Lines.Line.era(c, P) == x: Nat}, Shared.Maybe.none_ne_some(Nat, x, h))
+      h => Empty.absurd({Lines.Line.era(c, p) == x: Nat}, Shared.Maybe.none_ne_some(Nat, x, h))
 
 # the era of version 1+i of a line: the line has versions, and it is the era
 # after the first 1+i of them
-def Era.at(+c: Ledgers.Line, +i: Nat, mv: Maybe<&2, List<&2, Types.Entry>>, -x: Nat) -> {
-  Maybe.map(&2, List<&2, Types.Entry>, Nat, vs => Lines.Line.era(c, vs), Answers.Line.before.of(i, mv)) == Some{x}: Maybe<&2, Nat>
+def Era.at(
+  +c: Ledgers.Line,
+  +i: Nat,
+  mv: Maybe<&2, List<&2, Types.Entry>>,
+  -x: Nat
+) -> {
+  Maybe.map(
+    &2,
+    List<&2, Types.Entry>,
+    Nat,
+    vs => Lines.Line.era(c, vs),
+    Answers.Line.before.of(i, mv)
+  )
+    == Some{x}: Maybe<&2, Nat>
 } -> Exists(
   List<&2, Types.Entry>,
-  ws => {mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
+  ws => {
+    mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
+  }
+    & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
 ):
   match mv:
     case None{}:
       h => Empty.absurd(
         Exists(
           List<&2, Types.Entry>,
-          ws => {None{} == Some{ws}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
+          ws => {
+            None{} == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
+          }
+            & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
         ),
         Shared.Maybe.none_ne_some(Nat, x, h)
       )
@@ -2449,7 +3650,12 @@ def Era.at(+c: Ledgers.Line, +i: Nat, mv: Maybe<&2, List<&2, Types.Entry>>, -x: 
         vs,
         (
           {==},
-          Era.at.if(c, Nat.is_lt(i, List.length(&2, Types.Entry, vs)), List.take(&2, Types.Entry, vs, 1n+i), x)(h)
+          Era.at.if(
+            c,
+            Nat.is_lt(i, List.length(&2, Types.Entry, vs)),
+            List.take(&2, Types.Entry, vs, 1n+i),
+            x
+          )(h)
         )
       )
 
@@ -2464,11 +3670,17 @@ def Era.grow.of(
   l: {Nat.is_le(i, j) == True{}: Bool},
   p: Exists(
     List<&2, Types.Entry>,
-    ws => {mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
+    ws => {
+      mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
+    }
+      & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+i)) == x: Nat}
   ),
   q: Exists(
     List<&2, Types.Entry>,
-    ws => {mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>} & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+j)) == y: Nat}
+    ws => {
+      mv == Some{ws}: Maybe<&2, List<&2, Types.Entry>>
+    }
+      & {Lines.Line.era(c, List.take(&2, Types.Entry, ws, 1n+j)) == y: Nat}
   )
 ) -> {Nat.is_le(x, y) == True{}: Bool}:
   (+vs, p2) = p
@@ -2490,21 +3702,38 @@ def Era.grow.of(
       ew
     )
   ): {
-    Nat.is_le(Lines.Line.era(c, List.take(&2, Types.Entry, vs, 1n+i)), Lines.Line.era(c, List.take(&2, Types.Entry, _, 1n+j))) == True{}: Bool
+    Nat.is_le(
+      Lines.Line.era(c, List.take(&2, Types.Entry, vs, 1n+i)),
+      Lines.Line.era(c, List.take(&2, Types.Entry, _, 1n+j))
+    )
+      == True{}: Bool
   }
   Era.take_le(c, vs, 1n+i, 1n+j)(l)
 
 # the era of a version of a line is at most the era of a later version
-def Era.grow(+s: Facts.Facts(), +c: Ledgers.Line, a: Nat, b: Nat, -x: Nat, -y: Nat) -> {
+def Era.grow(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  a: Nat,
+  b: Nat,
+  -x: Nat,
+  -y: Nat
+) -> {
   Nat.is_le(a, b) == True{}: Bool
-} -> {Answers.Era.for(s, c, a) == Some{x}: Maybe<&2, Nat>} -> {Answers.Era.for(s, c, b) == Some{y}: Maybe<&2, Nat>} -> {
-  Nat.is_le(x, y) == True{}: Bool
-}:
+} -> {
+  Answers.Era.for(s, c, a) == Some{x}: Maybe<&2, Nat>
+} -> {Answers.Era.for(s, c, b) == Some{y}: Maybe<&2, Nat>} -> {Nat.is_le(x, y) == True{}: Bool}:
   match a b:
     case 0n q:
-      l => e1 => e2 => Empty.absurd({Nat.is_le(x, y) == True{}: Bool}, Shared.Maybe.none_ne_some(Nat, x, e1))
+      l => e1 => e2 => Empty.absurd(
+        {Nat.is_le(x, y) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Nat, x, e1)
+      )
     case 1n+i 0n:
-      l => e1 => e2 => Empty.absurd({Nat.is_le(x, y) == True{}: Bool}, Shared.Maybe.none_ne_some(Nat, y, e2))
+      l => e1 => e2 => Empty.absurd(
+        {Nat.is_le(x, y) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Nat, y, e2)
+      )
     case 1n+i 1n+j:
       +i = i
       +j = j
@@ -2522,9 +3751,29 @@ def Era.grow(+s: Facts.Facts(), +c: Ledgers.Line, a: Nat, b: Nat, -x: Nat, -y: N
 
 # Eras never go back: a later version of a line is decided by groups of the
 # same or a later version of the store.
-def Core.eras_grow(+s: Facts.Facts(), +c: Ledgers.Line, +a: Nat, +b: Nat, +x: Nat, +y: Nat) -> {
+def Core.eras_grow(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +a: Nat,
+  +b: Nat,
+  +x: Nat,
+  +y: Nat
+) -> {
   Nat.is_le(a, b) == True{}: Bool
-} -> {Answers.Answer.of(s, Spec.Question.Era{c, a}) == Some{Spec.Reply.Number{x}}: Maybe<&2, Spec.Reply>} -> {
+} -> {
+  Answers.Answer.of(s, Spec.Question.Era{c, a}) == Some{Spec.Reply.Number{x}}: Maybe<&2, Spec.Reply>
+} -> {
   Answers.Answer.of(s, Spec.Question.Era{c, b}) == Some{Spec.Reply.Number{y}}: Maybe<&2, Spec.Reply>
 } -> {Nat.is_le(x, y) == True{}: Bool}:
-  l => e1 => e2 => Era.grow(s, c, a, b, x, y)(l)(Reply.number_some(Answers.Era.for(s, c, a), x)(e1))(Reply.number_some(Answers.Era.for(s, c, b), y)(e2))
+  l => e1 => e2 => Era.grow(
+    s,
+    c,
+    a,
+    b,
+    x,
+    y
+  )(
+    l
+  )(
+    Reply.number_some(Answers.Era.for(s, c, a), x)(e1)
+  )(Reply.number_some(Answers.Era.for(s, c, b), y)(e2))

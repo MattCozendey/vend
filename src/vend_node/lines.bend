@@ -108,7 +108,12 @@ def Voting.most(+ds: List<&2, String>, g: Voting) -> Bool:
 # a count of the votes for a step: the facts, the step, the nodes that decide
 # it, and the picks that the votes for it are for
 type Tally is Data:
-  Tally{facts: Facts.Facts(), step: Types.Step, nodes: List<&2, String>, picks: List<&2, Types.Pick>}
+  Tally{
+    facts: Facts.Facts(),
+    step: Types.Step,
+    nodes: List<&2, String>,
+    picks: List<&2, Types.Pick>
+  }
 
 # more than half of the nodes of the tally t voted for the pick pk
 def Tally.most(t: Tally, pk: Types.Pick) -> Bool:
@@ -145,7 +150,11 @@ def Tally.wins(t: Tally, pk: Types.Pick) -> Bool:
   )
 
 # the pick that the nodes ds decided for the step st, in the facts s
-def Votes.decided(+s: Facts.Facts(), +st: Types.Step, ds: List<&2, String>) -> Maybe<&2, Types.Pick>:
+def Votes.decided(
+  +s: Facts.Facts(),
+  +st: Types.Step,
+  ds: List<&2, String>
+) -> Maybe<&2, Types.Pick>:
   +pks = Votes.picks(Facts.Facts.list(s), st)
   Lists.List.pick(~Types.Pick, ~Tally, ~Tally.wins, pks, Tally{s, st, ds, pks})
 
@@ -184,9 +193,9 @@ def Request.owners(r: Spec.Request) -> List<&2, String>:
     case _:
       []
 
-# the owners that the store of the versions R started with
-def Store.owners(R: List<&2, Types.Entry>) -> List<&2, String>:
-  match R:
+# the owners that the store of the versions r started with
+def Store.owners(r: List<&2, Types.Entry>) -> List<&2, String>:
+  match r:
     case Nil{}:
       []
     case Con{e, rest}:
@@ -204,36 +213,54 @@ def Rule.nodes(u: Rule) -> List<&2, String>:
       ns
 
 # the rule of the owner group g, if any, of the line c, at the era m of the
-# versions R of its store: the nodes of g; or, while a store named no owner
+# versions r of its store: the nodes of g; or, while a store named no owner
 # group of its own, the owners that it started with
-def Rule.of(+R: List<&2, Types.Entry>, +c: Ledgers.Line, +m: Nat, g: Maybe<&2, String>) -> Maybe<&2, Rule>:
+def Rule.of(
+  +r: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +m: Nat,
+  g: Maybe<&2, String>
+) -> Maybe<&2, Rule>:
   match g:
     case Some{+name}:
-      Maybe.map(&2, List<&2, String>, Rule, ns => Rule{Some{name}, ns}, Groups.Groups.nodes(R, Line.root(c), name, m))
+      Maybe.map(
+        &2,
+        List<&2, String>,
+        Rule,
+        ns => Rule{Some{name}, ns},
+        Groups.Groups.nodes(r, Line.root(c), name, m)
+      )
     case None{}:
-      Shared.Maybe.when(Rule, Line.is_root(c), u => Some{Rule{None{}, Store.owners(R)}})
+      Shared.Maybe.when(Rule, Line.is_root(c), u => Some{Rule{None{}, Store.owners(r)}})
 
 # the rule of the version of the line c that the era m decides, with the
-# versions R of its store (nothing while R does not reach m)
-def Rule.at(+R: List<&2, Types.Entry>, +c: Ledgers.Line, +m: Nat) -> Maybe<&2, Rule>:
+# versions r of its store (nothing while r does not reach m)
+def Rule.at(+r: List<&2, Types.Entry>, +c: Ledgers.Line, +m: Nat) -> Maybe<&2, Rule>:
   Shared.Maybe.when(
     Rule,
-    Nat.is_lt(m, List.length(&2, Types.Entry, R)),
-    u => Rule.of(R, c, m, Groups.Groups.owner(R, c, m))
+    Nat.is_lt(m, List.length(&2, Types.Entry, r)),
+    u => Rule.of(r, c, m, Groups.Groups.owner(r, c, m))
   )
 
-# the versions of the store of a line whose versions are vs: R, or vs itself
-# when the line is the store (R is none)
-def Line.store(R: Maybe<&2, List<&2, Types.Entry>>, vs: List<&2, Types.Entry>) -> List<&2, Types.Entry>:
-  match R:
+# the versions of the store of a line whose versions are vs: rs, or vs itself
+# when the line is the store (rs is none)
+def Line.store(
+  rs: Maybe<&2, List<&2, Types.Entry>>,
+  vs: List<&2, Types.Entry>
+) -> List<&2, Types.Entry>:
+  match rs:
     case None{}:
       vs
     case Some{r}:
       r
 
 # the rule of the next version of the line c, after its versions vs
-def Line.rule(R: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +vs: List<&2, Types.Entry>) -> Maybe<&2, Rule>:
-  Rule.at(Line.store(R, vs), c, Line.era(c, vs))
+def Line.rule(
+  r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>
+) -> Maybe<&2, Rule>:
+  Rule.at(Line.store(r, vs), c, Line.era(c, vs))
 
 # Slots
 # -----
@@ -287,7 +314,12 @@ def Line.step.of(st: State, m: Maybe<&2, Types.Pick>) -> Maybe<&2, State>:
       Some{State.put(vs, k, pk)}
 
 # the state after the next slot of st, once the rule u of the slot is known
-def Line.step.at(+s: Facts.Facts(), +c: Ledgers.Line, +st: State, u: Maybe<&2, Rule>) -> Maybe<&2, State>:
+def Line.step.at(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +st: State,
+  u: Maybe<&2, Rule>
+) -> Maybe<&2, State>:
   match u:
     case None{}:
       None{}
@@ -296,19 +328,31 @@ def Line.step.at(+s: Facts.Facts(), +c: Ledgers.Line, +st: State, u: Maybe<&2, R
 
 # the state of the line c after the next slot of st (nothing while the slot is
 # not decided, or who decides it is not known)
-def Line.step(+s: Facts.Facts(), R: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +st: State) -> Maybe<&2, State>:
-  Line.step.at(s, c, st, Line.rule(R, c, State.versions(st)))
+def Line.step(
+  +s: Facts.Facts(),
+  r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: State
+) -> Maybe<&2, State>:
+  Line.step.at(s, c, st, Line.rule(r, c, State.versions(st)))
 
 # the state of the line c after each decided slot from st on, at most fuel of
 # them; m is the state after the next slot of st, if it is decided
-def Line.run(fuel: Nat, +s: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, st: State, m: Maybe<&2, State>) -> State:
+def Line.run(
+  fuel: Nat,
+  +s: Facts.Facts(),
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  st: State,
+  m: Maybe<&2, State>
+) -> State:
   match fuel m:
     case 0n _:
       st
     case 1n+f None{}:
       st
     case 1n+f Some{+st2}:
-      Line.run(f, s, R, c, st2, Line.step(s, R, c, st2))
+      Line.run(f, s, r, c, st2, Line.step(s, r, c, st2))
 
 # one more than the slot k, when it is a slot of the line (hit)
 def Line.bound.at(hit: Bool, k: Nat) -> Nat:
@@ -392,32 +436,42 @@ def Branch.first.of(+j: Nat, m: Maybe<&2, Types.Entry>) -> Maybe<&2, Types.Entry
 
 # version 0 of a branch, once the version j of its store that first owned it
 # is known
-def Branch.first.at(+R: List<&2, Types.Entry>, j: Maybe<&2, Nat>) -> Maybe<&2, Types.Entry>:
+def Branch.first.at(+r: List<&2, Types.Entry>, j: Maybe<&2, Nat>) -> Maybe<&2, Types.Entry>:
   match j:
     case None{}:
       None{}
     case Some{+n}:
-      Branch.first.of(n, List.get(&2, Types.Entry, R, n))
+      Branch.first.of(n, List.get(&2, Types.Entry, r, n))
 
 # version 0 of the branch c: the first request of its store, of the versions
-# R, that made a group its owner
-def Branch.first(+R: List<&2, Types.Entry>, +c: Ledgers.Line) -> Maybe<&2, Types.Entry>:
-  Branch.first.at(R, Lists.List.index(~Types.Entry, ~Ledgers.Line, ~Entry.owns, R, c))
+# r, that made a group its owner
+def Branch.first(+r: List<&2, Types.Entry>, +c: Ledgers.Line) -> Maybe<&2, Types.Entry>:
+  Branch.first.at(r, Lists.List.index(~Types.Entry, ~Ledgers.Line, ~Entry.owns, r, c))
 
 # The versions of a line
 # ----------------------
 
 # the state of the line c after each decided slot from st on
-def Line.start(+s: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +st: State) -> State:
-  Line.run(Line.bound(Facts.Facts.list(s), c), s, R, c, st, Line.step(s, R, c, st))
+def Line.start(
+  +s: Facts.Facts(),
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: State
+) -> State:
+  Line.run(Line.bound(Facts.Facts.list(s), c), s, r, c, st, Line.step(s, r, c, st))
 
 # the state of a line from its version 0 on, if it has one
-def Line.from(+s: Facts.Facts(), +R: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, m: Maybe<&2, Types.Entry>) -> Maybe<&2, State>:
+def Line.from(
+  +s: Facts.Facts(),
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  m: Maybe<&2, Types.Entry>
+) -> Maybe<&2, State>:
   match m:
     case None{}:
       None{}
     case Some{e}:
-      Some{Line.start(s, R, c, State{[e], 1n})}
+      Some{Line.start(s, r, c, State{[e], 1n})}
 
 # the state of the store of the root h
 def Store.state(+s: Facts.Facts(), +h: Hashes.Hash) -> Maybe<&2, State>:
@@ -428,7 +482,11 @@ def Store.versions(+s: Facts.Facts(), +h: Hashes.Hash) -> Maybe<&2, List<&2, Typ
   Maybe.map(&2, State, List<&2, Types.Entry>, State.versions, Store.state(s, h))
 
 # the state of the branch c, once the versions m of its store are known
-def Branch.state(+s: Facts.Facts(), +c: Ledgers.Line, m: Maybe<&2, List<&2, Types.Entry>>) -> Maybe<&2, State>:
+def Branch.state(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  m: Maybe<&2, List<&2, Types.Entry>>
+) -> Maybe<&2, State>:
   match m:
     case None{}:
       None{}
@@ -465,7 +523,11 @@ def Line.at(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat) -> Maybe<&2, Types.Entr
 
 # the rule after the versions vs of the branch c, once the versions m of its
 # store are known
-def Rule.after.of(+c: Ledgers.Line, +vs: List<&2, Types.Entry>, m: Maybe<&2, List<&2, Types.Entry>>) -> Maybe<&2, Rule>:
+def Rule.after.of(
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  m: Maybe<&2, List<&2, Types.Entry>>
+) -> Maybe<&2, Rule>:
   match m:
     case None{}:
       None{}

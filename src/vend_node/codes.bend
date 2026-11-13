@@ -64,51 +64,115 @@ def Request.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Spe
   Shared.Bool.when(
     Maybe<&2, Codes.Read<Spec.Request>>,
     U32.is_eq(x, 0),
-    u => Codes.Code.one.read(~List<&2, String>, ~Spec.Request, ~Texts.code.read, a => Spec.Request.Start{a}, r),
-    u =>
-      Shared.Bool.when(
+    u => Codes.Code.one.read(
+      ~List<&2, String>,
+      ~Spec.Request,
+      ~Texts.code.read,
+      a => Spec.Request.Start{a},
+      r
+    ),
+    u => Shared.Bool.when(
+      Maybe<&2, Codes.Read<Spec.Request>>,
+      U32.is_eq(x, 1),
+      u => Codes.Code.three.read(
+        ~Ledgers.Line,
+        ~String,
+        ~Maybe<&2, List<&2, U32>>,
+        ~Spec.Request,
+        ~Ledgers.Line.code.read,
+        ~Codes.Code.text.read,
+        ~Content.code.read,
+        a => b => c => Spec.Request.Write{a, b, c},
+        r
+      ),
+      u => Shared.Bool.when(
         Maybe<&2, Codes.Read<Spec.Request>>,
-        U32.is_eq(x, 1),
-        u => Codes.Code.three.read(~Ledgers.Line, ~String, ~Maybe<&2, List<&2, U32>>, ~Spec.Request, ~Ledgers.Line.code.read, ~Codes.Code.text.read, ~Content.code.read, a => b => c => Spec.Request.Write{a, b, c}, r),
-        u =>
-          Shared.Bool.when(
+        U32.is_eq(x, 2),
+        u => Codes.Code.two.read(
+          ~Ledgers.Line,
+          ~Ledgers.Line,
+          ~Spec.Request,
+          ~Ledgers.Line.code.read,
+          ~Ledgers.Line.code.read,
+          a => b => Spec.Request.Merge{a, b},
+          r
+        ),
+        u => Shared.Bool.when(
+          Maybe<&2, Codes.Read<Spec.Request>>,
+          U32.is_eq(x, 3),
+          u => Codes.Code.three.read(
+            ~Ledgers.Id,
+            ~String,
+            ~Maybe<&2, List<&2, U32>>,
+            ~Spec.Request,
+            ~Ledgers.Id.code.read,
+            ~Codes.Code.text.read,
+            ~Content.code.read,
+            a => b => c => Spec.Request.Resolve{a, b, c},
+            r
+          ),
+          u => Shared.Bool.when(
             Maybe<&2, Codes.Read<Spec.Request>>,
-            U32.is_eq(x, 2),
-            u => Codes.Code.two.read(~Ledgers.Line, ~Ledgers.Line, ~Spec.Request, ~Ledgers.Line.code.read, ~Ledgers.Line.code.read, a => b => Spec.Request.Merge{a, b}, r),
-            u =>
-              Shared.Bool.when(
+            U32.is_eq(x, 4),
+            u => Codes.Code.three.read(
+              ~Ledgers.Line,
+              ~String,
+              ~Nat,
+              ~Spec.Request,
+              ~Ledgers.Line.code.read,
+              ~Codes.Code.text.read,
+              ~Codes.Code.count.read,
+              a => b => c => Spec.Request.Mark{a, b, c},
+              r
+            ),
+            u => Shared.Bool.when(
+              Maybe<&2, Codes.Read<Spec.Request>>,
+              U32.is_eq(x, 5),
+              u => Codes.Code.three.read(
+                ~Ledgers.Line,
+                ~Ledgers.Line,
+                ~Nat,
+                ~Spec.Request,
+                ~Ledgers.Line.code.read,
+                ~Ledgers.Line.code.read,
+                ~Codes.Code.count.read,
+                a => b => c => Spec.Request.Move{a, b, c},
+                r
+              ),
+              u => Shared.Bool.when(
                 Maybe<&2, Codes.Read<Spec.Request>>,
-                U32.is_eq(x, 3),
-                u => Codes.Code.three.read(~Ledgers.Id, ~String, ~Maybe<&2, List<&2, U32>>, ~Spec.Request, ~Ledgers.Id.code.read, ~Codes.Code.text.read, ~Content.code.read, a => b => c => Spec.Request.Resolve{a, b, c}, r),
-                u =>
-                  Shared.Bool.when(
-                    Maybe<&2, Codes.Read<Spec.Request>>,
-                    U32.is_eq(x, 4),
-                    u => Codes.Code.three.read(~Ledgers.Line, ~String, ~Nat, ~Spec.Request, ~Ledgers.Line.code.read, ~Codes.Code.text.read, ~Codes.Code.count.read, a => b => c => Spec.Request.Mark{a, b, c}, r),
-                    u =>
-                      Shared.Bool.when(
-                        Maybe<&2, Codes.Read<Spec.Request>>,
-                        U32.is_eq(x, 5),
-                        u => Codes.Code.three.read(~Ledgers.Line, ~Ledgers.Line, ~Nat, ~Spec.Request, ~Ledgers.Line.code.read, ~Ledgers.Line.code.read, ~Codes.Code.count.read, a => b => c => Spec.Request.Move{a, b, c}, r),
-                        u =>
-                          Shared.Bool.when(
-                            Maybe<&2, Codes.Read<Spec.Request>>,
-                            U32.is_eq(x, 6),
-                            u => Codes.Code.three.read(~Hashes.Hash, ~String, ~List<&2, String>, ~Spec.Request, ~Hashes.Hash.code.read, ~Codes.Code.text.read, ~Texts.code.read, a => b => c => Spec.Request.Group{a, b, c}, r),
-                            u =>
-                              Shared.Bool.when(
-                                Maybe<&2, Codes.Read<Spec.Request>>,
-                                U32.is_eq(x, 7),
-                                u => Codes.Code.two.read(~Ledgers.Line, ~String, ~Spec.Request, ~Ledgers.Line.code.read, ~Codes.Code.text.read, a => b => Spec.Request.Own{a, b}, r),
-                                u =>
-                                  None{}
-                              )
-                          )
-                      )
-                  )
+                U32.is_eq(x, 6),
+                u => Codes.Code.three.read(
+                  ~Hashes.Hash,
+                  ~String,
+                  ~List<&2, String>,
+                  ~Spec.Request,
+                  ~Hashes.Hash.code.read,
+                  ~Codes.Code.text.read,
+                  ~Texts.code.read,
+                  a => b => c => Spec.Request.Group{a, b, c},
+                  r
+                ),
+                u => Shared.Bool.when(
+                  Maybe<&2, Codes.Read<Spec.Request>>,
+                  U32.is_eq(x, 7),
+                  u => Codes.Code.two.read(
+                    ~Ledgers.Line,
+                    ~String,
+                    ~Spec.Request,
+                    ~Ledgers.Line.code.read,
+                    ~Codes.Code.text.read,
+                    a => b => Spec.Request.Own{a, b},
+                    r
+                  ),
+                  u => None{}
+                )
               )
+            )
           )
+        )
       )
+    )
   )
 
 # a request
@@ -120,24 +184,124 @@ def Request.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Spec.Request>>:
       Request.code.read.of(x, r)
 
 # a request reads back
-def Request.code_read(x: Spec.Request, r: List<&2, U32>) -> {Request.code.read(Request.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Request>>}:
+def Request.code_read(
+  x: Spec.Request,
+  r: List<&2, U32>
+) -> {
+  Request.code.read(
+    Request.code(x, r)
+  )
+    == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Request>>
+}:
   match x:
     case Spec.Request.Start{x0}:
-      Codes.Code.one_read(~List<&2, String>, ~Spec.Request, ~Texts.codec(), a => Spec.Request.Start{a}, x0, r)
+      Codes.Code.one_read(
+        ~List<&2, String>,
+        ~Spec.Request,
+        ~Texts.codec(),
+        a => Spec.Request.Start{a},
+        x0,
+        r
+      )
     case Spec.Request.Write{x0, x1, x2}:
-      Codes.Code.three_read(~Ledgers.Line, ~String, ~Maybe<&2, List<&2, U32>>, ~Spec.Request, ~Ledgers.Line.codec(), ~Codes.Code.text.codec(), ~Content.codec(), a => b => c => Spec.Request.Write{a, b, c}, x0, x1, x2, r)
+      Codes.Code.three_read(
+        ~Ledgers.Line,
+        ~String,
+        ~Maybe<&2, List<&2, U32>>,
+        ~Spec.Request,
+        ~Ledgers.Line.codec(),
+        ~Codes.Code.text.codec(),
+        ~Content.codec(),
+        a => b => c => Spec.Request.Write{a, b, c},
+        x0,
+        x1,
+        x2,
+        r
+      )
     case Spec.Request.Merge{x0, x1}:
-      Codes.Code.two_read(~Ledgers.Line, ~Ledgers.Line, ~Spec.Request, ~Ledgers.Line.codec(), ~Ledgers.Line.codec(), a => b => Spec.Request.Merge{a, b}, x0, x1, r)
+      Codes.Code.two_read(
+        ~Ledgers.Line,
+        ~Ledgers.Line,
+        ~Spec.Request,
+        ~Ledgers.Line.codec(),
+        ~Ledgers.Line.codec(),
+        a => b => Spec.Request.Merge{a, b},
+        x0,
+        x1,
+        r
+      )
     case Spec.Request.Resolve{x0, x1, x2}:
-      Codes.Code.three_read(~Ledgers.Id, ~String, ~Maybe<&2, List<&2, U32>>, ~Spec.Request, ~Ledgers.Id.codec(), ~Codes.Code.text.codec(), ~Content.codec(), a => b => c => Spec.Request.Resolve{a, b, c}, x0, x1, x2, r)
+      Codes.Code.three_read(
+        ~Ledgers.Id,
+        ~String,
+        ~Maybe<&2, List<&2, U32>>,
+        ~Spec.Request,
+        ~Ledgers.Id.codec(),
+        ~Codes.Code.text.codec(),
+        ~Content.codec(),
+        a => b => c => Spec.Request.Resolve{a, b, c},
+        x0,
+        x1,
+        x2,
+        r
+      )
     case Spec.Request.Mark{x0, x1, x2}:
-      Codes.Code.three_read(~Ledgers.Line, ~String, ~Nat, ~Spec.Request, ~Ledgers.Line.codec(), ~Codes.Code.text.codec(), ~Count.codec(), a => b => c => Spec.Request.Mark{a, b, c}, x0, x1, x2, r)
+      Codes.Code.three_read(
+        ~Ledgers.Line,
+        ~String,
+        ~Nat,
+        ~Spec.Request,
+        ~Ledgers.Line.codec(),
+        ~Codes.Code.text.codec(),
+        ~Count.codec(),
+        a => b => c => Spec.Request.Mark{a, b, c},
+        x0,
+        x1,
+        x2,
+        r
+      )
     case Spec.Request.Move{x0, x1, x2}:
-      Codes.Code.three_read(~Ledgers.Line, ~Ledgers.Line, ~Nat, ~Spec.Request, ~Ledgers.Line.codec(), ~Ledgers.Line.codec(), ~Count.codec(), a => b => c => Spec.Request.Move{a, b, c}, x0, x1, x2, r)
+      Codes.Code.three_read(
+        ~Ledgers.Line,
+        ~Ledgers.Line,
+        ~Nat,
+        ~Spec.Request,
+        ~Ledgers.Line.codec(),
+        ~Ledgers.Line.codec(),
+        ~Count.codec(),
+        a => b => c => Spec.Request.Move{a, b, c},
+        x0,
+        x1,
+        x2,
+        r
+      )
     case Spec.Request.Group{x0, x1, x2}:
-      Codes.Code.three_read(~Hashes.Hash, ~String, ~List<&2, String>, ~Spec.Request, ~Hashes.Hash.codec(), ~Codes.Code.text.codec(), ~Texts.codec(), a => b => c => Spec.Request.Group{a, b, c}, x0, x1, x2, r)
+      Codes.Code.three_read(
+        ~Hashes.Hash,
+        ~String,
+        ~List<&2, String>,
+        ~Spec.Request,
+        ~Hashes.Hash.codec(),
+        ~Codes.Code.text.codec(),
+        ~Texts.codec(),
+        a => b => c => Spec.Request.Group{a, b, c},
+        x0,
+        x1,
+        x2,
+        r
+      )
     case Spec.Request.Own{x0, x1}:
-      Codes.Code.two_read(~Ledgers.Line, ~String, ~Spec.Request, ~Ledgers.Line.codec(), ~Codes.Code.text.codec(), a => b => Spec.Request.Own{a, b}, x0, x1, r)
+      Codes.Code.two_read(
+        ~Ledgers.Line,
+        ~String,
+        ~Spec.Request,
+        ~Ledgers.Line.codec(),
+        ~Codes.Code.text.codec(),
+        a => b => Spec.Request.Own{a, b},
+        x0,
+        x1,
+        r
+      )
 
 # the code of requests
 def Request.codec() -> Codes.Codec(Spec.Request):
@@ -151,13 +315,36 @@ def Point.code(x: Spec.Point, r: List<&2, U32>) -> List<&2, U32>:
 
 # a version
 def Point.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Spec.Point>>:
-  Codes.Code.two.read(~Ledgers.Line, ~Nat, ~Spec.Point, ~Ledgers.Line.code.read, ~Codes.Code.count.read, a => b => Spec.Point{a, b}, ts)
+  Codes.Code.two.read(
+    ~Ledgers.Line,
+    ~Nat,
+    ~Spec.Point,
+    ~Ledgers.Line.code.read,
+    ~Codes.Code.count.read,
+    a => b => Spec.Point{a, b},
+    ts
+  )
 
 # a version reads back
-def Point.code_read(x: Spec.Point, r: List<&2, U32>) -> {Point.code.read(Point.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Point>>}:
+def Point.code_read(
+  x: Spec.Point,
+  r: List<&2, U32>
+) -> {
+  Point.code.read(Point.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Spec.Point>>
+}:
   match x:
     case Spec.Point{x0, x1}:
-      Codes.Code.two_read(~Ledgers.Line, ~Nat, ~Spec.Point, ~Ledgers.Line.codec(), ~Count.codec(), a => b => Spec.Point{a, b}, x0, x1, r)
+      Codes.Code.two_read(
+        ~Ledgers.Line,
+        ~Nat,
+        ~Spec.Point,
+        ~Ledgers.Line.codec(),
+        ~Count.codec(),
+        a => b => Spec.Point{a, b},
+        x0,
+        x1,
+        r
+      )
 
 # the code of versions
 def Point.codec() -> Codes.Codec(Spec.Point):
@@ -195,13 +382,39 @@ def Ask.code(x: Types.Ask, r: List<&2, U32>) -> List<&2, U32>:
 
 # a ask
 def Ask.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.Ask>>:
-  Codes.Code.three.read(~Ledgers.Id, ~Nat, ~Spec.Request, ~Types.Ask, ~Ledgers.Id.code.read, ~Codes.Code.count.read, ~Request.code.read, a => b => c => Types.Ask{a, b, c}, ts)
+  Codes.Code.three.read(
+    ~Ledgers.Id,
+    ~Nat,
+    ~Spec.Request,
+    ~Types.Ask,
+    ~Ledgers.Id.code.read,
+    ~Codes.Code.count.read,
+    ~Request.code.read,
+    a => b => c => Types.Ask{a, b, c},
+    ts
+  )
 
 # a ask reads back
-def Ask.code_read(x: Types.Ask, r: List<&2, U32>) -> {Ask.code.read(Ask.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Ask>>}:
+def Ask.code_read(
+  x: Types.Ask,
+  r: List<&2, U32>
+) -> {Ask.code.read(Ask.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Ask>>}:
   match x:
     case Types.Ask{x0, x1, x2}:
-      Codes.Code.three_read(~Ledgers.Id, ~Nat, ~Spec.Request, ~Types.Ask, ~Ledgers.Id.codec(), ~Count.codec(), ~Request.codec(), a => b => c => Types.Ask{a, b, c}, x0, x1, x2, r)
+      Codes.Code.three_read(
+        ~Ledgers.Id,
+        ~Nat,
+        ~Spec.Request,
+        ~Types.Ask,
+        ~Ledgers.Id.codec(),
+        ~Count.codec(),
+        ~Request.codec(),
+        a => b => c => Types.Ask{a, b, c},
+        x0,
+        x1,
+        x2,
+        r
+      )
 
 # the code of asks
 def Ask.codec() -> Codes.Codec(Types.Ask):
@@ -215,13 +428,49 @@ def Pins.code(x: Types.Pins, r: List<&2, U32>) -> List<&2, U32>:
 
 # a pins
 def Pins.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.Pins>>:
-  Codes.Code.five.read(~Nat, ~Nat, ~Maybe<&2, Spec.Point>, ~List<&2, Spec.Point>, ~List<&2, Spec.Point>, ~Types.Pins, ~Codes.Code.count.read, ~Codes.Code.count.read, ~Base.code.read, ~Points.code.read, ~Points.code.read, a => b => c => d => e => Types.Pins{a, b, c, d, e}, ts)
+  Codes.Code.five.read(
+    ~Nat,
+    ~Nat,
+    ~Maybe<&2, Spec.Point>,
+    ~List<&2, Spec.Point>,
+    ~List<&2, Spec.Point>,
+    ~Types.Pins,
+    ~Codes.Code.count.read,
+    ~Codes.Code.count.read,
+    ~Base.code.read,
+    ~Points.code.read,
+    ~Points.code.read,
+    a => b => c => d => e => Types.Pins{a, b, c, d, e},
+    ts
+  )
 
 # a pins reads back
-def Pins.code_read(x: Types.Pins, r: List<&2, U32>) -> {Pins.code.read(Pins.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Pins>>}:
+def Pins.code_read(
+  x: Types.Pins,
+  r: List<&2, U32>
+) -> {Pins.code.read(Pins.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Pins>>}:
   match x:
     case Types.Pins{x0, x1, x2, x3, x4}:
-      Codes.Code.five_read(~Nat, ~Nat, ~Maybe<&2, Spec.Point>, ~List<&2, Spec.Point>, ~List<&2, Spec.Point>, ~Types.Pins, ~Count.codec(), ~Count.codec(), ~Base.codec(), ~Points.codec(), ~Points.codec(), a => b => c => d => e => Types.Pins{a, b, c, d, e}, x0, x1, x2, x3, x4, r)
+      Codes.Code.five_read(
+        ~Nat,
+        ~Nat,
+        ~Maybe<&2, Spec.Point>,
+        ~List<&2, Spec.Point>,
+        ~List<&2, Spec.Point>,
+        ~Types.Pins,
+        ~Count.codec(),
+        ~Count.codec(),
+        ~Base.codec(),
+        ~Points.codec(),
+        ~Points.codec(),
+        a => b => c => d => e => Types.Pins{a, b, c, d, e},
+        x0,
+        x1,
+        x2,
+        x3,
+        x4,
+        r
+      )
 
 # the code of pinss
 def Pins.codec() -> Codes.Codec(Types.Pins):
@@ -235,13 +484,34 @@ def Pick.code(x: Types.Pick, r: List<&2, U32>) -> List<&2, U32>:
 
 # a pick
 def Pick.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.Pick>>:
-  Codes.Code.two.read(~Types.Ask, ~Types.Pins, ~Types.Pick, ~Ask.code.read, ~Pins.code.read, a => b => Types.Pick{a, b}, ts)
+  Codes.Code.two.read(
+    ~Types.Ask,
+    ~Types.Pins,
+    ~Types.Pick,
+    ~Ask.code.read,
+    ~Pins.code.read,
+    a => b => Types.Pick{a, b},
+    ts
+  )
 
 # a pick reads back
-def Pick.code_read(x: Types.Pick, r: List<&2, U32>) -> {Pick.code.read(Pick.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Pick>>}:
+def Pick.code_read(
+  x: Types.Pick,
+  r: List<&2, U32>
+) -> {Pick.code.read(Pick.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Pick>>}:
   match x:
     case Types.Pick{x0, x1}:
-      Codes.Code.two_read(~Types.Ask, ~Types.Pins, ~Types.Pick, ~Ask.codec(), ~Pins.codec(), a => b => Types.Pick{a, b}, x0, x1, r)
+      Codes.Code.two_read(
+        ~Types.Ask,
+        ~Types.Pins,
+        ~Types.Pick,
+        ~Ask.codec(),
+        ~Pins.codec(),
+        a => b => Types.Pick{a, b},
+        x0,
+        x1,
+        r
+      )
 
 # the code of picks
 def Pick.codec() -> Codes.Codec(Types.Pick):
@@ -260,15 +530,21 @@ def Step.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.
   Shared.Bool.when(
     Maybe<&2, Codes.Read<Types.Step>>,
     U32.is_eq(x, 0),
-    u => Codes.Code.two.read(~Ledgers.Line, ~Nat, ~Types.Step, ~Ledgers.Line.code.read, ~Codes.Code.count.read, a => b => Types.Step.At{a, b}, r),
-    u =>
-      Shared.Bool.when(
-        Maybe<&2, Codes.Read<Types.Step>>,
-        U32.is_eq(x, 1),
-        u => Some{Codes.Read{Types.Step.Broken{}, r}},
-        u =>
-          None{}
-      )
+    u => Codes.Code.two.read(
+      ~Ledgers.Line,
+      ~Nat,
+      ~Types.Step,
+      ~Ledgers.Line.code.read,
+      ~Codes.Code.count.read,
+      a => b => Types.Step.At{a, b},
+      r
+    ),
+    u => Shared.Bool.when(
+      Maybe<&2, Codes.Read<Types.Step>>,
+      U32.is_eq(x, 1),
+      u => Some{Codes.Read{Types.Step.Broken{}, r}},
+      u => None{}
+    )
   )
 
 # a step
@@ -280,10 +556,23 @@ def Step.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.Step>>:
       Step.code.read.of(x, r)
 
 # a step reads back
-def Step.code_read(x: Types.Step, r: List<&2, U32>) -> {Step.code.read(Step.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Step>>}:
+def Step.code_read(
+  x: Types.Step,
+  r: List<&2, U32>
+) -> {Step.code.read(Step.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Step>>}:
   match x:
     case Types.Step.At{x0, x1}:
-      Codes.Code.two_read(~Ledgers.Line, ~Nat, ~Types.Step, ~Ledgers.Line.codec(), ~Count.codec(), a => b => Types.Step.At{a, b}, x0, x1, r)
+      Codes.Code.two_read(
+        ~Ledgers.Line,
+        ~Nat,
+        ~Types.Step,
+        ~Ledgers.Line.codec(),
+        ~Count.codec(),
+        a => b => Types.Step.At{a, b},
+        x0,
+        x1,
+        r
+      )
     case Types.Step.Broken{}:
       {==}
 
@@ -305,14 +594,22 @@ def Fact.code.read.of(+x: U32, +r: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.
     Maybe<&2, Codes.Read<Types.Fact>>,
     U32.is_eq(x, 0),
     u => Codes.Code.one.read(~Types.Ask, ~Types.Fact, ~Ask.code.read, a => Types.Fact.Ask{a}, r),
-    u =>
-      Shared.Bool.when(
-        Maybe<&2, Codes.Read<Types.Fact>>,
-        U32.is_eq(x, 1),
-        u => Codes.Code.three.read(~String, ~Types.Step, ~Types.Pick, ~Types.Fact, ~Codes.Code.text.read, ~Step.code.read, ~Pick.code.read, a => b => c => Types.Fact.Vote{a, b, c}, r),
-        u =>
-          None{}
-      )
+    u => Shared.Bool.when(
+      Maybe<&2, Codes.Read<Types.Fact>>,
+      U32.is_eq(x, 1),
+      u => Codes.Code.three.read(
+        ~String,
+        ~Types.Step,
+        ~Types.Pick,
+        ~Types.Fact,
+        ~Codes.Code.text.read,
+        ~Step.code.read,
+        ~Pick.code.read,
+        a => b => c => Types.Fact.Vote{a, b, c},
+        r
+      ),
+      u => None{}
+    )
   )
 
 # a fact
@@ -324,12 +621,28 @@ def Fact.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Types.Fact>>:
       Fact.code.read.of(x, r)
 
 # a fact reads back
-def Fact.code_read(x: Types.Fact, r: List<&2, U32>) -> {Fact.code.read(Fact.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Fact>>}:
+def Fact.code_read(
+  x: Types.Fact,
+  r: List<&2, U32>
+) -> {Fact.code.read(Fact.code(x, r)) == Some{Codes.Read{x, r}}: Maybe<&2, Codes.Read<Types.Fact>>}:
   match x:
     case Types.Fact.Ask{x0}:
       Codes.Code.one_read(~Types.Ask, ~Types.Fact, ~Ask.codec(), a => Types.Fact.Ask{a}, x0, r)
     case Types.Fact.Vote{x0, x1, x2}:
-      Codes.Code.three_read(~String, ~Types.Step, ~Types.Pick, ~Types.Fact, ~Codes.Code.text.codec(), ~Step.codec(), ~Pick.codec(), a => b => c => Types.Fact.Vote{a, b, c}, x0, x1, x2, r)
+      Codes.Code.three_read(
+        ~String,
+        ~Types.Step,
+        ~Types.Pick,
+        ~Types.Fact,
+        ~Codes.Code.text.codec(),
+        ~Step.codec(),
+        ~Pick.codec(),
+        a => b => c => Types.Fact.Vote{a, b, c},
+        x0,
+        x1,
+        x2,
+        r
+      )
 
 # the code of facts
 def Fact.codec() -> Codes.Codec(Types.Fact):
@@ -355,7 +668,10 @@ def Request.is_eq_refl(a: Spec.Request) -> {Request.is_eq(a, a) == True{}: Bool}
   Shared.Eq.refl(~Spec.Request, ~Request.is_eq, Request.laws(), a)
 
 # Request.is_eq is True only for equal requests
-def Request.is_eq_sound(a: Spec.Request, b: Spec.Request) -> {Request.is_eq(a, b) == True{}: Bool} -> {a == b: Spec.Request}:
+def Request.is_eq_sound(
+  a: Spec.Request,
+  b: Spec.Request
+) -> {Request.is_eq(a, b) == True{}: Bool} -> {a == b: Spec.Request}:
   Shared.Eq.sound(~Spec.Request, ~Request.is_eq, Request.laws(), a, b)
 
 # the words of the ask x: its code
@@ -375,7 +691,10 @@ def Ask.is_eq_refl(a: Types.Ask) -> {Ask.is_eq(a, a) == True{}: Bool}:
   Shared.Eq.refl(~Types.Ask, ~Ask.is_eq, Ask.laws(), a)
 
 # Ask.is_eq is True only for equal asks
-def Ask.is_eq_sound(a: Types.Ask, b: Types.Ask) -> {Ask.is_eq(a, b) == True{}: Bool} -> {a == b: Types.Ask}:
+def Ask.is_eq_sound(
+  a: Types.Ask,
+  b: Types.Ask
+) -> {Ask.is_eq(a, b) == True{}: Bool} -> {a == b: Types.Ask}:
   Shared.Eq.sound(~Types.Ask, ~Ask.is_eq, Ask.laws(), a, b)
 
 # the words of the pick x: its code
@@ -395,11 +714,17 @@ def Pick.is_eq_refl(a: Types.Pick) -> {Pick.is_eq(a, a) == True{}: Bool}:
   Shared.Eq.refl(~Types.Pick, ~Pick.is_eq, Pick.laws(), a)
 
 # Pick.is_eq is True only for equal picks
-def Pick.is_eq_sound(a: Types.Pick, b: Types.Pick) -> {Pick.is_eq(a, b) == True{}: Bool} -> {a == b: Types.Pick}:
+def Pick.is_eq_sound(
+  a: Types.Pick,
+  b: Types.Pick
+) -> {Pick.is_eq(a, b) == True{}: Bool} -> {a == b: Types.Pick}:
   Shared.Eq.sound(~Types.Pick, ~Pick.is_eq, Pick.laws(), a, b)
 
 # two picks with the same words are the same
-def Pick.words_inj(+a: Types.Pick, +b: Types.Pick) -> {Pick.words(a) == Pick.words(b): List<&2, U32>} -> {a == b: Types.Pick}:
+def Pick.words_inj(
+  +a: Types.Pick,
+  +b: Types.Pick
+) -> {Pick.words(a) == Pick.words(b): List<&2, U32>} -> {a == b: Types.Pick}:
   Ledgers.Book.code_value(~Types.Pick, ~Pick.codec(), a, b, [], [])
 
 # the words of the step x: its code
@@ -419,11 +744,17 @@ def Step.is_eq_refl(a: Types.Step) -> {Step.is_eq(a, a) == True{}: Bool}:
   Shared.Eq.refl(~Types.Step, ~Step.is_eq, Step.laws(), a)
 
 # Step.is_eq is True only for equal steps
-def Step.is_eq_sound(a: Types.Step, b: Types.Step) -> {Step.is_eq(a, b) == True{}: Bool} -> {a == b: Types.Step}:
+def Step.is_eq_sound(
+  a: Types.Step,
+  b: Types.Step
+) -> {Step.is_eq(a, b) == True{}: Bool} -> {a == b: Types.Step}:
   Shared.Eq.sound(~Types.Step, ~Step.is_eq, Step.laws(), a, b)
 
 # two steps with the same words are the same
-def Step.words_inj(+a: Types.Step, +b: Types.Step) -> {Step.words(a) == Step.words(b): List<&2, U32>} -> {a == b: Types.Step}:
+def Step.words_inj(
+  +a: Types.Step,
+  +b: Types.Step
+) -> {Step.words(a) == Step.words(b): List<&2, U32>} -> {a == b: Types.Step}:
   Ledgers.Book.code_value(~Types.Step, ~Step.codec(), a, b, [], [])
 
 # the words of the fact x: its code
@@ -443,11 +774,17 @@ def Fact.is_eq_refl(a: Types.Fact) -> {Fact.is_eq(a, a) == True{}: Bool}:
   Shared.Eq.refl(~Types.Fact, ~Fact.is_eq, Fact.laws(), a)
 
 # Fact.is_eq is True only for equal facts
-def Fact.is_eq_sound(a: Types.Fact, b: Types.Fact) -> {Fact.is_eq(a, b) == True{}: Bool} -> {a == b: Types.Fact}:
+def Fact.is_eq_sound(
+  a: Types.Fact,
+  b: Types.Fact
+) -> {Fact.is_eq(a, b) == True{}: Bool} -> {a == b: Types.Fact}:
   Shared.Eq.sound(~Types.Fact, ~Fact.is_eq, Fact.laws(), a, b)
 
 # two facts with the same words are the same
-def Fact.words_inj(+a: Types.Fact, +b: Types.Fact) -> {Fact.words(a) == Fact.words(b): List<&2, U32>} -> {a == b: Types.Fact}:
+def Fact.words_inj(
+  +a: Types.Fact,
+  +b: Types.Fact
+) -> {Fact.words(a) == Fact.words(b): List<&2, U32>} -> {a == b: Types.Fact}:
   Ledgers.Book.code_value(~Types.Fact, ~Fact.codec(), a, b, [], [])
 
 # Names
@@ -458,11 +795,40 @@ def Named.code(i: Ledgers.Id, r: Spec.Request) -> List<&2, U32>:
   Ledgers.Id.code(i, Request.code(r, []))
 
 # two requests with one name have the same id and are the same request
-def Named.code_names(+i: Ledgers.Id, +r: Spec.Request, +j: Ledgers.Id, +s: Spec.Request) -> {Named.code(i, r) == Named.code(j, s): List<&2, U32>} -> {i == j: Ledgers.Id} & {r == s: Spec.Request}:
+def Named.code_names(
+  +i: Ledgers.Id,
+  +r: Spec.Request,
+  +j: Ledgers.Id,
+  +s: Spec.Request
+) -> {
+  Named.code(i, r) == Named.code(j, s): List<&2, U32>
+} -> {i == j: Ledgers.Id}
+  & {r == s: Spec.Request}:
   +e =>
     (
-      Ledgers.Book.code_value(~Ledgers.Id, ~Ledgers.Id.codec(), i, j, Request.code(r, []), Request.code(s, []))(e),
-      Ledgers.Book.code_value(~Spec.Request, ~Request.codec(), r, s, [], [])(
-        Ledgers.Book.code_rest(~Ledgers.Id, ~Ledgers.Id.codec(), i, j, Request.code(r, []), Request.code(s, []))(e)
+      Ledgers.Book.code_value(
+        ~Ledgers.Id,
+        ~Ledgers.Id.codec(),
+        i,
+        j,
+        Request.code(r, []),
+        Request.code(s, [])
+      )(e),
+      Ledgers.Book.code_value(
+        ~Spec.Request,
+        ~Request.codec(),
+        r,
+        s,
+        [],
+        []
+      )(
+        Ledgers.Book.code_rest(
+          ~Ledgers.Id,
+          ~Ledgers.Id.codec(),
+          i,
+          j,
+          Request.code(r, []),
+          Request.code(s, [])
+        )(e)
       )
     )

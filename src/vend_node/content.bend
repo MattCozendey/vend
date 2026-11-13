@@ -89,7 +89,13 @@ def Way.hop(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, w: Spec.Point) -> Bool
   Way.hop.of(c, k, w, Lines.Line.at(s, c, k))
 
 # ws is a way from version k of the line c back to the point a
-def Way.ok(+s: Facts.Facts(), +a: Spec.Point, ws: List<&2, Spec.Point>, +c: Ledgers.Line, +k: Nat) -> Bool:
+def Way.ok(
+  +s: Facts.Facts(),
+  +a: Spec.Point,
+  ws: List<&2, Spec.Point>,
+  +c: Ledgers.Line,
+  +k: Nat
+) -> Bool:
   match ws:
     case Nil{}:
       Spec.Point.is_eq(a, Spec.Point{c, k})
@@ -98,7 +104,15 @@ def Way.ok(+s: Facts.Facts(), +a: Spec.Point, ws: List<&2, Spec.Point>, +c: Ledg
 
 # the ways ours and theirs lead to the base m, if any, from version j of the
 # line c and from the point t
-def Merge.fits.of(+s: Facts.Facts(), +c: Ledgers.Line, +j: Nat, m: Maybe<&2, Spec.Point>, ours: List<&2, Spec.Point>, theirs: List<&2, Spec.Point>, t: Spec.Point) -> Bool:
+def Merge.fits.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +j: Nat,
+  m: Maybe<&2, Spec.Point>,
+  ours: List<&2, Spec.Point>,
+  theirs: List<&2, Spec.Point>,
+  t: Spec.Point
+) -> Bool:
   match m:
     case None{}:
       True{}
@@ -127,7 +141,11 @@ def Merge.fits(+s: Facts.Facts(), +c: Ledgers.Line, +j: Nat, +e: Types.Entry) ->
 # ------
 
 # acc with the merge m of the path p, when it does not clash
-def Merge.put(acc: Files.Files(), +p: String, m: Maybe<&2, Maybe<&2, List<&2, U32>>>) -> Files.Files():
+def Merge.put(
+  acc: Files.Files(),
+  +p: String,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> Files.Files():
   match m:
     case None{}:
       acc
@@ -135,11 +153,22 @@ def Merge.put(acc: Files.Files(), +p: String, m: Maybe<&2, Maybe<&2, List<&2, U3
       Files.Files.set(acc, p, x)
 
 # the merge of the path p, from the base b, ours o and theirs t
-def Merge.at(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), +p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+def Merge.at(
+  +b: Files.Files(),
+  +o: Files.Files(),
+  +t: Files.Files(),
+  +p: String
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   Formats.Format.merge(p, Files.Files.get(b, p), Files.Files.get(o, p), Files.Files.get(t, p))
 
 # acc with the merge of each of the paths ps that does not clash
-def Merge.fold(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), ps: List<&2, String>, acc: Files.Files()) -> Files.Files():
+def Merge.fold(
+  +b: Files.Files(),
+  +o: Files.Files(),
+  +t: Files.Files(),
+  ps: List<&2, String>,
+  acc: Files.Files()
+) -> Files.Files():
   match ps:
     case Nil{}:
       acc
@@ -161,7 +190,12 @@ def Merge.files(+b: Files.Files(), +o: Files.Files(), +t: Files.Files()) -> File
   Merge.fold(b, o, t, Merge.paths(b, o, t), o)
 
 # the paths among ps that clash
-def Merge.clashes.go(+b: Files.Files(), +o: Files.Files(), +t: Files.Files(), ps: List<&2, String>) -> List<&2, String>:
+def Merge.clashes.go(
+  +b: Files.Files(),
+  +o: Files.Files(),
+  +t: Files.Files(),
+  ps: List<&2, String>
+) -> List<&2, String>:
   match ps:
     case Nil{}:
       []
@@ -182,7 +216,12 @@ def Merge.clashes(+b: Files.Files(), +o: Files.Files(), +t: Files.Files()) -> Li
 
 # the merge of ours and theirs from base, when the merge fits and the node
 # holds the three
-def Merge.of(fits: Bool, ours: Maybe<&2, Files.Files()>, theirs: Maybe<&2, Files.Files()>, base: Maybe<&2, Files.Files()>) -> Maybe<&2, Files.Files()>:
+def Merge.of(
+  fits: Bool,
+  ours: Maybe<&2, Files.Files()>,
+  theirs: Maybe<&2, Files.Files()>,
+  base: Maybe<&2, Files.Files()>
+) -> Maybe<&2, Files.Files()>:
   match fits ours theirs base:
     case True{} Some{o} Some{t} Some{b}:
       Some{Merge.files(b, o, t)}
@@ -190,7 +229,11 @@ def Merge.of(fits: Bool, ours: Maybe<&2, Files.Files()>, theirs: Maybe<&2, Files
       None{}
 
 # the content t with the words w at the path p
-def Content.write(+p: String, w: Maybe<&2, List<&2, U32>>, m: Maybe<&2, Files.Files()>) -> Maybe<&2, Files.Files()>:
+def Content.write(
+  +p: String,
+  w: Maybe<&2, List<&2, U32>>,
+  m: Maybe<&2, Files.Files()>
+) -> Maybe<&2, Files.Files()>:
   match m:
     case None{}:
       None{}
@@ -200,7 +243,13 @@ def Content.write(+p: String, w: Maybe<&2, List<&2, U32>>, m: Maybe<&2, Files.Fi
 # the content after the request r: prev is the content before, other the
 # content that r takes from another line, base the content of the base of a
 # merge, and fits says that the merge fits
-def Content.apply(r: Spec.Request, fits: Bool, prev: Maybe<&2, Files.Files()>, other: Maybe<&2, Files.Files()>, base: Maybe<&2, Files.Files()>) -> Maybe<&2, Files.Files()>:
+def Content.apply(
+  r: Spec.Request,
+  fits: Bool,
+  prev: Maybe<&2, Files.Files()>,
+  other: Maybe<&2, Files.Files()>,
+  base: Maybe<&2, Files.Files()>
+) -> Maybe<&2, Files.Files()>:
   match r:
     case Spec.Request.Write{b, p, w}:
       Content.write(p, w, prev)
@@ -214,7 +263,13 @@ def Content.apply(r: Spec.Request, fits: Bool, prev: Maybe<&2, Files.Files()>, o
       prev
 
 # the content of a version, the entry m if the node holds it
-def Content.next(m: Maybe<&2, Types.Entry>, fits: Bool, prev: Maybe<&2, Files.Files()>, other: Maybe<&2, Files.Files()>, base: Maybe<&2, Files.Files()>) -> Maybe<&2, Files.Files()>:
+def Content.next(
+  m: Maybe<&2, Types.Entry>,
+  fits: Bool,
+  prev: Maybe<&2, Files.Files()>,
+  other: Maybe<&2, Files.Files()>,
+  base: Maybe<&2, Files.Files()>
+) -> Maybe<&2, Files.Files()>:
   match m:
     case None{}:
       None{}
@@ -256,7 +311,12 @@ def Entry.fits(+s: Facts.Facts(), +c: Ledgers.Line, +j: Nat, m: Maybe<&2, Types.
 
 # the content of version k of the line c in the facts s, read through at most
 # fuel versions (nothing while the node does not hold enough)
-def Content.at(+fuel: Nat, +s: Facts.Facts(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Files.Files()>:
+def Content.at(
+  +fuel: Nat,
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat
+) -> Maybe<&2, Files.Files()>:
   match fuel k:
     case 0n _:
       None{}
@@ -287,5 +347,10 @@ def Content.get(m: Maybe<&2, Files.Files()>, +p: String) -> Maybe<&2, Maybe<&2, 
       Some{Files.Files.get(t, p)}
 
 # the words of the resource at the path p in version k of the line c
-def Content.read(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, +p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+def Content.read(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +p: String
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   Content.get(Content.of(s, c, k), p)
