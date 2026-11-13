@@ -26010,7 +26010,39 @@ def Pieces.apart_rev(xs: List<&2, Piece>, +acc: List<&2, Piece>, +bs: List<&2, P
 def Pieces.apart_rev_right(as: List<&2, Piece>, +bs: List<&2, Piece>) -> {Pieces.apart(as, bs) == True{}: Bool} -> {
   Pieces.apart(as, List.reverse(&2, Piece, bs)) == True{}: Bool
 }:
-  ?TODO
+  match as:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{+k, v}, +rest}:
+      +h => Shared.Bool.and_both(
+        Bool.not(Pieces.has_key(List.reverse(&2, Piece, bs), k)),
+        Pieces.apart(rest, List.reverse(&2, Piece, bs))
+      )(
+        Equal.trans(
+          Bool,
+          Bool.not(Pieces.has_key(List.reverse(&2, Piece, bs), k)),
+          Bool.not(Pieces.has_key(bs, k)),
+          True{},
+          Equal.cong(
+            Bool,
+            Bool,
+            z => Bool.not(z),
+            Pieces.has_key(List.reverse(&2, Piece, bs), k),
+            Pieces.has_key(bs, k),
+            Equal.trans(
+              Bool,
+              Pieces.has_key(List.reverse(&2, Piece, bs), k),
+              Bool.or(Pieces.has_key(bs, k), False{}),
+              Pieces.has_key(bs, k),
+              Pieces.has_key_rev(bs, [], k),
+              Equal.sym(Bool, Pieces.has_key(bs, k), Bool.or(Pieces.has_key(bs, k), False{}), Shared.Bool.or_false(Pieces.has_key(bs, k)))
+            )
+          ),
+          Shared.Bool.and_true_left(Bool.not(Pieces.has_key(bs, k)), Pieces.apart(rest, bs))(h)
+        )
+      )(Pieces.apart_rev_right(rest, bs)(Shared.Bool.and_true_right(Bool.not(Pieces.has_key(bs, k)), Pieces.apart(rest, bs))(h)))
+    case Con{Piece.Sub{h2, u, lo, hi}, +rest}:
+      h => Pieces.apart_rev_right(rest, bs)(h)
 
 # a comparison that is neither LT nor EQ is GT
 def Cmp.gt_of(c: Cmp) -> {Cmp.is_lt(c) == False{}: Bool} -> {Cmp.is_eq(c) == False{}: Bool} -> {c == GT{}: Cmp}:
