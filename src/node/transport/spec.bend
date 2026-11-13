@@ -1,19 +1,20 @@
 import Base
 import ../../resource/formats.bend as Formats
+import ../../resource/resources.bend as Resources
+import ../../resource/uris.bend as Uris
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/text.bend as Texts
-import ../core/spec.bend as Core
+import ../../shared/vend.bend as Vend
+import ../../writer/reads.bend as Reads
 import ../../writer/requests.bend as Requests
-import ../../resource/resources.bend as Resources
-import ../../resource/uris.bend as Uris
 
 # A Vend Node over IO (README): the core, carried to writers and to other
 # nodes. Every front offers exactly these operations. A change is a request,
 # sent again unchanged until it is answered: a ledger holds an entry once
 # (Ledgers.Laws.AddTwice), so any front may retry it, to any node. A
 # connection is one writer's, so each read shows that writer's own pending
-# changes (Core.Node.read).
+# changes (Reads.Node.read).
 
 # Values that callers make
 # ------------------------
@@ -41,7 +42,7 @@ law Cursor:
 
 # the notices that a poll returns, and what to pass as since next time
 type Changes is Data:
-  Changes{notices: List<&2, Core.Notice>, since: Cursor}
+  Changes{notices: List<&2, Reads.Notice>, since: Cursor}
 
 # what a running node reports
 law Status:
@@ -60,7 +61,7 @@ law Status.writers:
 # the branches whose owners this node is among
 law Status.owned:
   for s: Status
-  List<&2, Core.Branch>
+  List<&2, Vend.Branch>
 
 # Partial: the submodules in missing could not be fetched. Unsupported: the
 # kind of the resource does not support a setting
@@ -132,21 +133,21 @@ law Client.try_get_status:
 # every branch
 law Client.try_get_branches:
   for c: Client
-  IO(Client & Reply<&2, List<&2, Core.BranchEntry>>)
+  IO(Client & Reply<&2, List<&2, Reads.BranchEntry>>)
 
 # the versions of the branch b that changed the resource n
 law Client.try_get_log:
   for c: Client
   for n: Resources.Name
-  for b: Core.Branch
-  IO(Client & Reply<&2, List<&2, Core.LogEntry>>)
+  for b: Vend.Branch
+  IO(Client & Reply<&2, List<&2, Reads.LogEntry>>)
 
 # the bytes of the resource n at the point p, if it is there, as the writer
-# reads it (Core.Node.read)
+# reads it (Reads.Node.read)
 law Client.try_get_content:
   for c: Client
   for n: Resources.Name
-  for p: Core.Point
+  for p: Vend.Point
   IO(Client & Reply<&2, Maybe<&2, Texts.Bytes()>>)
 
 # what changed in the resource n from the point a to the point b, as the
@@ -154,21 +155,21 @@ law Client.try_get_content:
 law Client.try_get_diff:
   for c: Client
   for n: Resources.Name
-  for a: Core.Point
-  for b: Core.Point
+  for a: Vend.Point
+  for b: Vend.Point
   IO(Client & Reply<&2, List<&2, Formats.Change>>)
 
 # the changes elsewhere that touch what the branch b uses
 law Client.try_get_affects:
   for c: Client
-  for b: Core.Branch
-  IO(Client & Reply<&2, List<&2, Core.Touch>>)
+  for b: Vend.Branch
+  IO(Client & Reply<&2, List<&2, Reads.Touch>>)
 
 # what the changes up to the point p touch elsewhere
 law Client.try_get_impact:
   for c: Client
-  for p: Core.Point
-  IO(Client & Reply<&2, List<&2, Core.Touch>>)
+  for p: Vend.Point
+  IO(Client & Reply<&2, List<&2, Reads.Touch>>)
 
 # the resources that still clash after the merge k
 law Client.try_get_conflict:
@@ -179,7 +180,7 @@ law Client.try_get_conflict:
 # the notices of the topic t that since does not have (all without it)
 law Client.try_get_changes:
   for c: Client
-  for t: Core.Topic
+  for t: Reads.Topic
   for since: Maybe<&2, Cursor>
   IO(Client & Reply<&2, Changes>)
 
@@ -189,10 +190,10 @@ law Client.try_write:
   for c: Client
   for r: String
   for n: Resources.Name
-  for b: Core.Branch
+  for b: Vend.Branch
   for base: Maybe<&2, Ledgers.Id>
   for x: Source
-  IO(Client & Reply<&2, Core.Answer>)
+  IO(Client & Reply<&2, Vend.Answer>)
 
 # the request r: makes the branch b at the point p (Requests.Change.Branch)
 # or, when b exists, records a new version of b that equals p, with its
@@ -200,38 +201,38 @@ law Client.try_write:
 law Client.try_set_branch:
   for c: Client
   for r: String
-  for b: Core.Branch
-  for p: Core.Point
-  IO(Client & Reply<&2, Core.Answer>)
+  for b: Vend.Branch
+  for p: Vend.Point
+  IO(Client & Reply<&2, Vend.Answer>)
 
 # the request r: names the newest version of the branch b as the mark m, with
 # the message t
 law Client.try_create_mark:
   for c: Client
   for r: String
-  for b: Core.Branch
+  for b: Vend.Branch
   for m: String
   for t: String
-  IO(Client & Reply<&2, Core.Answer>)
+  IO(Client & Reply<&2, Vend.Answer>)
 
 # the request r: merges the point p into the branch b, item by item
 law Client.try_merge:
   for c: Client
   for r: String
-  for p: Core.Point
-  for b: Core.Branch
-  IO(Client & Reply<&2, Core.Answer>)
+  for p: Vend.Point
+  for b: Vend.Branch
+  IO(Client & Reply<&2, Vend.Answer>)
 
 # the request r: settles the resource n of the merge k on the branch b with the
 # content x
 law Client.try_resolve:
   for c: Client
   for r: String
-  for b: Core.Branch
+  for b: Vend.Branch
   for k: Ledgers.Id
   for n: Resources.Name
   for x: Source
-  IO(Client & Reply<&2, Core.Answer>)
+  IO(Client & Reply<&2, Vend.Answer>)
 
 # ties the resource u to the branch b, with the settings ss that the kind of
 # u reads, and fills u when it is empty; when u is mounted, sets its settings
@@ -240,7 +241,7 @@ law Client.try_mount:
   for c: Client
   for u: Uris.Uri
   for ss: List<&2, String>
-  for b: Core.Branch
+  for b: Vend.Branch
   IO(Client & Reply<&2, Mount>)
 
 # stops versioning u
@@ -258,7 +259,7 @@ law Client.try_set_owner:
   for store: Hashes.Hash
   for l: Maybe<&2, String>
   for g: String
-  IO(Client & Reply<&2, Core.Answer>)
+  IO(Client & Reply<&2, Vend.Answer>)
 
 # the request r: makes the group g of the store with the members ms or, when g
 # exists, replaces its members (Requests.Change.Group)
@@ -268,7 +269,7 @@ law Client.try_set_group:
   for store: Hashes.Hash
   for g: String
   for ms: List<&2, Requests.Member>
-  IO(Client & Reply<&2, Core.Answer>)
+  IO(Client & Reply<&2, Vend.Answer>)
 
 # swaps entries with the node at n: each sends what the other lacks
 # (Ledgers.Laws.Missing) and keeps what checks (Replicas.Laws.Takes)
@@ -287,14 +288,14 @@ law Client.try_stop:
 # now without it)
 law Client.try_subscribe:
   for c: Client
-  for t: Core.Topic
+  for t: Reads.Topic
   for since: Maybe<&2, Cursor>
   IO(Client & Reply<&1, Subscription>)
 
 # the next notice of the stream x
 law Subscription.try_next:
   for x: Subscription
-  IO(Subscription & Reply<&2, Core.Notice>)
+  IO(Subscription & Reply<&2, Reads.Notice>)
 
 # ends the stream x
 law Subscription.try_close:
