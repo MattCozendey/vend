@@ -3,13 +3,18 @@ import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
 import ../shared/shared/shared/text.bend as Texts
+import ./affects.bend as Affects
 import ./answers.bend as Answers
 import ./codes.bend as Coded
 import ./content.bend as Contents
 import ./facts.bend as Facts
+import ./laws.bend as Laws
 import ./lines.bend as Lines
 import ./live.bend as Live
+import ./mirror.bend as Mirror
 import ./node.bend as Nodes
+import ./owners.bend as Owners
+import ./reads.bend as Reads
 import ./shared/format.bend as Formats
 import ./shared/lists.bend as Lists
 import ./shared/parts.bend as Parts
@@ -1220,3 +1225,175 @@ def Node.decides_alone(
 
 def Spec.VendNode.decides_alone(n, b, k, i, p, ws):
   Node.decides_alone(n, b, k, i, p, ws)
+
+# Laws of the core, said of a node
+# --------------------------------
+
+def Spec.VendNode.answer_fits(n, q, r):
+  Laws.Core.answer_fits(Node.facts(n), q, r)
+
+def Spec.VendNode.counts_once(n, c, i, a, b):
+  Laws.Core.counts_once(Node.facts(n), c, i, a, b)
+
+def Spec.VendNode.written_made(n, c, i):
+  Laws.Core.written_made(Node.facts(n), c, i)
+
+def Spec.VendNode.mark_names(n, c, i, m, v):
+  Laws.Core.mark_names(Node.facts(n), c, i, m, v)
+
+def Spec.VendNode.merge_resolved(n, c, i, f, ps, p):
+  Laws.Core.merge_resolved(Node.facts(n), c, i, f, ps, p)
+
+def Spec.VendNode.majority_decides(n, c, k, os, gs):
+  Laws.Core.majority_decides(Node.facts(n), c, k, os, gs)
+
+def Spec.VendNode.branches_decided(n, r, b, x):
+  Laws.Core.branches_decided(Node.facts(n), r, b, x)
+
+def Spec.VendNode.parents_are(n, c, k, i, r, ps):
+  Laws.Core.parents_are(Node.facts(n), c, k, i, r, ps)
+
+def Spec.VendNode.group_nodes(n, s, g, k, ms, v):
+  Owners.Core.group_nodes(Node.facts(n), s, g, k, ms, v)
+
+def Spec.VendNode.group_nodes_only(n, s, g, k, ns, x):
+  Owners.Core.group_nodes_only(Node.facts(n), s, g, k, ns, x)
+
+def Spec.VendNode.members_decided(n, s, g, m, ms):
+  Owners.Core.members_decided(Node.facts(n), s, g, m, ms)
+
+def Spec.VendNode.groups_decided(n, s, g, m, y):
+  Owners.Core.groups_decided(Node.facts(n), s, g, m, y)
+
+def Spec.VendNode.owner_decided(n, c, k, g, m):
+  Owners.Core.owner_decided(Node.facts(n), c, k, g, m)
+
+def Spec.VendNode.group_of_era(n, c, k, gs):
+  Owners.Core.group_of_era(Node.facts(n), c, k, gs)
+
+def Spec.VendNode.eras_grow(n, c, a, b, x, y):
+  Owners.Core.eras_grow(Node.facts(n), c, a, b, x, y)
+
+def Spec.VendNode.write_writes(n, c, k, i, p, ws, q, x, y):
+  Reads.Core.write_writes(Node.facts(n), c, k, i, p, ws, q, x, y)
+
+# a chain of imports in the facts of a node is one at the node
+def Node.imports_of(
+  ps: List<&2, String>,
+  -n: Spec.VendNode,
+  -c: Ledgers.Line,
+  -k: Nat,
+  -bs: List<&2, String>,
+  -a: String,
+  -b: String,
+  m: Mirror.Imports(Node.facts(n), c, k, bs, a, ps, b)
+) -> Spec.Imports(n, c, k, bs, a, ps, b):
+  match ps m:
+    case Nil{} e:
+      e
+    case Con{q, rest} Tuple{ws, Tuple{e1, Tuple{e2, r}}}:
+      (ws, (e1, (e2, Node.imports_of(rest, n, c, k, bs, q, b, r))))
+
+# a chain of imports at a node is one in its facts
+def Node.imports_to(
+  ps: List<&2, String>,
+  -n: Spec.VendNode,
+  -c: Ledgers.Line,
+  -k: Nat,
+  -bs: List<&2, String>,
+  -a: String,
+  -b: String,
+  m: Spec.Imports(n, c, k, bs, a, ps, b)
+) -> Mirror.Imports(Node.facts(n), c, k, bs, a, ps, b):
+  match ps m:
+    case Nil{} e:
+      e
+    case Con{q, rest} Tuple{ws, Tuple{e1, Tuple{e2, r}}}:
+      (ws, (e1, (e2, Node.imports_to(rest, n, c, k, bs, q, b, r))))
+
+# a path reached in the facts of a node is reached at the node
+def Node.reaches_of(
+  -n: Spec.VendNode,
+  -c: Ledgers.Line,
+  -k: Nat,
+  -bs: List<&2, String>,
+  -us: List<&2, String>,
+  -p: String,
+  m: Mirror.Reaches(Node.facts(n), c, k, bs, us, p)
+) -> Spec.Reaches(n, c, k, bs, us, p):
+  match m:
+    case Tuple{u, Tuple{e, Tuple{+ps, im}}}:
+      (u, (e, (ps, Node.imports_of(ps, n, c, k, bs, u, p, im))))
+
+# a path reached at a node is reached in its facts
+def Node.reaches_to(
+  -n: Spec.VendNode,
+  -c: Ledgers.Line,
+  -k: Nat,
+  -bs: List<&2, String>,
+  -us: List<&2, String>,
+  -p: String,
+  m: Spec.Reaches(n, c, k, bs, us, p)
+) -> Mirror.Reaches(Node.facts(n), c, k, bs, us, p):
+  match m:
+    case Tuple{u, Tuple{e, Tuple{+ps, im}}}:
+      (u, (e, (ps, Node.imports_to(ps, n, c, k, bs, u, p, im))))
+
+# a path changed and reached in the facts of a node is so at the node
+def Node.affects_only.of(
+  -n: Spec.VendNode,
+  -c: Ledgers.Line,
+  -a: Nat,
+  -b: Nat,
+  -bs: List<&2, String>,
+  -us: List<&2, String>,
+  -p: String,
+  m: Mirror.Changed(Node.facts(n), c, a, b, p) & Mirror.Reaches(Node.facts(n), c, b, bs, us, p)
+) -> Spec.Changed(n, c, a, b, p) & Spec.Reaches(n, c, b, bs, us, p):
+  match m:
+    case Tuple{ch, rc}:
+      (ch, Node.reaches_of(n, c, b, bs, us, p, rc))
+
+def Spec.VendNode.affects_only(n, c, a, b, us, bs, ps, p):
+  h => hin => Node.affects_only.of(
+    n,
+    c,
+    a,
+    b,
+    bs,
+    us,
+    p,
+    Affects.Core.affects_only(Node.facts(n), c, a, b, us, bs, ps, p)(h)(hin)
+  )
+
+def Spec.VendNode.affects_all(n, c, a, b, us, bs, ps, p):
+  h => ch => rc => Affects.Core.affects_all(Node.facts(n), c, a, b, us, bs, ps, p)(h)(ch)(
+    Node.reaches_to(n, c, b, bs, us, p, rc)
+  )
+
+# a chain of parents in the facts of a node is one at the node
+def Node.back_of(
+  qs: List<&2, Spec.Point>,
+  -n: Spec.VendNode,
+  -a: Spec.Point,
+  -c: Ledgers.Line,
+  -k: Nat,
+  m: Mirror.Back(Node.facts(n), a, qs, c, k)
+) -> Spec.Back(n, a, qs, c, k):
+  match qs m:
+    case Nil{} e:
+      e
+    case Con{q, rest} Tuple{ps, Tuple{e1, Tuple{e2, r}}}:
+      (ps, (e1, (e2, Node.back_of(rest, n, a, Spec.Point.line(q), Spec.Point.n(q), r))))
+
+# a version before another in the facts of a node is before it at the node
+def Node.before_of(
+  -n: Spec.VendNode,
+  -a: Spec.Point,
+  -c: Ledgers.Line,
+  -k: Nat,
+  m: Mirror.Before(Node.facts(n), a, c, k)
+) -> Spec.Before(n, a, c, k):
+  match m:
+    case Tuple{+qs, r}:
+      (qs, Node.back_of(qs, n, a, c, k, r))

@@ -2024,3 +2024,736 @@ def Line.state_asked(+name: String, +s: Facts.Facts(), +a: Types.Ask, +c: Ledger
         {==}
       )({==})({==})
 
+# A vote of a node that decides alone
+# -----------------------------------
+
+# the facts s with the vote of the node name for the pick pk at the slot k of
+# the line c
+def Alone.to(+s: Facts.Facts(), name: String, c: Ledgers.Line, k: Nat, pk: Types.Pick) -> Facts.Facts():
+  Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k}, pk})
+
+# a set that holds no vote of a node for a step holds no vote of it for a
+# pick at that step
+def Cast.none(+s: Facts.Facts(), +name: String, +st: Types.Step, +o: Types.Pick) -> {
+  Facts.Facts.cast(s, name, st) == False{}: Bool
+} -> {Facts.Facts.has(s, Types.Fact.Vote{name, st, o}) == False{}: Bool}:
+  nc => Lists.Bool.by(
+    b => {b == False{}: Bool},
+    Facts.Facts.has(s, Types.Fact.Vote{name, st, o}),
+    et => Lists.Bool.clash(
+      {True{} == False{}: Bool},
+      Facts.Facts.cast(s, name, st),
+      nc,
+      Lists.List.in_some(
+        ~Types.Fact,
+        ~Facts.Seat,
+        ~Facts.Fact.is_cast,
+        ~Coded.Fact.is_eq,
+        ~Coded.Fact.laws(),
+        Facts.Facts.list(s),
+        Facts.Seat{name, st},
+        Types.Fact.Vote{name, st, o}
+      )(
+        Equal.trans(
+          Bool,
+          List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), Types.Fact.Vote{name, st, o}),
+          Facts.Facts.has(s, Types.Fact.Vote{name, st, o}),
+          True{},
+          Equal.sym(
+            Bool,
+            Facts.Facts.has(s, Types.Fact.Vote{name, st, o}),
+            List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), Types.Fact.Vote{name, st, o}),
+            Facts.Facts.has_list(s, Types.Fact.Vote{name, st, o})
+          ),
+          et
+        )
+      )(
+        Shared.Bool.and_both(String.eq(name, name), Coded.Step.is_eq(st, st))(Texts.String.eq_refl(name))(
+          Coded.Step.is_eq_refl(st)
+        )
+      )
+    ),
+    ef => {==}
+  )
+
+# a set with a fact holds it
+def Added.has(+s: Facts.Facts(), +y: Types.Fact) -> {Facts.Facts.has(Facts.Facts.add(s, y), y) == True{}: Bool}:
+  Equal.trans(
+    Bool,
+    Facts.Facts.has(Facts.Facts.add(s, y), y),
+    Bool.or(Coded.Fact.is_eq(y, y), Facts.Facts.has(s, y)),
+    True{},
+    Facts.Facts.has_add(s, y, y),
+    (
+      %Equal.sym(Bool, Coded.Fact.is_eq(y, y), True{}, Coded.Fact.is_eq_refl(y)): {
+        Bool.or(_, Facts.Facts.has(s, y)) == True{}: Bool
+      }
+      {==}
+    )
+  )
+
+# after a node that held no vote for a step votes there, its one vote for a
+# pick at that step is that vote
+def Vote.only(+s: Facts.Facts(), +name: String, +st: Types.Step, +pk: Types.Pick, +o: Types.Pick) -> {
+  Facts.Facts.cast(s, name, st) == False{}: Bool
+} -> {
+  Facts.Facts.has(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), Types.Fact.Vote{name, st, o}) == True{}: Bool
+} -> {o == pk: Types.Pick}:
+  nc => h => Shared.Maybe.some_inj(
+    Types.Pick,
+    o,
+    pk,
+    Equal.cong(
+      Types.Fact,
+      Maybe<&2, Types.Pick>,
+      f => Fact.pick(f),
+      Types.Fact.Vote{name, st, o},
+      Types.Fact.Vote{name, st, pk},
+      Coded.Fact.is_eq_sound(Types.Fact.Vote{name, st, o}, Types.Fact.Vote{name, st, pk})(
+        Equal.trans(
+          Bool,
+          Coded.Fact.is_eq(Types.Fact.Vote{name, st, o}, Types.Fact.Vote{name, st, pk}),
+          Bool.or(Coded.Fact.is_eq(Types.Fact.Vote{name, st, o}, Types.Fact.Vote{name, st, pk}), False{}),
+          True{},
+          Shared.Bool.or_false(Coded.Fact.is_eq(Types.Fact.Vote{name, st, o}, Types.Fact.Vote{name, st, pk})),
+          (
+            %Cast.none(s, name, st, o)(nc): {
+              Bool.or(Coded.Fact.is_eq(Types.Fact.Vote{name, st, o}, Types.Fact.Vote{name, st, pk}), _) == True{}: Bool
+            }
+            Equal.trans(
+              Bool,
+              Bool.or(
+                Coded.Fact.is_eq(Types.Fact.Vote{name, st, o}, Types.Fact.Vote{name, st, pk}),
+                Facts.Facts.has(s, Types.Fact.Vote{name, st, o})
+              ),
+              Facts.Facts.has(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), Types.Fact.Vote{name, st, o}),
+              True{},
+              Equal.sym(
+                Bool,
+                Facts.Facts.has(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), Types.Fact.Vote{name, st, o}),
+                Bool.or(
+                  Coded.Fact.is_eq(Types.Fact.Vote{name, st, o}, Types.Fact.Vote{name, st, pk}),
+                  Facts.Facts.has(s, Types.Fact.Vote{name, st, o})
+                ),
+                Facts.Facts.has_add(s, Types.Fact.Vote{name, st, pk}, Types.Fact.Vote{name, st, o})
+              ),
+              h
+            )
+          )
+        )
+      )
+    )
+  )
+
+# after a node that held no vote for a step votes there, no pick stands
+# against its pick, when the node decides alone
+def Alone.beats(
+  +s: Facts.Facts(),
+  +name: String,
+  +st: Types.Step,
+  +pk: Types.Pick,
+  +X: List<&2, Types.Pick>,
+  +o: Types.Pick
+) -> {Facts.Facts.cast(s, name, st) == False{}: Bool} -> {
+  Lines.Rival.beats(
+    Lines.Rival{Lines.Tally{Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, [name], X}, pk},
+    o
+  )
+    == True{}: Bool
+}:
+  nc => Lists.Bool.by(
+    b => {
+      Bool.or(Coded.Pick.is_eq(o, pk), Bool.not(Lists.Nat.most(1n, Shared.Nat.add_if(b, 0n)))) == True{}: Bool
+    },
+    Facts.Facts.has(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), Types.Fact.Vote{name, st, o}),
+    et => (
+      %Vote.only(s, name, st, pk, o)(nc)(et): {
+        Bool.or(Coded.Pick.is_eq(o, _), Bool.not(Lists.Nat.most(1n, 1n))) == True{}: Bool
+      }
+      %Equal.sym(Bool, Coded.Pick.is_eq(o, o), True{}, Coded.Pick.is_eq_refl(o)): {
+        Bool.or(_, Bool.not(Lists.Nat.most(1n, 1n))) == True{}: Bool
+      }
+      {==}
+    ),
+    ef => Shared.Bool.or_true_right(Coded.Pick.is_eq(o, pk))
+  )
+
+# after a node that held no vote for a step votes there, no pick of ys stands
+# against its pick, when the node decides alone
+def Alone.holds(
+  ys: List<&2, Types.Pick>,
+  +s: Facts.Facts(),
+  +name: String,
+  +st: Types.Step,
+  +pk: Types.Pick,
+  +X: List<&2, Types.Pick>
+) -> {Facts.Facts.cast(s, name, st) == False{}: Bool} -> {
+  Shared.List.holds(
+    ~Types.Pick,
+    ~Lines.Rival,
+    ~Lines.Rival.beats,
+    ys,
+    Lines.Rival{Lines.Tally{Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, [name], X}, pk}
+  )
+    == True{}: Bool
+}:
+  match ys:
+    case Nil{}:
+      nc => {==}
+    case Con{+y, +r}:
+      +nc => Shared.List.all.if_both(
+        Lines.Rival.beats(
+          Lines.Rival{Lines.Tally{Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, [name], X}, pk},
+          y
+        ),
+        u => Shared.List.holds(
+          ~Types.Pick,
+          ~Lines.Rival,
+          ~Lines.Rival.beats,
+          r,
+          Lines.Rival{Lines.Tally{Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, [name], X}, pk}
+        )
+      )(Alone.beats(s, name, st, pk, X, y)(nc))(Alone.holds(r, s, name, st, pk, X)(nc))
+
+# after a node that held no vote for a step votes there, the node alone
+# decided its pick for the step
+def Alone.decided(+s: Facts.Facts(), +name: String, +st: Types.Step, +pk: Types.Pick) -> {
+  Facts.Facts.cast(s, name, st) == False{}: Bool
+} -> {
+  Lines.Votes.decided(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, [name]) == Some{pk}: Maybe<&2, Types.Pick>
+}:
+  nc => Wins.decided(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, [name], pk)(
+    Shared.Bool.and_both(
+      Lines.Voting.most([name], Lines.Voting{Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), st, pk}),
+      Shared.List.holds(
+        ~Types.Pick,
+        ~Lines.Rival,
+        ~Lines.Rival.beats,
+        Lines.Votes.picks(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st),
+        Lines.Rival{
+          Lines.Tally{
+            Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}),
+            st,
+            [name],
+            Lines.Votes.picks(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st)
+          },
+          pk
+        }
+      )
+    )(
+      %Equal.sym(
+        Bool,
+        Facts.Facts.has(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk}), Types.Fact.Vote{name, st, pk}),
+        True{},
+        Added.has(s, Types.Fact.Vote{name, st, pk})
+      ): {Lists.Nat.most(1n, Shared.Nat.add_if(_, 0n)) == True{}: Bool}
+      {==}
+    )(
+      Alone.holds(
+        Lines.Votes.picks(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st),
+        s,
+        name,
+        st,
+        pk,
+        Lines.Votes.picks(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, st, pk})), st)
+      )(nc)
+    )
+  )
+
+# after a node that alone decides the slot k of a line, and held no vote
+# there, votes there for a pick whose id made no version, the slot makes the
+# next version: that pick
+def Alone.step(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +k: Nat,
+  +g: Maybe<&2, String>,
+  +pk: Types.Pick,
+  +R: Maybe<&2, List<&2, Types.Entry>>
+) -> {Lines.Line.rule(R, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>} -> {
+  Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)) == False{}: Bool
+} -> {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool} -> {
+  Lines.Line.step(Alone.to(s, name, c, k, pk), R, c, Lines.State{vs, k})
+    == Some{Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}: Maybe<&2, Lines.State>
+}:
+  er => ed => nc => (
+    %Equal.sym(Maybe<&2, Lines.Rule>, Lines.Line.rule(R, c, vs), Some{Lines.Rule{g, [name]}}, er): {
+      Lines.Line.step.at(Alone.to(s, name, c, k, pk), c, Lines.State{vs, k}, _)
+        == Some{Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}: Maybe<&2, Lines.State>
+    }
+    %Equal.sym(
+      Maybe<&2, Types.Pick>,
+      Lines.Votes.decided(Alone.to(s, name, c, k, pk), Types.Step.At{c, k}, [name]),
+      Some{pk},
+      Alone.decided(s, name, Types.Step.At{c, k}, pk)(nc)
+    ): {
+      Lines.Line.step.of(Lines.State{vs, k}, _)
+        == Some{Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}: Maybe<&2, Lines.State>
+    }
+    %Equal.sym(
+      Bool,
+      Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)),
+      False{},
+      ed
+    ): {
+      Some{Lines.State.put.if(vs, k, pk, _)}
+        == Some{Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}}: Maybe<&2, Lines.State>
+    }
+    {==}
+  )
+
+# the state b comes after a decided slot of the state a: its versions extend
+# those of a, and its slot is the next one
+def Step.Next(a: Lines.State, b: Lines.State) -> Type:
+  Lists.List.Ext(Types.Entry, Lines.State.versions(a), Lines.State.versions(b))
+    & {Lines.State.slot(b) == 1n+Lines.State.slot(a): Nat}
+
+# the state after a decided slot comes after the state before it, whether the
+# pick is a new version or not (dup)
+def Step.next.if(+vs: List<&2, Types.Entry>, +k: Nat, +pk: Types.Pick, dup: Bool) -> Step.Next(
+  Lines.State{vs, k},
+  Lines.State.put.if(vs, k, pk, dup)
+):
+  match dup:
+    case True{}:
+      (Lists.List.ext_refl(Types.Entry, vs), {==})
+    case False{}:
+      (Lists.List.ext_snoc(Types.Entry, vs, Types.Entry{pk, k}), {==})
+
+# Step.next, once the decided pick m of the slot is known
+def Step.next.of(st: Lines.State, -st2: Lines.State, m: Maybe<&2, Types.Pick>) -> {
+  Lines.Line.step.of(st, m) == Some{st2}: Maybe<&2, Lines.State>
+} -> Step.Next(st, st2):
+  match st m:
+    case Lines.State{+vs, +k} None{}:
+      e => Empty.absurd(Step.Next(Lines.State{vs, k}, st2), Shared.Maybe.none_ne_some(Lines.State, st2, e))
+    case Lines.State{+vs, +k} Some{+pk}:
+      e => (
+        %Shared.Maybe.some_inj(Lines.State, Lines.State.put(vs, k, pk), st2, e): Step.Next(Lines.State{vs, k}, _)
+        Step.next.if(vs, k, pk, Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)))
+      )
+
+# Step.next, once the rule u of the slot is known
+def Step.next.at(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +st: Lines.State,
+  -st2: Lines.State,
+  u: Maybe<&2, Lines.Rule>
+) -> {Lines.Line.step.at(s, c, st, u) == Some{st2}: Maybe<&2, Lines.State>} -> Step.Next(st, st2):
+  match u:
+    case None{}:
+      e => Empty.absurd(Step.Next(st, st2), Shared.Maybe.none_ne_some(Lines.State, st2, e))
+    case Some{rule}:
+      e => Step.next.of(
+        st,
+        st2,
+        Lines.Votes.decided(s, Types.Step.At{c, Lines.State.slot(st)}, Lines.Rule.nodes(rule))
+      )(e)
+
+# the state after a decided slot comes after the state before it
+def Step.next(
+  +s: Facts.Facts(),
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: Lines.State,
+  -st2: Lines.State
+) -> {Lines.Line.step(s, R, c, st) == Some{st2}: Maybe<&2, Lines.State>} -> Step.Next(st, st2):
+  e => Step.next.at(s, c, st, st2, Lines.Line.rule(R, c, Lines.State.versions(st)))(e)
+
+# the versions of a state that comes after a extend those of a
+def Next.ext(-a: Lines.State, -b: Lines.State, n: Step.Next(a, b)) -> Lists.List.Ext(
+  Types.Entry,
+  Lines.State.versions(a),
+  Lines.State.versions(b)
+):
+  (x, e) = n
+  x
+
+# the slot of a state that comes after a is the slot after that of a
+def Next.slot(-a: Lines.State, -b: Lines.State, n: Step.Next(a, b)) -> {
+  Lines.State.slot(b) == 1n+Lines.State.slot(a): Nat
+}:
+  (x, e) = n
+  e
+
+# the versions after a run extend the versions before it
+def Run.grows(
+  f: Nat,
+  +s: Facts.Facts(),
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: Lines.State
+) -> Lists.List.Ext(
+  Types.Entry,
+  Lines.State.versions(st),
+  Lines.State.versions(Lines.Line.run(f, s, R, c, st, Lines.Line.step(s, R, c, st)))
+):
+  match f:
+    case 0n:
+      Lists.List.ext_refl(Types.Entry, Lines.State.versions(st))
+    case 1n+(+p):
+      Lists.Maybe.by(
+        Lines.State,
+        m => Lists.List.Ext(
+          Types.Entry,
+          Lines.State.versions(st),
+          Lines.State.versions(Lines.Line.run(1n+p, s, R, c, st, m))
+        ),
+        Lines.Line.step(s, R, c, st),
+        en => Lists.List.ext_refl(Types.Entry, Lines.State.versions(st)),
+        +st2 => e2 => Lists.List.ext_trans(
+          Types.Entry,
+          Lines.State.versions(st),
+          Lines.State.versions(st2),
+          Lines.State.versions(Lines.Line.run(p, s, R, c, st2, Lines.Line.step(s, R, c, st2)))
+        )(Next.ext(st, st2, Step.next(s, R, c, st, st2)(e2)))(Run.grows(p, s, R, c, st2))
+      )
+
+# the slot after a run is no less than the slot before it
+def Run.slot_le(
+  f: Nat,
+  +s: Facts.Facts(),
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: Lines.State
+) -> {
+  Nat.is_le(
+    Lines.State.slot(st),
+    Lines.State.slot(Lines.Line.run(f, s, R, c, st, Lines.Line.step(s, R, c, st)))
+  )
+    == True{}: Bool
+}:
+  match f:
+    case 0n:
+      Shared.Nat.le_refl(Lines.State.slot(st))
+    case 1n+(+p):
+      Lists.Maybe.by(
+        Lines.State,
+        m => {
+          Nat.is_le(Lines.State.slot(st), Lines.State.slot(Lines.Line.run(1n+p, s, R, c, st, m))) == True{}: Bool
+        },
+        Lines.Line.step(s, R, c, st),
+        en => Shared.Nat.le_refl(Lines.State.slot(st)),
+        +st2 => e2 => Shared.Nat.le_trans(
+          Lines.State.slot(st),
+          Lines.State.slot(st2),
+          Lines.State.slot(Lines.Line.run(p, s, R, c, st2, Lines.Line.step(s, R, c, st2)))
+        )(
+          %Equal.sym(
+            Nat,
+            Lines.State.slot(st2),
+            1n+Lines.State.slot(st),
+            Next.slot(st, st2, Step.next(s, R, c, st, st2)(e2))
+          ): {Nat.is_le(Lines.State.slot(st), _) == True{}: Bool}
+          Shared.Nat.le_succ(Lines.State.slot(st), Lines.State.slot(st))(Shared.Nat.le_refl(Lines.State.slot(st)))
+        )(Run.slot_le(p, s, R, c, st2))
+      )
+
+# after the node adds d, a slot that d is no vote for gives what it gave,
+# once the rule u of the slot is known
+def Step.kept.at(+d: Delta, +s: Facts.Facts(), +c: Ledgers.Line, +st: Lines.State, u: Maybe<&2, Lines.Rule>) -> {
+  Delta.keeps(d, c, Lines.State.slot(st)) == True{}: Bool
+} -> {Lines.Line.step.at(Delta.to(d, s), c, st, u) == Lines.Line.step.at(s, c, st, u): Maybe<&2, Lines.State>}:
+  match u:
+    case None{}:
+      h => {==}
+    case Some{+rule}:
+      h => Equal.cong(
+        Maybe<&2, Types.Pick>,
+        Maybe<&2, Lines.State>,
+        m => Lines.Line.step.of(st, m),
+        Lines.Votes.decided(Delta.to(d, s), Types.Step.At{c, Lines.State.slot(st)}, Lines.Rule.nodes(rule)),
+        Lines.Votes.decided(s, Types.Step.At{c, Lines.State.slot(st)}, Lines.Rule.nodes(rule)),
+        Decided.same(d, s, c, Lines.State.slot(st), Lines.Rule.nodes(rule))(h)
+      )
+
+# a number below another is not it
+def Nat.lt_ne(+a: Nat, +b: Nat) -> {Nat.is_le(1n+a, b) == True{}: Bool} -> {Nat.is_eq(a, b) == False{}: Bool}:
+  lt => Lists.Bool.by(
+    x => {x == False{}: Bool},
+    Nat.is_eq(a, b),
+    et => Lists.Bool.clash(
+      {True{} == False{}: Bool},
+      Nat.is_le(1n+a, a),
+      Shared.Nat.succ_nle(a),
+      (
+        %Equal.sym(Nat, a, b, Shared.Nat.is_eq_sound(a, b)(et)): {Nat.is_le(1n+a, _) == True{}: Bool}
+        lt
+      )
+    ),
+    ef => {==}
+  )
+
+# a vote for the slot k of the line c is no vote for a slot of c below k
+def Alone.keeps(+name: String, +c: Ledgers.Line, +k: Nat, +pk: Types.Pick, +j: Nat) -> {
+  Nat.is_le(1n+j, k) == True{}: Bool
+} -> {Delta.keeps(Delta.Vote{name, c, k, pk}, c, j) == True{}: Bool}:
+  lt => (
+    %Equal.sym(Bool, Nat.is_eq(j, k), False{}, Nat.lt_ne(j, k)(lt)): {
+      Bool.not(Bool.and(Ledgers.Line.is_eq(c, c), _)) == True{}: Bool
+    }
+    %Equal.sym(
+      Bool,
+      Bool.and(Ledgers.Line.is_eq(c, c), False{}),
+      False{},
+      Shared.Bool.and_false_right(Ledgers.Line.is_eq(c, c))
+    ): {Bool.not(_) == True{}: Bool}
+    {==}
+  )
+
+# a run of f2 slots from the state st, after the node votes, gives the pick
+# pk of the slot k as the version after the versions vs
+def Alone.Got(
+  s: Facts.Facts(),
+  name: String,
+  c: Ledgers.Line,
+  vs: List<&2, Types.Entry>,
+  k: Nat,
+  pk: Types.Pick,
+  R: Maybe<&2, List<&2, Types.Entry>>,
+  f2: Nat,
+  st: Lines.State
+) -> Type:
+  {
+    List.get(
+      &2,
+      Types.Entry,
+      Lines.State.versions(
+        Lines.Line.run(
+          f2,
+          Alone.to(s, name, c, k, pk),
+          R,
+          c,
+          st,
+          Lines.Line.step(Alone.to(s, name, c, k, pk), R, c, st)
+        )
+      ),
+      List.length(&2, Types.Entry, vs)
+    )
+      == Some{Types.Entry{pk, k}}: Maybe<&2, Types.Entry>
+  }
+
+# from the state that the line was read up to, a run after the vote makes the
+# pick the next version, when it has a slot to go
+def Alone.end(
+  f2: Nat,
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +k: Nat,
+  +g: Maybe<&2, String>,
+  +pk: Types.Pick,
+  +R: Maybe<&2, List<&2, Types.Entry>>
+) -> {Lines.Line.rule(R, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>} -> {
+  Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)) == False{}: Bool
+} -> {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool} -> {
+  Nat.is_lt(k, Nat.add(f2, k)) == True{}: Bool
+} -> Alone.Got(s, name, c, vs, k, pk, R, f2, Lines.State{vs, k}):
+  match f2:
+    case 0n:
+      er => ed => nc => hl => Lists.Bool.clash(
+        Alone.Got(s, name, c, vs, k, pk, R, 0n, Lines.State{vs, k}),
+        Nat.is_lt(k, k),
+        Shared.Nat.lt_irrefl(k),
+        hl
+      )
+    case 1n+(+p):
+      er => ed => nc => hl => (
+        %Equal.sym(
+          Maybe<&2, Lines.State>,
+          Lines.Line.step(Alone.to(s, name, c, k, pk), R, c, Lines.State{vs, k}),
+          Some{Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}},
+          Alone.step(s, name, c, vs, k, g, pk, R)(er)(ed)(nc)
+        ): {
+          List.get(
+            &2,
+            Types.Entry,
+            Lines.State.versions(
+              Lines.Line.run(1n+p, Alone.to(s, name, c, k, pk), R, c, Lines.State{vs, k}, _)
+            ),
+            List.length(&2, Types.Entry, vs)
+          )
+            == Some{Types.Entry{pk, k}}: Maybe<&2, Types.Entry>
+        }
+        Lists.List.ext_get(
+          Types.Entry,
+          List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]),
+          Lines.State.versions(
+            Lines.Line.run(
+              p,
+              Alone.to(s, name, c, k, pk),
+              R,
+              c,
+              Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k},
+              Lines.Line.step(
+                Alone.to(s, name, c, k, pk),
+                R,
+                c,
+                Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}
+              )
+            )
+          ),
+          List.length(&2, Types.Entry, vs),
+          Types.Entry{pk, k}
+        )(
+          Run.grows(
+            p,
+            Alone.to(s, name, c, k, pk),
+            R,
+            c,
+            Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k}
+          )
+        )(Lists.List.get_snoc(Types.Entry, vs, Types.Entry{pk, k}))
+      )
+
+# from a state whose slot is below k and decided, a run after the vote does
+# what a run from the state after that slot does (ih)
+def Alone.go(
+  f2: Nat,
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +k: Nat,
+  +pk: Types.Pick,
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  +st: Lines.State,
+  +st2: Lines.State,
+  +e2: {Lines.Line.step(s, R, c, st) == Some{st2}: Maybe<&2, Lines.State>},
+  lt: {Nat.is_le(1n+Lines.State.slot(st), k) == True{}: Bool},
+  ih: @f3: Nat -> {Nat.is_lt(k, Nat.add(f3, Lines.State.slot(st2))) == True{}: Bool} -> Alone.Got(
+    s,
+    name,
+    c,
+    vs,
+    k,
+    pk,
+    R,
+    f3,
+    st2
+  )
+) -> {Nat.is_lt(k, Nat.add(f2, Lines.State.slot(st))) == True{}: Bool} -> Alone.Got(s, name, c, vs, k, pk, R, f2, st):
+  match f2:
+    case 0n:
+      hl => Lists.Bool.clash(
+        Alone.Got(s, name, c, vs, k, pk, R, 0n, st),
+        Nat.is_lt(k, Lines.State.slot(st)),
+        Shared.Nat.le_nlt(Lines.State.slot(st), k)(
+          Shared.Nat.le_trans(Lines.State.slot(st), 1n+Lines.State.slot(st), k)(
+            Shared.Nat.le_succ(Lines.State.slot(st), Lines.State.slot(st))(Shared.Nat.le_refl(Lines.State.slot(st)))
+          )(lt)
+        ),
+        hl
+      )
+    case 1n+(+p):
+      hl => (
+        %Equal.sym(
+          Maybe<&2, Lines.State>,
+          Lines.Line.step(Alone.to(s, name, c, k, pk), R, c, st),
+          Some{st2},
+          Equal.trans(
+            Maybe<&2, Lines.State>,
+            Lines.Line.step(Alone.to(s, name, c, k, pk), R, c, st),
+            Lines.Line.step(s, R, c, st),
+            Some{st2},
+            Step.kept.at(Delta.Vote{name, c, k, pk}, s, c, st, Lines.Line.rule(R, c, Lines.State.versions(st)))(
+              Alone.keeps(name, c, k, pk, Lines.State.slot(st))(lt)
+            ),
+            e2
+          )
+        ): {
+          List.get(
+            &2,
+            Types.Entry,
+            Lines.State.versions(Lines.Line.run(1n+p, Alone.to(s, name, c, k, pk), R, c, st, _)),
+            List.length(&2, Types.Entry, vs)
+          )
+            == Some{Types.Entry{pk, k}}: Maybe<&2, Types.Entry>
+        }
+        ih(p)(
+          %Equal.sym(
+            Nat,
+            Lines.State.slot(st2),
+            1n+Lines.State.slot(st),
+            Next.slot(st, st2, Step.next(s, R, c, st, st2)(e2))
+          ): {Nat.is_lt(k, Nat.add(p, _)) == True{}: Bool}
+          %Equal.sym(
+            Nat,
+            Nat.add(p, 1n+Lines.State.slot(st)),
+            1n+Nat.add(p, Lines.State.slot(st)),
+            Shared.Nat.add_succ(p, Lines.State.slot(st))
+          ): {Nat.is_lt(k, _) == True{}: Bool}
+          hl
+        )
+      )
+
+# when a run of f slots from the state st ends where the line was read up to,
+# a run of f2 slots after the vote, with a slot to go beyond k, makes the pick
+# the next version
+def Alone.run(
+  f: Nat,
+  +f2: Nat,
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +k: Nat,
+  +g: Maybe<&2, String>,
+  +pk: Types.Pick,
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  +st: Lines.State
+) -> {Lines.Line.rule(R, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>} -> {
+  Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)) == False{}: Bool
+} -> {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool} -> {
+  Lines.Line.run(f, s, R, c, st, Lines.Line.step(s, R, c, st)) == Lines.State{vs, k}: Lines.State
+} -> {Nat.is_lt(k, Nat.add(f2, Lines.State.slot(st))) == True{}: Bool} -> Alone.Got(s, name, c, vs, k, pk, R, f2, st):
+  match f:
+    case 0n:
+      er => ed => nc => e => hl => (
+        %Equal.sym(Lines.State, st, Lines.State{vs, k}, e): (
+          {
+            Nat.is_lt(k, Nat.add(f2, Lines.State.slot(_))) == True{}: Bool
+          } -> Alone.Got(s, name, c, vs, k, pk, R, f2, _)
+        )
+        Alone.end(f2, s, name, c, vs, k, g, pk, R)(er)(ed)(nc)
+      )(hl)
+    case 1n+(+p):
+      +er => +ed => +nc => e => hl => Lists.Maybe.by(
+        Lines.State,
+        m => {Lines.Line.run(1n+p, s, R, c, st, m) == Lines.State{vs, k}: Lines.State} -> {
+          Nat.is_lt(k, Nat.add(f2, Lines.State.slot(st))) == True{}: Bool
+        } -> Alone.Got(s, name, c, vs, k, pk, R, f2, st),
+        Lines.Line.step(s, R, c, st),
+        en => e1 => hl1 => (
+          %Equal.sym(Lines.State, st, Lines.State{vs, k}, e1): (
+            {
+              Nat.is_lt(k, Nat.add(f2, Lines.State.slot(_))) == True{}: Bool
+            } -> Alone.Got(s, name, c, vs, k, pk, R, f2, _)
+          )
+          Alone.end(f2, s, name, c, vs, k, g, pk, R)(er)(ed)(nc)
+        )(hl1),
+        +st2 => +e2 => +e1 => hl1 => Alone.go(
+          f2,
+          s,
+          name,
+          c,
+          vs,
+          k,
+          pk,
+          R,
+          st,
+          st2,
+          e2,
+          (
+            %Next.slot(st, st2, Step.next(s, R, c, st, st2)(e2)): {Nat.is_le(_, k) == True{}: Bool}
+            %e1: {Nat.is_le(Lines.State.slot(st2), Lines.State.slot(_)) == True{}: Bool}
+            Run.slot_le(p, s, R, c, st2)
+          ),
+          +f3 => h3 => Alone.run(p, f3, s, name, c, vs, k, g, pk, R, st2)(er)(ed)(nc)(e1)(h3)
+        )(hl1)
+      )(e)(hl)
+
