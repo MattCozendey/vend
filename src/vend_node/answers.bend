@@ -10,6 +10,7 @@ import ./lines.bend as Lines
 import ./run/answers.bend as RAnswers
 import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
+import ./run/known.bend as RKnown
 import ./run/files.bend as Files
 import ./run/lines.bend as RLines
 import ./shared/format.bend as Formats
@@ -37,11 +38,11 @@ def Clashes.of(
   k: Nat,
   +e: Types.Entry
 ) -> Maybe<&2, List<&2, String>>:
-  RAnswers.Clashes.of(Facts.Facts.crit(s), c, k, e)
+  RAnswers.Clashes.of(RKnown.Known.none(), Facts.Facts.crit(s), c, k, e)
 
 # the base of the merge e, version k of the line c, when its ways lead to it
 def Base.of(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat, +e: Types.Entry) -> Maybe<&2, Spec.Point>:
-  RAnswers.Base.of(Facts.Facts.crit(s), c, k, e)
+  RAnswers.Base.of(RKnown.Known.none(), Facts.Facts.crit(s), c, k, e)
 
 # the status of the request r, version k of the line c
 def Status.of(
@@ -51,7 +52,7 @@ def Status.of(
   +k: Nat,
   +e: Types.Entry
 ) -> Spec.Status:
-  RAnswers.Status.of(Facts.Facts.crit(s), c, vs, k, e)
+  RAnswers.Status.of(RKnown.Known.none(), Facts.Facts.crit(s), c, vs, k, e)
 
 # The rule of a version
 # ---------------------
@@ -59,7 +60,7 @@ def Status.of(
 # the versions of the line c before its version 1+j, when the line has that
 # many, or one less (the version that comes next)
 def Line.before(+s: Facts.Facts(), +c: Ledgers.Line, +j: Nat) -> Maybe<&2, List<&2, Types.Entry>>:
-  RAnswers.Line.before(Facts.Facts.crit(s), c, j)
+  RAnswers.Line.before(RKnown.Known.none(), Facts.Facts.crit(s), c, j)
 
 # Rule.for, once the versions m before the version are known
 def Rule.for.of(
@@ -67,15 +68,15 @@ def Rule.for.of(
   +c: Ledgers.Line,
   m: Maybe<&2, List<&2, Types.Entry>>
 ) -> Maybe<&2, RLines.Rule>:
-  RAnswers.Rule.for.of(Facts.Facts.crit(s), c, m)
+  RAnswers.Rule.for.of(RKnown.Known.none(), Facts.Facts.crit(s), c, m)
 
 # the rule of version k of the line c: of the versions before it
 def Rule.for(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat) -> Maybe<&2, RLines.Rule>:
-  RAnswers.Rule.for(Facts.Facts.crit(s), c, k)
+  RAnswers.Rule.for(RKnown.Known.none(), Facts.Facts.crit(s), c, k)
 
 # the era of version k of the line c
 def Era.for(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat) -> Maybe<&2, Nat>:
-  RAnswers.Era.for(Facts.Facts.crit(s), c, k)
+  RAnswers.Era.for(RKnown.Known.none(), Facts.Facts.crit(s), c, k)
 
 # the first nodes of the rule u that are more than half of it, when the facts
 # hold the vote of each of them for the entry e of the line c
@@ -109,14 +110,14 @@ def Store.read(
   +m: Nat,
   f: List<&2, Types.Entry> -> Maybe<&2, A>
 ) -> Maybe<&2, A>:
-  RAnswers.Store.read(A, Facts.Facts.crit(s), h, m, f)
+  RAnswers.Store.read(A, RKnown.Known.none(), Facts.Facts.crit(s), h, m, f)
 
 # The answer
 # ----------
 
 # the entry of the id i in the line c, and its version
 def Line.find(+s: Facts.Facts(), +c: Ledgers.Line, i: Ledgers.Id) -> Maybe<&2, RAnswers.Found>:
-  RAnswers.Line.find(Facts.Facts.crit(s), c, i)
+  RAnswers.Line.find(RKnown.Known.none(), Facts.Facts.crit(s), c, i)
 
 # the reply of the status of the found entry m of the line c, with the
 # versions v of the line
@@ -126,11 +127,11 @@ def Reply.status(
   v: Maybe<&2, List<&2, Types.Entry>>,
   m: Maybe<&2, RAnswers.Found>
 ) -> Maybe<&2, Spec.Reply>:
-  RAnswers.Reply.status(Facts.Facts.crit(s), c, v, m)
+  RAnswers.Reply.status(RKnown.Known.none(), Facts.Facts.crit(s), c, v, m)
 
 # the reply of the facts s to the question q
 def Answer.of(+s: Facts.Facts(), q: Spec.Question) -> Maybe<&2, Spec.Reply>:
-  RAnswers.Answer.of(Facts.Facts.crit(s), q)
+  RAnswers.Answer.of(RKnown.Known.none(), Facts.Facts.crit(s), q)
 
 # Views
 # -----
@@ -142,7 +143,7 @@ def View.newest(
   +p: String,
   m: Maybe<&2, List<&2, Types.Entry>>
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  RAnswers.View.newest(Facts.Facts.crit(s), b, p, m)
+  RAnswers.View.newest(RKnown.Known.none(), Facts.Facts.crit(s), b, p, m)
 
 # the view of a writer whose last write there is the ask m, if any: its words
 # while no version was made by it; else what the newest version holds
@@ -152,7 +153,7 @@ def View.of(
   +p: String,
   m: Maybe<&2, Types.Ask>
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  RAnswers.View.of(Facts.Facts.crit(s), b, p, m)
+  RAnswers.View.of(RKnown.Known.none(), Facts.Facts.crit(s), b, p, m)
 
 # the words that the writer w reads at the path p of the newest version of
 # the branch b, its own writes included
@@ -162,4 +163,4 @@ def View.at(
   +b: Ledgers.Line,
   +p: String
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  RAnswers.View.at(Facts.Facts.crit(s), w, b, p)
+  RAnswers.View.at(RKnown.Known.none(), Facts.Facts.crit(s), w, b, p)

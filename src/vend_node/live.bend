@@ -12,6 +12,7 @@ import ./run/answers.bend as RAnswers
 import ./run/facts.bend as RFacts
 import ./run/lines.bend as RLines
 import ./run/rounds.bend as RRounds
+import ./run/known.bend as RKnown
 import ./run/work.bend as RWorks
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
@@ -1213,8 +1214,8 @@ def Work.does_alone(
   Facts.Facts.cast(s, name, st) == False{}: Bool
 } -> {Works.Work.does(s, name) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}:
   ht => ho => hc => (
-    %Equal.sym(Maybe<&2, Types.Ask>, Lists.List.top(~Types.Ask, ~RFacts.Ask.seq, Works.Work.ready(s, name, Facts.Facts.list(s))), Some{a}, ht): {Works.Work.cast(s, name, RWorks.Work.follow.or(Works.Work.propose.of(s, name, _), u => RWorks.Work.follow.or(RWorks.Work.follow(Facts.Facts.crit(s), name, Facts.Facts.list(s)), u2 => RWorks.Work.pass(Facts.Facts.crit(s), name, Facts.Facts.list(s))))) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}
-    %Equal.sym(Maybe<&2, RWorks.Plan>, Works.Work.offer(s, name, a), Some{RWorks.Plan{st, x}}, ho): {Works.Work.cast(s, name, RWorks.Work.follow.or(_, u => RWorks.Work.follow.or(RWorks.Work.follow(Facts.Facts.crit(s), name, Facts.Facts.list(s)), u2 => RWorks.Work.pass(Facts.Facts.crit(s), name, Facts.Facts.list(s))))) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}
+    %Equal.sym(Maybe<&2, Types.Ask>, Lists.List.top(~Types.Ask, ~RFacts.Ask.seq, Works.Work.ready(s, name, Facts.Facts.list(s))), Some{a}, ht): {Works.Work.cast(s, name, RWorks.Work.follow.or(Works.Work.propose.of(s, name, _), u => RWorks.Work.follow.or(RWorks.Work.follow(RKnown.Known.none(), Facts.Facts.crit(s), name, Facts.Facts.list(s)), u2 => RWorks.Work.pass(RKnown.Known.none(), Facts.Facts.crit(s), name, Facts.Facts.list(s))))) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}
+    %Equal.sym(Maybe<&2, RWorks.Plan>, Works.Work.offer(s, name, a), Some{RWorks.Plan{st, x}}, ho): {Works.Work.cast(s, name, RWorks.Work.follow.or(_, u => RWorks.Work.follow.or(RWorks.Work.follow(RKnown.Known.none(), Facts.Facts.crit(s), name, Facts.Facts.list(s)), u2 => RWorks.Work.pass(RKnown.Known.none(), Facts.Facts.crit(s), name, Facts.Facts.list(s))))) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}
     %Equal.sym(Bool, Facts.Facts.cast(s, name, st), False{}, hc): {Shared.Bool.when(Facts.Facts(), _, u => s, u => Facts.Facts.add(s, Types.Fact.Vote{name, st, x})) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}
     {==})
 

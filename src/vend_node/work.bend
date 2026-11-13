@@ -6,6 +6,7 @@ import ./facts.bend as Facts
 import ./lines.bend as Lines
 import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
+import ./run/known.bend as RKnown
 import ./run/lines.bend as RLines
 import ./run/work.bend as RWorks
 import ./shared/lists.bend as Lists
@@ -39,12 +40,12 @@ def Pins.for(
   m: Nat,
   r: Spec.Request
 ) -> Types.Pins:
-  RWorks.Pins.for(Facts.Facts.crit(s), c, vs, m, r)
+  RWorks.Pins.for(RKnown.Known.none(), Facts.Facts.crit(s), c, vs, m, r)
 
 # the era that the node pins for the line c: the newest version of its store
 # that it holds
 def Era.now(+s: Facts.Facts(), c: Ledgers.Line) -> Nat:
-  RWorks.Era.now(Facts.Facts.crit(s), c)
+  RWorks.Era.now(RKnown.Known.none(), Facts.Facts.crit(s), c)
 
 # The next ballot
 # ---------------
@@ -55,12 +56,12 @@ def Work.rule(
   +c: Ledgers.Line,
   m: Maybe<&2, RLines.State>
 ) -> Maybe<&2, RLines.Rule>:
-  RWorks.Work.rule(Facts.Facts.crit(s), c, m)
+  RWorks.Work.rule(RKnown.Known.none(), Facts.Facts.crit(s), c, m)
 
 # the next slot of the line c, when the node name is one of the nodes that
 # decide it
 def Work.open(+s: Facts.Facts(), +name: String, +c: Ledgers.Line) -> Maybe<&2, RWorks.Open>:
-  RWorks.Work.open(Facts.Facts.crit(s), name, c)
+  RWorks.Work.open(RKnown.Known.none(), Facts.Facts.crit(s), name, c)
 
 # the vote of the node name for the ask a at the next slot m of the line c:
 # when it is its turn, the votes of the rounds before leave it free, and the
@@ -72,7 +73,7 @@ def Work.offer.at(
   +a: Types.Ask,
   m: Maybe<&2, RWorks.Open>
 ) -> Maybe<&2, RWorks.Plan>:
-  RWorks.Work.offer.at(Facts.Facts.crit(s), name, c, a, m)
+  RWorks.Work.offer.at(RKnown.Known.none(), Facts.Facts.crit(s), name, c, a, m)
 
 # the vote of the node name for the ask a, on the line m that it is for
 def Work.offer.on(
@@ -81,15 +82,15 @@ def Work.offer.on(
   +a: Types.Ask,
   m: Maybe<&2, Ledgers.Line>
 ) -> Maybe<&2, RWorks.Plan>:
-  RWorks.Work.offer.on(Facts.Facts.crit(s), name, a, m)
+  RWorks.Work.offer.on(RKnown.Known.none(), Facts.Facts.crit(s), name, a, m)
 
 # the vote that the node name may cast for the ask a
 def Work.offer(+s: Facts.Facts(), +name: String, +a: Types.Ask) -> Maybe<&2, RWorks.Plan>:
-  RWorks.Work.offer(Facts.Facts.crit(s), name, a)
+  RWorks.Work.offer(RKnown.Known.none(), Facts.Facts.crit(s), name, a)
 
 # the asks among fs that the node name may vote for
 def Work.ready(+s: Facts.Facts(), +name: String, fs: List<&2, Types.Fact>) -> List<&2, Types.Ask>:
-  RWorks.Work.ready(Facts.Facts.crit(s), name, fs)
+  RWorks.Work.ready(RKnown.Known.none(), Facts.Facts.crit(s), name, fs)
 
 # the vote of the node name for the ask m, if any
 def Work.propose.of(
@@ -97,18 +98,18 @@ def Work.propose.of(
   +name: String,
   m: Maybe<&2, Types.Ask>
 ) -> Maybe<&2, RWorks.Plan>:
-  RWorks.Work.propose.of(Facts.Facts.crit(s), name, m)
+  RWorks.Work.propose.of(RKnown.Known.none(), Facts.Facts.crit(s), name, m)
 
 # the vote that the node name proposes: for the ask that it took in last,
 # among those that it may vote for
 def Work.propose(+s: Facts.Facts(), +name: String) -> Maybe<&2, RWorks.Plan>:
-  RWorks.Work.propose(Facts.Facts.crit(s), name)
+  RWorks.Work.propose(RKnown.Known.none(), Facts.Facts.crit(s), name)
 
 # the ballot that the node name casts next: the vote that it proposes, else
 # a vote at a slot that it holds a ballot for, else a pass at a slot that
 # waits
 def Work.plan(+s: Facts.Facts(), +name: String) -> Maybe<&2, RWorks.Plan>:
-  RWorks.Work.plan(Facts.Facts.crit(s), name)
+  RWorks.Work.plan(RKnown.Known.none(), Facts.Facts.crit(s), name)
 
 # the facts s with the ballot m, if any, of the node name: unless s holds a
 # ballot of the node with the same number
@@ -170,6 +171,6 @@ def Work.does_crit(
   +s: Facts.Facts(),
   +name: String
 ) -> {
-  Facts.Facts.crit(Work.does(s, name)) == RWorks.Work.does(Facts.Facts.crit(s), name): RFacts.Plain()
+  Facts.Facts.crit(Work.does(s, name)) == RWorks.Work.does(RKnown.Known.none(), Facts.Facts.crit(s), name): RFacts.Plain()
 }:
   Work.cast_crit(s, name, Work.plan(s, name))

@@ -5,6 +5,7 @@ import ./facts.bend as Facts
 import ./lines.bend as Lines
 import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
+import ./run/known.bend as RKnown
 import ./run/files.bend as Files
 import ./run/lines.bend as RLines
 import ./shared/files.bend as FileLaws
@@ -32,7 +33,7 @@ import ./types.bend as Types
 
 # the point w is reached in one hop from version k of the line c
 def Way.hop(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat, w: Spec.Point) -> Bool:
-  RContents.Way.hop(Facts.Facts.crit(s), c, k, w)
+  RContents.Way.hop(RKnown.Known.none(), Facts.Facts.crit(s), c, k, w)
 
 # ws is a way from version k of the line c back to the point a
 def Way.ok(
@@ -42,7 +43,7 @@ def Way.ok(
   +c: Ledgers.Line,
   +k: Nat
 ) -> Bool:
-  RContents.Way.ok(Facts.Facts.crit(s), a, ws, c, k)
+  RContents.Way.ok(RKnown.Known.none(), Facts.Facts.crit(s), a, ws, c, k)
 
 # the ways ours and theirs lead to the base m, if any, from version j of the
 # line c and from the point t
@@ -55,19 +56,19 @@ def Merge.fits.of(
   theirs: List<&2, Spec.Point>,
   t: Spec.Point
 ) -> Bool:
-  RContents.Merge.fits.of(Facts.Facts.crit(s), c, j, m, ours, theirs, t)
+  RContents.Merge.fits.of(RKnown.Known.none(), Facts.Facts.crit(s), c, j, m, ours, theirs, t)
 
 # the entry e, version 1+j of the line c, pins a base that both merged
 # versions come from, or none
 def Merge.fits(+s: Facts.Facts(), +c: Ledgers.Line, +j: Nat, +e: Types.Entry) -> Bool:
-  RContents.Merge.fits(Facts.Facts.crit(s), c, j, e)
+  RContents.Merge.fits(RKnown.Known.none(), Facts.Facts.crit(s), c, j, e)
 
 # The content of a version
 # ------------------------
 
 # the merge that the entry m, if any, is fits
 def Entry.fits(+s: Facts.Facts(), +c: Ledgers.Line, +j: Nat, m: Maybe<&2, Types.Entry>) -> Bool:
-  RContents.Entry.fits(Facts.Facts.crit(s), c, j, m)
+  RContents.Entry.fits(RKnown.Known.none(), Facts.Facts.crit(s), c, j, m)
 
 # the content of version k of the line c in the facts s, read through at most
 # fuel versions (nothing while the node does not hold enough)
@@ -77,11 +78,11 @@ def Content.at(
   +c: Ledgers.Line,
   +k: Nat
 ) -> Maybe<&2, Files.Files()>:
-  RContents.Content.at(fuel, Facts.Facts.crit(s), c, k)
+  RContents.Content.at(fuel, RKnown.Known.none(), Facts.Facts.crit(s), c, k)
 
 # the content of version k of the line c in the facts s
 def Content.of(+s: Facts.Facts(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Files.Files()>:
-  RContents.Content.of(Facts.Facts.crit(s), c, k)
+  RContents.Content.of(RKnown.Known.none(), Facts.Facts.crit(s), c, k)
 
 # the words of the resource at the path p in version k of the line c
 def Content.read(
@@ -90,7 +91,7 @@ def Content.read(
   +k: Nat,
   +p: String
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  RContents.Content.read(Facts.Facts.crit(s), c, k, p)
+  RContents.Content.read(RKnown.Known.none(), Facts.Facts.crit(s), c, k, p)
 
 # Laws of well-formed content
 # ---------------------------
@@ -268,7 +269,7 @@ def Content.at_sound(
   +s: RFacts.Plain(),
   +c: Ledgers.Line,
   +k: Nat
-) -> {Content.sound(RContents.Content.at(fuel, s, c, k)) == True{}: Bool}:
+) -> {Content.sound(RContents.Content.at(fuel, RKnown.Known.none(), s, c, k)) == True{}: Bool}:
   match fuel k:
     case 0n k:
       {==}
@@ -277,16 +278,18 @@ def Content.at_sound(
     case 1n+f 1n+j:
       Content.next_sound(
         RLines.Line.at(s, c, 1n+j),
-        RContents.Entry.fits(s, c, j, RLines.Line.at(s, c, 1n+j)),
-        RContents.Content.at(f, s, c, j),
+        RContents.Entry.fits(RKnown.Known.none(), s, c, j, RLines.Line.at(s, c, 1n+j)),
+        RContents.Content.at(f, RKnown.Known.none(), s, c, j),
         RContents.Content.at(
           f,
+          RKnown.Known.none(),
           s,
           Spec.Point.line(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j))),
           Spec.Point.n(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)))
         ),
         RContents.Content.at(
           f,
+          RKnown.Known.none(),
           s,
           Spec.Point.line(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))),
           Spec.Point.n(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j)))

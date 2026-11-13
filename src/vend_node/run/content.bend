@@ -2,6 +2,7 @@ import Base
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ./facts.bend as Facts
+import ./known.bend as Known
 import ./lines.bend as Lines
 import ./files.bend as Files
 import ../shared/format.bend as Formats
@@ -85,11 +86,12 @@ def Way.hop.of(c: Ledgers.Line, k: Nat, +w: Spec.Point, m: Maybe<&2, Types.Entry
       )
 
 # the point w is reached in one hop from version k of the line c
-def Way.hop(+s: Facts.Plain(), +c: Ledgers.Line, +k: Nat, w: Spec.Point) -> Bool:
-  Way.hop.of(c, k, w, Lines.Line.at(s, c, k))
+def Way.hop(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat, w: Spec.Point) -> Bool:
+  Way.hop.of(c, k, w, Known.Known.at(kn, s, c, k))
 
 # ws is a way from version k of the line c back to the point a
 def Way.ok(
+  +kn: Known.Known(),
   +s: Facts.Plain(),
   +a: Spec.Point,
   ws: List<&2, Spec.Point>,
@@ -100,11 +102,12 @@ def Way.ok(
     case Nil{}:
       Spec.Point.is_eq(a, Spec.Point{c, k})
     case Con{+w, rest}:
-      Bool.and(Way.hop(s, c, k, w), Way.ok(s, a, rest, Spec.Point.line(w), Spec.Point.n(w)))
+      Bool.and(Way.hop(kn, s, c, k, w), Way.ok(kn, s, a, rest, Spec.Point.line(w), Spec.Point.n(w)))
 
 # the ways ours and theirs lead to the base m, if any, from version j of the
 # line c and from the point t
 def Merge.fits.of(
+  +kn: Known.Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   +j: Nat,
@@ -118,7 +121,7 @@ def Merge.fits.of(
       True{}
     case Some{+a}:
       +t = t
-      Bool.and(Way.ok(s, a, ours, c, j), Way.ok(s, a, theirs, Spec.Point.line(t), Spec.Point.n(t)))
+      Bool.and(Way.ok(kn, s, a, ours, c, j), Way.ok(kn, s, a, theirs, Spec.Point.line(t), Spec.Point.n(t)))
 
 # the ways that the entry e pins to its base
 def Entry.ours(e: Types.Entry) -> List<&2, Spec.Point>:
@@ -134,8 +137,8 @@ def Entry.theirs(e: Types.Entry) -> List<&2, Spec.Point>:
 
 # the entry e, version 1+j of the line c, pins a base that both merged
 # versions come from, or none
-def Merge.fits(+s: Facts.Plain(), +c: Ledgers.Line, +j: Nat, +e: Types.Entry) -> Bool:
-  Merge.fits.of(s, c, j, Entry.base(e), Entry.ours(e), Entry.theirs(e), Point.or(c, Entry.takes(e)))
+def Merge.fits(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +j: Nat, +e: Types.Entry) -> Bool:
+  Merge.fits.of(kn, s, c, j, Entry.base(e), Entry.ours(e), Entry.theirs(e), Point.or(c, Entry.takes(e)))
 
 # Merges
 # ------
@@ -302,17 +305,18 @@ def Entry.based(c: Ledgers.Line, m: Maybe<&2, Types.Entry>) -> Spec.Point:
       Point.or(c, Entry.base(e))
 
 # the merge that the entry m, if any, is fits
-def Entry.fits(+s: Facts.Plain(), +c: Ledgers.Line, +j: Nat, m: Maybe<&2, Types.Entry>) -> Bool:
+def Entry.fits(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +j: Nat, m: Maybe<&2, Types.Entry>) -> Bool:
   match m:
     case None{}:
       False{}
     case Some{e}:
-      Merge.fits(s, c, j, e)
+      Merge.fits(kn, s, c, j, e)
 
 # the content of version k of the line c in the facts s, read through at most
 # fuel versions (nothing while the node does not hold enough)
 def Content.at(
   +fuel: Nat,
+  +kn: Known.Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   +k: Nat
@@ -321,22 +325,22 @@ def Content.at(
     case 0n _:
       None{}
     case 1n+f 0n:
-      Content.first(Lines.Line.at(s, c, 0n))
+      Content.first(Known.Known.at(kn, s, c, 0n))
     case 1n+f 1n+j:
-      +e = Lines.Line.at(s, c, 1n+j)
+      +e = Known.Known.at(kn, s, c, 1n+j)
       +t = Entry.taken(c, e)
       +a = Entry.based(c, e)
       Content.next(
         e,
-        Entry.fits(s, c, j, e),
-        Content.at(f, s, c, j),
-        Content.at(f, s, Spec.Point.line(t), Spec.Point.n(t)),
-        Content.at(f, s, Spec.Point.line(a), Spec.Point.n(a))
+        Entry.fits(kn, s, c, j, e),
+        Content.at(f, kn, s, c, j),
+        Content.at(f, kn, s, Spec.Point.line(t), Spec.Point.n(t)),
+        Content.at(f, kn, s, Spec.Point.line(a), Spec.Point.n(a))
       )
 
 # the content of version k of the line c in the facts s
-def Content.of(+s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Files.Files()>:
-  Content.at(Facts.Facts.fuel(s), s, c, k)
+def Content.of(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Files.Files()>:
+  Content.at(Facts.Facts.fuel(s), kn, s, c, k)
 
 # the words at the path p of the content m
 def Content.get(m: Maybe<&2, Files.Files()>, +p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
@@ -348,9 +352,10 @@ def Content.get(m: Maybe<&2, Files.Files()>, +p: String) -> Maybe<&2, Maybe<&2, 
 
 # the words of the resource at the path p in version k of the line c
 def Content.read(
+  +kn: Known.Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   +k: Nat,
   +p: String
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  Content.get(Content.of(s, c, k), p)
+  Content.get(Content.of(kn, s, c, k), p)

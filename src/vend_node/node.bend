@@ -7,6 +7,7 @@ import ./codes.bend as Coded
 import ./run/answers.bend as Answers
 import ./run/content.bend as Contents
 import ./run/facts.bend as Facts
+import ./run/known.bend as Known
 import ./run/parts.bend as Parts
 import ./run/set.bend as Checks
 import ./run/work.bend as Works
@@ -126,13 +127,18 @@ def Needs.put(
       rest
 
 # the hashes of the parts that the node name needs: what it reads at each of
-# the mounted resources ms
-def Needs.of(+s: Facts.Plain(), +name: String, ms: List<&2, Mounted>) -> List<&2, Hashes.Hash>:
+# the mounted resources ms, through the table kn of known states
+def Needs.of(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String,
+  ms: List<&2, Mounted>
+) -> List<&2, Hashes.Hash>:
   match ms:
     case Nil{}:
       []
     case Con{Mounted{a, b, p}, rest}:
-      Needs.put(Answers.View.at(s, name, b, p), Needs.of(s, name, rest))
+      Needs.put(Answers.View.at(kn, s, name, b, p), Needs.of(kn, s, name, rest))
 
 # the id of the request by which the node name records what the resource at
 # the address a held
@@ -197,7 +203,7 @@ def Raw.works(
     case True{}:
       Raw{name, ws, ms, True{}, fs, ps}
     case False{}:
-      Raw{name, ws, ms, False{}, Works.Work.does(fs, name), ps}
+      Raw{name, ws, ms, False{}, Works.Work.does(Known.Known.none(), fs, name), ps}
 
 # the state r after the deed a
 def Raw.does(r: Raw, a: Act) -> Raw:
@@ -244,7 +250,7 @@ def Raw.does(r: Raw, a: Act) -> Raw:
     case Raw{name, ws, ms, st, fs, ps} Act.Work{}:
       Raw.works(name, ws, ms, st, fs, ps)
     case Raw{+name, ws, +ms, st, +fs, ps} Act.Drop{}:
-      Raw{name, ws, ms, st, fs, Parts.Parts.only(ps, Needs.of(fs, name, ms))}
+      Raw{name, ws, ms, st, fs, Parts.Parts.only(ps, Needs.of(Known.Known.none(), fs, name, ms))}
     case Raw{name, +ws, +ms, st, fs, ps} Act.Stop{f}:
       Raw{
         name,
@@ -279,16 +285,16 @@ def Raw.holds(r: Raw, c: Types.Change) -> Bool:
 # the words of the resource at the path p in version k of the line c, as the
 # state r reads them
 def Raw.read(r: Raw, c: Ledgers.Line, k: Nat, p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  Contents.Content.read(Raw.facts(r), c, k, p)
+  Contents.Content.read(Known.Known.none(), Raw.facts(r), c, k, p)
 
 # the words of the resource at the path p of the branch b, as the state r
 # shows them to the writer w
 def Raw.view(r: Raw, w: String, b: Ledgers.Line, p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  Answers.View.at(Raw.facts(r), w, b, p)
+  Answers.View.at(Known.Known.none(), Raw.facts(r), w, b, p)
 
 # the reply of the state r to the question q
 def Raw.answer(r: Raw, q: Spec.Question) -> Maybe<&2, Spec.Reply>:
-  Answers.Answer.of(Raw.facts(r), q)
+  Answers.Answer.of(Known.Known.none(), Raw.facts(r), q)
 
 # the voters that the state r proves to be liars
 def Raw.liars(r: Raw) -> List<&2, String>:

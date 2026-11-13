@@ -18,6 +18,7 @@ import ./owners.bend as Owners
 import ./reads.bend as Reads
 import ./run/answers.bend as RAnswers
 import ./run/facts.bend as RFacts
+import ./run/known.bend as RKnown
 import ./run/parts.bend as RParts
 import ./run/lines.bend as RLines
 import ./shared/format.bend as Formats
@@ -566,7 +567,7 @@ def Node.works_sound(
         fs,
         ps,
         Works.Work.does(Node.set(name, fs, ps, ok), name),
-        RWorks.Work.does(fs, name),
+        RWorks.Work.does(RKnown.Known.none(), fs, name),
         ps,
         Works.Work.does_crit(Node.set(name, fs, ps, ok), name),
         Node.parts_wf(name, fs, ps, ok),
@@ -641,10 +642,10 @@ def Node.does_sound(
       +ok => Node.join(
         name,
         fs,
-        RParts.Parts.only(ps, Nodes.Needs.of(fs, name, ms)),
+        RParts.Parts.only(ps, Nodes.Needs.of(RKnown.Known.none(), fs, name, ms)),
         Node.set(name, fs, ps, ok),
         {==},
-        Parts.Plain.only_wf(ps, Nodes.Needs.of(fs, name, ms)),
+        Parts.Plain.only_wf(ps, Nodes.Needs.of(RKnown.Known.none(), fs, name, ms)),
         Node.sound(name, fs, ps, ok),
         Node.free(name, fs, ps, ok)
       )
@@ -1755,7 +1756,7 @@ def Node.asks_works_facts(
       Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)
     )((
         %Facts.Facts.ask_crit(name, Node.set(name, fs, ps, ok), i, r): {
-          Facts.Facts.crit(Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)) == RWorks.Work.does(_, name): RFacts.Plain()
+          Facts.Facts.crit(Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)) == RWorks.Work.does(RKnown.Known.none(), _, name): RFacts.Plain()
         }
         Works.Work.does_crit(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)))
   )
