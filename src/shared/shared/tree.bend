@@ -25857,7 +25857,18 @@ def Pieces.after_keys(+k: List<&2, U32>, +v: List<&2, U32>, ys: List<&2, Piece>)
 def Pieces.binds_below_tail(xs: List<&2, Piece>, +y: Piece, +ys: List<&2, Piece>) -> {Pieces.binds_below(xs, y <> ys) == True{}: Bool} -> {
   Pieces.binds_below(xs, ys) == True{}: Bool
 }:
-  ?TODO
+  match xs:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{+k, v}, +rest}:
+      +h => Shared.Bool.and_both(
+        Pieces.keys_after(k, ys),
+        Pieces.binds_below(rest, ys)
+      )(Pieces.keys_after_tail(k, y, ys)(Shared.Bool.and_true_left(Pieces.keys_after(k, y <> ys), Pieces.binds_below(rest, y <> ys))(h)))(
+        Pieces.binds_below_tail(rest, y, ys)(Shared.Bool.and_true_right(Pieces.keys_after(k, y <> ys), Pieces.binds_below(rest, y <> ys))(h))
+      )
+    case Con{Piece.Sub{h2, u, lo, hi}, +rest}:
+      h => Pieces.binds_below_tail(rest, y, ys)(h)
 
 # binding keys are below those of no piece
 def Pieces.binds_below_nil(xs: List<&2, Piece>) -> {Pieces.binds_below(xs, []) == True{}: Bool}:
