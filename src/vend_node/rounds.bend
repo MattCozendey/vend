@@ -8,6 +8,7 @@ import ./lines.bend as Lines
 import ./run/facts.bend as RFacts
 import ./run/lines.bend as RLines
 import ./run/rounds.bend as RRounds
+import ./safety.bend as Safeties
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
 import ./types.bend as Types
@@ -2514,7 +2515,7 @@ def Round.won_one(
   +p1: Types.Pick,
   +p2: Types.Pick
 ) -> Round.Won(bs, ds, k, r1, p1) -> Round.Won(bs, ds, k, r2, p2) -> {p1 == p2: Types.Pick}:
-  ?TODO
+  Safeties.Safety.won_one(bs, ds, k, r1, r2, p1, p2)
 
 # Slot.decided_grows, with the pick that is decided among the wider ballots
 def Slot.decided_grows.fin(
@@ -3337,6 +3338,1147 @@ def Slot.Alone(
         }
     )
 
+# Alone: the chain of the node
+# ----------------------------
+
+# the turn of each number is of the node that decides alone
+def Turn.go_one(k: Nat, +name: String) -> {RRounds.Turn.go(k, name, [], name, []) == name: String}:
+  match k:
+    case 0n:
+      {==}
+    case 1n+j:
+      Turn.go_one(j, name)
+
+# the promise that a node that leads gives itself, when it cast no vote that
+# counts before
+def Promise.read_own(
+  +bs: List<&2, RRounds.Ballot>,
+  +name: String,
+  +r: Nat,
+  +t: Nat,
+  +fl: Nat,
+  +basis: List<&2, Types.Ref>,
+  +ms: List<&2, RRounds.Mind>,
+  es: {RRounds.Chain.seen(bs, name, t) == Some{RRounds.Seen{fl, []}}: Maybe<&2, RRounds.Seen>}
+) -> {RRounds.Promise.read(RRounds.Lead{bs, r, name, t, basis, ms}, name) == RRounds.Promise.Held{[]}: RRounds.Promise}:
+  %Equal.sym(Bool, String.eq(name, name), True{}, Texts.String.eq_refl(name)): {
+    Shared.Bool.when(
+      RRounds.Promise,
+      _,
+      u => RRounds.Promise.own(RRounds.Chain.seen(bs, name, t)),
+      u => RRounds.Promise.of(r, RRounds.Chain.seen(bs, name, RRounds.Basis.find(basis, name)))
+    )
+      == RRounds.Promise.Held{[]}: RRounds.Promise
+  }
+  %Equal.sym(Maybe<&2, RRounds.Seen>, RRounds.Chain.seen(bs, name, t), Some{RRounds.Seen{fl, []}}, es): {RRounds.Promise.own(_) == RRounds.Promise.Held{[]}: RRounds.Promise}
+  {==}
+
+# the lead of a node that decides alone is sound, when it cast no vote that
+# counts before
+def Lead.mind_own(
+  +bs: List<&2, RRounds.Ballot>,
+  +name: String,
+  +r: Nat,
+  +t: Nat,
+  +fl: Nat,
+  +p: Types.Pick,
+  +basis: List<&2, Types.Ref>,
+  +ms: List<&2, RRounds.Mind>,
+  es: {RRounds.Chain.seen(bs, name, t) == Some{RRounds.Seen{fl, []}}: Maybe<&2, RRounds.Seen>}
+) -> {RRounds.Lead.mind.by(p, RRounds.Lead{bs, r, name, t, basis, ms}, [name]) == RRounds.Mind.Sound{p}: RRounds.Mind}:
+  %Equal.sym(
+    RRounds.Promise,
+    RRounds.Promise.read(RRounds.Lead{bs, r, name, t, basis, ms}, name),
+    RRounds.Promise.Held{[]},
+    Promise.read_own(bs, name, r, t, fl, basis, ms, es)
+  ): {
+    RRounds.Lead.mind.of(
+      p,
+      RRounds.Force.join(RRounds.Promise.force(ms, _), RRounds.Force.Free{}),
+      Lists.Nat.most(1n, Shared.Nat.add_if(RRounds.Promise.is_held(_), 0n))
+    )
+      == RRounds.Mind.Sound{p}: RRounds.Mind
+  }
+  {==}
+
+# the round of a vote that counts, of a node that decides alone and cast no
+# vote that counts before, decides its pick
+def Round.won_own(
+  +bs: List<&2, RRounds.Ballot>,
+  +name: String,
+  +k: Nat,
+  +r: Nat,
+  +t: Nat,
+  +fl: Nat,
+  +p: Types.Pick,
+  +basis: List<&2, Types.Ref>,
+  +ev: {RRounds.Vote.of(bs, name, r) == Some{RRounds.Ballot{name, t, Types.Cast.Vote{r, p, basis}}}: Maybe<&2, RRounds.Ballot>},
+  es: {RRounds.Chain.seen(bs, name, t) == Some{RRounds.Seen{fl, []}}: Maybe<&2, RRounds.Seen>}
+) -> Round.Won(bs, [name], k, r, p):
+  %Equal.sym(String, RRounds.Turn.go(Nat.add(k, r), name, [], name, []), name, Turn.go_one(Nat.add(k, r), name)): {
+    RRounds.Round.won(
+      bs,
+      [name],
+      r,
+      RRounds.Lead.mind.at(bs, [name], RRounds.Rounds.minds(bs, [name], k, r), r, _, RRounds.Vote.of(bs, _, r))
+    )
+      == Some{p}: Maybe<&2, Types.Pick>
+  }
+  %Equal.sym(Maybe<&2, RRounds.Ballot>, RRounds.Vote.of(bs, name, r), Some{RRounds.Ballot{name, t, Types.Cast.Vote{r, p, basis}}}, ev): {
+    RRounds.Round.won(
+      bs,
+      [name],
+      r,
+      RRounds.Lead.mind.at(bs, [name], RRounds.Rounds.minds(bs, [name], k, r), r, name, _)
+    )
+      == Some{p}: Maybe<&2, Types.Pick>
+  }
+  %Equal.sym(
+    RRounds.Mind,
+    RRounds.Lead.mind.by(p, RRounds.Lead{bs, r, name, t, basis, RRounds.Rounds.minds(bs, [name], k, r)}, [name]),
+    RRounds.Mind.Sound{p},
+    Lead.mind_own(bs, name, r, t, fl, p, basis, RRounds.Rounds.minds(bs, [name], k, r), es)
+  ): {RRounds.Round.won(bs, [name], r, _) == Some{p}: Maybe<&2, Types.Pick>}
+  %Equal.sym(Maybe<&2, RRounds.Ballot>, RRounds.Vote.of(bs, name, r), Some{RRounds.Ballot{name, t, Types.Cast.Vote{r, p, basis}}}, ev): {
+    Shared.Maybe.when(
+      Types.Pick,
+      Lists.Nat.most(1n, Shared.Nat.add_if(RRounds.Vote.is_for(p, _), 0n)),
+      u => Some{p}
+    )
+      == Some{p}: Maybe<&2, Types.Pick>
+  }
+  %Equal.sym(Bool, Coded.Pick.is_eq(p, p), True{}, Coded.Pick.is_eq_refl(p)): {
+    Shared.Maybe.when(Types.Pick, Lists.Nat.most(1n, Shared.Nat.add_if(_, 0n)), u => Some{p})
+      == Some{p}: Maybe<&2, Types.Pick>
+  }
+  {==}
+
+# Vote.of_counted, once the ballot counts
+def Vote.of_counted.fin(
+  +bs: List<&2, RRounds.Ballot>,
+  +v: String,
+  +r: Nat,
+  +t: Nat,
+  +p: Types.Pick,
+  +basis: List<&2, Types.Ref>,
+  +ha: {RRounds.Ballots.at(bs, v, t) == Some{Types.Cast.Vote{r, p, basis}}: Maybe<&2, Types.Cast>},
+  +hc: {RRounds.Ballot.counts(RRounds.Roll{bs, v, r}, RRounds.Ballot{v, t, Types.Cast.Vote{r, p, basis}}) == True{}: Bool}
+) -> {RRounds.Vote.of(bs, v, r) == Some{RRounds.Ballot{v, t, Types.Cast.Vote{r, p, basis}}}: Maybe<&2, RRounds.Ballot>}:
+  Lists.Maybe.by(
+    RRounds.Ballot,
+    z => {z == Some{RRounds.Ballot{v, t, Types.Cast.Vote{r, p, basis}}}: Maybe<&2, RRounds.Ballot>},
+    RRounds.Vote.of(bs, v, r),
+    en => Empty.absurd(
+      {None{} == Some{RRounds.Ballot{v, t, Types.Cast.Vote{r, p, basis}}}: Maybe<&2, RRounds.Ballot>},
+      Vote.found(bs, bs, v, r, t, Types.Cast.Vote{r, p, basis})(
+        Casts.agreed_in(RRounds.Casts.of(bs, Types.Ref{v, t}), Types.Cast.Vote{r, p, basis})(ha)
+      )(hc)(en)
+    ),
+    +b2 => e2 => Equal.cong(
+      RRounds.Ballot,
+      Maybe<&2, RRounds.Ballot>,
+      z => Some{z},
+      b2,
+      RRounds.Ballot{v, t, Types.Cast.Vote{r, p, basis}},
+      Ballot.counts_one(bs, v, r, b2, RRounds.Ballot{v, t, Types.Cast.Vote{r, p, basis}})(
+        Lists.List.pick_hit(~RRounds.Ballot, ~RRounds.Roll, ~RRounds.Ballot.counts, bs, RRounds.Roll{bs, v, r}, b2)(e2)
+      )(hc)
+    )
+  )
+
+# the vote of a voter in a round that counts is its ballot that casts a vote
+# of the round, where a vote of the round counts
+def Vote.of_counted(
+  +bs: List<&2, RRounds.Ballot>,
+  +v: String,
+  +r: Nat,
+  +t: Nat,
+  +p: Types.Pick,
+  +basis: List<&2, Types.Ref>,
+  +hk: {RRounds.Seen.takes(r, RRounds.Chain.seen(bs, v, t)) == True{}: Bool},
+  +ha: {RRounds.Ballots.at(bs, v, t) == Some{Types.Cast.Vote{r, p, basis}}: Maybe<&2, Types.Cast>}
+) -> {RRounds.Vote.of(bs, v, r) == Some{RRounds.Ballot{v, t, Types.Cast.Vote{r, p, basis}}}: Maybe<&2, RRounds.Ballot>}:
+  Vote.of_counted.fin(
+    bs,
+    v,
+    r,
+    t,
+    p,
+    basis,
+    ha,
+    Shared.Bool.and_both(
+      Bool.and(String.eq(v, v), Nat.is_eq(r, r)),
+      Bool.and(
+        RRounds.Seen.takes(r, RRounds.Chain.seen(bs, v, t)),
+        RRounds.Cast.is(Types.Cast.Vote{r, p, basis}, RRounds.Ballots.at(bs, v, t))
+      )
+    )(
+      Shared.Bool.and_both(String.eq(v, v), Nat.is_eq(r, r))(Texts.String.eq_refl(v))(Shared.Nat.is_eq_refl(r))
+    )(
+      Shared.Bool.and_both(
+        RRounds.Seen.takes(r, RRounds.Chain.seen(bs, v, t)),
+        RRounds.Cast.is(Types.Cast.Vote{r, p, basis}, RRounds.Ballots.at(bs, v, t))
+      )(hk)(Cast.is_of(Types.Cast.Vote{r, p, basis}, RRounds.Ballots.at(bs, v, t), ha))
+    )
+  )
+
+# Chain.quiet, for one more ballot of the node, which casts x after it is
+# seen as m0
+def Chain.quiet.step(
+  m0: RRounds.Seen,
+  x: Types.Cast,
+  +bs: List<&2, RRounds.Ballot>,
+  +name: String,
+  +k: Nat,
+  +j: Nat
+) -> {
+  RRounds.Chain.seen(bs, name, j) == Some{m0}: Maybe<&2, RRounds.Seen>
+} -> {
+  RRounds.Ballots.at(bs, name, j) == Some{x}: Maybe<&2, Types.Cast>
+} -> {
+  RRounds.Seen.votes(m0) == []: List<&2, RRounds.Voted>
+} -> {
+  RRounds.Slot.decided(bs, [name], k) == None{}: Maybe<&2, Types.Pick>
+} -> {RRounds.Seen.votes(RRounds.Seen.step(m0, x)) == []: List<&2, RRounds.Voted>}:
+  match m0 x:
+    case RRounds.Seen{+fl, +vs} Types.Cast.Pass{+r}:
+      es => ea => +ev => hu => Lists.Bool.by(
+        c => {
+          RRounds.Seen.votes(Bool.pick(RRounds.Seen, c, RRounds.Seen{r, vs}, RRounds.Seen{fl, vs}))
+            == []: List<&2, RRounds.Voted>
+        },
+        Nat.is_le(fl, r),
+        et => ev,
+        ef => ev
+      )
+    case RRounds.Seen{+fl, +vs} Types.Cast.Vote{+r, +p, +b}:
+      +es => +ea => +ev => +hu => Lists.Bool.by(
+        c => {
+          RRounds.Seen.votes(
+            Bool.pick(RRounds.Seen, c, RRounds.Seen{1n+r, RRounds.Voted{r, p} <> vs}, RRounds.Seen{fl, vs})
+          )
+            == []: List<&2, RRounds.Voted>
+        },
+        Nat.is_le(fl, r),
+        et => Empty.absurd(
+          {RRounds.Voted{r, p} <> vs == []: List<&2, RRounds.Voted>},
+          Ex.by(
+            Types.Pick,
+            q => {RRounds.Slot.decided(bs, [name], k) == Some{q}: Maybe<&2, Types.Pick>},
+            Empty,
+            Slot.won_decided(bs, [name], k, r, p)(
+              Round.won_own(
+                bs,
+                name,
+                k,
+                r,
+                j,
+                fl,
+                p,
+                b,
+                Vote.of_counted(
+                  bs,
+                  name,
+                  r,
+                  j,
+                  p,
+                  b,
+                  (
+                    %Equal.sym(Maybe<&2, RRounds.Seen>, RRounds.Chain.seen(bs, name, j), Some{RRounds.Seen{fl, vs}}, es): {RRounds.Seen.takes(r, _) == True{}: Bool}
+                    et),
+                  ea
+                ),
+                (
+                  %ev: {RRounds.Chain.seen(bs, name, j) == Some{RRounds.Seen{fl, _}}: Maybe<&2, RRounds.Seen>}
+                  es)
+              )
+            ),
+            q => e => Shared.Maybe.none_ne_some(
+              Types.Pick,
+              q,
+              Equal.trans(
+                Maybe<&2, Types.Pick>,
+                None{},
+                RRounds.Slot.decided(bs, [name], k),
+                Some{q},
+                Equal.sym(Maybe<&2, Types.Pick>, RRounds.Slot.decided(bs, [name], k), None{}, hu),
+                e
+              )
+            )
+          )
+        ),
+        ef => ev
+      )
+
+# no vote of a node that alone decides a slot counts, while the slot is not
+# decided: each such vote is sound, and decides
+def Chain.quiet(
+  t: Nat,
+  +bs: List<&2, RRounds.Ballot>,
+  +name: String,
+  +k: Nat,
+  +m: RRounds.Seen,
+  +hu: {RRounds.Slot.decided(bs, [name], k) == None{}: Maybe<&2, Types.Pick>}
+) -> {RRounds.Chain.seen(bs, name, t) == Some{m}: Maybe<&2, RRounds.Seen>} -> {RRounds.Seen.votes(m) == []: List<&2, RRounds.Voted>}:
+  match t:
+    case 0n:
+      e => (
+        %Shared.Maybe.some_inj(RRounds.Seen, RRounds.Seen{0n, []}, m, e): {RRounds.Seen.votes(_) == []: List<&2, RRounds.Voted>}
+        {==})
+    case 1n++j:
+      Lists.Maybe.by(
+        RRounds.Seen,
+        z => {
+          RRounds.Chain.seen.next(z, RRounds.Ballots.at(bs, name, j)) == Some{m}: Maybe<&2, RRounds.Seen>
+        } -> {RRounds.Seen.votes(m) == []: List<&2, RRounds.Voted>},
+        RRounds.Chain.seen(bs, name, j),
+        en => e => Empty.absurd(
+          {RRounds.Seen.votes(m) == []: List<&2, RRounds.Voted>},
+          Shared.Maybe.none_ne_some(RRounds.Seen, m, e)
+        ),
+        +m0 => +e0 => Lists.Maybe.by(
+          Types.Cast,
+          z => {
+            RRounds.Chain.seen.next(Some{m0}, z) == Some{m}: Maybe<&2, RRounds.Seen>
+          } -> {RRounds.Seen.votes(m) == []: List<&2, RRounds.Voted>},
+          RRounds.Ballots.at(bs, name, j),
+          en2 => e => Empty.absurd(
+            {RRounds.Seen.votes(m) == []: List<&2, RRounds.Voted>},
+            Shared.Maybe.none_ne_some(RRounds.Seen, m, e)
+          ),
+          +x => ea => e => (
+            %Shared.Maybe.some_inj(RRounds.Seen, RRounds.Seen.step(m0, x), m, e): {RRounds.Seen.votes(_) == []: List<&2, RRounds.Voted>}
+            Chain.quiet.step(m0, x, bs, name, k, j)(e0)(ea)(Chain.quiet(j, bs, name, k, m0, hu)(e0))(hu))
+        )
+      )
+
+# no number is above the next number
+def Nat.succ_not_le(a: Nat) -> {Nat.is_le(1n+a, a) == True{}: Bool} -> Empty:
+  match a:
+    case 0n:
+      h => Shared.Bool.false_ne_true(h)
+    case 1n+p:
+      h => Nat.succ_not_le(p)(h)
+
+# the number of a cast among the ballots that g names is at most the
+# greatest number of a ballot
+def Casts.of_turn(
+  bs: List<&2, RRounds.Ballot>,
+  +v: String,
+  +t: Nat,
+  +x: Types.Cast
+) -> {
+  List.contains(~Types.Cast, ~Coded.Cast.is_eq, RRounds.Casts.of(bs, Types.Ref{v, t}), x) == True{}: Bool
+} -> {Nat.is_le(t, Lists.List.peak(~RRounds.Ballot, ~RRounds.Ballot.turn, bs)) == True{}: Bool}:
+  match bs:
+    case Nil{}:
+      h => Empty.absurd({Nat.is_le(t, 0n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case Con{RRounds.Ballot{+w, +u, +y}, +rest}:
+      Lists.Bool.by(
+        b => {
+          List.contains(~Types.Cast, ~Coded.Cast.is_eq, Shared.Maybe.cons(Types.Cast, Shared.Maybe.when(Types.Cast, b, z => Some{y}), RRounds.Casts.of(rest, Types.Ref{v, t})), x) == True{}: Bool
+        } -> {Nat.is_le(t, Nat.max(u, Lists.List.peak(~RRounds.Ballot, ~RRounds.Ballot.turn, rest))) == True{}: Bool},
+        Bool.and(String.eq(w, v), Nat.is_eq(u, t)),
+        et => h => (
+          %Shared.Nat.is_eq_sound(u, t)(Shared.Bool.and_true_right(String.eq(w, v), Nat.is_eq(u, t))(et)): {Nat.is_le(_, Nat.max(u, Lists.List.peak(~RRounds.Ballot, ~RRounds.Ballot.turn, rest))) == True{}: Bool}
+          Lists.Nat.le_max_left(u, Lists.List.peak(~RRounds.Ballot, ~RRounds.Ballot.turn, rest))),
+        ef => h => Shared.Nat.le_trans(
+          t,
+          Lists.List.peak(~RRounds.Ballot, ~RRounds.Ballot.turn, rest),
+          Nat.max(u, Lists.List.peak(~RRounds.Ballot, ~RRounds.Ballot.turn, rest))
+        )(Casts.of_turn(rest, v, t, x)(h))(Lists.Nat.le_max_right(u, Lists.List.peak(~RRounds.Ballot, ~RRounds.Ballot.turn, rest)))
+      )
+
+# the ballots hold no ballot with a number above each of their numbers
+def Ballots.at_past(
+  +bs: List<&2, RRounds.Ballot>,
+  +v: String,
+  +t: Nat
+) -> {Nat.is_le(RRounds.Turns.count(bs), t) == True{}: Bool} -> {RRounds.Ballots.at(bs, v, t) == None{}: Maybe<&2, Types.Cast>}:
+  h => Lists.Maybe.by(
+    Types.Cast,
+    z => {z == None{}: Maybe<&2, Types.Cast>},
+    RRounds.Ballots.at(bs, v, t),
+    en => {==},
+    +x => ex => Empty.absurd(
+      {Some{x} == None{}: Maybe<&2, Types.Cast>},
+      Nat.succ_not_le(Lists.List.peak(~RRounds.Ballot, ~RRounds.Ballot.turn, bs))(
+        Shared.Nat.le_trans(
+          1n+Lists.List.peak(~RRounds.Ballot, ~RRounds.Ballot.turn, bs),
+          t,
+          Lists.List.peak(~RRounds.Ballot, ~RRounds.Ballot.turn, bs)
+        )(h)(Casts.of_turn(bs, v, t, x)(Casts.agreed_in(RRounds.Casts.of(bs, Types.Ref{v, t}), x)(ex)))
+      )
+    )
+  )
+
+# the ballots of the voter v are held among bs as far as m: each one before,
+# and not the one of its number
+def Reach.Held(bs: List<&2, RRounds.Ballot>, v: String, m: RRounds.Reach) -> Type:
+  match m:
+    case RRounds.Reach{t, sn}:
+      {RRounds.Chain.seen(bs, v, t) == Some{sn}: Maybe<&2, RRounds.Seen>}
+        & {RRounds.Ballots.at(bs, v, t) == None{}: Maybe<&2, Types.Cast>}
+
+# Chain.reach_held, from the number t on
+def Chain.reach_held.go(
+  fuel: Nat,
+  x: Maybe<&2, Types.Cast>,
+  +bs: List<&2, RRounds.Ballot>,
+  +v: String,
+  +t: Nat,
+  +m: RRounds.Seen
+) -> {
+  RRounds.Ballots.at(bs, v, t) == x: Maybe<&2, Types.Cast>
+} -> {
+  RRounds.Chain.seen(bs, v, t) == Some{m}: Maybe<&2, RRounds.Seen>
+} -> {
+  Nat.is_le(RRounds.Turns.count(bs), Nat.add(fuel, t)) == True{}: Bool
+} -> Reach.Held(bs, v, RRounds.Chain.reach.go(fuel, bs, v, t, m, x)):
+  match fuel x:
+    case 0n None{}:
+      ex => es => eb => (es, ex)
+    case 0n Some{c}:
+      ex => es => eb => (es, Ballots.at_past(bs, v, t)(eb))
+    case 1n++f None{}:
+      ex => es => eb => (es, ex)
+    case 1n++f Some{+c}:
+      +ex => +es => eb => Chain.reach_held.go(
+        f,
+        RRounds.Ballots.at(bs, v, 1n+t),
+        bs,
+        v,
+        1n+t,
+        RRounds.Seen.step(m, c)
+      )({==})((
+          %Equal.sym(Maybe<&2, RRounds.Seen>, RRounds.Chain.seen(bs, v, t), Some{m}, es): {RRounds.Chain.seen.next(_, RRounds.Ballots.at(bs, v, t)) == Some{RRounds.Seen.step(m, c)}: Maybe<&2, RRounds.Seen>}
+          %Equal.sym(Maybe<&2, Types.Cast>, RRounds.Ballots.at(bs, v, t), Some{c}, ex): {RRounds.Chain.seen.next(Some{m}, _) == Some{RRounds.Seen.step(m, c)}: Maybe<&2, RRounds.Seen>}
+          {==}))((
+          %Equal.sym(Nat, Nat.add(f, 1n+t), 1n+Nat.add(f, t), Shared.Nat.add_succ(f, t)): {Nat.is_le(RRounds.Turns.count(bs), _) == True{}: Bool}
+          eb))
+
+# the ballots of a voter are held as far as Chain.reach says
+def Chain.reach_held(+bs: List<&2, RRounds.Ballot>, +v: String) -> Reach.Held(bs, v, RRounds.Chain.reach(bs, v)):
+  Chain.reach_held.go(
+    RRounds.Turns.count(bs),
+    RRounds.Ballots.at(bs, v, 0n),
+    bs,
+    v,
+    0n,
+    RRounds.Seen{0n, []}
+  )({==})({==})(Shared.Nat.le_add_first(RRounds.Turns.count(bs), 0n))
+
+# Alone: the facts of the node
+# ----------------------------
+
+# the voter of the fact f ("" for an ask)
+def Fact.voter(f: Types.Fact) -> String:
+  match f:
+    case Types.Fact.Ask{a}:
+      ""
+    case Types.Fact.Vote{v, st, x}:
+      v
+
+# the step of the fact f (broken for an ask)
+def Fact.step(f: Types.Fact) -> Types.Step:
+  match f:
+    case Types.Fact.Ask{a}:
+      Types.Step.Broken{}
+    case Types.Fact.Vote{v, st, x}:
+      st
+
+# what the fact f casts (a pass for an ask)
+def Fact.cast(f: Types.Fact) -> Types.Cast:
+  match f:
+    case Types.Fact.Ask{a}:
+      Types.Cast.Pass{0n}
+    case Types.Fact.Vote{v, st, x}:
+      x
+
+# a voter that a set does not name a liar has one cast for a step in it
+def Slot.one_cast(
+  +s: Facts.Facts(),
+  +v: String,
+  +st: Types.Step,
+  +p: Types.Cast,
+  +q: Types.Cast
+) -> {
+  List.contains(~String, ~String.eq, Facts.Facts.liars(s), v) == False{}: Bool
+} -> {
+  Facts.Facts.has(s, Types.Fact.Vote{v, st, p}) == True{}: Bool
+} -> {Facts.Facts.has(s, Types.Fact.Vote{v, st, q}) == True{}: Bool} -> {p == q: Types.Cast}:
+  hn => hp => hq => Coded.Cast.words_inj(
+    p,
+    q
+  )(
+    Facts.Words.is_eq_sound(
+      Coded.Cast.words(p),
+      Coded.Cast.words(q)
+    )(
+      Facts.Case.true_of(
+        RFacts.Words.is_eq(Coded.Cast.words(p), Coded.Cast.words(q))
+      )(
+        ef => Lists.Bool.clash(
+          Empty,
+          List.contains(~String, ~String.eq, Facts.Facts.liars(s), v),
+          hn,
+          Facts.Facts.liars_in(
+            s,
+            Types.Fact.Vote{v, st, p},
+            Types.Fact.Vote{v, st, q},
+            v,
+            Coded.Step.words(st),
+            Coded.Cast.words(p),
+            Coded.Cast.words(q)
+          )(
+            hp
+          )(hq)({==})({==})(Facts.Case.not_of(RFacts.Words.is_eq(Coded.Cast.words(p), Coded.Cast.words(q)))(ef))
+        )
+      )
+    )
+  )
+
+# a set that does not name a voter a liar, and gives no ballot of its for a
+# number of a slot, holds none
+def Casts.none(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +x: Types.Cast,
+  +hl: {List.contains(~String, ~String.eq, Facts.Facts.liars(s), name) == False{}: Bool},
+  hn: {RRounds.Ballots.at(Slot.ballots(s, c, k), name, t) == None{}: Maybe<&2, Types.Cast>}
+) -> {
+  List.contains(~Types.Cast, ~Coded.Cast.is_eq, RRounds.Casts.of(Slot.ballots(s, c, k), Types.Ref{name, t}), x)
+    == True{}: Bool
+} -> Empty:
+  +hin => Shared.Maybe.none_ne_some(
+    Types.Cast,
+    x,
+    Equal.trans(
+      Maybe<&2, Types.Cast>,
+      None{},
+      RRounds.Ballots.at(Slot.ballots(s, c, k), name, t),
+      Some{x},
+      Equal.sym(Maybe<&2, Types.Cast>, RRounds.Ballots.at(Slot.ballots(s, c, k), name, t), None{}, hn),
+      Casts.agreed(
+        RRounds.Casts.of(Slot.ballots(s, c, k), Types.Ref{name, t}),
+        x,
+        hin,
+        List.holds_of(
+          ~Types.Cast,
+          ~Types.Cast,
+          ~Coded.Cast.is_eq,
+          ~Coded.Cast.is_eq,
+          ~Coded.Cast.laws(),
+          RRounds.Casts.of(Slot.ballots(s, c, k), Types.Ref{name, t}),
+          x,
+          +y => cy => (
+            %Slot.one_cast(s, name, Types.Step.At{c, k, t}, x, y)(hl)(Casts.of_has(s, c, k, name, t, x)(hin))(Casts.of_has(s, c, k, name, t, y)(cy)): {Coded.Cast.is_eq(x, _) == True{}: Bool}
+            Coded.Cast.is_eq_refl(x))
+        )
+      )
+    )
+  )
+
+# Slot.cast_none, for a vote g of the node for the step
+def Slot.cast_none.at(
+  g: Types.Fact,
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +hl: {List.contains(~String, ~String.eq, Facts.Facts.liars(s), name) == False{}: Bool},
+  +hn: {RRounds.Ballots.at(Slot.ballots(s, c, k), name, t) == None{}: Maybe<&2, Types.Cast>}
+) -> {
+  List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), g) == True{}: Bool
+} -> {RFacts.Fact.is_cast(RFacts.Seat{name, Types.Step.At{c, k, t}}, g) == True{}: Bool} -> Empty:
+  match g:
+    case Types.Fact.Ask{a}:
+      cin => h => Shared.Bool.false_ne_true(h)
+    case Types.Fact.Vote{+v, +st2, +x}:
+      cin => +h => Casts.none(s, name, c, k, t, x, hl, hn)(
+        Casts.in_of(Facts.Facts.list(s), c, k, name, t, x)((
+            %Texts.String.eq_sound(v, name)(Shared.Bool.and_true_left(String.eq(v, name), Coded.Step.is_eq(st2, Types.Step.At{c, k, t}))(h)): {List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), Types.Fact.Vote{_, Types.Step.At{c, k, t}, x}) == True{}: Bool}
+            %Coded.Step.is_eq_sound(st2, Types.Step.At{c, k, t})(Shared.Bool.and_true_right(String.eq(v, name), Coded.Step.is_eq(st2, Types.Step.At{c, k, t}))(h)): {List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), Types.Fact.Vote{v, _, x}) == True{}: Bool}
+            cin))
+      )
+
+# Slot.cast_none, with the vote of the node for the step
+def Slot.cast_none.of(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +hl: {List.contains(~String, ~String.eq, Facts.Facts.liars(s), name) == False{}: Bool},
+  +hn: {RRounds.Ballots.at(Slot.ballots(s, c, k), name, t) == None{}: Maybe<&2, Types.Cast>},
+  +g: Types.Fact,
+  w: {
+    List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), g) == True{}: Bool
+  }
+    & {RFacts.Fact.is_cast(RFacts.Seat{name, Types.Step.At{c, k, t}}, g) == True{}: Bool}
+) -> Empty:
+  (cin, h) = w
+  Slot.cast_none.at(g, s, name, c, k, t, hl, hn)(cin)(h)
+
+# a set that does not name a node a liar, and gives no ballot of its for a
+# number of a slot, holds no vote of the node for the step
+def Slot.cast_none(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +hl: {List.contains(~String, ~String.eq, Facts.Facts.liars(s), name) == False{}: Bool},
+  +hn: {RRounds.Ballots.at(Slot.ballots(s, c, k), name, t) == None{}: Maybe<&2, Types.Cast>}
+) -> {Facts.Facts.cast(s, name, Types.Step.At{c, k, t}) == False{}: Bool}:
+  Facts.Case.false_of(
+    Facts.Facts.cast(s, name, Types.Step.At{c, k, t})
+  )(
+    tr => Ex.by(
+      Types.Fact,
+      g => {
+        List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), g) == True{}: Bool
+      }
+        & {RFacts.Fact.is_cast(RFacts.Seat{name, Types.Step.At{c, k, t}}, g) == True{}: Bool},
+      Empty,
+      Lists.List.some_in(
+        ~Types.Fact,
+        ~RFacts.Seat,
+        ~RFacts.Fact.is_cast,
+        ~Coded.Fact.is_eq,
+        ~Coded.Fact.laws(),
+        Facts.Facts.list(s),
+        RFacts.Seat{name, Types.Step.At{c, k, t}}
+      )(tr),
+      +g => w => Slot.cast_none.of(s, name, c, k, t, hl, hn, g, w)
+    )
+  )
+
+# a set that holds a vote of a node for a step holds a vote of the node for
+# the step
+def Slot.cast_has(
+  +s: Facts.Facts(),
+  +name: String,
+  +st: Types.Step,
+  +x: Types.Cast
+) -> {Facts.Facts.has(s, Types.Fact.Vote{name, st, x}) == True{}: Bool} -> {Facts.Facts.cast(s, name, st) == True{}: Bool}:
+  h => Lists.List.in_some(
+    ~Types.Fact,
+    ~RFacts.Seat,
+    ~RFacts.Fact.is_cast,
+    ~Coded.Fact.is_eq,
+    ~Coded.Fact.laws(),
+    Facts.Facts.list(s),
+    RFacts.Seat{name, st},
+    Types.Fact.Vote{name, st, x}
+  )(Facts.Facts.has_in(s, Types.Fact.Vote{name, st, x})(h))(
+    Shared.Bool.and_both(String.eq(name, name), Coded.Step.is_eq(st, st))(Texts.String.eq_refl(name))(Coded.Step.is_eq_refl(st))
+  )
+
+# no ballot that a set holds for a slot is the first vote of a node for a
+# step of the slot
+def Slot.added_new(
+  -Q: Type,
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +z: Types.Cast,
+  +v: String,
+  +u: Nat,
+  +x: Types.Cast,
+  +y: Types.Cast,
+  hc: {Facts.Facts.cast(s, name, Types.Step.At{c, k, t}) == False{}: Bool},
+  hin: {Facts.Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k, u}, x}) == True{}: Bool},
+  +e: {Types.Fact.Vote{v, Types.Step.At{c, k, u}, y} == Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}: Types.Fact}
+) -> Q:
+  Lists.Bool.clash(
+    Q,
+    Facts.Facts.cast(s, name, Types.Step.At{c, k, t}),
+    hc,
+    Slot.cast_has(s, name, Types.Step.At{c, k, t}, x)((
+        %Equal.cong(Types.Fact, String, Fact.voter, Types.Fact.Vote{v, Types.Step.At{c, k, u}, y}, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}, e): {Facts.Facts.has(s, Types.Fact.Vote{_, Types.Step.At{c, k, t}, x}) == True{}: Bool}
+        %Equal.cong(Types.Fact, Types.Step, Fact.step, Types.Fact.Vote{v, Types.Step.At{c, k, u}, y}, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}, e): {Facts.Facts.has(s, Types.Fact.Vote{v, _, x}) == True{}: Bool}
+        hin))
+  )
+
+# Slot.added_grown, for a ballot that the set holds
+def Slot.added_sure(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +z: Types.Cast,
+  +hc: {Facts.Facts.cast(s, name, Types.Step.At{c, k, t}) == False{}: Bool},
+  +v: String,
+  +u: Nat,
+  +x: Types.Cast,
+  +hin: {Facts.Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k, u}, x}) == True{}: Bool}
+) -> {
+  Ballot.sure(
+    Grow{
+      Slot.ballots(s, c, k),
+      Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k)
+    },
+    RRounds.Ballot{v, u, x}
+  )
+    == True{}: Bool
+}:
+  Lists.Bool.by(
+    w => {
+      Bool.or(
+        Bool.not(w),
+        RRounds.Cast.is(
+          x,
+          RRounds.Ballots.at(
+            Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k),
+            v,
+            u
+          )
+        )
+      )
+        == True{}: Bool
+    },
+    RRounds.Cast.is(x, RRounds.Ballots.at(Slot.ballots(s, c, k), v, u)),
+    +et => Cast.is_of(
+      x,
+      RRounds.Ballots.at(
+        Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k),
+        v,
+        u
+      ),
+      Casts.agreed(
+        RRounds.Casts.of(
+          Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k),
+          Types.Ref{v, u}
+        ),
+        x,
+        Casts.has_of(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k, v, u, x)(
+          Facts.Facts.add_keeps(
+            s,
+            Types.Fact.Vote{name, Types.Step.At{c, k, t}, z},
+            Types.Fact.Vote{v, Types.Step.At{c, k, u}, x}
+          )(hin)
+        ),
+        List.holds_of(
+          ~Types.Cast,
+          ~Types.Cast,
+          ~Coded.Cast.is_eq,
+          ~Coded.Cast.is_eq,
+          ~Coded.Cast.laws(),
+          RRounds.Casts.of(
+            Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k),
+            Types.Ref{v, u}
+          ),
+          x,
+          +y => cy => Facts.Facts.add_cases(
+            {Coded.Cast.is_eq(x, y) == True{}: Bool},
+            s,
+            Types.Fact.Vote{name, Types.Step.At{c, k, t}, z},
+            Types.Fact.Vote{v, Types.Step.At{c, k, u}, y},
+            Casts.of_has(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k, v, u, y)(cy),
+            e => Slot.added_new({Coded.Cast.is_eq(x, y) == True{}: Bool}, s, name, c, k, t, z, v, u, x, y, hc, hin, e),
+            hy => Lists.List.holds_in(
+              ~Types.Cast,
+              ~Types.Cast,
+              ~Coded.Cast.is_eq,
+              ~Coded.Cast.is_eq,
+              ~Coded.Cast.laws(),
+              RRounds.Casts.of(Slot.ballots(s, c, k), Types.Ref{v, u}),
+              x,
+              y
+            )(
+              Shared.Bool.and_true_right(
+                Bool.not(List.is_empty(&2, Types.Cast, RRounds.Casts.of(Slot.ballots(s, c, k), Types.Ref{v, u}))),
+                Shared.List.holds(~Types.Cast, ~Types.Cast, ~Coded.Cast.is_eq, RRounds.Casts.of(Slot.ballots(s, c, k), Types.Ref{v, u}), x)
+              )(
+                Shared.List.agreed_holds(
+                  ~Types.Cast,
+                  ~Coded.Cast.is_eq,
+                  ~Coded.Cast.laws(),
+                  RRounds.Casts.of(Slot.ballots(s, c, k), Types.Ref{v, u}),
+                  x
+                )(Cast.is_some(x, RRounds.Ballots.at(Slot.ballots(s, c, k), v, u))(et))
+              )
+            )(Casts.has_of(s, c, k, v, u, y)(hy))
+          )
+        )
+      )
+    ),
+    ef => {==}
+  )
+
+# the ballots of a slot grow with the first vote of a node for a step of it
+def Slot.added_grown(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +z: Types.Cast,
+  +hc: {Facts.Facts.cast(s, name, Types.Step.At{c, k, t}) == False{}: Bool}
+) -> {
+  Ballots.grown(
+    Slot.ballots(s, c, k),
+    Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k)
+  )
+    == True{}: Bool
+}:
+  Slot.grown.go(
+    Facts.Facts.list(s),
+    Slot.ballots(s, c, k),
+    Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k),
+    c,
+    k,
+    +v => +u => +x => hin => Slot.added_sure(
+      s,
+      name,
+      c,
+      k,
+      t,
+      z,
+      hc,
+      v,
+      u,
+      x,
+      Facts.Facts.in_has(s, Types.Fact.Vote{v, Types.Step.At{c, k, u}, x})(hin)
+    )
+  )
+
+# the first vote of a node for a step of a slot is its ballot of the number,
+# among the ballots of the slot with it
+def Slot.added_at(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +z: Types.Cast,
+  +hc: {Facts.Facts.cast(s, name, Types.Step.At{c, k, t}) == False{}: Bool}
+) -> {
+  RRounds.Ballots.at(
+    Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k),
+    name,
+    t
+  )
+    == Some{z}: Maybe<&2, Types.Cast>
+}:
+  Casts.agreed(
+    RRounds.Casts.of(
+      Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k),
+      Types.Ref{name, t}
+    ),
+    z,
+    Casts.has_of(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k, name, t, z)(
+      Facts.Facts.add_has(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z})
+    ),
+    List.holds_of(
+      ~Types.Cast,
+      ~Types.Cast,
+      ~Coded.Cast.is_eq,
+      ~Coded.Cast.is_eq,
+      ~Coded.Cast.laws(),
+      RRounds.Casts.of(
+        Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k),
+        Types.Ref{name, t}
+      ),
+      z,
+      +y => cy => Facts.Facts.add_cases(
+        {Coded.Cast.is_eq(z, y) == True{}: Bool},
+        s,
+        Types.Fact.Vote{name, Types.Step.At{c, k, t}, z},
+        Types.Fact.Vote{name, Types.Step.At{c, k, t}, y},
+        Casts.of_has(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}), c, k, name, t, y)(cy),
+        e => (
+          %Equal.cong(Types.Fact, Types.Cast, Fact.cast, Types.Fact.Vote{name, Types.Step.At{c, k, t}, y}, Types.Fact.Vote{name, Types.Step.At{c, k, t}, z}, e): {Coded.Cast.is_eq(_, y) == True{}: Bool}
+          Coded.Cast.is_eq_refl(y)),
+        hy => Lists.Bool.clash(
+          {Coded.Cast.is_eq(z, y) == True{}: Bool},
+          Facts.Facts.cast(s, name, Types.Step.At{c, k, t}),
+          hc,
+          Slot.cast_has(s, name, Types.Step.At{c, k, t}, y)(hy)
+        )
+      )
+    )
+  )
+
+# Alone: the vote that decides
+# ----------------------------
+
+# Slot.voted_decides, with the round that decides
+def Slot.voted_decides.fin(
+  +bs: List<&2, RRounds.Ballot>,
+  +name: String,
+  +k: Nat,
+  +r: Nat,
+  +pk: Types.Pick,
+  +w: Round.Won(bs, [name], k, r, pk)
+) -> {RRounds.Slot.decided(bs, [name], k) == Some{pk}: Maybe<&2, Types.Pick>}:
+  Ex.by(
+    Types.Pick,
+    p => {RRounds.Slot.decided(bs, [name], k) == Some{p}: Maybe<&2, Types.Pick>},
+    {RRounds.Slot.decided(bs, [name], k) == Some{pk}: Maybe<&2, Types.Pick>},
+    Slot.won_decided(bs, [name], k, r, pk)(w),
+    +p => +hd => Slot.decided_grows.fin(bs, [name], k, r, pk, p, w, hd)
+  )
+
+# a slot that a node decides alone is decided for the pick of its ballot that
+# casts a vote, where a vote of the round counts and it cast none that counts
+# before
+def Slot.voted_decides(
+  +bs: List<&2, RRounds.Ballot>,
+  +name: String,
+  +k: Nat,
+  +t: Nat,
+  +fl: Nat,
+  +r: Nat,
+  +pk: Types.Pick,
+  +b: List<&2, Types.Ref>,
+  +es: {RRounds.Chain.seen(bs, name, t) == Some{RRounds.Seen{fl, []}}: Maybe<&2, RRounds.Seen>},
+  ha: {RRounds.Ballots.at(bs, name, t) == Some{Types.Cast.Vote{r, pk, b}}: Maybe<&2, Types.Cast>},
+  hr: {Nat.is_le(fl, r) == True{}: Bool}
+) -> {RRounds.Slot.decided(bs, [name], k) == Some{pk}: Maybe<&2, Types.Pick>}:
+  Slot.voted_decides.fin(
+    bs,
+    name,
+    k,
+    r,
+    pk,
+    Round.won_own(
+      bs,
+      name,
+      k,
+      r,
+      t,
+      fl,
+      pk,
+      b,
+      Vote.of_counted(
+        bs,
+        name,
+        r,
+        t,
+        pk,
+        b,
+        (
+          %Equal.sym(Maybe<&2, RRounds.Seen>, RRounds.Chain.seen(bs, name, t), Some{RRounds.Seen{fl, []}}, es): {RRounds.Seen.takes(r, _) == True{}: Bool}
+          hr),
+        ha
+      ),
+      es
+    )
+  )
+
+# the first vote of a node for a step of a slot that it decides alone decides
+# its pick, when a vote of its round counts and the node cast none that counts
+# before
+def Slot.added_decides(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +pk: Types.Pick,
+  +t: Nat,
+  +fl: Nat,
+  +r: Nat,
+  +hc: {Facts.Facts.cast(s, name, Types.Step.At{c, k, t}) == False{}: Bool},
+  es: {RRounds.Chain.seen(Slot.ballots(s, c, k), name, t) == Some{RRounds.Seen{fl, []}}: Maybe<&2, RRounds.Seen>},
+  hr: {Nat.is_le(fl, r) == True{}: Bool}
+) -> {Lines.Votes.decided(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, Types.Cast.Vote{r, pk, []}}), c, k, [name]) == Some{pk}: Maybe<&2, Types.Pick>}:
+  Slot.voted_decides(
+    Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, Types.Cast.Vote{r, pk, []}}), c, k),
+    name,
+    k,
+    t,
+    fl,
+    r,
+    pk,
+    [],
+    Chain.seen_grows(
+      Slot.ballots(s, c, k),
+      Slot.ballots(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, Types.Cast.Vote{r, pk, []}}), c, k),
+      name,
+      t,
+      RRounds.Seen{fl, []},
+      Slot.added_grown(s, name, c, k, t, Types.Cast.Vote{r, pk, []}, hc)
+    )(es),
+    Slot.added_at(s, name, c, k, t, Types.Cast.Vote{r, pk, []}, hc),
+    hr
+  )
+
+# the chance of a node that decides alone and cast no vote that counts: a
+# free one, with no basis
+def Slot.chance_own(
+  +bs: List<&2, RRounds.Ballot>,
+  +name: String,
+  +k: Nat,
+  +t: Nat,
+  +fl: Nat,
+  er: {RRounds.Chain.reach(bs, name) == RRounds.Reach{t, RRounds.Seen{fl, []}}: RRounds.Reach},
+  es: {RRounds.Chain.seen(bs, name, t) == Some{RRounds.Seen{fl, []}}: Maybe<&2, RRounds.Seen>}
+) -> {
+  RRounds.Slot.chance(bs, [name], k, name)
+    == Some{RRounds.Chance{t, Nat.max(fl, RRounds.Rounds.top(bs)), [], RRounds.Force.Free{}}}: Maybe<&2, RRounds.Chance>
+}:
+  %Equal.sym(RRounds.Reach, RRounds.Chain.reach(bs, name), RRounds.Reach{t, RRounds.Seen{fl, []}}, er): {
+    RRounds.Slot.chance.at(bs, [name], k, name, _)
+      == Some{RRounds.Chance{t, Nat.max(fl, RRounds.Rounds.top(bs)), [], RRounds.Force.Free{}}}: Maybe<&2, RRounds.Chance>
+  }
+  %Equal.sym(String, RRounds.Turn.go(Nat.add(k, Nat.max(fl, RRounds.Rounds.top(bs))), name, [], name, []), name, Turn.go_one(Nat.add(k, Nat.max(fl, RRounds.Rounds.top(bs))), name)): {
+    Shared.Maybe.when(
+      RRounds.Chance,
+      String.eq(_, name),
+      u => RRounds.Slot.chance.of(
+        RRounds.Lead{bs, Nat.max(fl, RRounds.Rounds.top(bs)), name, t, RRounds.Basis.make(bs, name, Nat.max(fl, RRounds.Rounds.top(bs)), [name]), RRounds.Rounds.minds(bs, [name], k, Nat.max(fl, RRounds.Rounds.top(bs)))},
+        [name]
+      )
+    )
+      == Some{RRounds.Chance{t, Nat.max(fl, RRounds.Rounds.top(bs)), [], RRounds.Force.Free{}}}: Maybe<&2, RRounds.Chance>
+  }
+  %Equal.sym(Bool, String.eq(name, name), True{}, Texts.String.eq_refl(name)): {
+    Shared.Maybe.when(
+      RRounds.Chance,
+      _,
+      u => RRounds.Slot.chance.of(
+        RRounds.Lead{
+          bs,
+          Nat.max(fl, RRounds.Rounds.top(bs)),
+          name,
+          t,
+          RRounds.Basis.make.at(name, Nat.max(fl, RRounds.Rounds.top(bs)), _, RRounds.Chain.reach(bs, name), []),
+          RRounds.Rounds.minds(bs, [name], k, Nat.max(fl, RRounds.Rounds.top(bs)))
+        },
+        [name]
+      )
+    )
+      == Some{RRounds.Chance{t, Nat.max(fl, RRounds.Rounds.top(bs)), [], RRounds.Force.Free{}}}: Maybe<&2, RRounds.Chance>
+  }
+  %Equal.sym(
+    RRounds.Promise,
+    RRounds.Promise.read(RRounds.Lead{bs, Nat.max(fl, RRounds.Rounds.top(bs)), name, t, [], RRounds.Rounds.minds(bs, [name], k, Nat.max(fl, RRounds.Rounds.top(bs)))}, name),
+    RRounds.Promise.Held{[]},
+    Promise.read_own(bs, name, Nat.max(fl, RRounds.Rounds.top(bs)), t, fl, [], RRounds.Rounds.minds(bs, [name], k, Nat.max(fl, RRounds.Rounds.top(bs))), es)
+  ): {
+    Shared.Maybe.when(
+      RRounds.Chance,
+      Lists.Nat.most(1n, Shared.Nat.add_if(RRounds.Promise.is_held(_), 0n)),
+      u => Some{
+        RRounds.Chance{
+          t,
+          Nat.max(fl, RRounds.Rounds.top(bs)),
+          [],
+          RRounds.Force.join(RRounds.Promise.force(RRounds.Rounds.minds(bs, [name], k, Nat.max(fl, RRounds.Rounds.top(bs))), _), RRounds.Force.Free{})
+        }
+      }
+    )
+      == Some{RRounds.Chance{t, Nat.max(fl, RRounds.Rounds.top(bs)), [], RRounds.Force.Free{}}}: Maybe<&2, RRounds.Chance>
+  }
+  {==}
+
+# a voter that cast no vote that counts is seen with its floor and no vote
+def Seen.quiet_is(m: RRounds.Seen) -> {RRounds.Seen.votes(m) == []: List<&2, RRounds.Voted>} -> {m == RRounds.Seen{RRounds.Seen.floor(m), []}: RRounds.Seen}:
+  match m:
+    case RRounds.Seen{fl, vs}:
+      e => (
+        %e: {RRounds.Seen{fl, vs} == RRounds.Seen{fl, _}: RRounds.Seen}
+        {==})
+
+# Slot.alone, with the number of the next ballot of the node, and the lowest
+# round that it may vote in
+def Slot.alone.fin(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +pk: Types.Pick,
+  +t: Nat,
+  +fl: Nat,
+  er: {RRounds.Chain.reach(Slot.ballots(s, c, k), name) == RRounds.Reach{t, RRounds.Seen{fl, []}}: RRounds.Reach},
+  +es: {RRounds.Chain.seen(Slot.ballots(s, c, k), name, t) == Some{RRounds.Seen{fl, []}}: Maybe<&2, RRounds.Seen>},
+  +hc: {Facts.Facts.cast(s, name, Types.Step.At{c, k, t}) == False{}: Bool}
+) -> Exists(
+  Nat,
+  t => Exists(Nat, r => Exists(List<&2, Types.Ref>, b => Slot.Alone(s, name, c, k, pk, t, r, b)))
+):
+  (
+    t,
+    (
+      Nat.max(fl, RRounds.Rounds.top(Slot.ballots(s, c, k))),
+      (
+        [],
+        (
+          Slot.chance_own(Slot.ballots(s, c, k), name, k, t, fl, er, es),
+          (
+            hc,
+            Slot.added_decides(s, name, c, k, pk, t, fl, Nat.max(fl, RRounds.Rounds.top(Slot.ballots(s, c, k))), hc, es, Lists.Nat.le_max_left(fl, RRounds.Rounds.top(Slot.ballots(s, c, k))))
+          )
+        )
+      )
+    )
+  )
+
+# Slot.alone, with how far the ballots of the node are held
+def Slot.alone.seen(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +pk: Types.Pick,
+  +t: Nat,
+  +sn: RRounds.Seen,
+  er: {RRounds.Chain.reach(Slot.ballots(s, c, k), name) == RRounds.Reach{t, sn}: RRounds.Reach},
+  held: {
+    RRounds.Chain.seen(Slot.ballots(s, c, k), name, t) == Some{sn}: Maybe<&2, RRounds.Seen>
+  }
+    & {RRounds.Ballots.at(Slot.ballots(s, c, k), name, t) == None{}: Maybe<&2, Types.Cast>},
+  +hl: {List.contains(~String, ~String.eq, Facts.Facts.liars(s), name) == False{}: Bool},
+  +hu: {RRounds.Slot.decided(Slot.ballots(s, c, k), [name], k) == None{}: Maybe<&2, Types.Pick>}
+) -> Exists(
+  Nat,
+  t => Exists(Nat, r => Exists(List<&2, Types.Ref>, b => Slot.Alone(s, name, c, k, pk, t, r, b)))
+):
+  (+es, +hn) = held
+  Slot.alone.fin(
+    s,
+    name,
+    c,
+    k,
+    pk,
+    t,
+    RRounds.Seen.floor(sn),
+    (
+      %Seen.quiet_is(sn)(Chain.quiet(t, Slot.ballots(s, c, k), name, k, sn, hu)(es)): {RRounds.Chain.reach(Slot.ballots(s, c, k), name) == RRounds.Reach{t, _}: RRounds.Reach}
+      er),
+    (
+      %Seen.quiet_is(sn)(Chain.quiet(t, Slot.ballots(s, c, k), name, k, sn, hu)(es)): {RRounds.Chain.seen(Slot.ballots(s, c, k), name, t) == Some{_}: Maybe<&2, RRounds.Seen>}
+      es),
+    Slot.cast_none(s, name, c, k, t, hl, hn)
+  )
+
+# Slot.alone, once how far the ballots of the node are held (m) is known
+def Slot.alone.at(
+  m: RRounds.Reach,
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +pk: Types.Pick
+) -> {
+  RRounds.Chain.reach(Slot.ballots(s, c, k), name) == m: RRounds.Reach
+} -> Reach.Held(Slot.ballots(s, c, k), name, m) -> {List.contains(~String, ~String.eq, Facts.Facts.liars(s), name) == False{}: Bool} -> {RRounds.Slot.decided(Slot.ballots(s, c, k), [name], k) == None{}: Maybe<&2, Types.Pick>} -> Exists(
+  Nat,
+  t => Exists(Nat, r => Exists(List<&2, Types.Ref>, b => Slot.Alone(s, name, c, k, pk, t, r, b)))
+):
+  match m:
+    case RRounds.Reach{+t, +sn}:
+      er => held => +hl => +hu => Slot.alone.seen(s, name, c, k, pk, t, sn, er, held, hl, hu)
+
 # a node that alone decides a slot that is not decided, in a set that does
 # not name it a liar, may lead a round of it for any pick, whatever ballots
 # of its own the set holds; and its vote decides the pick
@@ -3354,4 +4496,6 @@ def Slot.alone(
   Nat,
   t => Exists(Nat, r => Exists(List<&2, Types.Ref>, b => Slot.Alone(s, name, c, k, pk, t, r, b)))
 ):
-  ?TODO
+  hl => hu => Slot.alone.at(RRounds.Chain.reach(Slot.ballots(s, c, k), name), s, name, c, k, pk)({==})(
+    Chain.reach_held(Slot.ballots(s, c, k), name)
+  )(hl)(hu)
