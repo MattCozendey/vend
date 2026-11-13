@@ -25128,7 +25128,38 @@ def Bool.not_or_r(a: Bool, -b: Bool) -> {Bool.not(Bool.or(a, b)) == True{}: Bool
 def Pieces.apart_sub_left(as: List<&2, Piece>, +a: List<&2, Piece>, +b: List<&2, Piece>) -> {
   Pieces.apart(as, List.append(&2, Piece, a, b)) == True{}: Bool
 } -> {Pieces.apart(as, a) == True{}: Bool}:
-  ?TODO
+  match as:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{+k, v}, +rest}:
+      +h =>
+        +h1 = Equal.trans(
+          Bool,
+          Bool.not(Bool.or(Pieces.has_key(a, k), Pieces.has_key(b, k))),
+          Bool.not(Pieces.has_key(List.append(&2, Piece, a, b), k)),
+          True{},
+          Equal.cong(
+            Bool,
+            Bool,
+            z => Bool.not(z),
+            Bool.or(Pieces.has_key(a, k), Pieces.has_key(b, k)),
+            Pieces.has_key(List.append(&2, Piece, a, b), k),
+            Equal.sym(Bool, Pieces.has_key(List.append(&2, Piece, a, b), k), Bool.or(Pieces.has_key(a, k), Pieces.has_key(b, k)), Pieces.has_key_append(a, b, k))
+          ),
+          Shared.Bool.and_true_left(Bool.not(Pieces.has_key(List.append(&2, Piece, a, b), k)), Pieces.apart(rest, List.append(&2, Piece, a, b)))(h)
+        )
+        Shared.Bool.and_both(
+          Bool.not(Pieces.has_key(a, k)),
+          Pieces.apart(rest, a)
+        )(Bool.not_or_l(Pieces.has_key(a, k), Pieces.has_key(b, k))(h1))(
+          Pieces.apart_sub_left(
+            rest,
+            a,
+            b
+          )(Shared.Bool.and_true_right(Bool.not(Pieces.has_key(List.append(&2, Piece, a, b), k)), Pieces.apart(rest, List.append(&2, Piece, a, b)))(h))
+        )
+    case Con{Piece.Sub{h2, u, lo, hi}, +rest}:
+      h => Pieces.apart_sub_left(rest, a, b)(h)
 
 # pieces apart from others are apart from the back of them
 def Pieces.apart_sub_right(as: List<&2, Piece>, +a: List<&2, Piece>, +b: List<&2, Piece>) -> {
