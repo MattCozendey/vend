@@ -1,24 +1,28 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
+import ../shared/shared/shared/reach.bend as Reaches
 import ../shared/shared/shared/shared/shared.bend as Shared
 import ../shared/shared/shared/text.bend as Texts
 import ./answers.bend as Answers
 import ./content.bend as Contents
 import ./facts.bend as Facts
+import ./groups.bend as Groups
 import ./mirror.bend as Mirror
 import ./run/answers.bend as RAnswers
 import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
 import ./run/files.bend as Files
+import ./shared/files.bend as FileLaws
 import ./shared/format.bend as Formats
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
 
 # What a writer is told: the laws
 # -------------------------------
-# The reply to Affects is the paths seen from us in the newer content whose
-# words differ in the two contents. Seen holds only paths reached from us
-# (affects_only), and, being closed under imports, each of them (affects_all).
+# The reply to Affects is the paths that us reaches in the newer content, or
+# that are among us, whose words differ in the two contents. The reached paths
+# are a closure in the graph of the imports (groups.bend, Closure): it holds
+# only paths reached from us (affects_only), and each of them (affects_all).
 
 # Members
 # -------
@@ -75,298 +79,6 @@ def In.within(
       +hw => h => In.cases(In(ks, x), p, r, x, h, e => (
           %e: In(ks, _)
           Shared.Bool.and_true_left(List.contains(~String, ~String.eq, ks, p), Shared.List.within(~String, ~String.eq, r, ks))(hw)), t => In.within(r, ks, x)(Shared.Bool.and_true_right(List.contains(~String, ~String.eq, ks, p), Shared.List.within(~String, ~String.eq, r, ks))(hw))(t))
-
-# Adding paths to the seen ones
-# -----------------------------
-
-# seen with the path q, if it lacks it: one step of Reach.add
-def Reach.put(+seen: List<&2, String>, +q: String) -> List<&2, String>:
-  Shared.Bool.when(
-    List<&2, String>,
-    List.contains(~String, ~String.eq, seen, q),
-    u => seen,
-    u => List.append(&2, String, seen, [q])
-  )
-
-# a seen path stays seen when q is put
-def Reach.put_keeps(
-  +seen: List<&2, String>,
-  +q: String,
-  +x: String
-) -> In(seen, x) -> In(Reach.put(seen, q), x):
-  Lists.Bool.by(
-    c => In(
-      seen,
-      x
-    ) -> In(
-      Shared.Bool.when(List<&2, String>, c, u => seen, u => List.append(&2, String, seen, [q])),
-      x
-    ),
-    List.contains(~String, ~String.eq, seen, q),
-    e => h => h,
-    e => h => Shared.List.contains_left(~String, ~String.eq, seen, [q], x, h)
-  )
-
-# the path that is put is seen
-def Reach.put_has(+seen: List<&2, String>, +q: String) -> In(Reach.put(seen, q), q):
-  Lists.Bool.by(
-    c => In(
-      Shared.Bool.when(List<&2, String>, c, u => seen, u => List.append(&2, String, seen, [q])),
-      q
-    ),
-    List.contains(~String, ~String.eq, seen, q),
-    e => e,
-    e => Shared.List.contains_right(~String, ~String.eq, seen, [q], q, In.head(q, []))
-  )
-
-# a member of seen ++ [q] was seen or is q
-def Reach.put_in.at(
-  +seen: List<&2, String>,
-  +q: String,
-  +x: String
-) -> In(List.append(&2, String, seen, [q]), x) -> In(seen, x)
-  | {q == x: String}:
-  h => Lists.Bool.by(
-    c => {
-      Bool.or(c, List.contains(~String, ~String.eq, [q], x)) == True{}: Bool
-    } -> In(seen, x)
-      | {q == x: String},
-    List.contains(~String, ~String.eq, seen, x),
-    e => g => Inl{e},
-    e => g => Inr{
-      In.cases({q == x: String}, q, [], x, g, a => a, b => In.nil({q == x: String}, x, b))
-    }
-  )(
-    Equal.trans(
-      Bool,
-      Bool.or(
-        List.contains(~String, ~String.eq, seen, x),
-        List.contains(~String, ~String.eq, [q], x)
-      ),
-      List.contains(~String, ~String.eq, List.append(&2, String, seen, [q]), x),
-      True{},
-      Equal.sym(
-        Bool,
-        List.contains(~String, ~String.eq, List.append(&2, String, seen, [q]), x),
-        Bool.or(
-          List.contains(~String, ~String.eq, seen, x),
-          List.contains(~String, ~String.eq, [q], x)
-        ),
-        Shared.List.contains_append(~String, ~String.eq, seen, [q], x)
-      ),
-      h
-    )
-  )
-
-# a path seen after q is put was seen or is q
-def Reach.put_in(
-  +seen: List<&2, String>,
-  +q: String,
-  +x: String
-) -> In(Reach.put(seen, q), x) -> In(seen, x)
-  | {q == x: String}:
-  Lists.Bool.by(
-    c => In(
-      Shared.Bool.when(List<&2, String>, c, u => seen, u => List.append(&2, String, seen, [q])),
-      x
-    ) -> In(seen, x)
-      | {q == x: String},
-    List.contains(~String, ~String.eq, seen, q),
-    e => h => Inl{h},
-    e => h => Reach.put_in.at(seen, q, x)(h)
-  )
-
-# a seen path stays seen when the paths qs are added
-def Reach.add_keeps(
-  qs: List<&2, String>,
-  +seen: List<&2, String>,
-  +x: String
-) -> In(seen, x) -> In(RAnswers.Reach.add(qs, seen), x):
-  match qs:
-    case Nil{}:
-      h => h
-    case Con{+q, rest}:
-      h => Reach.add_keeps(rest, Reach.put(seen, q), x)(Reach.put_keeps(seen, q, x)(h))
-
-# each added path is seen
-def Reach.add_has(
-  qs: List<&2, String>,
-  +seen: List<&2, String>,
-  +x: String
-) -> In(qs, x) -> In(RAnswers.Reach.add(qs, seen), x):
-  match qs:
-    case Nil{}:
-      h => In.nil(In(seen, x), x, h)
-    case Con{+q, +rest}:
-      h => In.cases(In(RAnswers.Reach.add(rest, Reach.put(seen, q)), x), q, rest, x, h, e => (
-          %e: In(RAnswers.Reach.add(rest, Reach.put(seen, q)), _)
-          Reach.add_keeps(rest, Reach.put(seen, q), q)(Reach.put_has(seen, q))), t => Reach.add_has(rest, Reach.put(seen, q), x)(t))
-
-# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
-# Reach.add_in, once x is known to have been seen or to be q
-def Reach.add_in.at(
-  -seen: List<&2, String>,
-  q: String,
-  -rest: List<&2, String>,
-  -x: String,
-  r: In(seen, x) | {q == x: String}
-) -> In(seen, x)
-  | In(q <> rest, x):
-  match r:
-    case Inl{h}:
-      Inl{h}
-    case Inr{e}:
-      Inr{(
-          %e: In(q <> rest, _)
-          In.head(q, rest))}
-# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
-
-# Reach.add_in, by where the rest of the paths found x
-def Reach.add_in.of(
-  +seen: List<&2, String>,
-  +q: String,
-  +rest: List<&2, String>,
-  +x: String,
-  r: In(Reach.put(seen, q), x) | In(rest, x)
-) -> In(seen, x)
-  | In(q <> rest, x):
-  match r:
-    case Inl{h}:
-      Reach.add_in.at(seen, q, rest, x, Reach.put_in(seen, q, x)(h))
-    case Inr{h}:
-      Inr{In.tail(q, rest, x)(h)}
-
-# a path seen after the paths qs are added was seen or is one of them
-def Reach.add_in(
-  qs: List<&2, String>,
-  +seen: List<&2, String>,
-  +x: String
-) -> In(RAnswers.Reach.add(qs, seen), x) -> In(seen, x)
-  | In(qs, x):
-  match qs:
-    case Nil{}:
-      h => Inl{h}
-    case Con{+q, +rest}:
-      h => Reach.add_in.of(seen, q, rest, x, Reach.add_in(rest, Reach.put(seen, q), x)(h))
-
-# Growing by the imports
-# ----------------------
-
-# a seen path stays seen when seen grows by the imports of ps
-def Reach.grow_keeps(
-  +b: Files.Files(),
-  +bs: List<&2, String>,
-  ps: List<&2, String>,
-  +seen: List<&2, String>,
-  +x: String
-) -> In(seen, x) -> In(RAnswers.Reach.grow(b, bs, ps, seen), x):
-  match ps:
-    case Nil{}:
-      h => h
-    case Con{+p, rest}:
-      h => Reach.grow_keeps(
-        b,
-        bs,
-        rest,
-        RAnswers.Reach.add(RAnswers.Reach.imports(b, bs, p), seen),
-        x
-      )(Reach.add_keeps(RAnswers.Reach.imports(b, bs, p), seen, x)(h))
-
-# a seen path stays seen through the rounds
-def Reach.go_keeps(
-  fuel: Nat,
-  +b: Files.Files(),
-  +bs: List<&2, String>,
-  +seen: List<&2, String>,
-  +x: String
-) -> In(seen, x) -> In(RAnswers.Reach.go(fuel, b, bs, seen), x):
-  match fuel:
-    case 0n:
-      h => h
-    case 1n+f:
-      h => Reach.go_keeps(
-        f,
-        b,
-        bs,
-        RAnswers.Reach.grow(b, bs, seen, seen),
-        x
-      )(Reach.grow_keeps(b, bs, seen, seen, x)(h))
-
-# x was seen, or is an import of one of the paths ps
-def Reach.Grown(
-  b: Files.Files(),
-  bs: List<&2, String>,
-  ps: List<&2, String>,
-  seen: List<&2, String>,
-  x: String
-) -> Type:
-  In(seen, x) | Exists(String, p => In(ps, p) & In(RAnswers.Reach.imports(b, bs, p), x))
-
-# Reach.grow_in, once x is known to have been seen or to be an import of p
-def Reach.grow_in.at(
-  -b: Files.Files(),
-  -bs: List<&2, String>,
-  p: String,
-  -rest: List<&2, String>,
-  -seen: List<&2, String>,
-  -x: String,
-  r: In(seen, x) | In(RAnswers.Reach.imports(b, bs, p), x)
-) -> Reach.Grown(b, bs, p <> rest, seen, x):
-  match r:
-    case Inl{h}:
-      Inl{h}
-    case Inr{h}:
-      +p = p
-      Inr{(p, (In.head(p, rest), h))}
-
-# Reach.grow_in, by where the rest of the paths found x
-def Reach.grow_in.of(
-  +b: Files.Files(),
-  +bs: List<&2, String>,
-  +p: String,
-  +rest: List<&2, String>,
-  +seen: List<&2, String>,
-  +x: String,
-  r: Reach.Grown(b, bs, rest, RAnswers.Reach.add(RAnswers.Reach.imports(b, bs, p), seen), x)
-) -> Reach.Grown(b, bs, p <> rest, seen, x):
-  match r:
-    case Inl{h}:
-      Reach.grow_in.at(
-        b,
-        bs,
-        p,
-        rest,
-        seen,
-        x,
-        Reach.add_in(RAnswers.Reach.imports(b, bs, p), seen, x)(h)
-      )
-    case Inr{w}:
-      (+p2, w2) = w
-      (h1, h2) = w2
-      Inr{(p2, (In.tail(p, rest, p2)(h1), h2))}
-
-# a path seen after seen grows by the imports of ps was seen or is an import
-# of one of ps
-def Reach.grow_in(
-  +b: Files.Files(),
-  +bs: List<&2, String>,
-  ps: List<&2, String>,
-  +seen: List<&2, String>,
-  +x: String
-) -> In(RAnswers.Reach.grow(b, bs, ps, seen), x) -> Reach.Grown(b, bs, ps, seen, x):
-  match ps:
-    case Nil{}:
-      h => Inl{h}
-    case Con{+p, +rest}:
-      h => Reach.grow_in.of(
-        b,
-        bs,
-        p,
-        rest,
-        seen,
-        x,
-        Reach.grow_in(b, bs, rest, RAnswers.Reach.add(RAnswers.Reach.imports(b, bs, p), seen), x)(h)
-      )
 
 # Reads and imports
 # -----------------
@@ -517,212 +229,6 @@ def Imports.step(
     Reach.imports.of_in(Files.Files.get(b, p), p, bs, q)(hi)
   )
 
-# Each seen path is reached
-# -------------------------
-
-# the path x is reached from one of the paths us, in version k of c
-def Reach.From(
-  s: Facts.Facts(),
-  c: Ledgers.Line,
-  k: Nat,
-  bs: List<&2, String>,
-  us: List<&2, String>,
-  x: String
-) -> Type:
-  Exists(
-    String,
-    u => In(us, u) & Exists(List<&2, String>, ps => Mirror.Imports(s, c, k, bs, u, ps, x))
-  )
-
-# Reach.go_in, once the path u that x is reached from is known to have been
-# seen or to be an import of a seen path
-def Reach.go_in.at(
-  +s: Facts.Facts(),
-  +c: Ledgers.Line,
-  +k: Nat,
-  +bs: List<&2, String>,
-  +b: Files.Files(),
-  +seen: List<&2, String>,
-  +x: String,
-  +u: String,
-  hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>},
-  r: Reach.Grown(b, bs, seen, seen, u),
-  w: Exists(List<&2, String>, ps => Mirror.Imports(s, c, k, bs, u, ps, x))
-) -> Reach.From(s, c, k, bs, seen, x):
-  match r:
-    case Inl{h}:
-      (u, (h, w))
-    case Inr{v}:
-      (+p, v1) = v
-      (hp, hi) = v1
-      (+ps, ch) = w
-      (p, (hp, (u <> ps, Imports.step(s, c, k, bs, b, p, u, ps, x, hb, hi, ch))))
-
-# Reach.go_in, from what the later rounds give
-def Reach.go_in.of(
-  +s: Facts.Facts(),
-  +c: Ledgers.Line,
-  +k: Nat,
-  +bs: List<&2, String>,
-  +b: Files.Files(),
-  +seen: List<&2, String>,
-  +x: String,
-  hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>},
-  w: Reach.From(s, c, k, bs, RAnswers.Reach.grow(b, bs, seen, seen), x)
-) -> Reach.From(s, c, k, bs, seen, x):
-  (+u, w1) = w
-  (hu, w2) = w1
-  Reach.go_in.at(s, c, k, bs, b, seen, x, u, hb, Reach.grow_in(b, bs, seen, seen, u)(hu), w2)
-
-# a path seen after the rounds is reached from a path seen before them, in a
-# version whose content is b
-def Reach.go_in(
-  fuel: Nat,
-  +s: Facts.Facts(),
-  +c: Ledgers.Line,
-  +k: Nat,
-  +bs: List<&2, String>,
-  +b: Files.Files(),
-  +seen: List<&2, String>,
-  +x: String,
-  +hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>}
-) -> In(RAnswers.Reach.go(fuel, b, bs, seen), x) -> Reach.From(s, c, k, bs, seen, x):
-  match fuel:
-    case 0n:
-      h => (x, (h, ([], {==})))
-    case 1n+f:
-      h => Reach.go_in.of(
-        s,
-        c,
-        k,
-        bs,
-        b,
-        seen,
-        x,
-        hb,
-        Reach.go_in(f, s, c, k, bs, b, RAnswers.Reach.grow(b, bs, seen, seen), x, hb)(h)
-      )
-
-# the paths seen from us in the content b: what Reach.of answers
-def Reach.seen(+b: Files.Files(), +bs: List<&2, String>, +us: List<&2, String>) -> List<&2, String>:
-  RAnswers.Reach.go(
-    1n+Nat.add(
-      List.length(&2, String, RAnswers.Reach.add(us, [])),
-      List.length(&2, String, Files.Files.paths(b))
-    ),
-    b,
-    bs,
-    RAnswers.Reach.add(us, [])
-  )
-
-# Reach.start_in, by where Reach.add found u
-def Reach.start_in.of(-us: List<&2, String>, -u: String, r: In([], u) | In(us, u)) -> In(us, u):
-  match r:
-    case Inl{h}:
-      In.nil(In(us, u), u, h)
-    case Inr{h}:
-      h
-
-# a path of the first seen ones is one of us
-def Reach.start_in(
-  +us: List<&2, String>,
-  +u: String
-) -> In(RAnswers.Reach.add(us, []), u) -> In(us, u):
-  h => Reach.start_in.of(us, u, Reach.add_in(us, [], u)(h))
-
-# Reach.seen_in, from what Reach.go_in gives
-def Reach.seen_in.of(
-  -s: Facts.Facts(),
-  -c: Ledgers.Line,
-  -k: Nat,
-  -bs: List<&2, String>,
-  +us: List<&2, String>,
-  -x: String,
-  w: Reach.From(s, c, k, bs, RAnswers.Reach.add(us, []), x)
-) -> Mirror.Reaches(s, c, k, bs, us, x):
-  (+u, w1) = w
-  (hu, w2) = w1
-  (u, (Reach.start_in(us, u)(hu), w2))
-
-# each seen path is reached from us, in a version whose content is b
-def Reach.seen_in(
-  +s: Facts.Facts(),
-  +c: Ledgers.Line,
-  +k: Nat,
-  +bs: List<&2, String>,
-  +b: Files.Files(),
-  +us: List<&2, String>,
-  +x: String,
-  +hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>}
-) -> In(Reach.seen(b, bs, us), x) -> Mirror.Reaches(s, c, k, bs, us, x):
-  h => Reach.seen_in.of(
-    s,
-    c,
-    k,
-    bs,
-    us,
-    x,
-    Reach.go_in(
-      1n+Nat.add(
-        List.length(&2, String, RAnswers.Reach.add(us, [])),
-        List.length(&2, String, Files.Files.paths(b))
-      ),
-      s,
-      c,
-      k,
-      bs,
-      b,
-      RAnswers.Reach.add(us, []),
-      x,
-      hb
-    )(h)
-  )
-
-# Each reached path is seen
-# -------------------------
-
-# the seen paths are closed under imports in the content b
-def Reach.Closed(b: Files.Files(), bs: List<&2, String>, seen: List<&2, String>) -> Data:
-  {
-    Shared.List.holds(
-      ~String,
-      ~RAnswers.Reached,
-      ~RAnswers.Reached.closed,
-      seen,
-      RAnswers.Reached{b, bs, seen}
-    )
-      == True{}: Bool
-  }
-
-# an import of a seen path is seen, when the seen paths are closed
-def Reach.closed_in(
-  +b: Files.Files(),
-  +bs: List<&2, String>,
-  +seen: List<&2, String>,
-  +p: String,
-  +x: String
-) -> Reach.Closed(
-  b,
-  bs,
-  seen
-) -> In(seen, p) -> In(RAnswers.Reach.imports(b, bs, p), x) -> In(seen, x):
-  hc => hp => hi => In.within(
-    RAnswers.Reach.imports(b, bs, p),
-    seen,
-    x
-  )(
-    Lists.List.holds_in(
-      ~String,
-      ~RAnswers.Reached,
-      ~RAnswers.Reached.closed,
-      ~String.eq,
-      ~Texts.String.laws(),
-      seen,
-      RAnswers.Reached{b, bs, seen},
-      p
-    )(hc)(hp)
-  )(hi)
-
 # the path q is an import of a in the content b, as a step of a chain says
 def Reach.imports_of(
   +s: Facts.Facts(),
@@ -747,22 +253,487 @@ def Reach.imports_of(
     ): In(RAnswers.Reach.imports.of(a, bs, _), q)
     hi
 
-# Reach.chain_in at a step of the chain w, given the rest of the chain (ih)
-def Reach.chain_in.at(
+# The graph of the imports
+# ------------------------
+
+# Reached.live, by whether p holds words (hit)
+def Reached.live.at(
+  hit: Bool,
+  +b: Files.Files(),
+  +bs: List<&2, String>,
+  +p: String,
+  +q: String
+) -> {
+  List.contains(~String, ~String.eq, RAnswers.Reached.succ.if(hit, b, bs, p), q) == True{}: Bool
+} -> {hit == True{}: Bool}:
+  match hit:
+    case False{}:
+      h => h
+    case True{}:
+      h => {==}
+
+# Reached.live, for a content b and the paths ps
+def Reached.live.of(
+  +b: Files.Files(),
+  +bs: List<&2, String>,
+  +ps: List<&2, String>,
+  +p: String,
+  +q: String
+) -> {
+  List.contains(~String, ~String.eq, RAnswers.Reached.succ.of(b, bs, ps, p), q) == True{}: Bool
+} -> {List.contains(~String, ~String.eq, ps, p) == True{}: Bool}:
+  h => Reached.live.at(List.contains(~String, ~String.eq, ps, p), b, bs, p, q)(h)
+
+# a path that leads to another is a node of the graph
+def Reached.live(
+  g: RAnswers.Reached,
+  p: String,
+  q: String
+) -> {
+  List.contains(~String, ~String.eq, RAnswers.Reached.succ(g, p), q) == True{}: Bool
+} -> {List.contains(~String, ~String.eq, RAnswers.Reached.nodes(g), p) == True{}: Bool}:
+  match g:
+    case RAnswers.Reached{b, bs, ps}:
+      h => Reached.live.of(b, bs, ps, p, q)(h)
+
+# Reached.succ_imports, by whether p holds words (hit)
+def Reached.succ_imports.at(
+  hit: Bool,
+  +b: Files.Files(),
+  +bs: List<&2, String>,
+  +p: String,
+  +q: String
+) -> In(RAnswers.Reached.succ.if(hit, b, bs, p), q) -> In(RAnswers.Reach.imports(b, bs, p), q):
+  match hit:
+    case False{}:
+      h => In.nil(In(RAnswers.Reach.imports(b, bs, p), q), q, h)
+    case True{}:
+      h => h
+
+# a path that p leads to in the graph of the content b is an import of p
+def Reached.succ_imports(
+  +b: Files.Files(),
+  +bs: List<&2, String>,
+  +p: String,
+  +q: String
+) -> In(
+  RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, p),
+  q
+) -> In(RAnswers.Reach.imports(b, bs, p), q):
+  h => Reached.succ_imports.at(
+    List.contains(~String, ~String.eq, Files.Files.paths(b), p),
+    b,
+    bs,
+    p,
+    q
+  )(h)
+
+# Reached.imports_succ, once the words of p are known
+def Reached.imports_succ.of(
+  +b: Files.Files(),
+  +bs: List<&2, String>,
+  +p: String,
+  +q: String,
+  hw: {FileLaws.Files.wf(b) == True{}: Bool},
+  hi: In(RAnswers.Reach.imports(b, bs, p), q),
+  w: Exists(
+    List<&2, U32>,
+    ws => {
+      Files.Files.get(b, p) == Some{ws}: Maybe<&2, List<&2, U32>>
+    }
+      & In(Formats.Format.imports(p, ws, bs), q)
+  )
+) -> In(RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, p), q):
+  (+ws, w2) = w
+  (e, hi2) = w2
+  %Equal.sym(
+    Bool,
+    List.contains(~String, ~String.eq, Files.Files.paths(b), p),
+    True{},
+    FileLaws.Files.get_paths(b, p, ws)(hw)(e)
+  ): In(RAnswers.Reached.succ.if(_, b, bs, p), q)
+  hi
+
+# an import of p in a content b that is well formed is a path that p leads to
+# in the graph of b
+def Reached.imports_succ(
+  +b: Files.Files(),
+  +bs: List<&2, String>,
+  +p: String,
+  +q: String
+) -> In(
+  RAnswers.Reach.imports(b, bs, p),
+  q
+) -> {
+  FileLaws.Files.wf(b) == True{}: Bool
+} -> In(RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, p), q):
+  +hi => hw => Reached.imports_succ.of(
+    b,
+    bs,
+    p,
+    q,
+    hw,
+    hi,
+    Reach.imports.of_in(Files.Files.get(b, p), p, bs, q)(hi)
+  )
+
+# Each reached path is reached
+# ----------------------------
+
+# Reach.path_chain, once the chain from q to x is found
+def Reach.path_chain.cons(
   +s: Facts.Facts(),
   +c: Ledgers.Line,
   +k: Nat,
   +bs: List<&2, String>,
   +b: Files.Files(),
-  +seen: List<&2, String>,
+  +a: String,
+  +q: String,
+  +x: String,
+  hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>},
+  hi: In(RAnswers.Reach.imports(b, bs, a), q),
+  w: Exists(List<&2, String>, qs => Mirror.Imports(s, c, k, bs, q, qs, x))
+) -> Exists(List<&2, String>, qs => Mirror.Imports(s, c, k, bs, a, qs, x)):
+  (+qs, ch) = w
+  (q <> qs, Imports.step(s, c, k, bs, b, a, q, qs, x, hb, hi, ch))
+
+# a path of the graph from what a leads to, to x, is a chain of imports from a
+# to x, in a version whose content is b
+def Reach.path_chain(
+  r: List<&2, String>,
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +bs: List<&2, String>,
+  +b: Files.Files(),
+  +a: String,
+  +x: String,
+  +hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>}
+) -> {
+  Reaches.Reach.path(
+    ~String,
+    ~RAnswers.Reached,
+    ~String.eq,
+    ~RAnswers.Reached.succ,
+    r,
+    RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, a),
+    RAnswers.Reached{b, bs, Files.Files.paths(b)},
+    x
+  )
+    == True{}: Bool
+} -> Exists(List<&2, String>, qs => Mirror.Imports(s, c, k, bs, a, qs, x)):
+  match r:
+    case Nil{}:
+      h => (
+        [x],
+        Imports.step(s, c, k, bs, b, a, x, [], x, hb, Reached.succ_imports(b, bs, a, x)(h), {==})
+      )
+    case Con{+q, +t}:
+      +h => Reach.path_chain.cons(
+        s,
+        c,
+        k,
+        bs,
+        b,
+        a,
+        q,
+        x,
+        hb,
+        Reached.succ_imports(
+          b,
+          bs,
+          a,
+          q
+        )(
+          Shared.Bool.and_true_left(
+            List.contains(
+              ~String,
+              ~String.eq,
+              RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, a),
+              q
+            ),
+            Reaches.Reach.path(
+              ~String,
+              ~RAnswers.Reached,
+              ~String.eq,
+              ~RAnswers.Reached.succ,
+              t,
+              RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, q),
+              RAnswers.Reached{b, bs, Files.Files.paths(b)},
+              x
+            )
+          )(h)
+        ),
+        Reach.path_chain(
+          t,
+          s,
+          c,
+          k,
+          bs,
+          b,
+          q,
+          x,
+          hb
+        )(
+          Shared.Bool.and_true_right(
+            List.contains(
+              ~String,
+              ~String.eq,
+              RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, a),
+              q
+            ),
+            Reaches.Reach.path(
+              ~String,
+              ~RAnswers.Reached,
+              ~String.eq,
+              ~RAnswers.Reached.succ,
+              t,
+              RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, q),
+              RAnswers.Reached{b, bs, Files.Files.paths(b)},
+              x
+            )
+          )(h)
+        )
+      )
+
+# Reach.of_reaches, by the path ps of the graph from us to x
+def Reach.of_reaches.by(
+  ps: List<&2, String>,
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +bs: List<&2, String>,
+  +b: Files.Files(),
+  +us: List<&2, String>,
+  +x: String,
+  +hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>},
+  +hp: {
+    Reaches.Reach.path(
+      ~String,
+      ~RAnswers.Reached,
+      ~String.eq,
+      ~RAnswers.Reached.succ,
+      ps,
+      us,
+      RAnswers.Reached{b, bs, Files.Files.paths(b)},
+      x
+    )
+      == True{}: Bool
+  }
+) -> Mirror.Reaches(s, c, k, bs, us, x):
+  match ps:
+    case Nil{}:
+      (x, (hp, ([], {==})))
+    case Con{+p, +r}:
+      (
+        p,
+        (
+          Shared.Bool.and_true_left(
+            List.contains(~String, ~String.eq, us, p),
+            Reaches.Reach.path(
+              ~String,
+              ~RAnswers.Reached,
+              ~String.eq,
+              ~RAnswers.Reached.succ,
+              r,
+              RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, p),
+              RAnswers.Reached{b, bs, Files.Files.paths(b)},
+              x
+            )
+          )(hp),
+          Reach.path_chain(
+            r,
+            s,
+            c,
+            k,
+            bs,
+            b,
+            p,
+            x,
+            hb
+          )(
+            Shared.Bool.and_true_right(
+              List.contains(~String, ~String.eq, us, p),
+              Reaches.Reach.path(
+                ~String,
+                ~RAnswers.Reached,
+                ~String.eq,
+                ~RAnswers.Reached.succ,
+                r,
+                RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, p),
+                RAnswers.Reached{b, bs, Files.Files.paths(b)},
+                x
+              )
+            )(hp)
+          )
+        )
+      )
+
+# Reach.of_reaches, once the path of the graph from us to x is found
+def Reach.of_reaches.of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +bs: List<&2, String>,
+  +b: Files.Files(),
+  +us: List<&2, String>,
+  +x: String,
+  hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>},
+  w: &ps: List<
+    &2,
+    String> -> {
+    Reaches.Reach.path(
+      ~String,
+      ~RAnswers.Reached,
+      ~String.eq,
+      ~RAnswers.Reached.succ,
+      ps,
+      us,
+      RAnswers.Reached{b, bs, Files.Files.paths(b)},
+      x
+    )
+      == True{}: Bool
+  }
+) -> Mirror.Reaches(s, c, k, bs, us, x):
+  match w:
+    case (ps, hp):
+      Reach.of_reaches.by(ps, s, c, k, bs, b, us, x, hb, hp)
+
+# each path that Reach.of answers is reached from us, in a version whose
+# content is b
+def Reach.of_reaches(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +bs: List<&2, String>,
+  +b: Files.Files(),
+  +us: List<&2, String>,
+  +x: String,
+  hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>}
+) -> In(RAnswers.Reach.of(b, bs, us), x) -> Mirror.Reaches(s, c, k, bs, us, x):
+  h => Reach.of_reaches.of(
+    s,
+    c,
+    k,
+    bs,
+    b,
+    us,
+    x,
+    hb,
+    Groups.Closure.of_path(
+      ~String,
+      ~RAnswers.Reached,
+      ~String.eq,
+      ~RAnswers.Reached.succ,
+      ~RAnswers.Reached.nodes,
+      ~Texts.String.laws(),
+      RAnswers.Reached{b, bs, Files.Files.paths(b)},
+      us,
+      x
+    )(h)
+  )
+
+# Each reached path is answered
+# -----------------------------
+
+# Reach.chain_path, once the path of the graph from what a leads to is found
+def Reach.chain_path.cons(
+  +bs: List<&2, String>,
+  +b: Files.Files(),
+  +a: String,
+  +x: String,
+  +lv: List<&2, String>,
+  ha: In(lv, a),
+  w: &qs: List<
+    &2,
+    String> -> {
+    Reaches.Reach.path(
+      ~String,
+      ~RAnswers.Reached,
+      ~String.eq,
+      ~RAnswers.Reached.succ,
+      qs,
+      RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, a),
+      RAnswers.Reached{b, bs, Files.Files.paths(b)},
+      x
+    )
+      == True{}: Bool
+  }
+) -> &qs:
+  List<
+    &2,
+    String> -> {
+    Reaches.Reach.path(
+      ~String,
+      ~RAnswers.Reached,
+      ~String.eq,
+      ~RAnswers.Reached.succ,
+      qs,
+      lv,
+      RAnswers.Reached{b, bs, Files.Files.paths(b)},
+      x
+    )
+      == True{}: Bool
+  }:
+  match w:
+    case (+qs, hp):
+      (
+        a <> qs,
+        Shared.Bool.and_both(
+          List.contains(~String, ~String.eq, lv, a),
+          Reaches.Reach.path(
+            ~String,
+            ~RAnswers.Reached,
+            ~String.eq,
+            ~RAnswers.Reached.succ,
+            qs,
+            RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, a),
+            RAnswers.Reached{b, bs, Files.Files.paths(b)},
+            x
+          )
+        )(ha)(hp)
+      )
+
+# Reach.chain_path at a step of the chain w, given the rest of the chain (ih)
+def Reach.chain_path.at(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +bs: List<&2, String>,
+  +b: Files.Files(),
   +a: String,
   +q: String,
   -rest: List<&2, String>,
-  -x: String,
-  hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>},
-  hc: Reach.Closed(b, bs, seen),
-  ih: Mirror.Imports(s, c, k, bs, q, rest, x) -> In(seen, q) -> In(seen, x),
-  ha: In(seen, a),
+  +x: String,
+  +lv: List<&2, String>,
+  +hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>},
+  ih: Mirror.Imports(
+    s,
+    c,
+    k,
+    bs,
+    q,
+    rest,
+    x
+  ) -> In(
+    RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, a),
+    q
+  ) -> &qs: List<
+    &2,
+    String> -> {
+    Reaches.Reach.path(
+      ~String,
+      ~RAnswers.Reached,
+      ~String.eq,
+      ~RAnswers.Reached.succ,
+      qs,
+      RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, a),
+      RAnswers.Reached{b, bs, Files.Files.paths(b)},
+      x
+    )
+      == True{}: Bool
+  },
+  ha: In(lv, a),
   w: Exists(
     List<&2, U32>,
     ws => {
@@ -770,62 +741,169 @@ def Reach.chain_in.at(
     }
       & (In(Formats.Format.imports(a, ws, bs), q) & Mirror.Imports(s, c, k, bs, q, rest, x))
   )
-) -> In(seen, x):
+) -> &qs:
+  List<
+    &2,
+    String> -> {
+    Reaches.Reach.path(
+      ~String,
+      ~RAnswers.Reached,
+      ~String.eq,
+      ~RAnswers.Reached.succ,
+      qs,
+      lv,
+      RAnswers.Reached{b, bs, Files.Files.paths(b)},
+      x
+    )
+      == True{}: Bool
+  }:
   (+ws, w1) = w
   (er, w2) = w1
   (hi, ch2) = w2
-  ih(
-    ch2
-  )(
-    Reach.closed_in(
-      b,
-      bs,
-      seen,
-      a,
-      q
-    )(hc)(ha)(Reach.imports_of(s, c, k, bs, b, a, q, ws)(hb)(er)(hi))
+  Reach.chain_path.cons(
+    bs,
+    b,
+    a,
+    x,
+    lv,
+    ha,
+    ih(
+      ch2
+    )(
+      Reached.imports_succ(
+        b,
+        bs,
+        a,
+        q
+      )(
+        Reach.imports_of(s, c, k, bs, b, a, q, ws)(hb)(er)(hi)
+      )(Contents.Content.of_wf(s, c, k, b)(hb))
+    )
   )
 
-# the end of a chain of imports from a seen path is seen, when the seen paths
-# are closed in the content b of the version
-def Reach.chain_in(
+# a chain of imports from a path a of the level lv, to x, is a path of the
+# graph from lv to x, in a version whose content is b
+def Reach.chain_path(
   ps: List<&2, String>,
   +s: Facts.Facts(),
   +c: Ledgers.Line,
   +k: Nat,
   +bs: List<&2, String>,
   +b: Files.Files(),
-  +seen: List<&2, String>,
   +a: String,
   +x: String,
-  +hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>},
-  +hc: Reach.Closed(b, bs, seen)
-) -> Mirror.Imports(s, c, k, bs, a, ps, x) -> In(seen, a) -> In(seen, x):
+  +lv: List<&2, String>,
+  +hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>}
+) -> Mirror.Imports(s, c, k, bs, a, ps, x) -> In(lv, a) -> &qs:
+  List<
+    &2,
+    String> -> {
+    Reaches.Reach.path(
+      ~String,
+      ~RAnswers.Reached,
+      ~String.eq,
+      ~RAnswers.Reached.succ,
+      qs,
+      lv,
+      RAnswers.Reached{b, bs, Files.Files.paths(b)},
+      x
+    )
+      == True{}: Bool
+  }:
   match ps:
     case Nil{}:
       ch => ha =>
-        %ch: In(seen, _)
-        ha
+        ([], (%ch: In(lv, _)
+            ha))
     case Con{+q, rest}:
-      ch => ha => Reach.chain_in.at(
+      ch => ha => Reach.chain_path.at(
         s,
         c,
         k,
         bs,
         b,
-        seen,
         a,
         q,
         rest,
         x,
+        lv,
         hb,
-        hc,
-        Reach.chain_in(rest, s, c, k, bs, b, seen, q, x, hb, hc),
+        Reach.chain_path(
+          rest,
+          s,
+          c,
+          k,
+          bs,
+          b,
+          q,
+          x,
+          RAnswers.Reached.succ(RAnswers.Reached{b, bs, Files.Files.paths(b)}, a),
+          hb
+        ),
         ha,
         ch
       )
 
-# The paths whose words differ
+# Reach.reaches_of, once the path of the graph from us to x is found
+def Reach.reaches_of.of(
+  +bs: List<&2, String>,
+  +b: Files.Files(),
+  +us: List<&2, String>,
+  +x: String,
+  w: &ps: List<
+    &2,
+    String> -> {
+    Reaches.Reach.path(
+      ~String,
+      ~RAnswers.Reached,
+      ~String.eq,
+      ~RAnswers.Reached.succ,
+      ps,
+      us,
+      RAnswers.Reached{b, bs, Files.Files.paths(b)},
+      x
+    )
+      == True{}: Bool
+  }
+) -> In(RAnswers.Reach.of(b, bs, us), x):
+  match w:
+    case (+ps, hp):
+      Groups.Closure.path_of(
+        ~String,
+        ~RAnswers.Reached,
+        ~String.eq,
+        ~RAnswers.Reached.succ,
+        ~RAnswers.Reached.nodes,
+        ~Texts.String.laws(),
+        ~Reached.live,
+        RAnswers.Reached{b, bs, Files.Files.paths(b)},
+        us,
+        ps,
+        x
+      )(hp)
+
+# the end of a chain of imports from one of us is a path that Reach.of
+# answers, in a version whose content is b
+def Reach.reaches_of(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +bs: List<&2, String>,
+  +b: Files.Files(),
+  +us: List<&2, String>,
+  +u: String,
+  +qs: List<&2, String>,
+  +x: String,
+  hb: {Contents.Content.of(s, c, k) == Some{b}: Maybe<&2, Files.Files()>}
+) -> In(us, u) -> Mirror.Imports(s, c, k, bs, u, qs, x) -> In(RAnswers.Reach.of(b, bs, us), x):
+  hu => ch => Reach.reaches_of.of(
+    bs,
+    b,
+    us,
+    x,
+    Reach.chain_path(qs, s, c, k, bs, b, u, x, us, hb)(ch)(hu)
+  )
+
 # ----------------------------
 
 # a member of r is a member of r with h put, or not
@@ -848,7 +926,10 @@ def Delta.changed_head(
   +rest: List<&2, String>
 ) -> {
   RAnswers.Delta.differ(g, h) == True{}: Bool
-} -> In(List.filter.put(String, h, RAnswers.Delta.changed(g, rest), RAnswers.Delta.differ(g, h)), h):
+} -> In(
+  List.filter.put(String, h, RAnswers.Delta.changed(g, rest), RAnswers.Delta.differ(g, h)),
+  h
+):
   d =>
     %Equal.sym(
       Bool,
@@ -1104,40 +1185,6 @@ def Reply.names(r: Spec.Reply) -> List<&2, String>:
     case _:
       []
 
-# what Reach.of answers is Reach.seen, and it is closed
-def Reach.of_some(
-  +b: Files.Files(),
-  +bs: List<&2, String>,
-  +us: List<&2, String>,
-  +seen: List<&2, String>
-) -> {
-  RAnswers.Reach.of(b, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>
-} -> {Reach.seen(b, bs, us) == seen: List<&2, String>}
-  & Reach.Closed(b, bs, Reach.seen(b, bs, us)):
-  Lists.Bool.by(
-    k => {
-      Shared.Maybe.when(
-        List<&2, String>,
-        k,
-        u => Some{Reach.seen(b, bs, us)}
-      )
-        == Some{seen}: Maybe<&2, List<&2, String>>
-    } -> {Reach.seen(b, bs, us) == seen: List<&2, String>}
-      & {k == True{}: Bool},
-    Shared.List.holds(
-      ~String,
-      ~RAnswers.Reached,
-      ~RAnswers.Reached.closed,
-      Reach.seen(b, bs, us),
-      RAnswers.Reached{b, bs, Reach.seen(b, bs, us)}
-    ),
-    e => h => (Shared.Maybe.some_inj(List<&2, String>, Reach.seen(b, bs, us), seen, h), {==}),
-    e => h => Empty.absurd(
-      {Reach.seen(b, bs, us) == seen: List<&2, String>} & {False{} == True{}: Bool},
-      Shared.Maybe.none_ne_some(List<&2, String>, seen, h)
-    )
-  )
-
 # what a reply of the names ps to Affects says, of the contents fa and fb
 def Affects.Told(
   fa: Files.Files(),
@@ -1146,61 +1193,13 @@ def Affects.Told(
   bs: List<&2, String>,
   ps: List<&2, String>
 ) -> Type:
-  Exists(
-    List<&2, String>,
-    seen => {
-      RAnswers.Reach.of(fb, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>
-    }
-      & {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>}
-  )
-
-# a reply of the names ps is the changed ones among the reached paths m
-def Affects.at_some(
-  m: Maybe<&2, List<&2, String>>,
-  +fa: Files.Files(),
-  +fb: Files.Files(),
-  +ps: List<&2, String>
-) -> {
-  RAnswers.Affects.at(fa, fb, m) == Some{Spec.Reply.Names{ps}}: Maybe<&2, Spec.Reply>
-} -> Exists(
-  List<&2, String>,
-  seen => {
-    m == Some{seen}: Maybe<&2, List<&2, String>>
+  {
+    RAnswers.Delta.changed(
+      RAnswers.Delta{fa, fb},
+      RAnswers.Reach.of(fb, bs, us)
+    )
+      == ps: List<&2, String>
   }
-    & {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>}
-):
-  match m:
-    case None{}:
-      h => Empty.absurd(
-        Exists(
-          List<&2, String>,
-          seen => {
-            None{} == Some{seen}: Maybe<&2, List<&2, String>>
-          }
-            & {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>}
-        ),
-        Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{ps}, h)
-      )
-    case Some{+seen}:
-      h => (
-        seen,
-        (
-          {==},
-          Equal.cong(
-            Spec.Reply,
-            List<&2, String>,
-            r => Reply.names(r),
-            Spec.Reply.Names{RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen)},
-            Spec.Reply.Names{ps},
-            Shared.Maybe.some_inj(
-              Spec.Reply,
-              Spec.Reply.Names{RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen)},
-              Spec.Reply.Names{ps},
-              h
-            )
-          )
-        )
-      )
 
 # what a reply of names to Affects says of the two contents old and new
 def Affects.Some(
@@ -1233,7 +1232,35 @@ def Affects.of_some(
 } -> Affects.Some(old, new, us, bs, ps):
   match old new:
     case Some{+fa} Some{+fb}:
-      h => (fa, (fb, ({==}, ({==}, Affects.at_some(RAnswers.Reach.of(fb, bs, us), fa, fb, ps)(h)))))
+      h => (
+        fa,
+        (
+          fb,
+          (
+            {==},
+            (
+              {==},
+              Equal.cong(
+                Spec.Reply,
+                List<&2, String>,
+                r => Reply.names(r),
+                Spec.Reply.Names{
+                  RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, RAnswers.Reach.of(fb, bs, us))
+                },
+                Spec.Reply.Names{ps},
+                Shared.Maybe.some_inj(
+                  Spec.Reply,
+                  Spec.Reply.Names{
+                    RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, RAnswers.Reach.of(fb, bs, us))
+                  },
+                  Spec.Reply.Names{ps},
+                  h
+                )
+              )
+            )
+          )
+        )
+      )
     case Some{fa} None{}:
       h => Empty.absurd(
         Affects.Some(Some{fa}, None{}, us, bs, ps),
@@ -1250,37 +1277,10 @@ def Affects.of_some(
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{ps}, h)
       )
 
-# the names ps of the reply are the changed ones among Reach.seen
-def Affects.names(
-  +fa: Files.Files(),
-  +fb: Files.Files(),
-  +us: List<&2, String>,
-  +bs: List<&2, String>,
-  +ps: List<&2, String>,
-  +seen: List<&2, String>,
-  es: {Reach.seen(fb, bs, us) == seen: List<&2, String>},
-  ep: {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>}
-) -> {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, Reach.seen(fb, bs, us)) == ps: List<&2, String>}:
-  Equal.trans(
-    List<&2, String>,
-    RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
-    RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen),
-    ps,
-    Equal.cong(
-      List<&2, String>,
-      List<&2, String>,
-      z => RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, z),
-      Reach.seen(fb, bs, us),
-      seen,
-      es
-    ),
-    ep
-  )
-
 # The two laws
 # ------------
 
-# a member of the names ps of the reply is a seen path that differs
+# a member of the names ps of the reply is a reached path that differs
 def Affects.told_in(
   +fa: Files.Files(),
   +fb: Files.Files(),
@@ -1288,48 +1288,39 @@ def Affects.told_in(
   +bs: List<&2, String>,
   +ps: List<&2, String>,
   +p: String,
-  +seen: List<&2, String>,
-  er: {RAnswers.Reach.of(fb, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>},
-  ep: {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>},
+  ep: {
+    RAnswers.Delta.changed(
+      RAnswers.Delta{fa, fb},
+      RAnswers.Reach.of(fb, bs, us)
+    )
+      == ps: List<&2, String>
+  },
   hin: In(ps, p)
 ) -> In(
-  Reach.seen(fb, bs, us),
+  RAnswers.Reach.of(fb, bs, us),
   p
 )
   & {RAnswers.Delta.differ(RAnswers.Delta{fa, fb}, p) == True{}: Bool}:
   Delta.changed_in(
-    Reach.seen(fb, bs, us),
+    RAnswers.Reach.of(fb, bs, us),
     RAnswers.Delta{fa, fb},
     p
   )(
     In.cast(
       ps,
-      RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
+      RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, RAnswers.Reach.of(fb, bs, us)),
       p,
       Equal.sym(
         List<&2, String>,
-        RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
+        RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, RAnswers.Reach.of(fb, bs, us)),
         ps,
-        Affects.names(
-          fa,
-          fb,
-          us,
-          bs,
-          ps,
-          seen,
-          Pair.fst(
-            {Reach.seen(fb, bs, us) == seen: List<&2, String>},
-            Reach.Closed(fb, bs, Reach.seen(fb, bs, us)),
-            Reach.of_some(fb, bs, us, seen)(er)
-          ),
-          ep
-        )
+        ep
       ),
       hin
     )
   )
 
-# Core.affects_only, once the contents are known and p is known to be seen
+# Core.affects_only, once the contents are known and p is known to be reached
 # and to differ
 def Core.affects_only.at(
   +s: Facts.Facts(),
@@ -1344,7 +1335,7 @@ def Core.affects_only.at(
   ea: {Contents.Content.of(s, c, a) == Some{fa}: Maybe<&2, Files.Files()>},
   +eb: {Contents.Content.of(s, c, b) == Some{fb}: Maybe<&2, Files.Files()>},
   w: In(
-    Reach.seen(fb, bs, us),
+    RAnswers.Reach.of(fb, bs, us),
     p
   )
     & {RAnswers.Delta.differ(RAnswers.Delta{fa, fb}, p) == True{}: Bool}
@@ -1353,7 +1344,7 @@ def Core.affects_only.at(
   (hs, d) = w
   (
     Changed.of_differ(s, c, a, b, fa, fb, p, ea, eb, d),
-    Reach.seen_in(s, c, b, bs, fb, us, p, eb)(hs)
+    Reach.of_reaches(s, c, b, bs, fb, us, p, eb)(hs)
   )
 
 # Core.affects_only, from what the reply says
@@ -1373,9 +1364,7 @@ def Core.affects_only.of(
   (+fa, w1) = w
   (+fb, w2) = w1
   (ea, w3) = w2
-  (eb, w4) = w3
-  (+seen, w5) = w4
-  (er, ep) = w5
+  (eb, ep) = w3
   Core.affects_only.at(
     s,
     c,
@@ -1388,7 +1377,7 @@ def Core.affects_only.of(
     fb,
     ea,
     eb,
-    Affects.told_in(fa, fb, us, bs, ps, p, seen, er, ep, hin)
+    Affects.told_in(fa, fb, us, bs, ps, p, ep, hin)
   )
 
 # A writer is told only about changes to what its work uses.
@@ -1438,68 +1427,30 @@ def Core.affects_all.at(
   +fb: Files.Files(),
   +u: String,
   +qs: List<&2, String>,
-  +seen: List<&2, String>,
   ea: {Contents.Content.of(s, c, a) == Some{fa}: Maybe<&2, Files.Files()>},
   +eb: {Contents.Content.of(s, c, b) == Some{fb}: Maybe<&2, Files.Files()>},
-  +er: {RAnswers.Reach.of(fb, bs, us) == Some{seen}: Maybe<&2, List<&2, String>>},
-  ep: {RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, seen) == ps: List<&2, String>},
+  ep: {
+    RAnswers.Delta.changed(
+      RAnswers.Delta{fa, fb},
+      RAnswers.Reach.of(fb, bs, us)
+    )
+      == ps: List<&2, String>
+  },
   ch: Mirror.Changed(s, c, a, b, p),
   hu: In(us, u),
   chain: Mirror.Imports(s, c, b, bs, u, qs, p)
 ) -> In(ps, p):
   In.cast(
-    RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, Reach.seen(fb, bs, us)),
+    RAnswers.Delta.changed(RAnswers.Delta{fa, fb}, RAnswers.Reach.of(fb, bs, us)),
     ps,
     p,
-    Affects.names(
-      fa,
-      fb,
-      us,
-      bs,
-      ps,
-      seen,
-      Pair.fst(
-        {Reach.seen(fb, bs, us) == seen: List<&2, String>},
-        Reach.Closed(fb, bs, Reach.seen(fb, bs, us)),
-        Reach.of_some(fb, bs, us, seen)(er)
-      ),
-      ep
-    ),
+    ep,
     Delta.changed_has(
-      Reach.seen(fb, bs, us),
+      RAnswers.Reach.of(fb, bs, us),
       RAnswers.Delta{fa, fb},
       p
     )(
-      Reach.chain_in(
-        qs,
-        s,
-        c,
-        b,
-        bs,
-        fb,
-        Reach.seen(fb, bs, us),
-        u,
-        p,
-        eb,
-        Pair.snd(
-          {Reach.seen(fb, bs, us) == seen: List<&2, String>},
-          Reach.Closed(fb, bs, Reach.seen(fb, bs, us)),
-          Reach.of_some(fb, bs, us, seen)(er)
-        )
-      )(
-        chain
-      )(
-        Reach.go_keeps(
-          1n+Nat.add(
-            List.length(&2, String, RAnswers.Reach.add(us, [])),
-            List.length(&2, String, Files.Files.paths(fb))
-          ),
-          fb,
-          bs,
-          RAnswers.Reach.add(us, []),
-          u
-        )(Reach.add_has(us, [], u)(hu))
-      )
+      Reach.reaches_of(s, c, b, bs, fb, us, u, qs, p, eb)(hu)(chain)
     )(Changed.differ(s, c, a, b, fa, fb, p, ea, eb, ch))
   )
 
@@ -1520,13 +1471,11 @@ def Core.affects_all.of(
   (+fa, w1) = w
   (+fb, w2) = w1
   (ea, w3) = w2
-  (eb, w4) = w3
-  (+seen, w5) = w4
-  (er, ep) = w5
+  (eb, ep) = w3
   (+u, r1) = rc
   (hu, r2) = r1
   (+qs, chain) = r2
-  Core.affects_all.at(s, c, a, b, us, bs, ps, p, fa, fb, u, qs, seen, ea, eb, er, ep, ch, hu, chain)
+  Core.affects_all.at(s, c, a, b, us, bs, ps, p, fa, fb, u, qs, ea, eb, ep, ch, hu, chain)
 
 # And it is told about each of them.
 def Core.affects_all(

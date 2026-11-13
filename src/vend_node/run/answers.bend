@@ -346,76 +346,56 @@ def Reach.imports.of(
 def Reach.imports(+b: Files.Files(), bs: List<&2, String>, +p: String) -> List<&2, String>:
   Reach.imports.of(p, bs, Files.Files.get(b, p))
 
-# seen with each of the paths qs that it lacks
-def Reach.add(qs: List<&2, String>, +seen: List<&2, String>) -> List<&2, String>:
-  match qs:
-    case Nil{}:
-      seen
-    case Con{+q, rest}:
-      Reach.add(
-        rest,
-        Shared.Bool.when(
-          List<&2, String>,
-          List.contains(~String, ~String.eq, seen, q),
-          u => seen,
-          u => List.append(&2, String, seen, [q])
-        )
-      )
-
-# seen with what each of the paths ps imports
-def Reach.grow(
-  +b: Files.Files(),
-  +bs: List<&2, String>,
-  ps: List<&2, String>,
-  seen: List<&2, String>
-) -> List<&2, String>:
-  match ps:
-    case Nil{}:
-      seen
-    case Con{p, rest}:
-      Reach.grow(b, bs, rest, Reach.add(Reach.imports(b, bs, p), seen))
-
-# seen after fuel rounds of growing by its imports
-def Reach.go(
-  fuel: Nat,
-  +b: Files.Files(),
-  +bs: List<&2, String>,
-  +seen: List<&2, String>
-) -> List<&2, String>:
-  match fuel:
-    case 0n:
-      seen
-    case 1n+f:
-      Reach.go(f, b, bs, Reach.grow(b, bs, seen, seen))
-
-# a content and the conditions of a build, with the paths seen
+# a content, the conditions of a build, and the paths of the content that
+# hold words: the graph of its imports
 type Reached is Data:
-  Reached{content: Files.Files(), build: List<&2, String>, seen: List<&2, String>}
+  Reached{content: Files.Files(), build: List<&2, String>, paths: List<&2, String>}
 
-# each import of the path p is among the seen paths of g
-def Reached.closed(g: Reached, p: String) -> Bool:
-  match g:
-    case Reached{b, bs, seen}:
-      Shared.List.within(~String, ~String.eq, Reach.imports(b, bs, p), seen)
-
-# the paths that the paths us reach through imports in the content b, in the
-# build of the conditions bs (nothing if the rounds were not enough)
-def Reach.of(
+# the imports of the path p in the content b, when p holds words (hit)
+def Reached.succ.if(
+  hit: Bool,
   +b: Files.Files(),
-  +bs: List<&2, String>,
-  us: List<&2, String>
-) -> Maybe<&2, List<&2, String>>:
-  +start = Reach.add(us, [])
-  +seen = Reach.go(
-    1n+Nat.add(List.length(&2, String, start), List.length(&2, String, Files.Files.paths(b))),
-    b,
-    bs,
-    start
-  )
-  Shared.Maybe.when(
-    List<&2, String>,
-    Shared.List.holds(~String, ~Reached, ~Reached.closed, seen, Reached{b, bs, seen}),
-    u => Some{seen}
+  bs: List<&2, String>,
+  +p: String
+) -> List<&2, String>:
+  match hit:
+    case False{}:
+      []
+    case True{}:
+      Reach.imports(b, bs, p)
+
+# the imports of the path p in the content b, when p is one of the paths ps
+def Reached.succ.of(
+  +b: Files.Files(),
+  bs: List<&2, String>,
+  ps: List<&2, String>,
+  +p: String
+) -> List<&2, String>:
+  Reached.succ.if(List.contains(~String, ~String.eq, ps, p), b, bs, p)
+
+# the paths that the path p leads to in g: its imports
+def Reached.succ(g: Reached, p: String) -> List<&2, String>:
+  match g:
+    case Reached{b, bs, ps}:
+      Reached.succ.of(b, bs, ps, p)
+
+# the paths that lead to others in g: those that hold words
+def Reached.nodes(g: Reached) -> List<&2, String>:
+  match g:
+    case Reached{b, bs, ps}:
+      ps
+
+# the paths us and those that they reach through imports in the content b, in
+# the build of the conditions bs, each once
+def Reach.of(+b: Files.Files(), bs: List<&2, String>, us: List<&2, String>) -> List<&2, String>:
+  Groups.Closure.of(
+    ~String,
+    ~Reached,
+    ~String.eq,
+    ~Reached.succ,
+    ~Reached.nodes,
+    Reached{b, bs, Files.Files.paths(b)},
+    us
   )
 
 # two contents
@@ -444,21 +424,8 @@ def Delta.changed(+g: Delta, ps: List<&2, String>) -> List<&2, String>:
     case Con{+p, rest}:
       List.filter.put(String, p, Delta.changed(g, rest), Delta.differ(g, p))
 
-# the paths that changed from the content a to the content b among those that
-# us reaches in b, once the reached paths m are known
-def Affects.at(
-  a: Files.Files(),
-  b: Files.Files(),
-  m: Maybe<&2, List<&2, String>>
-) -> Maybe<&2, Spec.Reply>:
-  match m:
-    case None{}:
-      None{}
-    case Some{seen}:
-      Some{Spec.Reply.Names{Delta.changed(Delta{a, b}, seen)}}
-
 # the paths that changed between two contents, if the node holds both, among
-# those that us reaches in the newer
+# us and those that us reaches in the newer
 def Affects.of(
   old: Maybe<&2, Files.Files()>,
   new: Maybe<&2, Files.Files()>,
@@ -467,7 +434,7 @@ def Affects.of(
 ) -> Maybe<&2, Spec.Reply>:
   match old new:
     case Some{a} Some{+b}:
-      Affects.at(a, b, Reach.of(b, bs, us))
+      Some{Spec.Reply.Names{Delta.changed(Delta{a, b}, Reach.of(b, bs, us))}}
     case _ _:
       None{}
 

@@ -22,8 +22,8 @@ of work". These are the decisions.
    `node.bend`). The proofs are beside it, in the law world. Next: the node keeps the state of each
    line and the content of each version, proven equal to the reads (after rounds).
 3. Rounds: in work. A majority must be enough to decide when a node is lost (README).
-4. The closure checks of `Members`, `Nodes`, `IsGroup` and `Affects`: in work. They become total,
-   proven with `src/shared/shared/shared/reach.bend`.
+4. `Members`, `Nodes`, `IsGroup` and `Affects` are total. The closures are proven complete with
+   `src/shared/shared/shared/reach.bend` (`Closure` in `groups.bend`); no check at run time.
 5. A vote keeps its whole request. A hash would make every read depend on which asks a node holds,
    and add a second trust break. The storage and wire code will keep one copy of a request for the
    votes that name it, when IO is built.

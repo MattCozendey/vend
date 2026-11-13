@@ -631,27 +631,26 @@ def Fit.owners(
       )(f(Lists.List.lead(String, ns)))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# Fit.affects, once the reached paths m are known
+# Fit.affects, once the reached paths seen are known
 def Fit.affects.at(
   q: Spec.Question,
   a: Files.Files(),
   b: Files.Files(),
-  m: Maybe<&2, List<&2, String>>,
+  seen: List<&2, String>,
   -r: Spec.Reply
 ) -> (
   @x: List<&2, String> -> {Spec.Reply.fits(q, Spec.Reply.Names{x}) == True{}: Bool}
 ) -> {
-  RAnswers.Affects.at(a, b, m) == Some{r}: Maybe<&2, Spec.Reply>
+  Some{
+    Spec.Reply.Names{RAnswers.Delta.changed(RAnswers.Delta{a, b}, seen)}
+  }
+    == Some{r}: Maybe<&2, Spec.Reply>
 } -> {Spec.Reply.fits(q, r) == True{}: Bool}:
-  match m:
-    case None{}:
-      f => Fit.none(q, r)
-    case Some{seen}:
-      f => Fit.some(
-        q,
-        Spec.Reply.Names{RAnswers.Delta.changed(RAnswers.Delta{a, b}, seen)},
-        r
-      )(f(RAnswers.Delta.changed(RAnswers.Delta{a, b}, seen)))
+  f => Fit.some(
+    q,
+    Spec.Reply.Names{RAnswers.Delta.changed(RAnswers.Delta{a, b}, seen)},
+    r
+  )(f(RAnswers.Delta.changed(RAnswers.Delta{a, b}, seen)))
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # the reply of the paths that changed fits a question that names fit
