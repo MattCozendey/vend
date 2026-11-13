@@ -17698,6 +17698,16 @@ def Rep.waits(-L: Data, s: Rep<L>) -> List<&2, Ledgers.Line>:
     case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
       Crits.Dict.values(Ledgers.Line, ws)
 
+# the place of the last ballot of s under the root r
+def Rep.last(-L: Data, s: Rep<L>, r: Hashes.Hash) -> Maybe<&2, Ledgers.Place>:
+  match s:
+    case Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}:
+      Crits.Dict.get(Ledgers.Place, ls, Rep.hash_key(r))
+
+# the entry of the ballot b
+def Rep.entry(~mach: Machine(), b: Ledgers.Ballot) -> Entry(mach):
+  Ledgers.Entry.Ballot{b}
+
 # s with the ledger l
 def Rep.with_ledger(-L: Data, s: Rep<L>, l: L) -> Rep<L>:
   match s:
@@ -17919,43 +17929,54 @@ def Place.line(w: Ledgers.Place) -> Ledgers.Line:
     case Ledgers.Place{c, h, r}:
       c
 
+# s with the ballot entry e of its own, cast at the place w under the root r
+# with the number k, when ok (it checks), in the ledger l; else s with l
+def Rep.cast.if(
+  ~mach: Machine(),
+  ~d: Led(mach),
+  ok: Bool,
+  s: Rep<Led.L(mach, d)>,
+  +l: Led.L(mach, d),
+  +w: Ledgers.Place,
+  +r: Hashes.Hash,
+  +k: U32,
+  e: Entry(mach)
+) -> Rep.Cast<Led.L(mach, d)>:
+  match ok s:
+    case True{} Rep{n, sd, l0, cs, ct, ls, ps, ws, ts, bz}:
+      Rep.Cast{
+        Rep{
+          n,
+          sd,
+          Led.add(~mach, ~d, l, e),
+          cs,
+          Crits.Dict.set(~U32, ct, Rep.hash_key(r), U32.inc(k)),
+          Crits.Dict.set(~Ledgers.Place, ls, Rep.hash_key(r), w),
+          ps,
+          ws,
+          ts,
+          bz
+        },
+        True{}
+      }
+    case False{} Rep{n, sd, l0, cs, ct, ls, ps, ws, ts, bz}:
+      Rep.Cast{Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}, False{}}
+
+# the ballot of the replica of the name n and the seed sd that casts x at the
+# place w, the number k under the root r, after its ballot at p: signed with
+# the key of the number k, naming the key of k + 1 as the next
+def Rep.ballot(+sd: Hashes.Hash, +n: String, +r: Hashes.Hash, +k: U32, +w: Ledgers.Place, x: Ledgers.Cast, p: Maybe<&2, Ledgers.Place>) -> Ledgers.Ballot:
+  Ledgers.Ballot.make(Key.secret(sd, r, k), Ledgers.Signed{w, n, x}, p, Key.public(sd, r, U32.inc(k)))
+
 # s with a ballot of its own that casts x at the place w, in the ledger l:
 # signed with the key of the next number under the root of w, and linked to
 # its last ballot there. It casts it only when it checks (Entry.checks), and
 # the count grows with it, so no number signs twice
-def Rep.cast(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), s: Rep<Led.L(mach, d)>, +l: Led.L(mach, d), +w: Ledgers.Place, x: Ledgers.Cast) -> Rep.Cast<Led.L(mach, d)>:
-  match s:
-    case Rep{+n, +sd, l0, +cs, +ct, +ls, +ps, +ws, +ts, +bz}:
-      +r = Ledgers.Line.root(Place.line(w))
-      +k = Maybe.default(&2, U32, Crits.Dict.get(U32, ct, Rep.hash_key(r)), 0)
-      +e = Ledgers.Entry.Ballot{
-        Ledgers.Ballot.make(
-          Key.secret(sd, r, k),
-          Ledgers.Signed{w, n, x},
-          Crits.Dict.get(Ledgers.Place, ls, Rep.hash_key(r)),
-          Key.public(sd, r, U32.inc(k))
-        )
-      }
-      Shared.Bool.when(
-        Rep.Cast<Led.L(mach, d)>,
-        Entry.checks(~mach, ~d, ~kern, l, e),
-        u => Rep.Cast{
-          Rep{
-            n,
-            sd,
-            Led.add(~mach, ~d, l, e),
-            cs,
-            Crits.Dict.set(~U32, ct, Rep.hash_key(r), U32.inc(k)),
-            Crits.Dict.set(~Ledgers.Place, ls, Rep.hash_key(r), w),
-            ps,
-            ws,
-            ts,
-            bz
-          },
-          True{}
-        },
-        u => Rep.Cast{Rep{n, sd, l, cs, ct, ls, ps, ws, ts, bz}, False{}}
-      )
+def Rep.cast(~mach: Machine(), ~d: Led(mach), ~kern: Kernel(mach, d), +s: Rep<Led.L(mach, d)>, +l: Led.L(mach, d), +w: Ledgers.Place, x: Ledgers.Cast) -> Rep.Cast<Led.L(mach, d)>:
+  +r = Ledgers.Line.root(Place.line(w))
+  +k = Rep.count(Led.L(mach, d), s, r)
+  +e = Rep.entry(~mach, Rep.ballot(Rep.seed(Led.L(mach, d), s), Rep.name(Led.L(mach, d), s), r, k, w, x, Rep.last(Led.L(mach, d), s, r)))
+  Rep.cast.if(~mach, ~d, Entry.checks(~mach, ~d, ~kern, l, e), s, l, w, r, k, e)
 
 # The top of a line
 
