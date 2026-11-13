@@ -39,7 +39,7 @@ a Vend Node does what README.md promises.
 - It works over deltas and shares every unchanged part, so it never keeps data it does not need.
 - Correct by construction wherever a type can make a wrong value impossible.
 - Optimal data structures from day one.
-- Laziness and parallelism together, wherever they apply.
+- Laziness and/or parallelism, wherever they apply.
 - Use every speed-up heuristic that keeps the laws true.
 
 ## How to work
