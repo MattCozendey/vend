@@ -1524,3 +1524,17 @@ def Spec.VendNode.read_stays(n, d, c, k, p, x):
 
 def Spec.VendNode.move_equals(n, c, k, i, t, v, h, h2):
   Reads.Core.move_equals(Node.facts(n), c, k, i, t, v, h, h2)
+
+# a version before two others in the facts of a node is before both at the node
+def Node.base_shared.of(
+  -n: Spec.VendNode,
+  -a: Spec.Point,
+  -c: Ledgers.Line,
+  -k: Nat,
+  -f: Ledgers.Line,
+  -v: Nat,
+  m: Mirror.Before(Node.facts(n), a, c, k) & Mirror.Before(Node.facts(n), a, f, v)
+) -> Spec.Before(n, a, c, k) & Spec.Before(n, a, f, v):
+  match m:
+    case Tuple{x, y}:
+      (Node.before_of(n, a, c, k, x), Node.before_of(n, a, f, v, y))
