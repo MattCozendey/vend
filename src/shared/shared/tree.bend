@@ -26580,7 +26580,48 @@ def Mst.step_differ(
 def Mst.step_sorted(~S: Data, ~fetch: S -> Hashes.Hash -> Maybe<&2, List<&2, U32>>, +s: S, ps: List<&2, Runs>, -r: Round) -> {
   Mst.step(~S, ~fetch, s, ps) == Some{r}: Maybe<&2, Round>
 } -> {Runs.good(ps) == True{}: Bool} -> {Runs.sorted_all(Round.pairs(r)) == True{}: Bool}:
-  ?TODO
+  match ps:
+    case Nil{}:
+      e => h =>
+        %Shared.Maybe.some_inj(Round, Round{[], []}, r, e): {Runs.sorted_all(Round.pairs(_)) == True{}: Bool}
+        {==}
+    case Con{Runs{+a, +b}, +rest}:
+      e => +h => Maybe.bind_cases(
+        Round,
+        Round,
+        Mst.step.at(~S, ~fetch, s, Runs.trim(Runs{a, b})),
+        x => Maybe.map(&2, Round, Round, y => Round.append(x, y), Mst.step(~S, ~fetch, s, rest)),
+        r,
+        {Runs.sorted_all(Round.pairs(r)) == True{}: Bool},
+        +r1 => e1 => e2 => Maybe.map_cases(
+          Round,
+          Round,
+          Mst.step(~S, ~fetch, s, rest),
+          y => Round.append(r1, y),
+          r,
+          {Runs.sorted_all(Round.pairs(r)) == True{}: Bool},
+          +r2 => er2 => e3 =>
+            +hg = Shared.Bool.and_true_left(Bool.and(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Pieces.apart(a, b)), Runs.good(rest))(h)
+            +tg = Runs.trim_good(a, b)(Shared.Bool.and_true_left(Pieces.sorted(a), Pieces.sorted(b))(Shared.Bool.and_true_left(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Pieces.apart(a, b))(hg)))(Shared.Bool.and_true_right(Pieces.sorted(a), Pieces.sorted(b))(Shared.Bool.and_true_left(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Pieces.apart(a, b))(hg)))(Shared.Bool.and_true_right(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Pieces.apart(a, b))(hg))
+            %e3: {Runs.sorted_all(Round.pairs(_)) == True{}: Bool}
+            %Equal.sym(List<&2, Runs>, Round.pairs(Round.append(r1, r2)), List.append(&2, Runs, Round.pairs(r1), Round.pairs(r2)), Round.pairs_append(r1, r2)): {
+              Runs.sorted_all(_) == True{}: Bool
+            }
+            Runs.sorted_all_append(
+              Round.pairs(r1),
+              Round.pairs(r2)
+            )(
+              Mst.step_at_sorted(~S, ~fetch, s, Runs.side_a(Runs.trim(Runs{a, b})), Runs.side_b(Runs.trim(Runs{a, b})), r1)(Equal.trans(
+              Maybe<&2, Round>,
+              Mst.step.at(~S, ~fetch, s, Runs{Runs.side_a(Runs.trim(Runs{a, b})), Runs.side_b(Runs.trim(Runs{a, b}))}),
+              Mst.step.at(~S, ~fetch, s, Runs.trim(Runs{a, b})),
+              Some{r1},
+              Equal.cong(Runs, Maybe<&2, Round>, z => Mst.step.at(~S, ~fetch, s, z), Runs{Runs.side_a(Runs.trim(Runs{a, b})), Runs.side_b(Runs.trim(Runs{a, b}))}, Runs.trim(Runs{a, b}), Equal.sym(Runs, Runs.trim(Runs{a, b}), Runs{Runs.side_a(Runs.trim(Runs{a, b})), Runs.side_b(Runs.trim(Runs{a, b}))}, Runs.eta(Runs.trim(Runs{a, b})))),
+              e1
+            ))(Shared.Bool.and_true_left(Pieces.sorted(Runs.side_a(Runs.trim(Runs{a, b}))), Pieces.sorted(Runs.side_b(Runs.trim(Runs{a, b}))))(Shared.Bool.and_true_left(Bool.and(Pieces.sorted(Runs.side_a(Runs.trim(Runs{a, b}))), Pieces.sorted(Runs.side_b(Runs.trim(Runs{a, b})))), Pieces.apart(Runs.side_a(Runs.trim(Runs{a, b})), Runs.side_b(Runs.trim(Runs{a, b}))))(tg)))(Shared.Bool.and_true_right(Pieces.sorted(Runs.side_a(Runs.trim(Runs{a, b}))), Pieces.sorted(Runs.side_b(Runs.trim(Runs{a, b}))))(Shared.Bool.and_true_left(Bool.and(Pieces.sorted(Runs.side_a(Runs.trim(Runs{a, b}))), Pieces.sorted(Runs.side_b(Runs.trim(Runs{a, b})))), Pieces.apart(Runs.side_a(Runs.trim(Runs{a, b})), Runs.side_b(Runs.trim(Runs{a, b}))))(tg)))
+            )(Mst.step_sorted(~S, ~fetch, s, rest, r2)(er2)(Shared.Bool.and_true_right(Bool.and(Bool.and(Pieces.sorted(a), Pieces.sorted(b)), Pieces.apart(a, b)), Runs.good(rest))(h)))
+        )(e2)
+      )(e)
 
 # a difference of runs with sorted sides lists exactly the keys that they
 # read differently
