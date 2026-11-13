@@ -27052,17 +27052,28 @@ def Mst.wf_rest(
   f: Nat,
   +s: S,
   +k: List<&2, U32>,
-  -v: List<&2, U32>,
+  +v: List<&2, U32>,
   +r: Maybe<&2, Hashes.Hash>,
   +rest: List<&2, Item>,
   +l: Nat,
   prev: Maybe<&2, Hashes.Hash>,
-  -lo: Maybe<&2, List<&2, U32>>,
+  +lo: Maybe<&2, List<&2, U32>>,
   +hi: Maybe<&2, List<&2, U32>>
 ) -> {Mst.wf.items(~S, ~fetch, f, s, Item{k, v, r} <> rest, l, prev, lo, hi) == True{}: Bool} -> {
   Mst.wf.items(~S, ~fetch, f, s, rest, l, r, Some{k}, hi) == True{}: Bool
 }:
-  ?TODO
+  match f prev:
+    case 0n None{}:
+      e => Shared.Bool.and_true_right(Nat.is_eq(Key.level(k), l), Mst.wf.items(~S, ~fetch, 0n, s, rest, l, r, Some{k}, hi))(e)
+    case 0n Some{h}:
+      e => Empty.absurd({Mst.wf.items(~S, ~fetch, 0n, s, rest, l, r, Some{k}, hi) == True{}: Bool}, Shared.Bool.false_ne_true(e))
+    case 1n+p None{}:
+      e => Shared.Bool.and_true_right(Nat.is_eq(Key.level(k), l), Mst.wf.items(~S, ~fetch, 1n+p, s, rest, l, r, Some{k}, hi))(e)
+    case 1n+(+p) Some{+h}:
+      e => Shared.Bool.and_true_right(
+        Bool.and(Bool.and(Nat.is_eq(Key.level(k), l), Bool.not(List.is_empty(&2, U32, k))), Mst.wf(~S, ~fetch, 1n+p, s, l, Room{l, lo, Some{k}}, Some{h})),
+        Mst.wf.items(~S, ~fetch, 1n+p, s, rest, l, r, Some{k}, hi)
+      )(e)
 
 # the first item of a node is of its level
 def Mst.wf_level(
