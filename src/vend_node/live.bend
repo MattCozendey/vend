@@ -7,9 +7,11 @@ import ./codes.bend as Coded
 import ./facts.bend as Facts
 import ./lines.bend as Lines
 import ./moves.bend as Moves
+import ./rounds.bend as Rounds
 import ./run/answers.bend as RAnswers
 import ./run/facts.bend as RFacts
 import ./run/lines.bend as RLines
+import ./run/rounds.bend as RRounds
 import ./run/work.bend as RWorks
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
@@ -20,345 +22,75 @@ import ./work.bend as Works
 # What a node does for sure
 # -------------------------
 
-# the facts s after a work that casts the vote m, if any, are wider
+# the facts s with the ballot m, if any, of the node name are wider
 def Work.does_wider.of(
+  +name: String,
   +s: Facts.Facts(),
-  m: Maybe<&2, Types.Fact>
-) -> {Facts.Facts.wider(s, Works.Work.does.of(s, m)) == True{}: Bool}:
+  m: Maybe<&2, RWorks.Plan>
+) -> {Facts.Facts.wider(s, Works.Work.cast(s, name, m)) == True{}: Bool}:
   match m:
     case None{}:
       Facts.Facts.wider_refl(s)
-    case Some{+f}:
-      Facts.Facts.add_wider(s, f)
+    case Some{RWorks.Plan{+st, +x}}:
+      Lists.Bool.by(
+        b => {
+          Facts.Facts.wider(
+            s,
+            Shared.Bool.when(
+              Facts.Facts(),
+              b,
+              u => s,
+              u => Facts.Facts.add(s, Types.Fact.Vote{name, st, x})
+            )
+          )
+            == True{}: Bool
+        },
+        Facts.Facts.cast(s, name, st),
+        et => Facts.Facts.wider_refl(s),
+        ef => Facts.Facts.add_wider(s, Types.Fact.Vote{name, st, x})
+      )
 
 # the facts of a node are wider after it works
 def Work.does_wider(
   +name: String,
   +s: Facts.Facts()
 ) -> {Facts.Facts.wider(s, Works.Work.does(s, name)) == True{}: Bool}:
-  Work.does_wider.of(s, Works.Work.vote(s, name))
+  Work.does_wider.of(name, s, Works.Work.plan(s, name))
 
-# the vote m, if any, is a vote of the node name for a step that it holds no
-# vote for
-def Vote.Free(s: Facts.Facts(), name: String, m: Maybe<&2, Types.Fact>) -> Type:
-  match m:
-    case None{}:
-      Unit
-    case Some{f}:
-      Exists(
-        Types.Step,
-        st => Exists(
-          Types.Pick,
-          pk => {
-            f == Types.Fact.Vote{name, st, pk}: Types.Fact
-          }
-            & {Facts.Facts.cast(s, name, st) == False{}: Bool}
-        )
-      )
-
-# a node that may vote for a slot holds no vote for it
-def Work.free_cast(
-  +s: Facts.Facts(),
-  +name: String,
-  +c: Ledgers.Line,
-  +k: Nat,
-  +ns: List<&2, String>
-) -> {
-  Works.Work.free(s, name, c, k, ns) == True{}: Bool
-} -> {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool}:
-  h => Shared.Bool.not_true(
-    Facts.Facts.cast(s, name, Types.Step.At{c, k})
-  )(
-    Shared.Bool.and_true_right(
-      List.contains(~String, ~String.eq, ns, name),
-      Bool.not(Facts.Facts.cast(s, name, Types.Step.At{c, k}))
-    )(h)
-  )
-
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
-# the vote that a node offers is free
-def Work.offer.at_free(
-  +s: Facts.Facts(),
-  +name: String,
-  +c: Ledgers.Line,
-  +a: Types.Ask,
-  m: Maybe<&2, RLines.State>,
-  u: Maybe<&2, RLines.Rule>
-) -> Vote.Free(s, name, Works.Work.offer.at(s, name, c, a, m, u)):
-  match m u:
-    case Some{RLines.State{+vs, +k}} Some{RLines.Rule{g, +ns}}:
-      Lists.Bool.by(
-        t => Vote.Free(
-          s,
-          name,
-          Shared.Maybe.when(
-            Types.Fact,
-            t,
-            u2 => Some{
-              Types.Fact.Vote{
-                name,
-                Types.Step.At{c, k},
-                Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}
-              }
-            }
-          )
-        ),
-        Bool.and(
-          Bool.and(String.eq(RWorks.Turn.of(ns, k), name), Works.Work.free(s, name, c, k, ns)),
-          Bool.not(
-            Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, RLines.Ask.id(a))
-          )
-        ),
-        et => (
-          Types.Step.At{c, k},
-          (
-            Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
-            (
-              {==},
-              Work.free_cast(
-                s,
-                name,
-                c,
-                k,
-                ns
-              )(
-                Shared.Bool.and_true_right(
-                  String.eq(RWorks.Turn.of(ns, k), name),
-                  Works.Work.free(s, name, c, k, ns)
-                )(
-                  Shared.Bool.and_true_left(
-                    Bool.and(
-                      String.eq(RWorks.Turn.of(ns, k), name),
-                      Works.Work.free(s, name, c, k, ns)
-                    ),
-                    Bool.not(
-                      Shared.List.some(
-                        ~Types.Entry,
-                        ~Ledgers.Id,
-                        ~RLines.Entry.is_of,
-                        vs,
-                        RLines.Ask.id(a)
-                      )
-                    )
-                  )(et)
-                )
-              )
-            )
-          )
-        ),
-        ef => Unit{}
-      )
-    case Some{st} None{}:
-      Unit{}
-    case None{} u:
-      Unit{}
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# the vote that a node offers on a line is free
-def Work.offer.on_free(
-  +s: Facts.Facts(),
-  +name: String,
-  +a: Types.Ask,
-  m: Maybe<&2, Ledgers.Line>
-) -> Vote.Free(s, name, Works.Work.offer.on(s, name, a, m)):
-  match m:
-    case None{}:
-      Unit{}
-    case Some{+c}:
-      Work.offer.at_free(
-        s,
-        name,
-        c,
-        a,
-        Lines.Line.state(s, c),
-        Works.Work.rule(s, c, Lines.Line.state(s, c))
-      )
-
-# the vote that a node proposes for an ask is free
-def Work.propose.of_free(
-  +s: Facts.Facts(),
-  +name: String,
-  m: Maybe<&2, Types.Ask>
-) -> Vote.Free(s, name, Works.Work.propose.of(s, name, m)):
-  match m:
-    case None{}:
-      Unit{}
-    case Some{+a}:
-      Work.offer.on_free(s, name, a, RWorks.Request.line(Facts.Facts.list(s), RLines.Ask.request(a)))
-
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
-# the vote of a node that follows a vote at a slot is free
-def Work.follow.at_free(
-  +s: Facts.Facts(),
-  +name: String,
-  +v: String,
-  +c: Ledgers.Line,
-  +k: Nat,
-  +pk: Types.Pick,
-  m: Maybe<&2, RLines.State>,
-  u: Maybe<&2, RLines.Rule>
-) -> Vote.Free(s, name, Works.Work.follow.at(s, name, v, c, k, pk, m, u)):
-  match m u:
-    case Some{RLines.State{vs, +k2}} Some{RLines.Rule{g, +ns}}:
-      Lists.Bool.by(
-        t => Vote.Free(
-          s,
-          name,
-          Shared.Maybe.when(
-            Types.Fact,
-            t,
-            u2 => Some{Types.Fact.Vote{name, Types.Step.At{c, k}, pk}}
-          )
-        ),
-        Bool.and(
-          Bool.and(Nat.is_eq(k2, k), String.eq(RWorks.Turn.of(ns, k), v)),
-          Works.Work.free(s, name, c, k, ns)
-        ),
-        et => (
-          Types.Step.At{c, k},
-          (
-            pk,
-            (
-              {==},
-              Work.free_cast(
-                s,
-                name,
-                c,
-                k,
-                ns
-              )(
-                Shared.Bool.and_true_right(
-                  Bool.and(Nat.is_eq(k2, k), String.eq(RWorks.Turn.of(ns, k), v)),
-                  Works.Work.free(s, name, c, k, ns)
-                )(et)
-              )
-            )
-          )
-        ),
-        ef => Unit{}
-      )
-    case Some{st} None{}:
-      Unit{}
-    case None{} u:
-      Unit{}
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# the vote of a node that follows a fact is free
-def Work.follow.of_free(
-  +s: Facts.Facts(),
-  +name: String,
-  f: Types.Fact
-) -> Vote.Free(s, name, Works.Work.follow.of(s, name, f)):
-  match f:
-    case Types.Fact.Vote{+v, Types.Step.At{+c, +k}, +pk}:
-      Work.follow.at_free(
-        s,
-        name,
-        v,
-        c,
-        k,
-        pk,
-        Lines.Line.state(s, c),
-        Works.Work.rule(s, c, Lines.Line.state(s, c))
-      )
-    case Types.Fact.Vote{v, Types.Step.Broken{}, pk}:
-      Unit{}
-    case Types.Fact.Ask{a}:
-      Unit{}
-
-# the first of two free votes is free
-def Work.follow.or_free(
-  -s: Facts.Facts(),
-  -name: String,
-  m: Maybe<&2, Types.Fact>,
-  -r: Maybe<&2, Types.Fact>
-) -> Vote.Free(
-  s,
-  name,
-  m
-) -> Vote.Free(s, name, r) -> Vote.Free(s, name, RWorks.Work.follow.or(m, u => r)):
-  match m:
-    case None{}:
-      a => b => b
-    case Some{f}:
-      a => b => a
-
-# the vote of a node that follows a vote among fs is free
-def Work.follow_free(
-  +s: Facts.Facts(),
-  +name: String,
-  fs: List<&2, Types.Fact>
-) -> Vote.Free(s, name, Works.Work.follow(s, name, fs)):
-  match fs:
-    case Nil{}:
-      Unit{}
-    case Con{+f, +rest}:
-      Work.follow.or_free(
-        s,
-        name,
-        Works.Work.follow.of(s, name, f),
-        Works.Work.follow(s, name, rest)
-      )(Work.follow.of_free(s, name, f))(Work.follow_free(s, name, rest))
-
-# the vote that a node casts next is free
-def Work.vote_free(
-  +s: Facts.Facts(),
-  +name: String
-) -> Vote.Free(s, name, Works.Work.vote(s, name)):
-  Work.follow.or_free(
-    s,
-    name,
-    Works.Work.propose(s, name),
-    Works.Work.follow(s, name, Facts.Facts.list(s))
-  )(
-    Work.propose.of_free(
-      s,
-      name,
-      Lists.List.top(~Types.Ask, ~RFacts.Ask.seq, Works.Work.ready(s, name, Facts.Facts.list(s)))
-    )
-  )(Work.follow_free(s, name, Facts.Facts.list(s)))
-
-# the facts stay sound with the free vote f
-def Work.does_ok.at(
-  +name: String,
-  +s: Facts.Facts(),
-  -f: Types.Fact,
-  ok: {Facts.Facts.ok(name, s) == True{}: Bool},
-  fr: Exists(
-    Types.Step,
-    st => Exists(
-      Types.Pick,
-      pk => {
-        f == Types.Fact.Vote{name, st, pk}: Types.Fact
-      }
-        & {Facts.Facts.cast(s, name, st) == False{}: Bool}
-    )
-  )
-) -> {Facts.Facts.ok(name, Facts.Facts.add(s, f)) == True{}: Bool}:
-  (+st, r1) = fr
-  (+pk, r2) = r1
-  (ef, ec) = r2
-  %Equal.sym(
-    Types.Fact,
-    f,
-    Types.Fact.Vote{name, st, pk},
-    ef
-  ): {Facts.Facts.ok(name, Facts.Facts.add(s, _)) == True{}: Bool}
-  Facts.Facts.add_cast_ok(name, s, st, pk)(ok)(ec)
-
-# the facts stay sound with a free vote
+# the facts stay sound with the ballot m, if any, of the node name: it is cast
+# only where the node holds no ballot of its own
 def Work.does_ok.of(
   +name: String,
   +s: Facts.Facts(),
-  m: Maybe<&2, Types.Fact>
+  m: Maybe<&2, RWorks.Plan>
 ) -> {
   Facts.Facts.ok(name, s) == True{}: Bool
-} -> Vote.Free(s, name, m) -> {Facts.Facts.ok(name, Works.Work.does.of(s, m)) == True{}: Bool}:
+} -> {Facts.Facts.ok(name, Works.Work.cast(s, name, m)) == True{}: Bool}:
   match m:
     case None{}:
-      ok => fr => ok
-    case Some{+f}:
-      ok => fr => Work.does_ok.at(name, s, f, ok, fr)
+      ok => ok
+    case Some{RWorks.Plan{+st, +x}}:
+      Lists.Bool.by(
+        b => {
+          Facts.Facts.cast(s, name, st) == b: Bool
+        } -> {
+          Facts.Facts.ok(name, s) == True{}: Bool
+        } -> {
+          Facts.Facts.ok(
+            name,
+            Shared.Bool.when(
+              Facts.Facts(),
+              b,
+              u => s,
+              u => Facts.Facts.add(s, Types.Fact.Vote{name, st, x})
+            )
+          )
+            == True{}: Bool
+        },
+        Facts.Facts.cast(s, name, st),
+        et => ec => ok => ok,
+        ef => ec => ok => Facts.Facts.add_cast_ok(name, s, st, x)(ok)(ec)
+      )({==})
 
 # the facts of a node stay sound when it works
 def Work.does_ok(
@@ -367,7 +99,7 @@ def Work.does_ok(
 ) -> {
   Facts.Facts.ok(name, s) == True{}: Bool
 } -> {Facts.Facts.ok(name, Works.Work.does(s, name)) == True{}: Bool}:
-  ok => Work.does_ok.of(name, s, Works.Work.vote(s, name))(ok)(Work.vote_free(s, name))
+  ok => Work.does_ok.of(name, s, Works.Work.plan(s, name))(ok)
 
 # Tools
 # -----
@@ -519,7 +251,7 @@ def Fact.vote_not_ask(
   -P: Type,
   +v: String,
   +st: Types.Step,
-  +pk: Types.Pick,
+  +pk: Types.Cast,
   +a: Types.Ask
 ) -> {Types.Fact.Vote{v, st, pk} == Types.Fact.Ask{a}: Types.Fact} -> P:
   e => Empty.absurd(
@@ -831,6 +563,32 @@ def Writes.top(
     )(ne)
   )
 
+# Ask.fresh.vote, with the vote
+def Ask.fresh.vote.of(
+  +name: String,
+  +s: Facts.Facts(),
+  +a: Types.Ask,
+  +c: Ledgers.Line,
+  +a2: Types.Ask,
+  +pins: Types.Pins,
+  +k: Nat,
+  hlt: {Nat.is_lt(RFacts.Seq.peak(Facts.Facts.list(s)), RFacts.Ask.seq(a)) == True{}: Bool},
+  he: {Coded.Ask.is_eq(a2, a) == True{}: Bool},
+  w0: Rounds.Votes.Voted(Facts.Facts.take(name, s, Types.Fact.Ask{a}), c, k, Types.Pick{a2, pins})
+) -> Empty:
+  (+v, w1) = w0
+  (+t, w2) = w1
+  (+r, w3) = w2
+  (+b, hv) = w3
+  Lists.Bool.clash(
+    Empty,
+    Nat.is_lt(RFacts.Ask.seq(a), RFacts.Ask.seq(a)),
+    Shared.Nat.lt_irrefl(RFacts.Ask.seq(a)),
+    Shared.Nat.le_lt(RFacts.Ask.seq(a), RFacts.Seq.peak(Facts.Facts.list(s)), RFacts.Ask.seq(a))((
+        %Coded.Ask.is_eq_sound(a2, a)(he): {Nat.is_le(RFacts.Ask.seq(_), RFacts.Seq.peak(Facts.Facts.list(s))) == True{}: Bool}
+        Facts.Facts.seq_vote(s, v, Types.Step.At{c, k, t}, r, a2, pins, b)(Bool.via(Facts.Facts.has(Facts.Facts.take(name, s, Types.Fact.Ask{a}), Types.Fact.Vote{v, Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a2, pins}, b}}), Facts.Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a2, pins}, b}}), Facts.Facts.take_ask_votes(name, s, a, v, c, k, t, Types.Cast.Vote{r, Types.Pick{a2, pins}, b}), hv))))(hlt)
+  )
+
 # no vote that a node holds after it took in the ask a, of a number above
 # every number that it held, is for the entry e made by a
 def Ask.fresh.vote(
@@ -838,27 +596,20 @@ def Ask.fresh.vote(
   +s: Facts.Facts(),
   +a: Types.Ask,
   +c: Ledgers.Line,
-  e: Types.Entry,
-  +v: String
+  e: Types.Entry
 ) -> {
   Nat.is_lt(RFacts.Seq.peak(Facts.Facts.list(s)), RFacts.Ask.seq(a)) == True{}: Bool
 } -> {
-  Facts.Facts.has(
-    Facts.Facts.take(name, s, Types.Fact.Ask{a}),
-    Types.Fact.Vote{v, Types.Step.At{c, RLines.Entry.slot(e)}, RLines.Entry.pick(e)}
-  )
-    == True{}: Bool
-} -> {Coded.Ask.is_eq(RLines.Entry.ask(e), a) == True{}: Bool} -> Empty:
+  Coded.Ask.is_eq(RLines.Entry.ask(e), a) == True{}: Bool
+} -> Rounds.Votes.Voted(
+  Facts.Facts.take(name, s, Types.Fact.Ask{a}),
+  c,
+  RLines.Entry.slot(e),
+  RLines.Entry.pick(e)
+) -> Empty:
   match e:
     case Types.Entry{Types.Pick{+a2, +pins}, +k}:
-      hlt => hv => he => Lists.Bool.clash(
-        Empty,
-        Nat.is_lt(RFacts.Ask.seq(a), RFacts.Ask.seq(a)),
-        Shared.Nat.lt_irrefl(RFacts.Ask.seq(a)),
-        Shared.Nat.le_lt(RFacts.Ask.seq(a), RFacts.Seq.peak(Facts.Facts.list(s)), RFacts.Ask.seq(a))((
-            %Coded.Ask.is_eq_sound(a2, a)(he): {Nat.is_le(RFacts.Ask.seq(_), RFacts.Seq.peak(Facts.Facts.list(s))) == True{}: Bool}
-            Facts.Facts.seq_vote(s, v, Types.Step.At{c, k}, a2, pins)(Bool.via(Facts.Facts.has(Facts.Facts.take(name, s, Types.Fact.Ask{a}), Types.Fact.Vote{v, Types.Step.At{c, k}, Types.Pick{a2, pins}}), Facts.Facts.has(s, Types.Fact.Vote{v, Types.Step.At{c, k}, Types.Pick{a2, pins}}), Facts.Facts.take_ask_votes(name, s, a, v, c, k, Types.Pick{a2, pins}), hv))))(hlt)
-      )
+      hlt => he => w0 => Ask.fresh.vote.of(name, s, a, c, a2, pins, k, hlt, he, w0)
 
 # an entry of the number 0 is not made by an ask of a number above n
 def Ask.fresh.zero(
@@ -916,24 +667,14 @@ def View.fresh.at(
         )
       )(he)
     case 1n+(+j):
-      hlt => hv => hg => he => Ex.by(
-        String,
-        v => {
-          Facts.Facts.has(
-            Facts.Facts.take(name, s, Types.Fact.Ask{a}),
-            Types.Fact.Vote{v, Types.Step.At{c, RLines.Entry.slot(e)}, RLines.Entry.pick(e)}
-          )
-            == True{}: Bool
-        },
-        Empty,
+      hlt => hv => hg => he => Ask.fresh.vote(name, s, a, c, e)(hlt)(he)(
         Versions.Line.versions_voted(
           Facts.Facts.take(name, s, Types.Fact.Ask{a}),
           c,
           vs,
           j,
           e
-        )(hv)(hg),
-        +v => hvote => Ask.fresh.vote(name, s, a, c, e, v)(hlt)(hvote)(he)
+        )(hv)(hg)
       )
 
 # no version of a line, of the versions m after a node took in the ask a of a
@@ -1170,366 +911,6 @@ def List.index_miss(
     )
   )
 
-# the step of the fact f, or d when f is an ask
-def Fact.step_or(d: Types.Step, f: Types.Fact) -> Types.Step:
-  match f:
-    case Types.Fact.Ask{a}:
-      d
-    case Types.Fact.Vote{v, st, pk}:
-      st
-
-# the pick of the fact f, or d when f is an ask
-def Fact.pick_or(d: Types.Pick, f: Types.Fact) -> Types.Pick:
-  match f:
-    case Types.Fact.Ask{a}:
-      d
-    case Types.Fact.Vote{v, st, pk}:
-      pk
-
-# an ask is no vote
-def Fact.ask_not_vote(
-  -P: Type,
-  +a: Types.Ask,
-  +v: String,
-  +st: Types.Step,
-  +pk: Types.Pick
-) -> {Types.Fact.Ask{a} == Types.Fact.Vote{v, st, pk}: Types.Fact} -> P:
-  e => Empty.absurd(
-    P,
-    Shared.Bool.true_ne_false(
-      Equal.cong(
-        Types.Fact,
-        Bool,
-        f => Moves.Fact.is_ask(f),
-        Types.Fact.Ask{a},
-        Types.Fact.Vote{v, st, pk},
-        e
-      )
-    )
-  )
-
-# a pick of the rest is among the kept picks
-def Votes.picks_rest(
-  +a: Types.Pick,
-  +r: List<&2, Types.Pick>,
-  keep: Bool,
-  +x: Types.Pick
-) -> {
-  List.contains(~Types.Pick, ~Coded.Pick.is_eq, r, x) == True{}: Bool
-} -> {
-  List.contains(
-    ~Types.Pick,
-    ~Coded.Pick.is_eq,
-    List.filter.put(Types.Pick, a, r, keep),
-    x
-  )
-    == True{}: Bool
-}:
-  match keep:
-    case True{}:
-      h => Shared.List.contains_cons(~Types.Pick, ~Coded.Pick.is_eq, a, r, x)(h)
-    case False{}:
-      h => h
-
-# the pick of a vote among fs for the step st is one of the picks of fs for st
-def Votes.picks_in(
-  fs: List<&2, Types.Fact>,
-  +st: Types.Step,
-  +v: String,
-  +q: Types.Pick
-) -> {
-  List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Vote{v, st, q}) == True{}: Bool
-} -> {List.contains(~Types.Pick, ~Coded.Pick.is_eq, RLines.Votes.picks(fs, st), q) == True{}: Bool}:
-  match fs:
-    case Nil{}:
-      hin => Empty.absurd({False{} == True{}: Bool}, Shared.Bool.false_ne_true(hin))
-    case Con{Types.Fact.Ask{+a}, +rest}:
-      hin => Lists.List.contains_cons_by(
-        ~Types.Fact,
-        ~Coded.Fact.is_eq,
-        ~Coded.Fact.laws(),
-        {
-          List.contains(
-            ~Types.Pick,
-            ~Coded.Pick.is_eq,
-            RLines.Votes.picks(rest, st),
-            q
-          )
-            == True{}: Bool
-        },
-        Types.Fact.Ask{a},
-        rest,
-        Types.Fact.Vote{v, st, q},
-        hin,
-        e => Fact.ask_not_vote(
-          {
-            List.contains(
-              ~Types.Pick,
-              ~Coded.Pick.is_eq,
-              RLines.Votes.picks(rest, st),
-              q
-            )
-              == True{}: Bool
-          },
-          a,
-          v,
-          st,
-          q
-        )(e),
-        c => Votes.picks_in(rest, st, v, q)(c)
-      )
-    case Con{Types.Fact.Vote{+v2, +st2, +pk2}, +rest}:
-      hin => Lists.List.contains_cons_by(
-        ~Types.Fact,
-        ~Coded.Fact.is_eq,
-        ~Coded.Fact.laws(),
-        {
-          List.contains(
-            ~Types.Pick,
-            ~Coded.Pick.is_eq,
-            List.filter.put(
-              Types.Pick,
-              pk2,
-              RLines.Votes.picks(rest, st),
-              Coded.Step.is_eq(st2, st)
-            ),
-            q
-          )
-            == True{}: Bool
-        },
-        Types.Fact.Vote{v2, st2, pk2},
-        rest,
-        Types.Fact.Vote{v, st, q},
-        hin,
-        +e => (
-          %Equal.sym(Types.Step, st2, st, Equal.cong(Types.Fact, Types.Step, f => Fact.step_or(st, f), Types.Fact.Vote{v2, st2, pk2}, Types.Fact.Vote{v, st, q}, e)): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, List.filter.put(Types.Pick, pk2, RLines.Votes.picks(rest, st), Coded.Step.is_eq(_, st)), q) == True{}: Bool}
-          %Equal.sym(Types.Pick, pk2, q, Equal.cong(Types.Fact, Types.Pick, f => Fact.pick_or(q, f), Types.Fact.Vote{v2, st2, pk2}, Types.Fact.Vote{v, st, q}, e)): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, List.filter.put(Types.Pick, _, RLines.Votes.picks(rest, st), Coded.Step.is_eq(st, st)), q) == True{}: Bool}
-          %Equal.sym(Bool, Coded.Step.is_eq(st, st), True{}, Coded.Step.is_eq_refl(st)): {List.contains(~Types.Pick, ~Coded.Pick.is_eq, List.filter.put(Types.Pick, q, RLines.Votes.picks(rest, st), _), q) == True{}: Bool}
-          Lists.List.contains_head(~Types.Pick, ~Coded.Pick.is_eq, ~Coded.Pick.laws(), q, RLines.Votes.picks(rest, st))),
-        c => Votes.picks_rest(
-          pk2,
-          RLines.Votes.picks(rest, st),
-          Coded.Step.is_eq(st2, st),
-          q
-        )(Votes.picks_in(rest, st, v, q)(c))
-      )
-
-# a vote of the node of a seat for its step, among the facts of s, gives a
-# pick that s holds a vote of the node for
-def Cast.vote.at(
-  +s: Facts.Facts(),
-  +name: String,
-  +st: Types.Step,
-  f: Types.Fact
-) -> {
-  List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), f) == True{}: Bool
-} -> {
-  RFacts.Fact.is_cast(RFacts.Seat{name, st}, f) == True{}: Bool
-} -> Exists(Types.Pick, q => {Facts.Facts.has(s, Types.Fact.Vote{name, st, q}) == True{}: Bool}):
-  match f:
-    case Types.Fact.Ask{a}:
-      hin => hc => Empty.absurd(
-        Exists(Types.Pick, q => {Facts.Facts.has(s, Types.Fact.Vote{name, st, q}) == True{}: Bool}),
-        Shared.Bool.false_ne_true(hc)
-      )
-    case Types.Fact.Vote{+v, +st2, +q}:
-      hin => +hc => (q, (
-          %Texts.String.eq_sound(v, name)(Shared.Bool.and_true_left(String.eq(v, name), Coded.Step.is_eq(st2, st))(hc)): {Facts.Facts.has(s, Types.Fact.Vote{_, st, q}) == True{}: Bool}
-          %Coded.Step.is_eq_sound(st2, st)(Shared.Bool.and_true_right(String.eq(v, name), Coded.Step.is_eq(st2, st))(hc)): {Facts.Facts.has(s, Types.Fact.Vote{v, _, q}) == True{}: Bool}
-          Facts.Facts.in_has(s, Types.Fact.Vote{v, st2, q})(hin)))
-
-# Cast.vote, with the member of the facts that is the vote
-def Cast.vote.of(
-  +s: Facts.Facts(),
-  +name: String,
-  +st: Types.Step,
-  r: Exists(
-    Types.Fact,
-    f => {
-      List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.Facts.list(s), f) == True{}: Bool
-    }
-      & {RFacts.Fact.is_cast(RFacts.Seat{name, st}, f) == True{}: Bool}
-  )
-) -> Exists(Types.Pick, q => {Facts.Facts.has(s, Types.Fact.Vote{name, st, q}) == True{}: Bool}):
-  (+f, w) = r
-  (hin, hc) = w
-  Cast.vote.at(s, name, st, f)(hin)(hc)
-
-# a node that holds a vote of its own for a step holds one for a pick
-def Cast.vote(
-  +s: Facts.Facts(),
-  +name: String,
-  +st: Types.Step
-) -> {
-  Facts.Facts.cast(s, name, st) == True{}: Bool
-} -> Exists(Types.Pick, q => {Facts.Facts.has(s, Types.Fact.Vote{name, st, q}) == True{}: Bool}):
-  h => Cast.vote.of(
-    s,
-    name,
-    st,
-    Lists.List.some_in(
-      ~Types.Fact,
-      ~RFacts.Seat,
-      ~RFacts.Fact.is_cast,
-      ~Coded.Fact.is_eq,
-      ~Coded.Fact.laws(),
-      Facts.Facts.list(s),
-      RFacts.Seat{name, st}
-    )(h)
-  )
-
-# the one node that decides a step voted for the pick q: more than half did
-def Alone.most(
-  +s: Facts.Facts(),
-  +name: String,
-  +st: Types.Step,
-  -pks: List<&2, Types.Pick>,
-  +q: Types.Pick
-) -> {
-  Facts.Facts.has(s, Types.Fact.Vote{name, st, q}) == True{}: Bool
-} -> {RLines.Tally.most(RLines.Tally{Facts.Facts.crit(s), st, [name], pks}, q) == True{}: Bool}:
-  h => (
-    %Equal.sym(Bool, Facts.Facts.has(s, Types.Fact.Vote{name, st, q}), True{}, h): {Lists.Nat.most(1n, Shared.Nat.add_if(_, 0n)) == True{}: Bool}
-    {==})
-
-# more than half of the one node that decides a step voted for the pick r:
-# the node did
-def Alone.most_inv(
-  +s: Facts.Facts(),
-  +name: String,
-  +st: Types.Step,
-  -pks: List<&2, Types.Pick>,
-  +r: Types.Pick
-) -> {
-  RLines.Tally.most(RLines.Tally{Facts.Facts.crit(s), st, [name], pks}, r) == True{}: Bool
-} -> {Facts.Facts.has(s, Types.Fact.Vote{name, st, r}) == True{}: Bool}:
-  hm => Lists.Bool.by(
-    x => {Lists.Nat.most(1n, Shared.Nat.add_if(x, 0n)) == True{}: Bool} -> {x == True{}: Bool},
-    Facts.Facts.has(s, Types.Fact.Vote{name, st, r}),
-    et => h => {==},
-    ef => h => h
-  )(hm)
-
-# no pick stands against the pick that the one node of a step voted for, in
-# facts that are sound for the node
-def Alone.beats(
-  +name: String,
-  +s: Facts.Facts(),
-  +st: Types.Step,
-  +pks: List<&2, Types.Pick>,
-  +q: Types.Pick,
-  +r: Types.Pick
-) -> {
-  Facts.Facts.ok(name, s) == True{}: Bool
-} -> {
-  Facts.Facts.has(s, Types.Fact.Vote{name, st, q}) == True{}: Bool
-} -> {RLines.Rival.beats(RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, [name], pks}, q}, r) == True{}: Bool}:
-  ok => hq => Lists.Bool.by(
-    x => {Bool.or(Coded.Pick.is_eq(r, q), Bool.not(x)) == True{}: Bool},
-    RLines.Tally.most(RLines.Tally{Facts.Facts.crit(s), st, [name], pks}, r),
-    et => Lists.Bool.by(
-      x => {Bool.or(x, False{}) == True{}: Bool},
-      Coded.Pick.is_eq(r, q),
-      et2 => {==},
-      ef2 => Lists.Bool.clash(
-        {False{} == True{}: Bool},
-        List.contains(~String, ~String.eq, Facts.Facts.liars(s), name),
-        Facts.Facts.ok_never(name, s)(ok),
-        Facts.Facts.liars_in(
-          s,
-          Types.Fact.Vote{name, st, r},
-          Types.Fact.Vote{name, st, q},
-          name,
-          Coded.Step.words(st),
-          Coded.Pick.words(r),
-          Coded.Pick.words(q)
-        )(
-          Alone.most_inv(s, name, st, pks, r)(et)
-        )(
-          hq
-        )(
-          {==}
-        )({==})(Facts.Case.not_of(RFacts.Words.is_eq(Coded.Pick.words(r), Coded.Pick.words(q)))(ef2))
-      )
-    ),
-    ef => Shared.Bool.or_true_right(Coded.Pick.is_eq(r, q))
-  )
-
-# the pick that the one node of a step voted for wins the tally, in facts
-# that are sound for the node
-def Alone.wins(
-  +name: String,
-  +s: Facts.Facts(),
-  +st: Types.Step,
-  +q: Types.Pick
-) -> {
-  Facts.Facts.ok(name, s) == True{}: Bool
-} -> {
-  Facts.Facts.has(s, Types.Fact.Vote{name, st, q}) == True{}: Bool
-} -> {
-  RLines.Tally.wins(
-    RLines.Tally{Facts.Facts.crit(s), st, [name], RLines.Votes.picks(Facts.Facts.list(s), st)},
-    q
-  )
-    == True{}: Bool
-}:
-  +ok => +hq => Shared.Bool.and_both(
-    RLines.Tally.most(RLines.Tally{Facts.Facts.crit(s), st, [name], RLines.Votes.picks(Facts.Facts.list(s), st)}, q),
-    Shared.List.holds(
-      ~Types.Pick,
-      ~RLines.Rival,
-      ~RLines.Rival.beats,
-      RLines.Votes.picks(Facts.Facts.list(s), st),
-      RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, [name], RLines.Votes.picks(Facts.Facts.list(s), st)}, q}
-    )
-  )(
-    Alone.most(s, name, st, RLines.Votes.picks(Facts.Facts.list(s), st), q)(hq)
-  )(
-    List.holds_all(
-      ~Types.Pick,
-      ~RLines.Rival,
-      ~RLines.Rival.beats,
-      ~Coded.Pick.is_eq,
-      ~Coded.Pick.laws(),
-      RLines.Votes.picks(Facts.Facts.list(s), st),
-      RLines.Rival{RLines.Tally{Facts.Facts.crit(s), st, [name], RLines.Votes.picks(Facts.Facts.list(s), st)}, q}
-    )(
-      +r => hr => Alone.beats(name, s, st, RLines.Votes.picks(Facts.Facts.list(s), st), q, r)(ok)(hq)
-    )
-  )
-
-# a step that one node decides is decided once the node voted for it, in
-# facts that are sound for the node
-def Alone.decided(
-  +name: String,
-  +s: Facts.Facts(),
-  +st: Types.Step,
-  +q: Types.Pick
-) -> {
-  Facts.Facts.ok(name, s) == True{}: Bool
-} -> {
-  Facts.Facts.has(s, Types.Fact.Vote{name, st, q}) == True{}: Bool
-} -> {Lines.Votes.decided(s, st, [name]) == None{}: Maybe<&2, Types.Pick>} -> Empty:
-  ok => +hq => hd => List.pick_miss(
-    ~Types.Pick,
-    ~RLines.Tally,
-    ~RLines.Tally.wins,
-    ~Coded.Pick.is_eq,
-    ~Coded.Pick.laws(),
-    RLines.Votes.picks(Facts.Facts.list(s), st),
-    RLines.Tally{Facts.Facts.crit(s), st, [name], RLines.Votes.picks(Facts.Facts.list(s), st)},
-    q
-  )(
-    hd
-  )(
-    Votes.picks_in(
-      Facts.Facts.list(s),
-      st,
-      name,
-      q
-    )(Facts.Facts.has_in(s, Types.Fact.Vote{name, st, q})(hq))
-  )(Alone.wins(name, s, st, q)(ok)(hq))
-
 # a slot that makes no next state has no decided pick
 def Step.of_none(
   -vs: List<&2, Types.Entry>,
@@ -1547,41 +928,6 @@ def Step.of_none(
         Lists.Maybe.some_ne_none(RLines.State, RLines.State.put(vs, k, pk), h)
       )
 
-# a node that alone decides the next slot of a line holds no vote for it, in
-# facts that are sound for it
-def Work.alone_free(
-  +name: String,
-  +s: Facts.Facts(),
-  +c: Ledgers.Line,
-  +vs: List<&2, Types.Entry>,
-  +k: Nat,
-  +g: Maybe<&2, String>
-) -> {
-  Facts.Facts.ok(name, s) == True{}: Bool
-} -> {
-  Lines.Line.state(s, c) == Some{RLines.State{vs, k}}: Maybe<&2, RLines.State>
-} -> {
-  Lines.Rule.after(s, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
-} -> {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool}:
-  ok => hst => hr => Facts.Case.false_of(
-    Facts.Facts.cast(s, name, Types.Step.At{c, k})
-  )(
-    ht => Ex.by(
-      Types.Pick,
-      q => {Facts.Facts.has(s, Types.Fact.Vote{name, Types.Step.At{c, k}, q}) == True{}: Bool},
-      Empty,
-      Cast.vote(s, name, Types.Step.At{c, k})(ht),
-      +q => hq => Alone.decided(
-        name,
-        s,
-        Types.Step.At{c, k},
-        q
-      )(ok)(hq)(Step.of_none(vs, k, Lines.Votes.decided(s, Types.Step.At{c, k}, [name]))((
-            %hr: {Lines.Line.step.at(s, c, RLines.State{vs, k}, _) == None{}: Maybe<&2, RLines.State>}
-            Versions.Line.state_open(s, c, RLines.State{vs, k})(hst))))
-    )
-  )
-
 # an ask among fs that the node may vote for is one of the ready asks of fs
 def Ready.in(
   fs: List<&2, Types.Fact>,
@@ -1591,7 +937,7 @@ def Ready.in(
 ) -> {
   List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Ask{a}) == True{}: Bool
 } -> {
-  Maybe.is_some(&2, Types.Fact, Works.Work.offer(s, name, a)) == True{}: Bool
+  Maybe.is_some(&2, RWorks.Plan, Works.Work.offer(s, name, a)) == True{}: Bool
 } -> {
   List.contains(~Types.Ask, ~Coded.Ask.is_eq, Works.Work.ready(s, name, fs), a) == True{}: Bool
 }:
@@ -1646,7 +992,7 @@ def Ready.in(
               Types.Ask,
               b,
               Works.Work.ready(s, name, rest),
-              Maybe.is_some(&2, Types.Fact, Works.Work.offer(s, name, b))
+              Maybe.is_some(&2, RWorks.Plan, Works.Work.offer(s, name, b))
             ),
             a
           )
@@ -1657,12 +1003,12 @@ def Ready.in(
         Types.Fact.Ask{a},
         hin,
         e => (
-          %Equal.sym(Types.Ask, b, a, Fact.ask_inj(b, a)(e)): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, _, Works.Work.ready(s, name, rest), Maybe.is_some(&2, Types.Fact, Works.Work.offer(s, name, _))), a) == True{}: Bool}
-          Asks.put_head(a, Works.Work.ready(s, name, rest), Maybe.is_some(&2, Types.Fact, Works.Work.offer(s, name, a)))(hw)),
+          %Equal.sym(Types.Ask, b, a, Fact.ask_inj(b, a)(e)): {List.contains(~Types.Ask, ~Coded.Ask.is_eq, List.filter.put(Types.Ask, _, Works.Work.ready(s, name, rest), Maybe.is_some(&2, RWorks.Plan, Works.Work.offer(s, name, _))), a) == True{}: Bool}
+          Asks.put_head(a, Works.Work.ready(s, name, rest), Maybe.is_some(&2, RWorks.Plan, Works.Work.offer(s, name, a)))(hw)),
         c => Asks.put_rest(
           b,
           Works.Work.ready(s, name, rest),
-          Maybe.is_some(&2, Types.Fact, Works.Work.offer(s, name, b)),
+          Maybe.is_some(&2, RWorks.Plan, Works.Work.offer(s, name, b)),
           a
         )(Ready.in(rest, s, name, a)(c)(hw))
       )
@@ -1700,7 +1046,7 @@ def Ready.from(
         },
         b,
         Works.Work.ready(s, name, rest),
-        Maybe.is_some(&2, Types.Fact, Works.Work.offer(s, name, b)),
+        Maybe.is_some(&2, RWorks.Plan, Works.Work.offer(s, name, b)),
         y,
         h,
         e => k => (
@@ -1726,7 +1072,7 @@ def Ready.top(
 } -> {
   Maybe.is_some(
     &2,
-    Types.Fact,
+    RWorks.Plan,
     Works.Work.offer(Facts.Facts.take(name, s, Types.Fact.Ask{a}), name, a)
   )
     == True{}: Bool
@@ -1788,17 +1134,27 @@ def Ready.top(
     )(ne)
   )
 
-# with one node, each turn is its own
-def Turn.one(k: Nat, +name: String) -> {RWorks.Turn.go(k, name, [], name, []) == name: String}:
-  match k:
-    case 0n:
-      {==}
-    case 1n+j:
-      Turn.one(j, name)
+# the next slot of a line, for a node that alone decides it
+def Work.open_alone(
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +k: Nat,
+  +g: Maybe<&2, String>
+) -> {
+  Lines.Line.state(s, c) == Some{RLines.State{vs, k}}: Maybe<&2, RLines.State>
+} -> {
+  Lines.Rule.after(s, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
+} -> {Works.Work.open(s, name, c) == Some{RWorks.Open{vs, k, [name]}}: Maybe<&2, RWorks.Open>}:
+  hst => hr => (
+    %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(s, c), Some{RLines.State{vs, k}}, hst): {RWorks.Work.open.at(name, _, Works.Work.rule(s, c, _)) == Some{RWorks.Open{vs, k, [name]}}: Maybe<&2, RWorks.Open>}
+    %Equal.sym(Maybe<&2, RLines.Rule>, Lines.Rule.after(s, c, vs), Some{RLines.Rule{g, [name]}}, hr): {RWorks.Work.open.at(name, Some{RLines.State{vs, k}}, _) == Some{RWorks.Open{vs, k, [name]}}: Maybe<&2, RWorks.Open>}
+    %Equal.sym(Bool, String.eq(name, name), True{}, Texts.String.eq_refl(name)): {Shared.Maybe.when(RWorks.Open, List.any.if(u => List.contains(~String, ~String.eq, [], name), _), u2 => Some{RWorks.Open{vs, k, [name]}}) == Some{RWorks.Open{vs, k, [name]}}: Maybe<&2, RWorks.Open>}
+    {==})
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the vote that a node offers for an ask at the next slot of its line, when
-# it alone decides the slot, holds no vote for it, and the ask made no version
+# it may lead a round of the slot freely, and the ask made no version
 def Work.offer_alone(
   +s: Facts.Facts(),
   +name: String,
@@ -1806,15 +1162,14 @@ def Work.offer_alone(
   +a: Types.Ask,
   +vs: List<&2, Types.Entry>,
   +k: Nat,
-  +g: Maybe<&2, String>
+  +ns: List<&2, String>,
+  +t: Nat,
+  +r: Nat,
+  +b: List<&2, Types.Ref>
 ) -> {
   RWorks.Request.line(Facts.Facts.list(s), RLines.Ask.request(a)) == Some{c}: Maybe<&2, Ledgers.Line>
 } -> {
-  Lines.Line.state(s, c) == Some{RLines.State{vs, k}}: Maybe<&2, RLines.State>
-} -> {
-  Lines.Rule.after(s, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
-} -> {
-  Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool
+  Works.Work.open(s, name, c) == Some{RWorks.Open{vs, k, ns}}: Maybe<&2, RWorks.Open>
 } -> {
   Shared.List.some(
     ~Types.Entry,
@@ -1825,37 +1180,26 @@ def Work.offer_alone(
   )
     == False{}: Bool
 } -> {
-  Works.Work.offer(
-    s,
-    name,
-    a
-  )
-    == Some{
-      Types.Fact.Vote{
-        name,
-        Types.Step.At{c, k},
-        Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}
-      }
-    }: Maybe<&2, Types.Fact>
+  RRounds.Slot.chance(Rounds.Slot.ballots(s, c, k), ns, k, name)
+    == Some{RRounds.Chance{t, r, b, RRounds.Force.Free{}}}: Maybe<&2, RRounds.Chance>
+} -> {
+  Works.Work.offer(s, name, a) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>
 }:
-  hl => hst => hr => hc => hn => (
-    %Equal.sym(Maybe<&2, Ledgers.Line>, RWorks.Request.line(Facts.Facts.list(s), RLines.Ask.request(a)), Some{c}, hl): {Works.Work.offer.on(s, name, a, _) == Some{Types.Fact.Vote{name, Types.Step.At{c, k}, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}}}: Maybe<&2, Types.Fact>}
-    %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(s, c), Some{RLines.State{vs, k}}, hst): {Works.Work.offer.at(s, name, c, a, _, Works.Work.rule(s, c, _)) == Some{Types.Fact.Vote{name, Types.Step.At{c, k}, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}}}: Maybe<&2, Types.Fact>}
-    %Equal.sym(Maybe<&2, RLines.Rule>, Lines.Rule.after(s, c, vs), Some{RLines.Rule{g, [name]}}, hr): {Works.Work.offer.at(s, name, c, a, Some{RLines.State{vs, k}}, _) == Some{Types.Fact.Vote{name, Types.Step.At{c, k}, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}}}: Maybe<&2, Types.Fact>}
-    %Equal.sym(Bool, Bool.and(Bool.and(String.eq(RWorks.Turn.of([name], k), name), Works.Work.free(s, name, c, k, [name])), Bool.not(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, RLines.Ask.id(a)))), True{}, Shared.Bool.and_both(Bool.and(String.eq(RWorks.Turn.of([name], k), name), Works.Work.free(s, name, c, k, [name])), Bool.not(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, RLines.Ask.id(a))))(Shared.Bool.and_both(String.eq(RWorks.Turn.of([name], k), name), Works.Work.free(s, name, c, k, [name]))((
-          %Equal.sym(String, RWorks.Turn.go(k, name, [], name, []), name, Turn.one(k, name)): {String.eq(_, name) == True{}: Bool}
-          Texts.String.eq_refl(name)))(Shared.Bool.and_both(List.contains(~String, ~String.eq, [name], name), Bool.not(Facts.Facts.cast(s, name, Types.Step.At{c, k})))((
-            %Equal.sym(Bool, String.eq(name, name), True{}, Texts.String.eq_refl(name)): {List.any.if(u => List.contains(~String, ~String.eq, [], name), _) == True{}: Bool}
-            {==}))(Facts.Case.not_of(Facts.Facts.cast(s, name, Types.Step.At{c, k}))(hc))))(Facts.Case.not_of(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, RLines.Ask.id(a)))(hn))): {Shared.Maybe.when(Types.Fact, _, u2 => Some{Types.Fact.Vote{name, Types.Step.At{c, k}, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}}}) == Some{Types.Fact.Vote{name, Types.Step.At{c, k}, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}}}: Maybe<&2, Types.Fact>}
+  hl => ho => hn => hch => (
+    %Equal.sym(Maybe<&2, Ledgers.Line>, RWorks.Request.line(Facts.Facts.list(s), RLines.Ask.request(a)), Some{c}, hl): {Works.Work.offer.on(s, name, a, _) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>}
+    %Equal.sym(Maybe<&2, RWorks.Open>, Works.Work.open(s, name, c), Some{RWorks.Open{vs, k, ns}}, ho): {Works.Work.offer.at(s, name, c, a, _) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>}
+    %Equal.sym(Bool, Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, RLines.Ask.id(a)), False{}, hn): {Shared.Maybe.when(RWorks.Plan, Bool.not(_), u => RWorks.Plan.of(c, k, RWorks.Work.offer.of(u2 => Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, RRounds.Slot.chance(Rounds.Slot.ballots(s, c, k), ns, k, name)))) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>}
+    %Equal.sym(Maybe<&2, RRounds.Chance>, RRounds.Slot.chance(Rounds.Slot.ballots(s, c, k), ns, k, name), Some{RRounds.Chance{t, r, b, RRounds.Force.Free{}}}, hch): {RWorks.Plan.of(c, k, RWorks.Work.offer.of(u2 => Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, _)) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>}
     {==})
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# a node whose last ready ask is a, and that offers the vote f for it, casts f
+# a node whose last ready ask is a, that offers a ballot for it where it
+# holds none of its own, casts that ballot
 def Work.does_alone(
   +s: Facts.Facts(),
   +name: String,
   +a: Types.Ask,
-  +f: Types.Fact
+  +st: Types.Step,
+  +x: Types.Cast
 ) -> {
   Lists.List.top(
     ~Types.Ask,
@@ -1864,12 +1208,16 @@ def Work.does_alone(
   )
     == Some{a}: Maybe<&2, Types.Ask>
 } -> {
-  Works.Work.offer(s, name, a) == Some{f}: Maybe<&2, Types.Fact>
-} -> {Works.Work.does(s, name) == Facts.Facts.add(s, f): Facts.Facts()}:
-  ht => ho => (
-    %Equal.sym(Maybe<&2, Types.Ask>, Lists.List.top(~Types.Ask, ~RFacts.Ask.seq, Works.Work.ready(s, name, Facts.Facts.list(s))), Some{a}, ht): {Works.Work.does.of(s, RWorks.Work.follow.or(Works.Work.propose.of(s, name, _), u => Works.Work.follow(s, name, Facts.Facts.list(s)))) == Facts.Facts.add(s, f): Facts.Facts()}
-    %Equal.sym(Maybe<&2, Types.Fact>, Works.Work.offer(s, name, a), Some{f}, ho): {Works.Work.does.of(s, RWorks.Work.follow.or(_, u => Works.Work.follow(s, name, Facts.Facts.list(s)))) == Facts.Facts.add(s, f): Facts.Facts()}
+  Works.Work.offer(s, name, a) == Some{RWorks.Plan{st, x}}: Maybe<&2, RWorks.Plan>
+} -> {
+  Facts.Facts.cast(s, name, st) == False{}: Bool
+} -> {Works.Work.does(s, name) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}:
+  ht => ho => hc => (
+    %Equal.sym(Maybe<&2, Types.Ask>, Lists.List.top(~Types.Ask, ~RFacts.Ask.seq, Works.Work.ready(s, name, Facts.Facts.list(s))), Some{a}, ht): {Works.Work.cast(s, name, RWorks.Work.follow.or(Works.Work.propose.of(s, name, _), u => RWorks.Work.follow.or(RWorks.Work.follow(Facts.Facts.crit(s), name, Facts.Facts.list(s)), u2 => RWorks.Work.pass(Facts.Facts.crit(s), name, Facts.Facts.list(s))))) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}
+    %Equal.sym(Maybe<&2, RWorks.Plan>, Works.Work.offer(s, name, a), Some{RWorks.Plan{st, x}}, ho): {Works.Work.cast(s, name, RWorks.Work.follow.or(_, u => RWorks.Work.follow.or(RWorks.Work.follow(Facts.Facts.crit(s), name, Facts.Facts.list(s)), u2 => RWorks.Work.pass(Facts.Facts.crit(s), name, Facts.Facts.list(s))))) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}
+    %Equal.sym(Bool, Facts.Facts.cast(s, name, st), False{}, hc): {Shared.Bool.when(Facts.Facts(), _, u => s, u => Facts.Facts.add(s, Types.Fact.Vote{name, st, x})) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}
     {==})
+
 
 # taking in an ask that starts no store leaves the rule after the versions of
 # every line as it was
@@ -1915,6 +1263,9 @@ def Work.alone_does.end(
   +vs: List<&2, Types.Entry>,
   +k: Nat,
   +g: Maybe<&2, String>,
+  +t: Nat,
+  +r: Nat,
+  +b: List<&2, Types.Ref>,
   hst: {Lines.Line.state(s, c) == Some{RLines.State{vs, k}}: Maybe<&2, RLines.State>},
   hr: {Lines.Rule.after(s, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>},
   hn: {
@@ -1927,23 +1278,22 @@ def Work.alone_does.end(
     )
       == False{}: Bool
   },
-  hc: {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool},
-  +ho: {
-    Works.Work.offer(
-      s,
-      name,
-      a
+  hc: {Facts.Facts.cast(s, name, Types.Step.At{c, k, t}) == False{}: Bool},
+  hd: {
+    Lines.Votes.decided(
+      Facts.Facts.add(
+        s,
+        Types.Fact.Vote{name, Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}
+      ),
+      c,
+      k,
+      [name]
     )
-      == Some{
-        Types.Fact.Vote{
-          name,
-          Types.Step.At{c, k},
-          Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}
-        }
-      }: Maybe<&2, Types.Fact>
+      == Some{Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}}: Maybe<&2, Types.Pick>
   },
+  +ho: {Works.Work.offer(s, name, a) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>},
   ht: {
-    Maybe.is_some(&2, Types.Fact, Works.Work.offer(s, name, a)) == True{}: Bool
+    Maybe.is_some(&2, RWorks.Plan, Works.Work.offer(s, name, a)) == True{}: Bool
   } -> {
     Lists.List.top(
       ~Types.Ask,
@@ -1977,44 +1327,37 @@ def Work.alone_does.end(
     Works.Work.does(s, name),
     Facts.Facts.add(
       s,
-      Types.Fact.Vote{
-        name,
-        Types.Step.At{c, k},
-        Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}
-      }
+      Types.Fact.Vote{name, Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}
     ),
     Work.does_alone(
       s,
       name,
       a,
-      Types.Fact.Vote{
-        name,
-        Types.Step.At{c, k},
-        Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}
-      }
+      Types.Step.At{c, k, t},
+      Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}
     )(ht((
-          %Equal.sym(Maybe<&2, Types.Fact>, Works.Work.offer(s, name, a), Some{Types.Fact.Vote{name, Types.Step.At{c, k}, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}}}, ho): {Maybe.is_some(&2, Types.Fact, _) == True{}: Bool}
-          {==})))(ho)
+          %Equal.sym(Maybe<&2, RWorks.Plan>, Works.Work.offer(s, name, a), Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}, ho): {Maybe.is_some(&2, RWorks.Plan, _) == True{}: Bool}
+          {==})))(ho)(hc)
   ): Exists(
-    List<&2, Types.Entry>,
-    vs2 => {
-      Lines.Line.versions(_, c) == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
+  List<&2, Types.Entry>,
+  vs2 => {
+    Lines.Line.versions(_, c) == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
+  }
+    & {
+      List.get(
+        &2,
+        Types.Entry,
+        vs2,
+        List.length(&2, Types.Entry, vs)
+      )
+        == Some{
+          Types.Entry{
+            Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
+            k
+          }
+        }: Maybe<&2, Types.Entry>
     }
-      & {
-        List.get(
-          &2,
-          Types.Entry,
-          vs2,
-          List.length(&2, Types.Entry, vs)
-        )
-          == Some{
-            Types.Entry{
-              Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
-              k
-            }
-          }: Maybe<&2, Types.Entry>
-      }
-  )
+)
   Moves.Line.voted_alone(
     s,
     name,
@@ -2022,10 +1365,11 @@ def Work.alone_does.end(
     vs,
     k,
     g,
-    Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}
-  )(hst)(hr)(hn)(hc)
+    Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
+    Moves.Seat{t, r, b}
+  )(hst)(hr)(hn)(hd)
 
-# Work.alone_does, once the node is known to hold no vote for the slot
+# Work.alone_does, with what the node may cast alone
 def Work.alone_does.fin(
   +s: Facts.Facts(),
   +name: String,
@@ -2046,7 +1390,6 @@ def Work.alone_does.fin(
     )
       == False{}: Bool
   },
-  +hc: {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool},
   hl: {
     RWorks.Request.line(
       Facts.Facts.list(s),
@@ -2055,7 +1398,7 @@ def Work.alone_does.fin(
       == Some{c}: Maybe<&2, Ledgers.Line>
   },
   ht: {
-    Maybe.is_some(&2, Types.Fact, Works.Work.offer(s, name, a)) == True{}: Bool
+    Maybe.is_some(&2, RWorks.Plan, Works.Work.offer(s, name, a)) == True{}: Bool
   } -> {
     Lists.List.top(
       ~Types.Ask,
@@ -2063,7 +1406,14 @@ def Work.alone_does.fin(
       Works.Work.ready(s, name, Facts.Facts.list(s))
     )
       == Some{a}: Maybe<&2, Types.Ask>
-  }
+  },
+  w0: Exists(
+    Nat,
+    t => Exists(
+      Nat,
+      r => Exists(List<&2, Types.Ref>, b => Rounds.Slot.Alone(s, name, c, k, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, t, r, b))
+    )
+  )
 ) -> Exists(
   List<&2, Types.Entry>,
   vs2 => {
@@ -2084,6 +1434,11 @@ def Work.alone_does.fin(
         }: Maybe<&2, Types.Entry>
     }
 ):
+  (+t, w1) = w0
+  (+r, w2) = w1
+  (+b, w3) = w2
+  (hch, w4) = w3
+  (hc, hd) = w4
   Work.alone_does.end(
     s,
     name,
@@ -2092,11 +1447,15 @@ def Work.alone_does.fin(
     vs,
     k,
     g,
+    t,
+    r,
+    b,
     hst,
     hr,
     hn,
     hc,
-    Work.offer_alone(s, name, c, a, vs, k, g)(hl)(hst)(hr)(hc)(hn),
+    hd,
+    Work.offer_alone(s, name, c, a, vs, k, [name], t, r, b)(hl)(Work.open_alone(s, name, c, vs, k, g)(hst)(hr))(hn)(hch),
     ht
   )
 
@@ -2130,7 +1489,7 @@ def Work.alone_does(
     == False{}: Bool
 } -> (
   {
-    Maybe.is_some(&2, Types.Fact, Works.Work.offer(s, name, a)) == True{}: Bool
+    Maybe.is_some(&2, RWorks.Plan, Works.Work.offer(s, name, a)) == True{}: Bool
   } -> {
     Lists.List.top(
       ~Types.Ask,
@@ -2170,10 +1529,19 @@ def Work.alone_does(
     hst,
     hr,
     hn,
-    Work.alone_free(name, s, c, vs, k, g)(ok)(hst)(hr),
     hl,
-    ht
+    ht,
+    Rounds.Slot.alone(
+      s,
+      name,
+      c,
+      k,
+      Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}
+    )(Facts.Facts.ok_never(name, s)(ok))(Step.of_none(vs, k, Lines.Votes.decided(s, c, k, [name]))((
+          %hr: {Lines.Line.step.at(s, c, RLines.State{vs, k}, _) == None{}: Maybe<&2, RLines.State>}
+          Versions.Line.state_open(s, c, RLines.State{vs, k})(hst))))
   )
+
 
 # the status of a write that made a version of its branch is Written
 def Status.written(
