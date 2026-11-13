@@ -25210,7 +25210,45 @@ def Mst.value_key(
 ) -> {Pieces.has_sub(ps) == False{}: Bool} -> {
   Maybe.is_some(&2, List<&2, U32>, Pieces.value(~S, ~fetch, f, s, ps, k)) == Pieces.has_key(ps, k): Bool
 }:
-  ?TODO
+  match ps:
+    case Nil{}:
+      h => {==}
+    case Con{Piece.Bind{+k2, +v}, +rest}:
+      +h => Bool.cases(
+        Shared.List.is_eq(~U32, ~U32.is_eq, k2, k),
+        {
+          Maybe.is_some(&2, List<&2, U32>, Pieces.value(~S, ~fetch, f, s, Piece.Bind{k2, v} <> rest, k))
+            == Bool.or(Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), Pieces.has_key(rest, k)): Bool
+        },
+        +ct =>
+          %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), True{}, ct): {
+            Maybe.is_some(
+              &2,
+              List<&2, U32>,
+              Shared.Bool.when(Maybe<&2, List<&2, U32>>, _, u => Some{v}, u => Pieces.value(~S, ~fetch, f, s, rest, k))
+            )
+              == Bool.or(_, Pieces.has_key(rest, k)): Bool
+          }
+          {==},
+        +cf =>
+          %Equal.sym(Bool, Shared.List.is_eq(~U32, ~U32.is_eq, k2, k), False{}, cf): {
+            Maybe.is_some(
+              &2,
+              List<&2, U32>,
+              Shared.Bool.when(Maybe<&2, List<&2, U32>>, _, u => Some{v}, u => Pieces.value(~S, ~fetch, f, s, rest, k))
+            )
+              == Bool.or(_, Pieces.has_key(rest, k)): Bool
+          }
+          Mst.value_key(~S, ~fetch, f, s, rest, k)(h)
+      )
+    case Con{Piece.Sub{h2, u, lo, hi}, rest}:
+      h => Empty.absurd(
+        {
+          Maybe.is_some(&2, List<&2, U32>, Pieces.value(~S, ~fetch, f, s, Piece.Sub{h2, u, lo, hi} <> rest, k))
+            == Pieces.has_key(rest, k): Bool
+        },
+        Shared.Bool.true_ne_false(h)
+      )
 
 # values that are not both there differ exactly when either is there
 def Mst.differ_some(x: Maybe<&2, List<&2, U32>>, y: Maybe<&2, List<&2, U32>>) -> {
