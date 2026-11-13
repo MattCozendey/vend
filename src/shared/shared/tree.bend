@@ -25992,7 +25992,19 @@ def Pieces.has_key_rev(xs: List<&2, Piece>, +acc: List<&2, Piece>, +k: List<&2, 
 def Pieces.apart_rev(xs: List<&2, Piece>, +acc: List<&2, Piece>, +bs: List<&2, Piece>) -> {Pieces.apart(xs, bs) == True{}: Bool} -> {
   Pieces.apart(acc, bs) == True{}: Bool
 } -> {Pieces.apart(List.reverse.go(&2, Piece, xs, acc), bs) == True{}: Bool}:
-  ?TODO
+  match xs:
+    case Nil{}:
+      h => g => g
+    case Con{Piece.Bind{+k, +v}, +rest}:
+      +h => g => Pieces.apart_rev(
+        rest,
+        Piece.Bind{k, v} <> acc,
+        bs
+      )(Shared.Bool.and_true_right(Bool.not(Pieces.has_key(bs, k)), Pieces.apart(rest, bs))(h))(
+        Shared.Bool.and_both(Bool.not(Pieces.has_key(bs, k)), Pieces.apart(acc, bs))(Shared.Bool.and_true_left(Bool.not(Pieces.has_key(bs, k)), Pieces.apart(rest, bs))(h))(g)
+      )
+    case Con{Piece.Sub{+h2, +u, +lo, +hi}, +rest}:
+      h => g => Pieces.apart_rev(rest, Piece.Sub{h2, u, lo, hi} <> acc, bs)(h)(g)
 
 # pieces apart from others are apart from them read back to front
 def Pieces.apart_rev_right(as: List<&2, Piece>, +bs: List<&2, Piece>) -> {Pieces.apart(as, bs) == True{}: Bool} -> {
