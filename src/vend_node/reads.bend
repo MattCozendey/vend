@@ -1247,6 +1247,3 @@ def Core.read_stays(+name: String, +s: Facts.Facts(), +s2: Facts.Facts(), +c: Le
       )
     )
   }
-
-def Bad.x(a: Nat) -> {a == 0n: Nat}:
-  {==}
