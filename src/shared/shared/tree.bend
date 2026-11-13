@@ -25929,7 +25929,43 @@ def Pieces.apart_sub(as: List<&2, Piece>, +h: Hashes.Hash, +u: Nat, +lo: Maybe<&
 def Pieces.apart_push(as: List<&2, Piece>, +k: List<&2, U32>, +v: List<&2, U32>, +rb: List<&2, Piece>, +bs: List<&2, Piece>) -> {
   Pieces.binds_below(as, Piece.Bind{k, v} <> rb) == True{}: Bool
 } -> {Pieces.apart(as, bs) == True{}: Bool} -> {Pieces.apart(as, Piece.Bind{k, v} <> bs) == True{}: Bool}:
-  ?TODO
+  match as:
+    case Nil{}:
+      hb => ha => {==}
+    case Con{Piece.Bind{+k2, +v2}, +rest}:
+      +hb => +ha =>
+        %Equal.sym(
+          Bool,
+          Shared.List.is_eq(~U32, ~U32.is_eq, k, k2),
+          False{},
+          Key.gt_ne(
+            k,
+            k2
+          )(
+            Shared.Bool.and_true_left(
+              Key.is_lt(k2, k),
+              Pieces.keys_after(k2, rb)
+            )(Shared.Bool.and_true_left(Pieces.keys_after(k2, Piece.Bind{k, v} <> rb), Pieces.binds_below(rest, Piece.Bind{k, v} <> rb))(hb))
+          )
+        ): {
+          Bool.and(Bool.not(Bool.or(_, Pieces.has_key(bs, k2))), Pieces.apart(rest, Piece.Bind{k, v} <> bs)) == True{}: Bool
+        }
+        Shared.Bool.and_both(
+          Bool.not(Pieces.has_key(bs, k2)),
+          Pieces.apart(rest, Piece.Bind{k, v} <> bs)
+        )(Shared.Bool.and_true_left(Bool.not(Pieces.has_key(bs, k2)), Pieces.apart(rest, bs))(ha))(
+          Pieces.apart_push(
+            rest,
+            k,
+            v,
+            rb,
+            bs
+          )(Shared.Bool.and_true_right(Pieces.keys_after(k2, Piece.Bind{k, v} <> rb), Pieces.binds_below(rest, Piece.Bind{k, v} <> rb))(hb))(
+            Shared.Bool.and_true_right(Bool.not(Pieces.has_key(bs, k2)), Pieces.apart(rest, bs))(ha)
+          )
+        )
+    case Con{Piece.Sub{h2, u, lo, hi}, +rest}:
+      hb => ha => Pieces.apart_push(rest, k, v, rb, bs)(hb)(ha)
 
 # a binding key of pieces read back to front is one of them or of acc
 def Pieces.has_key_rev(xs: List<&2, Piece>, +acc: List<&2, Piece>, +k: List<&2, U32>) -> {
