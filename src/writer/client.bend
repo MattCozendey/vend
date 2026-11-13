@@ -1,5 +1,4 @@
 import Base
-import ../node/node.bend as Nodes
 import ../resource/formats.bend as Formats
 import ../resource/mounts.bend as Mounts
 import ../resource/resources.bend as Resources
@@ -9,6 +8,7 @@ import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/text.bend as Texts
 import ../shared/vend.bend as Vend
+import ../vend_node/impl.bend as Nodes
 import ./reads.bend as Reads
 import ./requests.bend as Requests
 
