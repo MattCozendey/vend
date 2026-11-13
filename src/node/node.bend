@@ -1,24 +1,24 @@
 import Base
-import ../../branch/merges.bend as Merges
-import ../../group/owners.bend as Owners
-import ../../resource/formats.bend as Formats
-import ../../resource/resources.bend as Resources
-import ../../shared/replica.bend as Replicas
-import ../../shared/shared/ledger.bend as Ledgers
-import ../../shared/shared/rope.bend as Ropes
-import ../../shared/shared/shared/depot.bend as Depots
-import ../../shared/shared/shared/pack.bend as Packs
-import ../../shared/shared/shared/shared/code.bend as Codes
-import ../../shared/shared/shared/shared/crit.bend as Crits
-import ../../shared/shared/shared/shared/hash.bend as Hashes
-import ../../shared/shared/shared/shared/shared.bend as Shared
-import ../../shared/shared/shared/shared/side.bend as Sides
-import ../../shared/shared/shared/text.bend as Texts
-import ../../shared/shared/tree.bend as Trees
-import ../../shared/vend.bend as Vend
-import ../../store/kept.bend as Store
-import ../../writer/reads.bend as Reads
-import ../../writer/requests.bend as Requests
+import ../branch/merges.bend as Merges
+import ../group/owners.bend as Owners
+import ../resource/formats.bend as Formats
+import ../resource/resources.bend as Resources
+import ../shared/replica.bend as Replicas
+import ../shared/shared/ledger.bend as Ledgers
+import ../shared/shared/rope.bend as Ropes
+import ../shared/shared/shared/depot.bend as Depots
+import ../shared/shared/shared/pack.bend as Packs
+import ../shared/shared/shared/shared/code.bend as Codes
+import ../shared/shared/shared/shared/crit.bend as Crits
+import ../shared/shared/shared/shared/hash.bend as Hashes
+import ../shared/shared/shared/shared/shared.bend as Shared
+import ../shared/shared/shared/shared/side.bend as Sides
+import ../shared/shared/shared/text.bend as Texts
+import ../shared/shared/tree.bend as Trees
+import ../shared/vend.bend as Vend
+import ../store/kept.bend as Store
+import ../writer/reads.bend as Reads
+import ../writer/requests.bend as Requests
 
 # The pure core of a Vend Node (README): what it answers, and the rules of
 # Vend's kernel. A Vend Node is a replica (Replicas) of the machine of Vend
