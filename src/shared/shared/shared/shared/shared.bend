@@ -983,6 +983,32 @@ def Maybe.is_eq(~A: Data, ~eq: A -> A -> Bool, a: Maybe<&2, A>, b: Maybe<&2, A>)
     case _ _:
       False{}
 
+# b keeps what a holds: a is empty, or b holds what a holds, as eq compares
+def Maybe.keeps(~A: Data, ~eq: A -> A -> Bool, a: Maybe<&2, A>, b: Maybe<&2, A>) -> Bool:
+  match a b:
+    case None{} y:
+      True{}
+    case Some{x} Some{y}:
+      eq(x, y)
+    case Some{x} None{}:
+      False{}
+
+# a value that stays is kept
+def Maybe.keeps_stay(
+  ~A: Data,
+  ~eq: A -> A -> Bool,
+  ~laws: Eq.Laws(A, eq),
+  m: Maybe<&2, A>,
+  -m2: Maybe<&2, A>,
+  hm: @v: A -> {m == Some{v}: Maybe<&2, A>} -> {m2 == Some{v}: Maybe<&2, A>}
+) -> {Maybe.keeps(~A, ~eq, m, m2) == True{}: Bool}:
+  match m:
+    case None{}:
+      {==}
+    case Some{+x}:
+      %Equal.sym(Maybe<&2, A>, m2, Some{x}, hm(x)({==})): {Maybe.keeps(~A, ~eq, Some{x}, _) == True{}: Bool}
+      Eq.refl(~A, ~eq, laws, x)
+
 # nothing taken of a list is nothing
 def List.take_zero(-A: Data, xs: List<&2, A>) -> {List.take(&2, A, xs, 0n) == []: List<&2, A>}:
   match xs:
@@ -1983,6 +2009,96 @@ def List.holds(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -
     case Con{x, r}:
       List.all.if(u => List.holds(~A, ~V, ~p, r, g), p(g)(x))
 
+# the value that each element of xs is, as same compares them: nothing when xs
+# is empty or two elements differ
+def List.agreed(~A: Data, ~same: A -> A -> Bool, xs: List<&2, A>) -> Maybe<&2, A>:
+  match xs:
+    case Nil{}:
+      None{}
+    case Con{+x, rest}:
+      Bool.pick(Maybe<&2, A>, List.holds(~A, ~A, ~same, rest, x), Some{x}, None{})
+
+# agreed(xs) is x exactly when xs is not empty and each element of xs is the
+# same as x.
+# [3, 3, 3] gives 3. [3, 4] gives nothing. [] gives nothing.
+law List.agreed_is:
+  for ~A: Data
+  for ~same: A -> A -> Bool
+  for ~laws: Eq.Laws(A, same)
+  for +xs: List<&2, A>
+  for +x: A
+  ({List.agreed(~A, ~same, xs) == Some{x}: Maybe<&2, A>}
+    -> {Bool.and(Bool.not(List.is_empty(&2, A, xs)), List.holds(~A, ~A, ~same, xs, x)) == True{}: Bool})
+    & ({Bool.and(Bool.not(List.is_empty(&2, A, xs)), List.holds(~A, ~A, ~same, xs, x)) == True{}: Bool}
+      -> {List.agreed(~A, ~same, xs) == Some{x}: Maybe<&2, A>})
+
+# List.agreed_is for x0 before rest, once it is known whether each element of
+# rest is the same as x0 (b)
+def List.agreed_is.at(
+  ~A: Data,
+  ~same: A -> A -> Bool,
+  ~laws: Eq.Laws(A, same),
+  +x0: A,
+  +rest: List<&2, A>,
+  +x: A,
+  b: Bool,
+  eb: {List.holds(~A, ~A, ~same, rest, x0) == b: Bool}
+) -> ({Bool.pick(Maybe<&2, A>, b, Some{x0}, None{}) == Some{x}: Maybe<&2, A>}
+    -> {List.all.if(u => List.holds(~A, ~A, ~same, rest, x), same(x, x0)) == True{}: Bool})
+  & ({List.all.if(u => List.holds(~A, ~A, ~same, rest, x), same(x, x0)) == True{}: Bool}
+    -> {Bool.pick(Maybe<&2, A>, b, Some{x0}, None{}) == Some{x}: Maybe<&2, A>}):
+  match b:
+    case True{}:
+      (
+        h =>
+          %Maybe.some_inj(A, x0, x, h): {List.all.if(u => List.holds(~A, ~A, ~same, rest, _), same(_, x0)) == True{}: Bool}
+          %Equal.sym(Bool, same(x0, x0), True{}, Eq.refl(~A, ~same, laws, x0)):
+            {List.all.if(u => List.holds(~A, ~A, ~same, rest, x0), _) == True{}: Bool}
+          eb,
+        h =>
+          %Eq.sound(~A, ~same, laws, x, x0)(List.all.if_hit(same(x, x0), u => List.holds(~A, ~A, ~same, rest, x))(h)): {Some{_} == Some{x}: Maybe<&2, A>}
+          {==}
+      )
+    case False{}:
+      (
+        h => Empty.absurd({List.all.if(u => List.holds(~A, ~A, ~same, rest, x), same(x, x0)) == True{}: Bool}, Maybe.none_ne_some(A, x, h)),
+        +h => Empty.absurd(
+          {None{} == Some{x}: Maybe<&2, A>},
+          Bool.false_ne_true(
+            Equal.trans(
+              Bool,
+              False{},
+              List.holds(~A, ~A, ~same, rest, x0),
+              True{},
+              Equal.sym(Bool, List.holds(~A, ~A, ~same, rest, x0), False{}, eb),
+              Equal.trans(
+                Bool,
+                List.holds(~A, ~A, ~same, rest, x0),
+                List.holds(~A, ~A, ~same, rest, x),
+                True{},
+                Equal.sym(
+                  Bool,
+                  List.holds(~A, ~A, ~same, rest, x),
+                  List.holds(~A, ~A, ~same, rest, x0),
+                  Equal.cong(A, Bool, z => List.holds(~A, ~A, ~same, rest, z), x, x0, Eq.sound(~A, ~same, laws, x, x0)(List.all.if_hit(same(x, x0), u => List.holds(~A, ~A, ~same, rest, x))(h)))
+                ),
+                List.all.if_rest(same(x, x0), u => List.holds(~A, ~A, ~same, rest, x))(h)
+              )
+            )
+          )
+        )
+      )
+
+def List.agreed_is(ty, same, laws, xs, x):
+  match xs:
+    case Nil{}:
+      (
+        h => Empty.absurd({False{} == True{}: Bool}, Maybe.none_ne_some(ty, x, h)),
+        h => Empty.absurd({None{} == Some{x}: Maybe<&2, ty>}, Bool.false_ne_true(h))
+      )
+    case Con{+x0, +rest}:
+      List.agreed_is.at(~ty, ~same, ~laws, x0, rest, x, List.holds(~ty, ~ty, ~same, rest, x0), {==})
+
 # p holds of g and some element of xs
 def List.some(~A: Data, ~V: Data, ~p: V -> A -> Bool, xs: List<&2, A>, +g: V) -> Bool:
   match xs:
@@ -2815,6 +2931,23 @@ def Maybe.cons(-A: Data, m: Maybe<&2, A>, rest: List<&2, A>) -> List<&2, A>:
       rest
     case Some{x}:
       x <> rest
+
+# a value before a list that is not empty leaves it not empty
+def Maybe.cons_nonempty(-A: Data, m: Maybe<&2, A>, -xs: List<&2, A>) -> {List.is_empty(&2, A, xs) == False{}: Bool}
+  -> {List.is_empty(&2, A, Maybe.cons(A, m, xs)) == False{}: Bool}:
+  match m:
+    case None{}:
+      h => h
+    case Some{y}:
+      h => {==}
+
+# the values that f gives for the elements of xs, in order
+def List.filter_map(~A: Data, ~B: Data, ~f: A -> Maybe<&2, B>, xs: List<&2, A>) -> List<&2, B>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{x, rest}:
+      Maybe.cons(B, f(x), List.filter_map(~A, ~B, ~f, rest))
 
 # every element of ps is in ks, as same compares them
 def List.within(~A: Data, ~same: A -> A -> Bool, ps: List<&2, A>, +ks: List<&2, A>) -> Bool:
