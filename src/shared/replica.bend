@@ -17700,6 +17700,111 @@ def Rep.cast(~mach: Machine(), ~d: Led(mach), s: Rep<Led.L(mach, d)>, +w: Ledger
         ws
       }
 
+# a line of r is a line of the maybe m then r
+def Binds.cons_has(m: Maybe<&2, Ledgers.Line>, -r: List<&2, Ledgers.Line>, +c: Ledgers.Line) -> {
+  List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, r, c) == True{}: Bool
+} -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Shared.Maybe.cons(Ledgers.Line, m, r), c) == True{}: Bool}:
+  match m:
+    case None{}:
+      h => h
+    case Some{+z}:
+      h => Ledgers.Book.any_rest(Ledgers.Line.is_eq(z, c), List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, r, c))(h)
+
+# the lines of the entries of m then rest hold the lines of rest
+def Binds.lines_rest(m: Crits.Crit<Top>, +rest: List<&2, Crits.Bind<Top>>, +c: Ledgers.Line) -> {
+  List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Binds.lines(rest), c) == True{}: Bool
+} -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Binds.lines(Crits.Crit.entries.go(Top, m, rest)), c) == True{}: Bool}:
+  match m:
+    case Crits.Crit.Tip{}:
+      h => h
+    case Crits.Crit.Leaf{+k, v}:
+      h => Binds.cons_has(Codes.Code.whole.read(~Ledgers.Line, ~Ledgers.Line.code, ~Ledgers.Line.code.read, k), Binds.lines(rest), c)(h)
+    case Crits.Crit.Fork{r, p, None{}, +z, +o}:
+      h => Binds.lines_rest(z, Crits.Crit.entries.go(Top, o, rest), c)(Binds.lines_rest(o, rest, c)(h))
+    case Crits.Crit.Fork{+r, p, Some{v}, +z, +o}:
+      h =>
+        Binds.cons_has(
+          Codes.Code.whole.read(~Ledgers.Line, ~Ledgers.Line.code, ~Ledgers.Line.code.read, r),
+          Binds.lines(Crits.Crit.entries.go(Top, z, Crits.Crit.entries.go(Top, o, rest))),
+          c
+        )(Binds.lines_rest(z, Crits.Crit.entries.go(Top, o, rest), c)(Binds.lines_rest(o, rest, c)(h)))
+
+# a choice that gives some holds
+def Binds.when_hit(b: Bool, -w: Top, -v: Top) -> {Shared.Maybe.when(Top, b, u => Some{w}) == Some{v}: Maybe<&2, Top>} -> {
+  b == True{}: Bool
+}:
+  match b:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => Empty.absurd({False{} == True{}: Bool}, Shared.Maybe.none_ne_some(Top, v, h))
+
+# the line that the key k reads whole as is a line of the entry under k2 then
+# r, when the entry is under k
+def Binds.lines_hit.at(
+  +k2: List<&2, U32>,
+  +k: List<&2, U32>,
+  -w: Top,
+  -v: Top,
+  -r: List<&2, Ledgers.Line>,
+  +c: Ledgers.Line
+) -> {Shared.Maybe.when(Top, Crits.Key.is_eq(k2, k), u => Some{w}) == Some{v}: Maybe<&2, Top>} -> {
+  Codes.Code.whole.read(~Ledgers.Line, ~Ledgers.Line.code, ~Ledgers.Line.code.read, k) == Some{c}: Maybe<&2, Ledgers.Line>
+} -> {
+  List.contains(
+    ~Ledgers.Line,
+    ~Ledgers.Line.is_eq,
+    Shared.Maybe.cons(Ledgers.Line, Codes.Code.whole.read(~Ledgers.Line, ~Ledgers.Line.code, ~Ledgers.Line.code.read, k2), r),
+    c
+  )
+    == True{}: Bool
+}:
+  hw => hr =>
+    %Equal.sym(List<&2, U32>, k2, k, Crits.Key.is_eq_sound(k2, k)(Binds.when_hit(Crits.Key.is_eq(k2, k), w, v)(hw))): {
+      List.contains(
+        ~Ledgers.Line,
+        ~Ledgers.Line.is_eq,
+        Shared.Maybe.cons(Ledgers.Line, Codes.Code.whole.read(~Ledgers.Line, ~Ledgers.Line.code, ~Ledgers.Line.code.read, _), r),
+        c
+      )
+        == True{}: Bool
+    }
+    %Equal.sym(Maybe<&2, Ledgers.Line>, Codes.Code.whole.read(~Ledgers.Line, ~Ledgers.Line.code, ~Ledgers.Line.code.read, k), Some{c}, hr): {
+      List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Shared.Maybe.cons(Ledgers.Line, _, r), c) == True{}: Bool
+    }
+    Ledgers.Book.any_hit(Ledgers.Line.is_eq(c, c), u => List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, r, c))(Ledgers.Line.is_eq_refl(c))
+
+# the line that a key of m reads whole as is a line of the entries of m then
+# rest
+def Binds.lines_hit(m: Crits.Crit<Top>, +rest: List<&2, Crits.Bind<Top>>, +k: List<&2, U32>, -v: Top, +c: Ledgers.Line) -> {
+  Crits.Crit.lookup(Top, m, k) == Some{v}: Maybe<&2, Top>
+} -> {Codes.Code.whole.read(~Ledgers.Line, ~Ledgers.Line.code, ~Ledgers.Line.code.read, k) == Some{c}: Maybe<&2, Ledgers.Line>} -> {
+  List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Binds.lines(Crits.Crit.entries.go(Top, m, rest)), c) == True{}: Bool
+}:
+  ?TODO
+
+# the key of a line starts with the code of its root
+def Line.key_starts(c: Ledgers.Line) -> {Crits.Key.starts(Hashes.Hash.code(Ledgers.Line.root(c), []), Line.key(c)) == True{}: Bool}:
+  match c:
+    case Ledgers.Line{Hashes.Hash{+i0, +i1, +i2, +i3, +i4, +i5, +i6, +i7}, +s}:
+      Ledgers.Book.starts_append(
+        Hashes.Hash.code(Hashes.Hash{i0, i1, i2, i3, i4, i5, i6, i7}, []),
+        Codes.Code.maybe(~String, ~Codes.Code.text, s, [])
+      )
+
+# the top of a line among ts is in the part of ts under its root
+def Tops.under_hit(+ts: Tops(), +c: Ledgers.Line, -v: Top) -> {Tops.get(ts, c) == Some{v}: Maybe<&2, Top>} -> {
+  Crits.Crit.lookup(Top, Crits.Crit.under(Top, Crits.Dict.crit(Top, ts), Hashes.Hash.code(Ledgers.Line.root(c), [])), Line.key(c))
+    == Some{v}: Maybe<&2, Top>
+}:
+  ?TODO
+
+# Tops.under_has once the top of c is known (mv)
+def Tops.under_has.at(+ts: Tops(), +c: Ledgers.Line, mv: Maybe<&2, Top>) -> {Tops.get(ts, c) == mv: Maybe<&2, Top>} -> {
+  Maybe.is_some(&2, Top, mv) == True{}: Bool
+} -> {List.contains(~Ledgers.Line, ~Ledgers.Line.is_eq, Tops.under(ts, Ledgers.Line.root(c)), c) == True{}: Bool}:
+  ?TODO
+
 # a line that has a top among ts is among the lines under its root
 law Tops.under_has:
   for ts: Tops()
