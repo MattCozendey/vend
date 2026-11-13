@@ -2338,11 +2338,7 @@ def Ballots.agreed_value.at(
       h => ih(h)
     case Some{+z}:
       h =>
-        +ha = Pair.fst(
-          {Shared.List.agreed(~B, ~same, z <> xs) == Some{x}: Maybe<&2, B>} -> {Bool.and(Bool.not(List.is_empty(&2, B, z <> xs)), Shared.List.holds(~B, ~B, ~same, z <> xs, x)) == True{}: Bool},
-          {Bool.and(Bool.not(List.is_empty(&2, B, z <> xs)), Shared.List.holds(~B, ~B, ~same, z <> xs, x)) == True{}: Bool} -> {Shared.List.agreed(~B, ~same, z <> xs) == Some{x}: Maybe<&2, B>},
-          Shared.List.agreed_is(~B, ~same, ~sl, z <> xs, x)
-        )(h)
+        +ha = Shared.List.agreed_holds(~B, ~same, ~sl, z <> xs, x)(h)
         +exz = Shared.Eq.sound(~B, ~same, sl, x, z)(
           Shared.List.all.if_hit(same(x, z), u => Shared.List.holds(~B, ~B, ~same, xs, x))(ha)
         )
@@ -4940,11 +4936,7 @@ def Safe.witness(
       Shared.Bool.and_true_left(
         Bool.not(List.is_empty(&2, B, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs))),
         Shared.List.holds(~B, ~B, ~same, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs), v)
-      )(Pair.fst(
-          {Shared.List.agreed(~B, ~same, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs)) == Some{v}: Maybe<&2, B>} -> {Bool.and(Bool.not(List.is_empty(&2, B, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs))), Shared.List.holds(~B, ~B, ~same, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs), v)) == True{}: Bool},
-          {Bool.and(Bool.not(List.is_empty(&2, B, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs))), Shared.List.holds(~B, ~B, ~same, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs), v)) == True{}: Bool} -> {Shared.List.agreed(~B, ~same, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs)) == Some{v}: Maybe<&2, B>},
-          Shared.List.agreed_is(~B, ~same, ~sl, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs), v)
-        )(h))
+      )(Shared.List.agreed_holds(~B, ~same, ~sl, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs), v)(h))
     )
   )
 
@@ -5572,11 +5564,7 @@ def Safe.agreed_value(
   -> {Safe.all_of(~B, ~same, ~of, bs, x) == True{}: Bool}
   -> {Ledgers.Ballots.agreed(~B, ~same, ~of, bs) == Some{x}: Maybe<&2, B>}:
   hc => hx => hall =>
-    Pair.snd(
-      {Shared.List.agreed(~B, ~same, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs)) == Some{x}: Maybe<&2, B>} -> {Bool.and(Bool.not(List.is_empty(&2, B, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs))), Shared.List.holds(~B, ~B, ~same, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs), x)) == True{}: Bool},
-      {Bool.and(Bool.not(List.is_empty(&2, B, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs))), Shared.List.holds(~B, ~B, ~same, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs), x)) == True{}: Bool} -> {Shared.List.agreed(~B, ~same, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs)) == Some{x}: Maybe<&2, B>},
-      Shared.List.agreed_is(~B, ~same, ~sl, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs), x)
-    )(
+    Shared.List.agreed_of_holds(~B, ~same, ~sl, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs), x)(
       %Equal.sym(Bool, List.is_empty(&2, B, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs)), False{}, Safe.has_value(~B, ~of, bs, e0, x, hx)(hc)):
         {Bool.and(Bool.not(_), Shared.List.holds(~B, ~B, ~same, Shared.List.filter_map(~Ledgers.Ballot, ~B, ~of, bs), x)) == True{}: Bool}
       Safe.all_holds(~B, ~same, ~sl, ~of, bs, x)(hall)
