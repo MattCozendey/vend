@@ -27137,7 +27137,17 @@ def Mst.wf_last(
 ) -> {Mst.wf.items(~S, ~fetch, f, s, xs, l, prev, lo, hi) == True{}: Bool} -> {
   Mst.wf(~S, ~fetch, f, s, l, Room{l, Items.last_key(xs, lo), hi}, Mst.last(xs, prev)) == True{}: Bool
 }:
-  ?TODO
+  match xs:
+    case Nil{}:
+      x => (%Mst.wf_nil(~S, ~fetch, f, s, l, prev, lo, hi) : {_ == True{} : Bool}; x)
+    case Con{head, tail}:
+      match head:
+        case Item{key, value, right}:
+          +f = f
+          +key = key
+          +right = right
+          +tail = tail
+          x => Mst.wf_last(S, fetch, f, s, tail, l, right, Some{key}, hi)(Mst.wf_rest(~S, ~fetch, f, s, key, value, right, tail, l, prev, lo, hi)(x))
 
 # the items of a part before its gap, last first
 def Part.before(p: Part) -> List<&2, Item>:
