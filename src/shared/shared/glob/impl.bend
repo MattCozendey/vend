@@ -1,11 +1,11 @@
 import Base
-import ../shared/shared/regex.bend as Regex
-import ../shared/shared/search.bend as Searches
-import ../shared/shared/shared/keyset.bend as KeySets
-import ../shared/shared/shared/shared/shared.bend as Shared
-import ../shared/shared/shared/shared/crit.bend as Crits
-import ../shared/shared/shared/spans.bend as Spans
-import ../shared/shared/shared/text.bend as Texts
+import ../regex.bend as Regex
+import ../search.bend as Searches
+import ../shared/keyset.bend as KeySets
+import ../shared/shared/shared.bend as Shared
+import ../shared/shared/crit.bend as Crits
+import ../shared/spans.bend as Spans
+import ../shared/text.bend as Texts
 import ./spec.bend as Spec
 
 # Atom equality and keys

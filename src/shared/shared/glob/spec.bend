@@ -1,6 +1,6 @@
 import Base
-import ../shared/shared/regex.bend as Regex
-import ../shared/shared/shared/spans.bend as Spans
+import ../regex.bend as Regex
+import ../shared/spans.bend as Spans
 
 # A path is a String: segments joined by '/'. It has no leading or trailing
 # '/', and no empty, "." or ".." segment. A segment has no NUL and no '\'.

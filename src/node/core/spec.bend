@@ -1,6 +1,6 @@
 import Base
 import ../../shared/replica.bend as Replicas
-import ../../shared/shared/formats.bend as Formats
+import ../../resource/formats.bend as Formats
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/depot.bend as Depots
 import ../../shared/shared/rope.bend as Ropes
@@ -14,8 +14,8 @@ import ../../shared/shared/shared/shared/side.bend as Sides
 import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/text.bend as Texts
 import ../../shared/shared/tree.bend as Trees
-import ../shared/requests.bend as Requests
-import ../shared/shared/resources.bend as Resources
+import ../../writer/requests.bend as Requests
+import ../../resource/resources.bend as Resources
 
 # The pure core of a Vend Node (README): what it answers, and the rules of
 # Vend's kernel. A Vend Node is a replica (Replicas) of the machine of Vend

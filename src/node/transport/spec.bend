@@ -1,12 +1,12 @@
 import Base
-import ../../shared/shared/formats.bend as Formats
+import ../../resource/formats.bend as Formats
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/text.bend as Texts
 import ../core/spec.bend as Core
-import ../shared/requests.bend as Requests
-import ../shared/shared/resources.bend as Resources
-import ../shared/shared/uris.bend as Uris
+import ../../writer/requests.bend as Requests
+import ../../resource/resources.bend as Resources
+import ../../resource/uris.bend as Uris
 
 # A Vend Node over IO (README): the core, carried to writers and to other
 # nodes. Every front offers exactly these operations. A change is a request,
