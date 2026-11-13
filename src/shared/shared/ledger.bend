@@ -1,6 +1,5 @@
 import Base
 import ./shared/quorum.bend as Quorums
-import ./shared/shared/cell.bend as Cells
 import ./shared/shared/code.bend as Codes
 import ./shared/shared/crit.bend as Crits
 import ./shared/shared/hash.bend as Hashes
@@ -1022,24 +1021,15 @@ def Cast.is_eq(a: Cast, b: Cast) -> Bool:
 def Last.is_eq(a: Maybe<&2, Last>, b: Maybe<&2, Last>) -> Bool:
   Shared.Maybe.is_eq(~Last, ~(x => y => Codes.Code.is_eq(~Last, ~Last.code, x, y)), a, b)
 
-# what the ballots bs hold of the part that of reads: nothing, one value, or
-# many when two ballots hold different ones
-def Ballots.cell(
+# what the ballots bs agree on, of the part that of reads: nothing when no
+# ballot holds it, or two ballots hold different ones
+def Ballots.agreed(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~of: Ballot -> Maybe<&2, B>,
   bs: List<&2, Ballot>
-) -> Maybe<&2, Cells.Cell<B>>:
-  match bs:
-    case Nil{}:
-      None{}
-    case Con{b, rest}:
-      Shared.Maybe.join(
-        ~Cells.Cell<B>,
-        ~Cells.Cell.join(~B, ~same),
-        Maybe.bind(&2, B, Cells.Cell<B>, of(b), x => Some{Cells.One{x}}),
-        Ballots.cell(~B, ~same, ~of, rest)
-      )
+) -> Maybe<&2, B>:
+  Shared.List.agreed(~B, ~same, Shared.List.filter_map(~Ballot, ~B, ~of, bs))
 
 # Ledgers
 # -------
@@ -1468,28 +1458,14 @@ def Entry.words(-Q: Data, m: Maybe<&2, Entry<Q>>) -> Maybe<&2, List<&2, U32>>:
 def Kind.data(-Q: Data, k: Ledger.Kind(Q)) -> Kind.L(Q, k) -> Hashes.Hash -> Maybe<&2, List<&2, U32>>:
   l => h => Entry.words(Q, Kind.get(Q, k)(l)(Name.Data{h}))
 
-# the step that the voter cast at the place w, in the ledger l: one step, or
-# many when it cast two
-def Kind.cell(
-  ~Q: Data,
-  ~k: Ledger.Kind(Q),
-  l: Kind.L(Q, k),
-  w: Place,
-  voter: String
-) -> Maybe<&2, Cells.Cell<Step>>:
-  Ballots.cell(~Step, ~Step.is_eq, ~Ballot.step, Kind.ballots(Q, k)(l)(w)(voter))
-
 # the step that the voter cast at the place w, when it cast one
 def Kind.voted(~Q: Data, ~k: Ledger.Kind(Q), l: Kind.L(Q, k), w: Place, voter: String) -> Maybe<&2, Step>:
-  Cells.Cell.value(Step, Kind.cell(~Q, ~k, l, w, voter))
+  Ballots.agreed(~Step, ~Step.is_eq, ~Ballot.step, Kind.ballots(Q, k)(l)(w)(voter))
 
 # the vote of the voter at the place w, with the voters whose passes allow it,
 # when it cast one
 def Kind.cast(~Q: Data, ~k: Ledger.Kind(Q), l: Kind.L(Q, k), w: Place, voter: String) -> Maybe<&2, Cast>:
-  Cells.Cell.value(
-    Cast,
-    Ballots.cell(~Cast, ~Cast.is_eq, ~Ballot.vote, Kind.ballots(Q, k)(l)(w)(voter))
-  )
+  Ballots.agreed(~Cast, ~Cast.is_eq, ~Ballot.vote, Kind.ballots(Q, k)(l)(w)(voter))
 
 # the last vote that the voter named when it passed to the place w, when l
 # holds one pass of it
@@ -1500,24 +1476,21 @@ def Kind.passed(
   w: Place,
   voter: String
 ) -> Maybe<&2, Maybe<&2, Last>>:
-  Cells.Cell.value(
-    Maybe<&2, Last>,
-    Ballots.cell(~Maybe<&2, Last>, ~Last.is_eq, ~Ballot.pass, Kind.ballots(Q, k)(l)(w)(voter))
-  )
+  Ballots.agreed(~Maybe<&2, Last>, ~Last.is_eq, ~Ballot.pass, Kind.ballots(Q, k)(l)(w)(voter))
 
-# the cell of each of the voters at the place w
-def Kind.cells(
+# the step that each of the voters cast at the place w, when it cast one
+def Kind.votes(
   ~Q: Data,
   ~k: Ledger.Kind(Q),
   +l: Kind.L(Q, k),
   +w: Place,
   voters: List<&2, String>
-) -> List<&2, Maybe<&2, Cells.Cell<Step>>>:
+) -> List<&2, Maybe<&2, Step>>:
   match voters:
     case Nil{}:
       []
     case Con{v, rest}:
-      Kind.cell(~Q, ~k, l, w, v) <> Kind.cells(~Q, ~k, l, w, rest)
+      Kind.voted(~Q, ~k, l, w, v) <> Kind.votes(~Q, ~k, l, w, rest)
 
 # the step that a majority of the voters cast at the place w of l, if one did
 def Kind.tally(
@@ -1527,7 +1500,7 @@ def Kind.tally(
   w: Place,
   voters: List<&2, String>
 ) -> Maybe<&2, Step>:
-  Quorums.Quorum.major(~Step, ~Step.is_eq, Kind.cells(~Q, ~k, l, w, voters))
+  Quorums.Quorum.major(~Step, ~Step.is_eq, Kind.votes(~Q, ~k, l, w, voters))
 
 # the law of a ledger that it gives nothing when it holds nothing
 def Laws.get_empty(

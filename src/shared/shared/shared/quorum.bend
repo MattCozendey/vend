@@ -1,5 +1,4 @@
 import Base
-import ./shared/cell.bend as Cells
 import ./shared/shared.bend as Shared
 
 # Quorums
@@ -10,12 +9,10 @@ import ./shared/shared.bend as Shared
 # arrive, so it never changes (Quorum.major_kept).
 
 # the ballot v is for x
-def Quorum.hit(~B: Data, ~same: B -> B -> Bool, v: Maybe<&2, Cells.Cell<B>>, x: B) -> Bool:
+def Quorum.hit(~B: Data, ~same: B -> B -> Bool, v: Maybe<&2, B>, x: B) -> Bool:
   match v:
-    case Some{Cells.One{b}}:
+    case Some{b}:
       same(b, x)
-    case Some{Cells.Many{}}:
-      False{}
     case None{}:
       False{}
 
@@ -23,7 +20,7 @@ def Quorum.hit(~B: Data, ~same: B -> B -> Bool, v: Maybe<&2, Cells.Cell<B>>, x: 
 def Quorum.yes(
   ~B: Data,
   ~same: B -> B -> Bool,
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  bs: List<&2, Maybe<&2, B>>,
   +x: B
 ) -> Nat:
   match bs:
@@ -36,7 +33,7 @@ def Quorum.yes(
 def Quorum.no(
   ~B: Data,
   ~same: B -> B -> Bool,
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  bs: List<&2, Maybe<&2, B>>,
   +x: B
 ) -> Nat:
   match bs:
@@ -49,7 +46,7 @@ def Quorum.no(
 def Quorum.has(
   ~B: Data,
   ~same: B -> B -> Bool,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  +bs: List<&2, Maybe<&2, B>>,
   +x: B
 ) -> Bool:
   Nat.is_lt(Quorum.no(~B, ~same, bs, x), Quorum.yes(~B, ~same, bs, x))
@@ -58,15 +55,13 @@ def Quorum.has(
 def Quorum.winner.at(
   ~B: Data,
   ~same: B -> B -> Bool,
-  v: Maybe<&2, Cells.Cell<B>>,
+  v: Maybe<&2, B>,
   rest: Maybe<&2, B>,
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+  bs: List<&2, Maybe<&2, B>>
 ) -> Maybe<&2, B>:
   match v:
-    case Some{Cells.One{+b}}:
+    case Some{+b}:
       Bool.pick(Maybe<&2, B>, Quorum.has(~B, ~same, bs, b), Some{b}, rest)
-    case Some{Cells.Many{}}:
-      rest
     case None{}:
       rest
 
@@ -74,8 +69,8 @@ def Quorum.winner.at(
 def Quorum.winner(
   ~B: Data,
   ~same: B -> B -> Bool,
-  ks: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+  ks: List<&2, Maybe<&2, B>>,
+  +bs: List<&2, Maybe<&2, B>>
 ) -> Maybe<&2, B>:
   match ks:
     case Nil{}:
@@ -105,19 +100,15 @@ def Quorum.step.vote(~B: Data, ~same: B -> B -> Bool, b: B, c: Maybe<&2, B>, +j:
 def Quorum.step.of(
   ~B: Data,
   ~same: B -> B -> Bool,
-  v: Maybe<&2, Cells.Cell<B>>,
+  v: Maybe<&2, B>,
   c: Maybe<&2, B>,
   k: Nat
 ) -> Pass<B>:
   match v k:
-    case Some{Cells.One{b}} 0n:
+    case Some{b} 0n:
       Pass{Some{b}, 1n}
-    case Some{Cells.One{+b}} 1n+j:
+    case Some{+b} 1n+j:
       Quorum.step.vote(~B, ~same, b, c, j)
-    case Some{Cells.Many{}} 0n:
-      Pass{c, 0n}
-    case Some{Cells.Many{}} 1n+j:
-      Pass{c, j}
     case None{} 0n:
       Pass{c, 0n}
     case None{} 1n+j:
@@ -127,7 +118,7 @@ def Quorum.step.of(
 def Quorum.step(
   ~B: Data,
   ~same: B -> B -> Bool,
-  v: Maybe<&2, Cells.Cell<B>>,
+  v: Maybe<&2, B>,
   p: Pass<B>
 ) -> Pass<B>:
   match p:
@@ -135,7 +126,7 @@ def Quorum.step(
       Quorum.step.of(~B, ~same, v, c, k)
 
 # the pass over the ballots bs, the last first
-def Quorum.pass(~B: Data, ~same: B -> B -> Bool, bs: List<&2, Maybe<&2, Cells.Cell<B>>>) -> Pass<B>:
+def Quorum.pass(~B: Data, ~same: B -> B -> Bool, bs: List<&2, Maybe<&2, B>>) -> Pass<B>:
   match bs:
     case Nil{}:
       Pass{None{}, 0n}
@@ -151,7 +142,7 @@ def Quorum.hit_excl(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  v: Maybe<&2, Cells.Cell<B>>,
+  v: Maybe<&2, B>,
   x: B,
   +y: B,
   no: {same(x, y) == False{}: Bool}
@@ -159,7 +150,7 @@ def Quorum.hit_excl(
   Quorum.hit(~B, ~same, v, y) == True{}: Bool
 } -> {Quorum.hit(~B, ~same, v, x) == False{}: Bool}:
   match v:
-    case Some{Cells.One{b}}:
+    case Some{b}:
       h =>
         %Equal.sym(
           B,
@@ -168,8 +159,6 @@ def Quorum.hit_excl(
           Shared.Eq.sound(~B, ~same, laws, b)(y)(h)
         ): {same(_, x) == False{}: Bool}
         Shared.Eq.ne_flip(~B, ~same, ~laws, x, y, no)
-    case Some{Cells.Many{}}:
-      h => {==}
     case None{}:
       h => {==}
 
@@ -200,7 +189,7 @@ def Quorum.yes_le_no(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  bs: List<&2, Maybe<&2, B>>,
   +x: B,
   +y: B,
   +no: {same(x, y) == False{}: Bool}
@@ -224,7 +213,7 @@ def Quorum.unique.at(
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
   held: Bool,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  +bs: List<&2, Maybe<&2, B>>,
   +x: B,
   +y: B,
   +e: {same(x, y) == held: Bool},
@@ -267,7 +256,7 @@ def Quorum.unique(
   ~Ty: Data,
   ~same: Ty -> Ty -> Bool,
   ~laws: Shared.Eq.Laws(Ty, same),
-  bs: List<&2, Maybe<&2, Cells.Cell<Ty>>>,
+  bs: List<&2, Maybe<&2, Ty>>,
   +x: Ty,
   +y: Ty
 ) -> {Quorum.has(~Ty, ~same, bs, x) == True{}: Bool}
@@ -280,12 +269,12 @@ def Quorum.yes_more.at(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  v: Maybe<&2, Cells.Cell<B>>,
-  w: Maybe<&2, Cells.Cell<B>>,
+  v: Maybe<&2, B>,
+  w: Maybe<&2, B>,
   x: B,
   y: Nat,
   y2: Nat,
-  k: {Cells.Cell.keeps(~B, ~same, v, w) == True{}: Bool},
+  k: {Shared.Maybe.keeps(~B, ~same, v, w) == True{}: Bool},
   ih: {Nat.is_le(y, y2) == True{}: Bool}
 ) -> {
   Nat.is_le(
@@ -297,19 +286,12 @@ def Quorum.yes_more.at(
   match v w:
     case None{} u:
       Shared.Nat.le_add_if(Quorum.hit(~B, ~same, u, x), y, y2)(ih)
-    case Some{Cells.Many{}} u:
-      Shared.Nat.le_add_if(Quorum.hit(~B, ~same, u, x), y, y2)(ih)
-    case Some{Cells.One{b}} None{}:
+    case Some{b} None{}:
       Empty.absurd(
         {Nat.is_le(Shared.Nat.add_if(same(b, x), y), y2) == True{}: Bool},
         Shared.Bool.false_ne_true(k)
       )
-    case Some{Cells.One{b}} Some{Cells.Many{}}:
-      Empty.absurd(
-        {Nat.is_le(Shared.Nat.add_if(same(b, x), y), y2) == True{}: Bool},
-        Shared.Bool.false_ne_true(k)
-      )
-    case Some{Cells.One{+b}} Some{Cells.One{c}}:
+    case Some{+b} Some{c}:
       %Shared.Eq.sound(~B, ~same, laws, b)(c)(k):
         {
           Nat.is_le(
@@ -325,12 +307,12 @@ def Quorum.no_less.at(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  v: Maybe<&2, Cells.Cell<B>>,
-  w: Maybe<&2, Cells.Cell<B>>,
+  v: Maybe<&2, B>,
+  w: Maybe<&2, B>,
   x: B,
   n: Nat,
   n2: Nat,
-  k: {Cells.Cell.keeps(~B, ~same, v, w) == True{}: Bool},
+  k: {Shared.Maybe.keeps(~B, ~same, v, w) == True{}: Bool},
   ih: {Nat.is_le(n2, n) == True{}: Bool}
 ) -> {
   Nat.is_le(
@@ -342,19 +324,12 @@ def Quorum.no_less.at(
   match v w:
     case None{} u:
       Shared.Nat.add_if_le_succ(Bool.not(Quorum.hit(~B, ~same, u, x)), n2, n)(ih)
-    case Some{Cells.Many{}} u:
-      Shared.Nat.add_if_le_succ(Bool.not(Quorum.hit(~B, ~same, u, x)), n2, n)(ih)
-    case Some{Cells.One{b}} None{}:
+    case Some{b} None{}:
       Empty.absurd(
         {Nat.is_le(1n+n2, Shared.Nat.add_if(Bool.not(same(b, x)), n)) == True{}: Bool},
         Shared.Bool.false_ne_true(k)
       )
-    case Some{Cells.One{b}} Some{Cells.Many{}}:
-      Empty.absurd(
-        {Nat.is_le(1n+n2, Shared.Nat.add_if(Bool.not(same(b, x)), n)) == True{}: Bool},
-        Shared.Bool.false_ne_true(k)
-      )
-    case Some{Cells.One{+b}} Some{Cells.One{c}}:
+    case Some{+b} Some{c}:
       not1 = Bool.not(same(b, x))
       %Shared.Eq.sound(~B, ~same, laws, b)(c)(k):
         {
@@ -372,14 +347,14 @@ def Quorum.yes_more(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  bs2: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  bs: List<&2, Maybe<&2, B>>,
+  bs2: List<&2, Maybe<&2, B>>,
   +x: B
 ) -> {
   Shared.List.all2(
-    ~Maybe<&2, Cells.Cell<B>>,
-    ~Maybe<&2, Cells.Cell<B>>,
-    ~Cells.Cell.keeps(~B, ~same),
+    ~Maybe<&2, B>,
+    ~Maybe<&2, B>,
+    ~Shared.Maybe.keeps(~B, ~same),
     bs,
     bs2
   )
@@ -390,11 +365,11 @@ def Quorum.yes_more(
       k => {==}
     case Con{+v, +r} Con{+w, +r2}:
       +k =>
-        +kh = Cells.Cell.keeps(~B, ~same, v, w)
+        +kh = Shared.Maybe.keeps(~B, ~same, v, w)
         kr = Shared.List.all2(
-          ~Maybe<&2, Cells.Cell<B>>,
-          ~Maybe<&2, Cells.Cell<B>>,
-          ~Cells.Cell.keeps(~B, ~same),
+          ~Maybe<&2, B>,
+          ~Maybe<&2, B>,
+          ~Shared.Maybe.keeps(~B, ~same),
           r,
           r2
         )
@@ -428,14 +403,14 @@ def Quorum.no_less(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  bs2: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  bs: List<&2, Maybe<&2, B>>,
+  bs2: List<&2, Maybe<&2, B>>,
   +x: B
 ) -> {
   Shared.List.all2(
-    ~Maybe<&2, Cells.Cell<B>>,
-    ~Maybe<&2, Cells.Cell<B>>,
-    ~Cells.Cell.keeps(~B, ~same),
+    ~Maybe<&2, B>,
+    ~Maybe<&2, B>,
+    ~Shared.Maybe.keeps(~B, ~same),
     bs,
     bs2
   )
@@ -446,11 +421,11 @@ def Quorum.no_less(
       k => {==}
     case Con{+v, +r} Con{+w, +r2}:
       +k =>
-        +kh = Cells.Cell.keeps(~B, ~same, v, w)
+        +kh = Shared.Maybe.keeps(~B, ~same, v, w)
         kr = Shared.List.all2(
-          ~Maybe<&2, Cells.Cell<B>>,
-          ~Maybe<&2, Cells.Cell<B>>,
-          ~Cells.Cell.keeps(~B, ~same),
+          ~Maybe<&2, B>,
+          ~Maybe<&2, B>,
+          ~Shared.Maybe.keeps(~B, ~same),
           r,
           r2
         )
@@ -485,7 +460,7 @@ def Quorum.has_winner.if(
   held: Bool,
   b: B,
   rest: Maybe<&2, B>,
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  bs: List<&2, Maybe<&2, B>>,
   x: B,
   eb: {Quorum.has(~B, ~same, bs, b) == held: Bool},
   ih: {rest == Some{x}: Maybe<&2, B>} -> {Quorum.has(~B, ~same, bs, x) == True{}: Bool}
@@ -504,19 +479,17 @@ def Quorum.has_winner.if(
 def Quorum.has_winner.at(
   ~B: Data,
   ~same: B -> B -> Bool,
-  v: Maybe<&2, Cells.Cell<B>>,
+  v: Maybe<&2, B>,
   rest: Maybe<&2, B>,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  +bs: List<&2, Maybe<&2, B>>,
   x: B,
   ih: {rest == Some{x}: Maybe<&2, B>} -> {Quorum.has(~B, ~same, bs, x) == True{}: Bool}
 ) -> {
   Quorum.winner.at(~B, ~same, v, rest, bs) == Some{x}: Maybe<&2, B>
 } -> {Quorum.has(~B, ~same, bs, x) == True{}: Bool}:
   match v:
-    case Some{Cells.One{+b}}:
+    case Some{+b}:
       Quorum.has_winner.if(~B, ~same, Quorum.has(~B, ~same, bs, b), b, rest, bs, x, {==}, ih)
-    case Some{Cells.Many{}}:
-      ih
     case None{}:
       ih
 
@@ -524,8 +497,8 @@ def Quorum.has_winner.at(
 def Quorum.has_winner(
   ~Ty: Data,
   ~same: Ty -> Ty -> Bool,
-  ks: List<&2, Maybe<&2, Cells.Cell<Ty>>>,
-  +bs: List<&2, Maybe<&2, Cells.Cell<Ty>>>,
+  ks: List<&2, Maybe<&2, Ty>>,
+  +bs: List<&2, Maybe<&2, Ty>>,
   +x: Ty
 ) -> {Quorum.winner(~Ty, ~same, ks, bs) == Some{x}: Maybe<&2, Ty>}
   -> {Quorum.has(~Ty, ~same, bs, x) == True{}: Bool}:
@@ -554,7 +527,7 @@ def Quorum.scan.past(
   ~laws: Shared.Eq.Laws(B, same),
   c: Bool,
   +b: B,
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  bs: List<&2, Maybe<&2, B>>,
   x: B,
   yr: Nat,
   ec: {same(b, x) == c: Bool},
@@ -586,7 +559,7 @@ def Quorum.scan.if(
   held: Bool,
   +b: B,
   rest: Maybe<&2, B>,
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  bs: List<&2, Maybe<&2, B>>,
   +x: B,
   yr: Nat,
   eb: {Quorum.has(~B, ~same, bs, b) == held: Bool},
@@ -606,9 +579,9 @@ def Quorum.scan.at(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  v: Maybe<&2, Cells.Cell<B>>,
+  v: Maybe<&2, B>,
   rest: Maybe<&2, B>,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  +bs: List<&2, Maybe<&2, B>>,
   x: B,
   yr: Nat,
   hx: {Quorum.has(~B, ~same, bs, x) == True{}: Bool},
@@ -616,7 +589,7 @@ def Quorum.scan.at(
   ih: {Nat.is_lt(0n, yr) == True{}: Bool} -> {rest == Some{x}: Maybe<&2, B>}
 ) -> {Quorum.winner.at(~B, ~same, v, rest, bs) == Some{x}: Maybe<&2, B>}:
   match v:
-    case Some{Cells.One{+b}}:
+    case Some{+b}:
       Quorum.scan.if(
         ~B,
         ~same,
@@ -632,8 +605,6 @@ def Quorum.scan.at(
         pos,
         ih
       )
-    case Some{Cells.Many{}}:
-      ih(pos)
     case None{}:
       ih(pos)
 
@@ -642,8 +613,8 @@ def Quorum.scan(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  ks: List<&2, Maybe<&2, Cells.Cell<B>>>,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  ks: List<&2, Maybe<&2, B>>,
+  +bs: List<&2, Maybe<&2, B>>,
   +x: B,
   +hx: {Quorum.has(~B, ~same, bs, x) == True{}: Bool}
 ) -> {
@@ -672,7 +643,7 @@ def Quorum.winner_of(
   ~Ty: Data,
   ~same: Ty -> Ty -> Bool,
   ~laws: Shared.Eq.Laws(Ty, same),
-  +bs: List<&2, Maybe<&2, Cells.Cell<Ty>>>,
+  +bs: List<&2, Maybe<&2, Ty>>,
   +x: Ty
 ) -> {Quorum.has(~Ty, ~same, bs, x) == True{}: Bool}
   -> {Quorum.winner(~Ty, ~same, bs, bs) == Some{x}: Maybe<&2, Ty>}:
@@ -699,7 +670,7 @@ def Quorum.winner_of(
 def Quorum.winner_fast.of(
   ~B: Data,
   ~same: B -> B -> Bool,
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  bs: List<&2, Maybe<&2, B>>,
   p: Pass<B>
 ) -> Maybe<&2, B>:
   match p:
@@ -712,7 +683,7 @@ def Quorum.winner_fast.of(
 def Quorum.winner_fast(
   ~B: Data,
   ~same: B -> B -> Bool,
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+  +bs: List<&2, Maybe<&2, B>>
 ) -> Maybe<&2, B>:
   Quorum.winner_fast.of(~B, ~same, bs, Quorum.pass(~B, ~same, bs))
 
@@ -1099,7 +1070,7 @@ def Quorum.step_inv(
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
   +x: B,
-  v: Maybe<&2, Cells.Cell<B>>,
+  v: Maybe<&2, B>,
   +c: Maybe<&2, B>,
   k: Nat,
   +q: Nat,
@@ -1118,7 +1089,7 @@ def Quorum.step_inv(
     == True{}: Bool
 }:
   match v c k:
-    case Some{Cells.One{+b}} w 0n:
+    case Some{+b} w 0n:
       e => Quorum.step_inv.first(
         ~B,
         ~same,
@@ -1129,7 +1100,7 @@ def Quorum.step_inv(
         same(b, x),
         {==}
       )(Quorum.bound_zero(Quorum.is_cand(~B, ~same, w, x), q, r)(e))
-    case Some{Cells.One{+b}} Some{+a} 1n+j:
+    case Some{+b} Some{+a} 1n+j:
       Quorum.step_inv.vote(
         ~B,
         ~same,
@@ -1147,16 +1118,8 @@ def Quorum.step_inv(
         {==},
         {==}
       )
-    case Some{Cells.One{+b}} None{} 1n+j:
+    case Some{+b} None{} 1n+j:
       Quorum.step_inv.none(~B, ~same, x, b, j, q, r, same(b, x), {==})
-    case Some{Cells.Many{}} w 0n:
-      e => Quorum.step_inv.idle(
-        Quorum.is_cand(~B, ~same, w, x),
-        q,
-        r
-      )(Quorum.bound_zero(Quorum.is_cand(~B, ~same, w, x), q, r)(e))
-    case Some{Cells.Many{}} w 1n+j:
-      Quorum.bound_fall(Quorum.is_cand(~B, ~same, w, x), j, q, r)
     case None{} w 0n:
       e => Quorum.step_inv.idle(
         Quorum.is_cand(~B, ~same, w, x),
@@ -1173,7 +1136,7 @@ def Quorum.pass_inv.at(
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
   x: B,
-  v: Maybe<&2, Cells.Cell<B>>,
+  v: Maybe<&2, B>,
   p: Pass<B>,
   q: Nat,
   r: Nat
@@ -1201,7 +1164,7 @@ def Quorum.pass_inv(
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
   +x: B,
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+  bs: List<&2, Maybe<&2, B>>
 ) -> {
   Quorum.inv(
     ~B,
@@ -1294,7 +1257,7 @@ def Quorum.cand_is(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  +bs: List<&2, Maybe<&2, B>>,
   +x: B,
   p: Pass<B>,
   ep: {Quorum.pass(~B, ~same, bs) == p: Pass<B>}
@@ -1332,7 +1295,7 @@ def Quorum.winner_fast_eq.none(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  bs: List<&2, Maybe<&2, B>>,
   y: B,
   ew: {Quorum.winner(~B, ~same, bs, bs) == None{}: Maybe<&2, B>},
   h: Bool,
@@ -1377,7 +1340,7 @@ def Quorum.winner_fast_eq.at(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  +bs: List<&2, Maybe<&2, B>>,
   w: Maybe<&2, B>,
   ew: {Quorum.winner(~B, ~same, bs, bs) == w: Maybe<&2, B>},
   p: Pass<B>,
@@ -1435,7 +1398,7 @@ def Quorum.winner_fast_eq(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+  +bs: List<&2, Maybe<&2, B>>
 ) -> {Quorum.winner_fast(~B, ~same, bs) == Quorum.winner(~B, ~same, bs, bs): Maybe<&2, B>}:
   Quorum.winner_fast_eq.at(
     ~B,
@@ -1457,7 +1420,7 @@ def Quorum.winner_fast_eq(
 def Quorum.major(
   ~B: Data,
   ~same: B -> B -> Bool,
-  bs: List<&2, Maybe<&2, Cells.Cell<B>>>
+  bs: List<&2, Maybe<&2, B>>
 ) -> Maybe<&2, B>:
   Quorum.winner_fast(~B, ~same, bs)
 
@@ -1466,14 +1429,14 @@ def Quorum.has_more(
   ~Ty: Data,
   ~same: Ty -> Ty -> Bool,
   ~laws: Shared.Eq.Laws(Ty, same),
-  +bs: List<&2, Maybe<&2, Cells.Cell<Ty>>>,
-  +bs2: List<&2, Maybe<&2, Cells.Cell<Ty>>>,
+  +bs: List<&2, Maybe<&2, Ty>>,
+  +bs2: List<&2, Maybe<&2, Ty>>,
   +x: Ty
 ) -> {
   Shared.List.all2(
-    ~Maybe<&2, Cells.Cell<Ty>>,
-    ~Maybe<&2, Cells.Cell<Ty>>,
-    ~Cells.Cell.keeps(~Ty, ~same),
+    ~Maybe<&2, Ty>,
+    ~Maybe<&2, Ty>,
+    ~Shared.Maybe.keeps(~Ty, ~same),
     bs,
     bs2
   )
@@ -1500,7 +1463,7 @@ def Quorum.major_has(
   ~B: Data,
   ~same: B -> B -> Bool,
   ~laws: Shared.Eq.Laws(B, same),
-  +bs: List<&2, Maybe<&2, Cells.Cell<B>>>,
+  +bs: List<&2, Maybe<&2, B>>,
   x: B
 ) -> {Quorum.major(~B, ~same, bs) == Some{x}: Maybe<&2, B>}
   -> {Quorum.has(~B, ~same, bs, x) == True{}: Bool}:
@@ -1535,12 +1498,12 @@ law Quorum.major_kept:
   for ~same: B -> B -> Bool
   for ~laws: Shared.Eq.Laws(B, same)
   Shared.Read.Stable(
-    List<&2, Maybe<&2, Cells.Cell<B>>>,
+    List<&2, Maybe<&2, B>>,
     bs => bs2 => {
       Shared.List.all2(
-        ~Maybe<&2, Cells.Cell<B>>,
-        ~Maybe<&2, Cells.Cell<B>>,
-        ~Cells.Cell.keeps(~B, ~same),
+        ~Maybe<&2, B>,
+        ~Maybe<&2, B>,
+        ~Shared.Maybe.keeps(~B, ~same),
         bs,
         bs2
       )
