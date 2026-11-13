@@ -28,8 +28,10 @@ import ./work.bend as Works
 # -----------
 # This file fills the names of spec.bend and proves its laws. A node is its
 # state (Nodes.Raw) with the proof that its facts are sound for its name
-# (Facts.ok), so every node, however it came to be, never names itself a
-# liar. The laws are those of the core, said of the facts of the node.
+# (Facts.ok) and that its name is not reserved (Facts.Trust.reserved), so
+# every node, however it came to be, never names itself a liar, and is never
+# the one that another node names when its trust breaks. The laws are those
+# of the core, said of the facts of the node.
 def Spec.VendNode():
   Sigma<&2, &2, Nodes.Raw, r => {Nodes.Raw.ok(r) == True{}: Bool}>
 
@@ -123,9 +125,70 @@ def Spec.VendNode.liars(n):
 # What a node does
 # ----------------
 
-# a node of the name name, that holds nothing yet
-def Node.new(+name: String) -> Spec.VendNode:
-  (Nodes.Raw{name, [], [], False{}, Facts.Facts.new(), Parts.Parts.new()}, Facts.Facts.new_ok(name))
+# the facts fs of a node of the name name are sound for the name
+def Node.sound(
+  +name: String,
+  +fs: Facts.Facts(),
+  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+) -> {Facts.Facts.ok(name, fs) == True{}: Bool}:
+  Shared.Bool.and_true_left(Facts.Facts.ok(name, fs), Bool.not(Facts.Trust.reserved(name)))(ok)
+
+# the name name of a node, whatever its facts fs, is not reserved
+def Node.free(
+  +name: String,
+  +fs: Facts.Facts(),
+  ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
+) -> {Bool.not(Facts.Trust.reserved(name)) == True{}: Bool}:
+  Shared.Bool.and_true_right(Facts.Facts.ok(name, fs), Bool.not(Facts.Trust.reserved(name)))(ok)
+
+# facts fs that are sound for a name name that is not reserved can be those of
+# a node of that name
+def Node.join(
+  +name: String,
+  +fs: Facts.Facts(),
+  sound: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  free: {Bool.not(Facts.Trust.reserved(name)) == True{}: Bool}
+) -> {Nodes.Raw.sound(name, fs) == True{}: Bool}:
+  Shared.Bool.and_both(Facts.Facts.ok(name, fs), Bool.not(Facts.Trust.reserved(name)))(sound)(free)
+
+# a node of the name name keeps its proof when its facts go from fs to gs, if
+# gs are sound for the name whenever fs are
+def Node.resound(
+  +name: String,
+  +fs: Facts.Facts(),
+  +gs: Facts.Facts(),
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
+  step: {Facts.Facts.ok(name, fs) == True{}: Bool} -> {Facts.Facts.ok(name, gs) == True{}: Bool}
+) -> {Nodes.Raw.sound(name, gs) == True{}: Bool}:
+  Node.join(name, gs, step(Node.sound(name, fs, ok)), Node.free(name, fs, ok))
+
+# a node of the name name, that holds nothing yet, unless the name is
+# reserved (b)
+def Node.new.if(
+  +name: String,
+  b: Bool,
+  e: {Facts.Trust.reserved(name) == b: Bool}
+) -> Maybe<&2, Spec.VendNode>:
+  match b e:
+    case True{} e:
+      None{}
+    case False{} e:
+      Some{
+        (
+          Nodes.Raw{name, [], [], False{}, Facts.Facts.new(), Parts.Parts.new()},
+          Node.join(
+            name,
+            Facts.Facts.new(),
+            Facts.Facts.new_ok(name),
+            Equal.cong(Bool, Bool, Bool.not, Facts.Trust.reserved(name), False{}, e)
+          )
+        )
+      }
+
+# a node of the name name, that holds nothing yet; none if the name is
+# reserved, as no node has such a name
+def Node.new(+name: String) -> Maybe<&2, Spec.VendNode>:
+  Node.new.if(name, Facts.Trust.reserved(name), {==})
 
 # the node after it takes in the request r of the id i, with the words m to
 # keep, when it may (go): it has not stopped, and the writer is connected
@@ -136,7 +199,7 @@ def Node.asks(
   st: Bool,
   +fs: Facts.Facts(),
   ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -154,7 +217,13 @@ def Node.asks(
           Facts.Facts.ask(name, fs, i, r),
           Nodes.Kept.with(ps, Nodes.Request.content(r))
         },
-        Facts.Facts.take_ok(name, fs, Types.Fact.Ask{Facts.Facts.asked(fs, i, r)})(ok)
+        Node.resound(
+          name,
+          fs,
+          Facts.Facts.ask(name, fs, i, r),
+          ok,
+          Facts.Facts.take_ok(name, fs, Types.Fact.Ask{Facts.Facts.asked(fs, i, r)})
+        )
       )
 
 # the node after a work, unless it has stopped
@@ -165,7 +234,7 @@ def Node.works(
   +st: Bool,
   +fs: Facts.Facts(),
   ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
 ) -> Spec.VendNode:
   match st:
     case True{}:
@@ -173,7 +242,7 @@ def Node.works(
     case False{}:
       (
         Nodes.Raw{name, ws, ms, False{}, Works.Work.does(fs, name), ps},
-        Live.Work.does_ok(name, fs)(ok)
+        Node.resound(name, fs, Works.Work.does(fs, name), ok, Live.Work.does_ok(name, fs))
       )
 
 def Spec.VendNode.does(n, d):
@@ -202,7 +271,13 @@ def Spec.VendNode.does(n, d):
       +gs = Facts.Facts.list(fs2)
       (
         Nodes.Raw{name, ws, ms, st, Facts.Facts.take_all(name, gs, fs), Parts.Parts.join(ps, ps2)},
-        Facts.Facts.take_all_ok(name, gs, fs)(ok)
+        Node.resound(
+          name,
+          fs,
+          Facts.Facts.take_all(name, gs, fs),
+          ok,
+          Facts.Facts.take_all_ok(name, gs, fs)
+        )
       )
     case Tuple{Nodes.Raw{+name, ws, ms, +st, fs, ps}, ok} Spec.Deed.Mount{+a, +b, +p, +held}:
       Node.asks(
@@ -274,12 +349,22 @@ def Node.ok(
 ) -> {Facts.Facts.ok(Spec.VendNode.name(n), Node.facts(n)) == True{}: Bool}:
   match n:
     case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
-      ok
+      Node.sound(name, fs, ok)
+
+# the name of a node is not reserved: it is never the name under which a node
+# says that its trust broke (Facts.Trust.voter), so no node is named a liar
+# by the broken trust of another
+def Node.name_free(
+  n: Spec.VendNode
+) -> {Facts.Trust.reserved(Spec.VendNode.name(n)) == False{}: Bool}:
+  match n:
+    case Tuple{Nodes.Raw{+name, ws, ms, st, fs, ps}, ok}:
+      Shared.Bool.not_true(Facts.Trust.reserved(name))(Node.free(name, fs, ok))
 
 def Spec.VendNode.never_lies(n):
   match n:
-    case Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}:
-      Facts.Facts.ok_never(name, fs)(ok)
+    case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, ps}, ok}:
+      Facts.Facts.ok_never(name, fs)(Node.sound(name, fs, ok))
 
 def Spec.VendNode.liars_are(n, v):
   match n:
@@ -376,7 +461,7 @@ def Node.asks_name(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -395,7 +480,7 @@ def Node.works_name(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
 ) -> {Spec.VendNode.name(Node.works(name, ws, ms, st, fs, ps, ok)) == name: String}:
   match st:
     case True{}:
@@ -497,7 +582,7 @@ def Node.asks_writers(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -518,7 +603,7 @@ def Node.works_writers(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
 ) -> {Spec.VendNode.writers(Node.works(name, ws, ms, st, fs, ps, ok)) == ws: List<&2, String>}:
   match st:
     case True{}:
@@ -619,7 +704,7 @@ def Node.asks_mounts(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -643,7 +728,7 @@ def Node.works_mounts(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
 ) -> {
   Spec.VendNode.mounts(
     Node.works(name, ws, ms, st, fs, ps, ok)
@@ -852,7 +937,7 @@ def Node.asks_stopped(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -871,7 +956,7 @@ def Node.works_stopped(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
 ) -> {Spec.VendNode.stopped(Node.works(name, ws, ms, st, fs, ps, ok)) == st: Bool}:
   match st:
     case True{}:
@@ -936,7 +1021,7 @@ def Node.asks_wider(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -961,7 +1046,7 @@ def Node.works_wider(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool}
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool}
 ) -> {Facts.Facts.wider(fs, Node.facts(Node.works(name, ws, ms, st, fs, ps, ok))) == True{}: Bool}:
   match st:
     case True{}:
@@ -1122,7 +1207,7 @@ def Node.asks_at(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -1150,7 +1235,7 @@ def Node.asks_works_at(
   +st: Bool,
   +fs: Facts.Facts(),
   +ps: Parts.Parts,
-  +ok: {Facts.Facts.ok(name, fs) == True{}: Bool},
+  +ok: {Nodes.Raw.sound(name, fs) == True{}: Bool},
   +i: Ledgers.Id,
   +r: Spec.Request,
   go: Bool
@@ -1436,7 +1521,7 @@ def Node.decides_alone(
               hs
             )(
               Node.gate(st, List.contains(~String, ~String.eq, wrs, Spec.Id.writer(i)))(hs)(hw)
-            )(Live.Work.decides(name, fs, b, k, i, p, ws)(ok)(h1)(h2)(h3))
+            )(Live.Work.decides(name, fs, b, k, i, p, ws)(Node.sound(name, fs, ok))(h1)(h2)(h3))
           )
         )
       )

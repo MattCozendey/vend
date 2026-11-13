@@ -10,7 +10,9 @@ import ./spec.bend as Spec
 # -------------------
 # A node holds its name, the writers connected to it, the resources mounted
 # to it, whether it has stopped, its facts, and the parts of content that it
-# keeps by hash. All that it answers is read from its facts.
+# keeps by hash. All that it answers is read from its facts. The name of a
+# node is not reserved (it does not start with '~'): a reserved name is one
+# under which a node says that its trust broke, and never the name of a node.
 
 # a resource mounted to a node: its address, and the path of a branch where
 # it is mounted
@@ -28,11 +30,18 @@ type Raw is Data:
     parts: Parts.Parts
   }
 
-# the facts of r are sound for its name
+# the facts fs are sound for the name name, and the name is not reserved
+# (Facts.Trust.reserved): it can be the name of a node that holds fs
+def Raw.sound(+name: String, fs: Facts.Facts()) -> Bool:
+  Bool.and(Facts.Facts.ok(name, fs), Bool.not(Facts.Trust.reserved(name)))
+
+# r can be a node: its facts are sound for its name, and its name is not
+# reserved, so the name under which another node says that its trust broke is
+# never the name of r
 def Raw.ok(r: Raw) -> Bool:
   match r:
     case Raw{name, ws, ms, st, fs, ps}:
-      Facts.Facts.ok(name, fs)
+      Raw.sound(name, fs)
 
 # the address of the mounted resource m
 def Mounted.address(m: Mounted) -> String:

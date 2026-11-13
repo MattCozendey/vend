@@ -141,11 +141,25 @@ def Facts.liars(s: Facts()) -> List<&2, String>:
 # under its name, and that no two requests start one store (SHA-256). When a
 # node sees either broken, it says so with two votes that contradict each
 # other, under a name of its own that is not its name. So it names a liar,
-# and no law about a node that names no liar binds it any more.
+# and no law about a node that names no liar binds it any more. The names
+# that start with '~' are reserved: no node has one, so the name under which
+# a node says that its trust broke is never the name of a node.
 
 # the name under which the node name says that its trust broke
 def Trust.voter(name: String) -> String:
   SCon{'~', name}
+
+# the name name is reserved: it starts with '~', so no node has it
+def Trust.reserved(name: String) -> Bool:
+  match name:
+    case SNil{}:
+      False{}
+    case SCon{c, rest}:
+      Char.is_eq(c, '~')
+
+# the name under which a node says that its trust broke is reserved
+def Trust.voter_reserved(name: String) -> {Trust.reserved(Trust.voter(name)) == True{}: Bool}:
+  {==}
 
 # a pick that is for nothing, of the number k
 def Trust.pick(k: Nat) -> Types.Pick:
