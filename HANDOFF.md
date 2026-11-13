@@ -9,6 +9,14 @@ opaque types and operations, and laws about them. `src/vend_node/impl.bend` must
 name and prove every law. When `bend src/vend_node/impl.bend --check-only` prints ALL PROOFS CHECK,
 a Vend Node does what README.md promises.
 
+## Priority
+
+- The laws of `spec.bend` are by far the most important thing. If they hold, the work is done.
+  Focus on them.
+- Every other law in the repo is a means, not a goal. It states how the current code works.
+- An agent may replace or delete any other law, if the laws of `spec.bend` still hold. List each one
+  that you deleted, and why, for the human to accept.
+
 ## Rules
 
 - Do not change any statement in `spec.bend`: no law, type, operation or comment. The human owns it.

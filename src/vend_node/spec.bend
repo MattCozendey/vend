@@ -58,7 +58,7 @@ type Deed is Data:
   Deed.Leave{writer: String}
   Deed.Ask{id: Ledgers.Id, request: Request}
   Deed.Sync{from: VendNode}
-  Deed.Mount{address: String, branch: Ledgers.Line, held: List<&2, U32>}
+  Deed.Mount{address: String, branch: Ledgers.Line, path: String, held: List<&2, U32>}
   Deed.Unmount{address: String}
   Deed.Work{}
   Deed.Drop{}
@@ -66,7 +66,7 @@ type Deed is Data:
 
 # Connect, Leave: a writer connects or leaves. Ask: a writer sends a request.
 # Sync: the node takes in what another node holds. Mount: a resource that holds
-# these words is mounted to a branch. Unmount: it is unmounted. Work: the node
+# these words is mounted at a path of a branch. Unmount: it is unmounted. Work: the node
 # goes on with its work (it votes, decides and fetches). Drop: it lets go of the
 # content that it does not need. Stop: it is asked to stop.
 
@@ -141,6 +141,34 @@ type Status is Data:
   Status.Stale{}
   Status.Refused{}
 
+# a version of a line
+type Point is Data:
+  Point{line: Ledgers.Line, n: Nat}
+
+# the line of the version x
+def Point.line(x: Point) -> Ledgers.Line:
+  match x:
+    case Point{c, k}:
+      c
+
+# the number of the version x in its line
+def Point.n(x: Point) -> Nat:
+  match x:
+    case Point{c, k}:
+      k
+
+# a and b are the same version
+def Point.is_eq(a: Point, b: Point) -> Bool:
+  match a b:
+    case Point{c, x} Point{d, y}:
+      Bool.and(Ledgers.Line.is_eq(c, d), Nat.is_eq(x, y))
+
+# the store of the line c
+def Line.store(c: Ledgers.Line) -> Hashes.Hash:
+  match c:
+    case Ledgers.Line{r, b}:
+      r
+
 # a question about a store or a branch
 type Question is Data:
   Question.Status{line: Ledgers.Line, id: Ledgers.Id}
@@ -162,6 +190,10 @@ type Question is Data:
     uses: List<&2, String>,
     build: List<&2, String>
   }
+  Question.Parents{line: Ledgers.Line, n: Nat}
+  Question.Base{line: Ledgers.Line, id: Ledgers.Id}
+  Question.Owner{line: Ledgers.Line, n: Nat}
+  Question.Era{line: Ledgers.Line, n: Nat}
 
 # Status: what became of the request id. Request: what the request id asked
 # for. Version: the request whose decision made version n. Content: the hash of
@@ -172,7 +204,10 @@ type Question is Data:
 # Mark: the version that a mark names. Count: how many versions the line has.
 # Clashes: the paths that clash in the merge id. Affects: the paths that changed
 # from version from to version to among those that uses reaches through imports,
-# in the build of these conditions.
+# in the build of these conditions. Parents: the versions that version n comes
+# from. Base: the version that the merge id merges from. Owner: the owner group
+# of the line that decides version n. Era: the version of the store whose
+# groups decide version n.
 
 # a reply to a question
 type Reply is Data:
@@ -183,6 +218,9 @@ type Reply is Data:
   Reply.Names{names: List<&2, String>}
   Reply.Number{n: Nat}
   Reply.Yes{yes: Bool}
+  Reply.Name{name: String}
+  Reply.Point{point: Point}
+  Reply.Points{points: List<&2, Point>}
 
 # the reply r is of the kind that the question q asks for
 def Reply.fits(q: Question, r: Reply) -> Bool:
@@ -212,6 +250,14 @@ def Reply.fits(q: Question, r: Reply) -> Bool:
     case Question.Clashes{c, i} Reply.Names{ns}:
       True{}
     case Question.Affects{c, a, b, us, bs} Reply.Names{ns}:
+      True{}
+    case Question.Parents{c, k} Reply.Points{ps}:
+      True{}
+    case Question.Base{c, i} Reply.Point{x}:
+      True{}
+    case Question.Owner{c, k} Reply.Name{g}:
+      True{}
+    case Question.Era{c, k} Reply.Number{m}:
       True{}
     case _ _:
       False{}
@@ -334,7 +380,7 @@ def Deed.writers(d: Deed, ws: List<&2, String>) -> List<&2, String>:
 # the mounts after the deed d, from ms
 def Deed.mounts(d: Deed, ms: List<&2, String>) -> List<&2, String>:
   match d:
-    case Deed.Mount{+a, b, h}:
+    case Deed.Mount{+a, b, q, h}:
       a <> Shared.List.remove(~String, ~String.eq, ms, a)
     case Deed.Unmount{a}:
       Shared.List.remove(~String, ~String.eq, ms, a)
@@ -349,6 +395,60 @@ def Deed.stopped(d: Deed, s: Bool, ws: List<&2, String>, ms: List<&2, String>) -
       Bool.or(s, Bool.or(f, Bool.and(List.is_empty(&2, String, ws), List.is_empty(&2, String, ms))))
     case _:
       s
+
+# P holds of n after k works
+def Worked(k: Nat, n: VendNode, P: VendNode -> Type) -> Type:
+  match k:
+    case 0n:
+      P(n)
+    case 1n+j:
+      Exists(VendNode, m => {m == VendNode.does(n, Deed.Work{}): VendNode} & Worked(j, m, P))
+
+# P holds of n after some number of works
+def Works(n: VendNode, P: VendNode -> Type) -> Type:
+  Exists(Nat, k => Worked(k, n, P))
+
+# the versions ps that a version made by the request r, after version k of c,
+# comes from: version k, and the version that a merge or a move takes
+def Request.Parents(r: Request, c: Ledgers.Line, k: Nat, ps: List<&2, Point>) -> Type:
+  match r:
+    case Request.Merge{f, x}:
+      Exists(Nat, v => {ps == [Point{c, k}, Point{f, v}]: List<&2, Point>})
+    case Request.Move{b, t, v}:
+      {ps == [Point{c, k}, Point{t, v}]: List<&2, Point>}
+    case _:
+      {ps == [Point{c, k}]: List<&2, Point>}
+
+# qs is a chain of parents from the version c, k back to a
+def Back(n: VendNode, a: Point, qs: List<&2, Point>, c: Ledgers.Line, k: Nat) -> Type:
+  match qs:
+    case Nil{}:
+      {a == Point{c, k}: Point}
+    case Con{q, rest}:
+      Exists(
+        List<&2, Point>,
+        ps => {
+          VendNode.answer(n, Question.Parents{c, k}) == Some{Reply.Points{ps}}: Maybe<&2, Reply>
+        }
+          & (
+            {
+              List.contains(~Point, ~Point.is_eq, ps, q) == True{}: Bool
+            }
+              & Back(n, a, rest, Point.line(q), Point.n(q))
+          )
+      )
+
+# the version a is the version c, k or one that it comes from
+def Before(n: VendNode, a: Point, c: Ledgers.Line, k: Nat) -> Type:
+  Exists(List<&2, Point>, qs => Back(n, a, qs, c, k))
+
+# version j of the store of c is the latest that decides r among those up to m
+def Latest(n: VendNode, c: Ledgers.Line, j: Nat, m: Nat, r: Request) -> Type:
+  Exists(
+    Ledgers.Id,
+    i => Made(n, Ledgers.Line{Line.store(c), None{}}, j, i, r)
+  )
+    & {Nat.is_le(j, m) == True{}: Bool}
 
 # no hash is twice in hs
 def Distinct(hs: List<&2, Hashes.Hash>) -> Type:
@@ -549,28 +649,31 @@ law VendNode.stops:
 # ---------------
 
 # A connected writer that starts a store whose only owner is the node gets the
-# store at once: its root is the hash of the start request, and its first
-# version is that request.
-# The writer w asks Start{["a"]} as request "s1" of node "a": after the node
-# works, version 0 of the store of root SHA-256(code of s1) is s1.
+# store once the node works: its root is the hash of the start request, and its
+# first version is that request.
+# The writer w asks Start{["a"]} as request s1 of node a: once a works, version
+# 0 of the store of root SHA-256(code of s1) is s1.
 law VendNode.starts:
   for n: VendNode
   for i: Ledgers.Id
   {VendNode.stopped(n) == False{}: Bool}
     -> {List.contains(~String, ~String.eq, VendNode.writers(n), Id.writer(i)) == True{}: Bool}
-    -> {
-      VendNode.answer(
-        VendNode.does(
-          VendNode.does(n, Deed.Ask{i, Request.Start{[VendNode.name(n)]}}),
-          Deed.Work{}
-        ),
-        Question.Version{
-          Ledgers.Line{Hashes.Sha.hash(Request.code(i, Request.Start{[VendNode.name(n)]})), None{}},
-          0n
-        }
-      )
-        == Some{Reply.Id{i}}: Maybe<&2, Reply>
-    }
+    -> Works(
+      VendNode.does(n, Deed.Ask{i, Request.Start{[VendNode.name(n)]}}),
+      m => {
+        VendNode.answer(
+          m,
+          Question.Version{
+            Ledgers.Line{
+              Hashes.Sha.hash(Request.code(i, Request.Start{[VendNode.name(n)]})),
+              None{}
+            },
+            0n
+          }
+        )
+          == Some{Reply.Id{i}}: Maybe<&2, Reply>
+      }
+    )
 
 # Two requests have one code only when they are the same, so no other request
 # starts a store of the same root (as far as SHA-256 is not broken).
@@ -615,21 +718,6 @@ law VendNode.parts_once:
           == List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, VendNode.parts(n), h): Bool
       }
     )
-
-# A node of the owner group of a line can read every resource of the newest
-# version of the line: the owners keep all of it, so it is never lost.
-# An owner of main, whose newest version is 7, reads every file of version 7
-# without fetching.
-law VendNode.owners_keep:
-  for n: VendNode
-  for c: Ledgers.Line
-  for k: Nat
-  for ns: List<&2, String>
-  for p: String
-  {VendNode.answer(n, Question.Count{c}) == Some{Reply.Number{1n+k}}: Maybe<&2, Reply>}
-    -> {VendNode.answer(n, Question.Group{c, k}) == Some{Reply.Names{ns}}: Maybe<&2, Reply>}
-    -> {List.contains(~String, ~String.eq, ns, VendNode.name(n)) == True{}: Bool}
-    -> {Maybe.is_some(&2, Maybe<&2, List<&2, U32>>, VendNode.read(n, c, k, p)) == True{}: Bool}
 
 # A branch exists only when the owner group of its store decided it: some
 # version of the store is a request that owns the branch.
@@ -701,9 +789,9 @@ law VendNode.counts_once:
     -> {a == b: Nat}
 
 # A node that alone decides the next version of a branch writes a new request
-# of a connected writer at once.
-# Node a, the only owner of main at version 6, gets a write of a.txt from a
-# connected writer: after it works, the write is Written as version 6.
+# of a connected writer once it works.
+# Node a, the only owner of main, gets a write of a.txt from a connected
+# writer: once a works, the write is Written.
 law VendNode.decides_alone:
   for n: VendNode
   for b: Ledgers.Line
@@ -722,20 +810,16 @@ law VendNode.decides_alone:
         == Some{Reply.Names{[VendNode.name(n)]}}: Maybe<&2, Reply>
     }
     -> {VendNode.answer(n, Question.Status{b, i}) == None{}: Maybe<&2, Reply>}
-    -> {
-      VendNode.answer(
-        VendNode.does(VendNode.does(n, Deed.Ask{i, Request.Write{b, p, ws}}), Deed.Work{}),
-        Question.Version{b, k}
-      )
-        == Some{Reply.Id{i}}: Maybe<&2, Reply>
-    }
-      & {
+    -> Works(
+      VendNode.does(n, Deed.Ask{i, Request.Write{b, p, ws}}),
+      m => {
         VendNode.answer(
-          VendNode.does(VendNode.does(n, Deed.Ask{i, Request.Write{b, p, ws}}), Deed.Work{}),
+          m,
           Question.Status{b, i}
         )
           == Some{Reply.Status{Status.Written{}}}: Maybe<&2, Reply>
       }
+    )
 
 # A request that is Written made a version.
 # A write answered Written is version k of its branch, for some k.
@@ -1062,6 +1146,148 @@ law VendNode.liars_found:
     -> ({x == y: List<&2, U32>} -> Empty)
     -> {List.contains(~String, ~String.eq, VendNode.liars(n), v) == True{}: Bool}
 
+# The group that decides a version is the owner group of the line, made of its
+# nodes at one version of the store: its era.
+# Version 4 of main is decided by the nodes of the group "core" at version 9 of
+# the store.
+law VendNode.group_of_era:
+  for n: VendNode
+  for c: Ledgers.Line
+  for k: Nat
+  for gs: List<&2, String>
+  {VendNode.answer(n, Question.Group{c, k}) == Some{Reply.Names{gs}}: Maybe<&2, Reply>}
+    -> Exists(
+      String,
+      g => Exists(
+        Nat,
+        m => {
+          VendNode.answer(n, Question.Owner{c, k}) == Some{Reply.Name{g}}: Maybe<&2, Reply>
+        }
+          & (
+            {
+              VendNode.answer(n, Question.Era{c, k}) == Some{Reply.Number{m}}: Maybe<&2, Reply>
+            }
+              & {
+                VendNode.answer(
+                  n,
+                  Question.Nodes{Line.store(c), g, m}
+                )
+                  == Some{Reply.Names{gs}}: Maybe<&2, Reply>
+              }
+          )
+      )
+    )
+
+# Eras never go back: a later version of a line is decided by groups of the
+# same or a later version of the store, so a change of a group reaches each line
+# at its next decided version.
+# If version 4 of main is of era 9, version 5 is of era 9 or later.
+law VendNode.eras_grow:
+  for n: VendNode
+  for c: Ledgers.Line
+  for a: Nat
+  for b: Nat
+  for x: Nat
+  for y: Nat
+  {Nat.is_le(a, b) == True{}: Bool}
+    -> {VendNode.answer(n, Question.Era{c, a}) == Some{Reply.Number{x}}: Maybe<&2, Reply>}
+    -> {VendNode.answer(n, Question.Era{c, b}) == Some{Reply.Number{y}}: Maybe<&2, Reply>}
+    -> {Nat.is_le(x, y) == True{}: Bool}
+
+# The owner group of a line is the one that the latest Own of the line, up to
+# the era, names.
+# The store decided Own{main, "core"} at version 3 and Own{main, "ops"} at
+# version 7: at era 9, main is owned by "ops".
+law VendNode.owner_decided:
+  for n: VendNode
+  for c: Ledgers.Line
+  for k: Nat
+  for g: String
+  for m: Nat
+  {VendNode.answer(n, Question.Owner{c, k}) == Some{Reply.Name{g}}: Maybe<&2, Reply>}
+    -> {VendNode.answer(n, Question.Era{c, k}) == Some{Reply.Number{m}}: Maybe<&2, Reply>}
+    -> Exists(
+      Nat,
+      j => Latest(
+        n,
+        c,
+        j,
+        m,
+        Request.Own{c, g}
+      )
+        & (
+          @j2: Nat -> @g2: String -> Latest(
+            n,
+            c,
+            j2,
+            m,
+            Request.Own{c, g2}
+          ) -> {Nat.is_le(j2, j) == True{}: Bool}
+        )
+    )
+
+# The members of a group are those that the latest Group of its name, up to that
+# version of the store, names; a name is a group exactly when one was decided.
+# The store decided Group{"core", [a, b]} at version 2 and Group{"core", [a, c]}
+# at version 6: at version 8, core has the members a and c.
+law VendNode.members_decided:
+  for n: VendNode
+  for s: Hashes.Hash
+  for g: String
+  for m: Nat
+  for ms: List<&2, String>
+  {VendNode.answer(n, Question.Members{s, g, m}) == Some{Reply.Names{ms}}: Maybe<&2, Reply>}
+    -> Exists(
+      Nat,
+      j => Latest(
+        n,
+        Ledgers.Line{s, None{}},
+        j,
+        m,
+        Request.Group{s, g, ms}
+      )
+        & (
+          @j2: Nat -> @ms2: List<
+            &2,
+            String> -> Latest(
+            n,
+            Ledgers.Line{s, None{}},
+            j2,
+            m,
+            Request.Group{s, g, ms2}
+          ) -> {Nat.is_le(j2, j) == True{}: Bool}
+        )
+    )
+
+# A name is a group at a version of the store exactly when a Group of that name
+# was decided up to it.
+# "core" is a group from the version of the store that decided Group{"core", ..}.
+law VendNode.groups_decided:
+  for n: VendNode
+  for s: Hashes.Hash
+  for g: String
+  for m: Nat
+  for y: Bool
+  {VendNode.answer(n, Question.IsGroup{s, g, m}) == Some{Reply.Yes{y}}: Maybe<&2, Reply>}
+    -> (
+      {
+        y == True{}: Bool
+      } -> Exists(
+        Nat,
+        j => Exists(
+          List<&2, String>,
+          ms => Latest(n, Ledgers.Line{s, None{}}, j, m, Request.Group{s, g, ms})
+        )
+      )
+    )
+      & (
+        {
+          y == False{}: Bool
+        } -> @j: Nat -> @ms: List<
+          &2,
+          String> -> Latest(n, Ledgers.Line{s, None{}}, j, m, Request.Group{s, g, ms}) -> Empty
+      )
+
 # Laws of a branch
 # ----------------
 
@@ -1140,6 +1366,107 @@ law VendNode.merge_resolved:
       )
     )
 
+# A version comes from the version before it, and also from the version that a
+# merge or a move takes; the first version comes from none.
+# Version 5 of main, a merge of version 3 of dev, comes from version 4 of main
+# and version 3 of dev.
+law VendNode.parents_are:
+  for n: VendNode
+  for c: Ledgers.Line
+  for k: Nat
+  for i: Ledgers.Id
+  for r: Request
+  for ps: List<&2, Point>
+  (
+    {
+      VendNode.answer(n, Question.Parents{c, 0n}) == Some{Reply.Points{ps}}: Maybe<&2, Reply>
+    } -> {ps == []: List<&2, Point>}
+  )
+    & (
+      Made(
+        n,
+        c,
+        1n+k,
+        i,
+        r
+      ) -> {
+        VendNode.answer(n, Question.Parents{c, 1n+k}) == Some{Reply.Points{ps}}: Maybe<&2, Reply>
+      } -> Request.Parents(r, c, k, ps)
+    )
+
+# The base of a merge is a version that both merged versions come from.
+# Merging dev into main takes as base a version that both main and dev come from.
+law VendNode.base_shared:
+  for n: VendNode
+  for c: Ledgers.Line
+  for k: Nat
+  for i: Ledgers.Id
+  for f: Ledgers.Line
+  for v: Nat
+  for a: Point
+  Made(n, c, 1n+k, i, Request.Merge{f, c})
+    -> {
+      VendNode.answer(
+        n,
+        Question.Parents{c, 1n+k}
+      )
+        == Some{Reply.Points{[Point{c, k}, Point{f, v}]}}: Maybe<&2, Reply>
+    }
+    -> {VendNode.answer(n, Question.Base{c, i}) == Some{Reply.Point{a}}: Maybe<&2, Reply>}
+    -> Before(n, a, c, k) & Before(n, a, f, v)
+
+# A merge takes, for each path, the merge of the base, ours and theirs in the
+# format of the resource, and records each path where they clash.
+# Base "hi", main "hi", dev "hello": the merge reads "hello". Base "hi", main
+# "ho", dev "hey": the path clashes.
+law VendNode.merge_merges:
+  for n: VendNode
+  for c: Ledgers.Line
+  for k: Nat
+  for i: Ledgers.Id
+  for f: Ledgers.Line
+  for v: Nat
+  for a: Point
+  for p: String
+  for b: Maybe<&2, List<&2, U32>>
+  for o: Maybe<&2, List<&2, U32>>
+  for t: Maybe<&2, List<&2, U32>>
+  Made(n, c, 1n+k, i, Request.Merge{f, c})
+    -> {
+      VendNode.answer(
+        n,
+        Question.Parents{c, 1n+k}
+      )
+        == Some{Reply.Points{[Point{c, k}, Point{f, v}]}}: Maybe<&2, Reply>
+    }
+    -> {VendNode.answer(n, Question.Base{c, i}) == Some{Reply.Point{a}}: Maybe<&2, Reply>}
+    -> {
+      VendNode.read(n, Point.line(a), Point.n(a), p) == Some{b}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+    }
+    -> {VendNode.read(n, c, k, p) == Some{o}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+    -> {VendNode.read(n, f, v, p) == Some{t}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+    -> (
+      @x: Maybe<
+        &2,
+        List<
+          &2,
+          U32>> -> {
+        Format.merge(p, b, o, t) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      } -> {
+        VendNode.read(n, c, 1n+k, p) == Some{x}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+      }
+        | {VendNode.read(n, c, 1n+k, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+    )
+      & (
+        {
+          Format.merge(p, b, o, t) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+        } -> @cs: List<
+          &2,
+          String> -> {
+          VendNode.answer(n, Question.Clashes{c, i}) == Some{Reply.Names{cs}}: Maybe<&2, Reply>
+        } -> {List.contains(~String, ~String.eq, cs, p) == True{}: Bool}
+      )
+
 # Laws of a resource
 # ------------------
 
@@ -1185,19 +1512,21 @@ law Format.merge_same:
   {Format.merge(p, base, both, both) == Some{both}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
 
 # Mounting records what the resource held as a change of the node to the branch.
-# Mounting a folder that holds a.txt "hi" to main makes the node read "hi" there.
+# Mounting a folder that holds "hi" at a.txt of main makes the node read "hi"
+# there.
 law VendNode.mount_records:
   for n: VendNode
   for a: String
   for b: Ledgers.Line
+  for p: String
   for ws: List<&2, U32>
   {VendNode.stopped(n) == False{}: Bool}
     -> {
       VendNode.view(
-        VendNode.does(n, Deed.Mount{a, b, ws}),
+        VendNode.does(n, Deed.Mount{a, b, p, ws}),
         VendNode.name(n),
         b,
-        a
+        p
       )
         == Some{Some{ws}}: Maybe<&2, Maybe<&2, List<&2, U32>>>
     }
