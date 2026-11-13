@@ -26989,7 +26989,17 @@ def Nat.add6_lt13(n: Nat) -> {Nat.is_le(n, 6n) == True{}: Bool} -> {Nat.is_lt(Na
 
 # a level of a hash is below 13
 def Level.of_lt(h: Hashes.Hash) -> {Nat.is_lt(Level.of(h), 13n) == True{}: Bool}:
-  ?TODO
+  match h:
+    case Hashes.Hash{+a, +b, c, d, e, f, g, i}:
+      Shared.Bool.when_cases(
+        Nat,
+        x => {Nat.is_lt(x, 13n) == True{}: Bool},
+        Nat.is_eq(Level.zeros(6n, a), 6n),
+        u => Nat.add(6n, Level.zeros(6n, b)),
+        u => Level.zeros(6n, a),
+        y => Nat.add6_lt13(Level.zeros(6n, b))(Level.zeros_le(6n, b)),
+        n => Nat.le6_lt13(Level.zeros(6n, a))(Level.zeros_le(6n, a))
+      )
 
 # a key is of a level below 13
 def Key.level_lt(k: List<&2, U32>) -> {Nat.is_lt(Key.level(k), 13n) == True{}: Bool}:
