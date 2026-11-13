@@ -38,9 +38,13 @@ Read "Questions". Each one needs your decision.
 6. `Members`, `Nodes`, `IsGroup` and `Affects` answer only when a check passes (`Groups.good`,
    `Reached.closed`): the computed set is closed. The check always passes in fact, but that is not
    proven. Decide: prove it (with `src/shared/shared/shared/reach.bend`), or accept.
-7. `bun run lint` cannot pass: each core file imports `spec.bend` for its types, and bend-lint
-   takes the open laws of the spec as a failed check of that file. Decide: move the types of the
-   spec to a shared module, or accept.
+7. `bun run lint` cannot pass. bend-lint checks with its own Bend 2.0.39, where
+   `src/shared/shared/shared/shared/shared.bend` fails (no `String.eq.go` in its Base), so the
+   rules that need facts skip each file that imports it. It also fails on files that this work did
+   not touch (`crit.bend`, `ledger.bend`). In `src/vend_node`, 43 findings are left, all in code
+   that runs: 39 `eager_branch` on checks that the proofs split with `Bool.and_*` lemmas (the
+   older files expect these, with a reason), and 4 `missed_fork` hints. Decide: expect them, or
+   bridge each with a lemma.
 
 ## Speed
 
