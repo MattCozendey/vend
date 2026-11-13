@@ -3,6 +3,7 @@ import ../branch/merges.bend as Merges
 import ../group/owners.bend as Owners
 import ../resource/formats.bend as Formats
 import ../resource/resources.bend as Resources
+import ../resource/uris.bend as Uris
 import ../shared/replica.bend as Replicas
 import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/rope.bend as Ropes
@@ -29,7 +30,7 @@ import ../writer/requests.bend as Requests
 # and what a line knows is final.
 #
 # A def here takes the ledger d as a template, and the kernel kern where it
-# reads a history. transport/spec.bend carries the core over IO.
+# reads a history. writer/client.bend carries it to writers over IO.
 
 # The kernel of Vend
 # ------------------
@@ -6255,3 +6256,53 @@ def Kern.vend(~d: Vend.Led()) -> Vend.Kern(d):
 # the kernel of Vend obeys the rules of Vend by its construction
 def Kernel.vend(~d: Vend.Led()) -> Kernel(d):
   (Kern.vend(~d), (l => t => c => i => q => {==}, hs => l => c => {==}))
+
+# A running node
+# --------------
+
+# what a running node reports
+law Status:
+  Data
+
+# the mounted resources
+law Status.mounts:
+  for s: Status
+  List<&2, Uris.Uri>
+
+# the writers that are connected
+law Status.writers:
+  for s: Status
+  List<&2, String>
+
+# the branches whose owners this node is among
+law Status.owned:
+  for s: Status
+  List<&2, Vend.Branch>
+
+# Partial: some entries of the other node did not arrive; the ones that did
+# are taken in
+type Sync is Data:
+  Sync.Synced{}
+  Sync.Partial{}
+  Sync.Refused{why: String}
+
+# Refused: without force, while mounts are active or other writers are
+# connected
+type Stop is Data:
+  Stop.Stopped{}
+  Stop.Refused{why: String}
+
+# Busy: another node holds the store
+type Start is Data:
+  Start.Ended{}
+  Start.Busy{}
+  Start.Refused{why: String}
+
+# runs the node named n on the data address at store, until a stop. The node
+# keeps its secret seed there. A node that starts a new Vend Store asks for
+# Requests.Ask.Start with itself as the first owner, and the first key of its
+# chain in the store
+law VendNode.try_start_or_resume:
+  for n: String
+  for store: Uris.Uri
+  IO(Start)

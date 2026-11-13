@@ -53,3 +53,18 @@ def Mount.change(
       Replicas.Tip.newest(~Requests.Ask.machine(), ~d, l, t)
     )
   )
+
+# What a mount answers
+# --------------------
+
+# Partial: the submodules in missing could not be fetched. Unsupported: the
+# kind of the resource does not support a setting
+type Mount is Data:
+  Mount.Mounted{}
+  Mount.Partial{missing: List<&2, String>}
+  Mount.Unsupported{why: String}
+  Mount.Refused{why: String}
+
+type Unmount is Data:
+  Unmount.Unmounted{}
+  Unmount.NotMounted{}
