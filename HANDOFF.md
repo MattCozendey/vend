@@ -7,51 +7,45 @@
 `src/vend_node/impl.bend` fills every opaque name of `src/vend_node/spec.bend` and proves every
 law. `spec.bend` is unchanged. No `@unsafe`. No `?TODO`.
 
-## Next action
+## Decisions
 
-Read "Questions". Each one needs your decision.
+The human gave every decision to the agent: "whatever is objectively best, regardless of the amount
+of work". These are the decisions.
 
-## Questions
-
-1. `never_lies` and `sync_joins` contradict each other for a node that meets a twin. Node "a" holds
-   its own vote for a step. Another node holds a different vote under the name "a" for the same
-   step (a second node ran under that name, or a seal was forged). `keeps` + `sync_joins` +
-   `liars_found` then force "a" to name itself a liar. `never_lies` forbids that. The only exit that
-   the spec leaves is `Honest`: the node must name a liar that is not itself.
-   What the code does: a node does not take in a vote under its own name that contradicts one that
-   it holds. It then records that its trust broke: two votes that contradict each other, under the
-   name `~` + its name (`Trust` in `facts.bend`). So it names a liar, and the laws that need
-   `Honest` release it. This is a formal exit, not a true accusation. Decide: keep it, or change
-   `never_lies` (for example: "a node never casts two votes for one step") or `sync_joins`.
-2. `starts` and `answer_moves_forward` contradict each other if two different requests have the
-   same SHA-256. A proof cannot exclude that. The code treats it like question 1: the node records
-   that its trust broke. Decide: keep it, or state the laws for one start per root.
-3. A group of several nodes can stop for good at a slot. The node whose turn it is proposes; the
-   others follow. If that node is lost, the slot is never decided. There are no rounds. The laws do
-   not ask for more than `decides_alone`. Decide: are rounds in scope now?
-4. A vote carries its whole request (`Pick` in `types.bend`), not its hash. With a hash, a proof
-   would need "SHA-256 has no collisions". Decide: accept, or allow such an assumption.
-5. The spec makes a request, with its words, a change that a node holds for good (`Reply.Ask`,
-   `same_changes`, `keeps`). So `Drop` cannot drop the words of a write. `Drop` drops parts only.
-   `read` never answers "not held" for a version that the node knows (`affects_only` with
-   `same_changes` does not allow a read that depends on parts). Decide: is that the intent?
-6. `Members`, `Nodes`, `IsGroup` and `Affects` answer only when a check passes (`Groups.good`,
-   `Reached.closed`): the computed set is closed. The check always passes in fact, but that is not
-   proven. Decide: prove it (with `src/shared/shared/shared/reach.bend`), or accept.
-7. `bun run lint` cannot pass. bend-lint checks with its own Bend 2.0.39, where
-   `src/shared/shared/shared/shared/shared.bend` fails (no `String.eq.go` in its Base), so the
-   rules that need facts skip each file that imports it. It also fails on files that this work did
-   not touch (`crit.bend`, `ledger.bend`). In `src/vend_node`, 43 findings are left, all in code
-   that runs: 39 `eager_branch` on checks that the proofs split with `Bool.and_*` lemmas (the
-   older files expect these, with a reason), and 4 `missed_fork` hints. Decide: expect them, or
-   bridge each with a lemma.
+1. `never_lies` against `sync_joins` (a node meets a vote under its own name that it did not
+   cast), and `starts` against `answer_moves_forward` (two requests with one SHA-256): both occur
+   only when something under "Trusted, and outside the spec" is broken. The spec stays. The node
+   then records that its trust broke: two votes that contradict each other under the name `~` + its
+   name (`Trust` in `facts.bend`), so the laws that need `Honest` release it. Names that start with
+   `~` are reserved: no node has one (`Node.name_free`), so this never names a node.
+2. Speed: all code that runs works on plain values and builds no proof (`src/vend_node/run/`,
+   `node.bend`). The proofs are beside it, in the law world. Next: the node keeps the state of each
+   line and the content of each version, proven equal to the reads (after rounds).
+3. Rounds: in work. A majority must be enough to decide when a node is lost (README).
+4. The closure checks of `Members`, `Nodes`, `IsGroup` and `Affects`: in work. They become total,
+   proven with `src/shared/shared/shared/reach.bend`.
+5. A vote keeps its whole request. A hash would make every read depend on which asks a node holds,
+   and add a second trust break. The storage and wire code will keep one copy of a request for the
+   votes that name it, when IO is built.
+6. Lint: the findings left in code that runs get a lemma each, after rounds.
+7. `Drop` cannot drop the words of a write: the spec makes a request a change that a node holds for
+   good. To look at last, with the spec.
 
 ## Speed
 
-The core reads everything again from the facts at each answer. It is the definition, not the fast
-form. Measured (native build, one node, one owner): the facts after 1, 2, 3 and 4 decided requests
-take 0.09 s, 0.9 s, 4.9 s and 16.7 s. The next step: a node keeps the state of each line and the
-content of each version, proven equal to these reads.
+Measured, native build, one node, one owner:
+
+- Proofs inside the data run. A node that carried its proofs took 283 s for 4 decided requests.
+  The plain state takes 0.01 s.
+- The reads are still polynomial: 20 writes take 0.8 s, 40 take 6.8 s, 80 take 88 s. Each deed
+  reads every line again from the facts. Decision 2 removes that.
+
+## Lint
+
+`bun run lint` cannot pass. bend-lint checks with its own Bend 2.0.39, where
+`src/shared/shared/shared/shared/shared.bend` fails (no `String.eq.go` in its Base), so the rules
+that need facts skip each file that imports it. It also fails on files that this work did not touch
+(`crit.bend`, `ledger.bend`).
 
 ## Design
 
@@ -64,9 +58,12 @@ content of each version, proven equal to these reads.
 
 ## Files
 
-- `src/vend_node/`: `types`, `codes`, `facts`, `lines`, `groups`, `content`, `answers`, `work`,
-  `node`: the code. `versions`, `stays`, `moves`, `reads`, `forward`, `laws`, `owners`, `affects`,
-  `live`: the proofs. `mirror`: the helpers of the spec's laws, over facts. `impl`: the fills.
+- `src/vend_node/run/` (`facts`, `lines`, `content`, `answers`, `work`, `files`, `parts`, `set`)
+  and `node.bend`: the code that runs. No proof.
+- `src/vend_node/`: `facts`, `lines`, `content`, `answers`, `work`: the same names over the set of
+  facts with its proofs. `versions`, `stays`, `moves`, `reads`, `forward`, `laws`, `owners`,
+  `affects`, `live`: the proofs. `types`, `codes`, `groups`. `mirror`: the helpers of the spec's
+  laws, over facts. `impl`: the fills.
 - `src/vend_node/shared/`: `set`, `lists`, `files`, `parts`, `format`.
 
 ## Deleted, for you to accept
