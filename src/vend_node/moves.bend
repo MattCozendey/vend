@@ -2610,6 +2610,32 @@ def Alone.end(
         )(Lists.List.get_snoc(Types.Entry, vs, Types.Entry{pk, k}))
       )
 
+# Alone.end, from a state that is the state that the line was read up to
+def Alone.stop(
+  +f2: Nat,
+  +s: Facts.Facts(),
+  +name: String,
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  +k: Nat,
+  +g: Maybe<&2, String>,
+  +pk: Types.Pick,
+  +R: Maybe<&2, List<&2, Types.Entry>>,
+  +st: Lines.State
+) -> {Lines.Line.rule(R, c, vs) == Some{Lines.Rule{g, [name]}}: Maybe<&2, Lines.Rule>} -> {
+  Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Pick.id(pk)) == False{}: Bool
+} -> {Facts.Facts.cast(s, name, Types.Step.At{c, k}) == False{}: Bool} -> {st == Lines.State{vs, k}: Lines.State} -> {
+  Nat.is_lt(k, Nat.add(f2, Lines.State.slot(st))) == True{}: Bool
+} -> Alone.Got(s, name, c, vs, k, pk, R, f2, st):
+  er => ed => nc => e => (
+    %Equal.sym(Lines.State, st, Lines.State{vs, k}, e): (
+      {
+        Nat.is_lt(k, Nat.add(f2, Lines.State.slot(_))) == True{}: Bool
+      } -> Alone.Got(s, name, c, vs, k, pk, R, f2, _)
+    )
+    Alone.end(f2, s, name, c, vs, k, g, pk, R)(er)(ed)(nc)
+  )
+
 # from a state whose slot is below k and decided, a run after the vote does
 # what a run from the state after that slot does (ih)
 def Alone.go(
@@ -2713,14 +2739,7 @@ def Alone.run(
 } -> {Nat.is_lt(k, Nat.add(f2, Lines.State.slot(st))) == True{}: Bool} -> Alone.Got(s, name, c, vs, k, pk, R, f2, st):
   match f:
     case 0n:
-      er => ed => nc => e => hl => (
-        %Equal.sym(Lines.State, st, Lines.State{vs, k}, e): (
-          {
-            Nat.is_lt(k, Nat.add(f2, Lines.State.slot(_))) == True{}: Bool
-          } -> Alone.Got(s, name, c, vs, k, pk, R, f2, _)
-        )
-        Alone.end(f2, s, name, c, vs, k, g, pk, R)(er)(ed)(nc)
-      )(hl)
+      er => ed => nc => e => hl => Alone.stop(f2, s, name, c, vs, k, g, pk, R, st)(er)(ed)(nc)(e)(hl)
     case 1n+(+p):
       +er => +ed => +nc => e => hl => Lists.Maybe.by(
         Lines.State,
@@ -2728,14 +2747,7 @@ def Alone.run(
           Nat.is_lt(k, Nat.add(f2, Lines.State.slot(st))) == True{}: Bool
         } -> Alone.Got(s, name, c, vs, k, pk, R, f2, st),
         Lines.Line.step(s, R, c, st),
-        en => e1 => hl1 => (
-          %Equal.sym(Lines.State, st, Lines.State{vs, k}, e1): (
-            {
-              Nat.is_lt(k, Nat.add(f2, Lines.State.slot(_))) == True{}: Bool
-            } -> Alone.Got(s, name, c, vs, k, pk, R, f2, _)
-          )
-          Alone.end(f2, s, name, c, vs, k, g, pk, R)(er)(ed)(nc)
-        )(hl1),
+        en => e1 => hl1 => Alone.stop(f2, s, name, c, vs, k, g, pk, R, st)(er)(ed)(nc)(e1)(hl1),
         +st2 => +e2 => +e1 => hl1 => Alone.go(
           f2,
           s,
