@@ -598,7 +598,324 @@ def Key.ne_id(
     ef2 => {==}
   )
 
-#NEWIDS
+#BEGIN NEWIDS
+# the map of the versions x by id
+def Ids.map(x: RKnown.Ids) -> Crits.Crit<List<&2, RKnown.Found>>:
+  match x:
+    case RKnown.Ids{m, n}:
+      m
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# what a map with one more version under the key kk holds under a key: under
+# kk, the version before the versions that the map held there
+def Map.get_put(
+  +acc: Crits.Crit<List<&2, RKnown.Found>>,
+  +kk: List<&2, U32>,
+  +f: RKnown.Found,
+  +k: List<&2, U32>
+) -> {
+  Crits.Crit.wf(~List<&2, RKnown.Found>, acc, 0n) == True{}: Bool
+} -> {
+  Crits.Crit.get(
+    List<&2, RKnown.Found>,
+    Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]),
+    k
+  )
+    == Bool.pick(
+      Maybe<&2, List<&2, RKnown.Found>>,
+      Crits.Key.is_eq(k, kk),
+      Some{
+        Crits.Crit.merge(
+          ~List<&2, RKnown.Found>,
+          ~RKnown.Ids.join,
+          Crits.Crit.get(List<&2, RKnown.Found>, acc, kk),
+          [f]
+        )
+      },
+      Crits.Crit.get(List<&2, RKnown.Found>, acc, k)
+    ): Maybe<&2, List<&2, RKnown.Found>>
+}:
+  +w =>
+    %Equal.sym(
+      Maybe<&2, List<&2, RKnown.Found>>,
+      Crits.Crit.get(List<&2, RKnown.Found>, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]), k),
+      Crits.Crit.lookup(List<&2, RKnown.Found>, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]), k),
+      Crits.Crit.get_lookup(
+        ~List<&2, RKnown.Found>,
+        Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]),
+        k
+      )(
+        Crits.Crit.upsert_wf(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f])(w)
+      )
+    ): {
+      _
+        == Bool.pick(
+          Maybe<&2, List<&2, RKnown.Found>>,
+          Crits.Key.is_eq(k, kk),
+          Some{
+            Crits.Crit.merge(
+              ~List<&2, RKnown.Found>,
+              ~RKnown.Ids.join,
+              Crits.Crit.get(List<&2, RKnown.Found>, acc, kk),
+              [f]
+            )
+          },
+          Crits.Crit.get(List<&2, RKnown.Found>, acc, k)
+        ): Maybe<&2, List<&2, RKnown.Found>>
+    }
+    %Equal.sym(
+      Maybe<&2, List<&2, RKnown.Found>>,
+      Crits.Crit.lookup(List<&2, RKnown.Found>, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]), k),
+      Bool.pick(
+        Maybe<&2, List<&2, RKnown.Found>>,
+        Crits.Key.is_eq(k, kk),
+        Some{
+          Crits.Crit.merge(
+            ~List<&2, RKnown.Found>,
+            ~RKnown.Ids.join,
+            Crits.Crit.lookup(List<&2, RKnown.Found>, acc, kk),
+            [f]
+          )
+        },
+        Crits.Crit.lookup(List<&2, RKnown.Found>, acc, k)
+      ),
+      Crits.Crit.upsert_lookup(
+        ~List<&2, RKnown.Found>,
+        ~RKnown.Ids.join,
+        acc,
+        kk,
+        [f],
+        k
+      )(w)
+    ): {
+      _
+        == Bool.pick(
+          Maybe<&2, List<&2, RKnown.Found>>,
+          Crits.Key.is_eq(k, kk),
+          Some{
+            Crits.Crit.merge(
+              ~List<&2, RKnown.Found>,
+              ~RKnown.Ids.join,
+              Crits.Crit.get(List<&2, RKnown.Found>, acc, kk),
+              [f]
+            )
+          },
+          Crits.Crit.get(List<&2, RKnown.Found>, acc, k)
+        ): Maybe<&2, List<&2, RKnown.Found>>
+    }
+    %Equal.sym(
+      Maybe<&2, List<&2, RKnown.Found>>,
+      Crits.Crit.get(List<&2, RKnown.Found>, acc, k),
+      Crits.Crit.lookup(List<&2, RKnown.Found>, acc, k),
+      Crits.Crit.get_lookup(~List<&2, RKnown.Found>, acc, k)(w)
+    ): {
+      Bool.pick(
+        Maybe<&2, List<&2, RKnown.Found>>,
+        Crits.Key.is_eq(k, kk),
+        Some{
+          Crits.Crit.merge(
+            ~List<&2, RKnown.Found>,
+            ~RKnown.Ids.join,
+            Crits.Crit.lookup(List<&2, RKnown.Found>, acc, kk),
+            [f]
+          )
+        },
+        Crits.Crit.lookup(List<&2, RKnown.Found>, acc, k)
+      )
+        == Bool.pick(
+          Maybe<&2, List<&2, RKnown.Found>>,
+          Crits.Key.is_eq(k, kk),
+          Some{
+            Crits.Crit.merge(
+              ~List<&2, RKnown.Found>,
+              ~RKnown.Ids.join,
+              Crits.Crit.get(List<&2, RKnown.Found>, acc, kk),
+              [f]
+            )
+          },
+          _
+        ): Maybe<&2, List<&2, RKnown.Found>>
+    }
+    %Equal.sym(
+      Maybe<&2, List<&2, RKnown.Found>>,
+      Crits.Crit.get(List<&2, RKnown.Found>, acc, kk),
+      Crits.Crit.lookup(List<&2, RKnown.Found>, acc, kk),
+      Crits.Crit.get_lookup(~List<&2, RKnown.Found>, acc, kk)(w)
+    ): {
+      Bool.pick(
+        Maybe<&2, List<&2, RKnown.Found>>,
+        Crits.Key.is_eq(k, kk),
+        Some{
+          Crits.Crit.merge(
+            ~List<&2, RKnown.Found>,
+            ~RKnown.Ids.join,
+            Crits.Crit.lookup(List<&2, RKnown.Found>, acc, kk),
+            [f]
+          )
+        },
+        Crits.Crit.lookup(List<&2, RKnown.Found>, acc, k)
+      )
+        == Bool.pick(
+          Maybe<&2, List<&2, RKnown.Found>>,
+          Crits.Key.is_eq(k, kk),
+          Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, _, [f])},
+          Crits.Crit.lookup(List<&2, RKnown.Found>, acc, k)
+        ): Maybe<&2, List<&2, RKnown.Found>>
+    }
+    {==}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# the request of an id made one of the versions m, if any, with a version
+# before them, exactly when it made that version or one of m
+def Bucket.has_put(
+  m: Maybe<&2, List<&2, RKnown.Found>>,
+  +n: Nat,
+  +e: Types.Entry,
+  +i: Ledgers.Id
+) -> {
+  RKnown.Ids.has.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, [RKnown.Found{n, e}])}, i)
+    == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has.of(m, i)): Bool
+}:
+  match m:
+    case None{}:
+      Lists.Bool.by(
+        b => {List.any.if(u => False{}, b) == Bool.or(b, False{}): Bool},
+        RLines.Entry.is_of(i, e),
+        et => {==},
+        ef => {==}
+      )
+    case Some{+old}:
+      Lists.Bool.by(
+        b => {List.any.if(u => RKnown.Ids.holds(old, i), b) == Bool.or(b, RKnown.Ids.holds(old, i)): Bool},
+        RLines.Entry.is_of(i, e),
+        et => {==},
+        ef => {==}
+      )
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# the request of an id made one of the versions by id with one more version
+# exactly when it made that version, or one of the versions before
+def Ids.put_has(
+  +m: Crits.Crit<List<&2, RKnown.Found>>,
+  +n: Nat,
+  +e: Types.Entry,
+  +i: Ledgers.Id
+) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
+  RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n}, e), i)
+    == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool
+}:
+  w =>
+    %Equal.sym(
+      Maybe<&2, List<&2, RKnown.Found>>,
+      Crits.Crit.get(List<&2, RKnown.Found>, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}]), RKnown.Id.key(i)),
+      Bool.pick(Maybe<&2, List<&2, RKnown.Found>>, Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e))), Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Entry.id(e))), [RKnown.Found{n, e}])}, Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i))),
+      Map.get_put(m, RKnown.Id.key(RLines.Entry.id(e)), RKnown.Found{n, e}, RKnown.Id.key(i))(w)
+    ): {RKnown.Ids.has.of(_, i) == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}
+    Lists.Bool.by(
+      h => {RKnown.Ids.has.of(Bool.pick(Maybe<&2, List<&2, RKnown.Found>>, h, Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Entry.id(e))), [RKnown.Found{n, e}])}, Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i))), i) == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool},
+      Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e))),
+      et => (
+        %Crits.Key.is_eq_sound(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e)))(et): {RKnown.Ids.has.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, _), [RKnown.Found{n, e}])}, i) == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}
+        Bucket.has_put(Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i)), n, e, i)),
+      ef => (
+        %Equal.sym(Bool, RLines.Entry.is_of(i, e), False{}, Key.ne_id(RLines.Entry.id(e), i)(ef)): {RKnown.Ids.has(RKnown.Ids{m, n}, i) == Bool.or(_, RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}
+        {==})
+    )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# versions by id with more versions are well formed when they were
+def Ids.go_wf(
+  vs: List<&2, Types.Entry>,
+  +m: Crits.Crit<List<&2, RKnown.Found>>,
+  +n: Nat
+) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {Crits.Crit.wf(~List<&2, RKnown.Found>, Ids.map(RKnown.Ids.go(vs, RKnown.Ids{m, n})), 0n) == True{}: Bool}:
+  match vs:
+    case Nil{}:
+      w => w
+    case Con{+e, rest}:
+      w => Ids.go_wf(
+        rest,
+        Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}]),
+        1n+n
+      )(Crits.Crit.upsert_wf(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}])(w))
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# the request of an id made one of the versions by id with the versions vs
+# exactly when it made one of vs, or one of the versions before
+def Ids.go_has(
+  vs: List<&2, Types.Entry>,
+  +m: Crits.Crit<List<&2, RKnown.Found>>,
+  +n: Nat,
+  +i: Ledgers.Id
+) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
+  RKnown.Ids.has(RKnown.Ids.go(vs, RKnown.Ids{m, n}), i)
+    == Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool
+}:
+  match vs:
+    case Nil{}:
+      w => {==}
+    case Con{+e, +rest}:
+      +w => Equal.trans(
+        Bool,
+        RKnown.Ids.has(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n}, e)), i),
+        Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n}, e), i)),
+        Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, e <> rest, i), RKnown.Ids.has(RKnown.Ids{m, n}, i)),
+        Ids.go_has(
+          rest,
+          Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}]),
+          1n+n,
+          i
+        )(Crits.Crit.upsert_wf(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}])(w)),
+        (
+          %Equal.sym(Bool, RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n}, e), i), Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)), Ids.put_has(m, n, e, i)(w)): {Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), _) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), RLines.Entry.is_of(i, e)), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}
+          Lists.Bool.by(b => {Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), Bool.or(b, RKnown.Ids.has(RKnown.Ids{m, n}, i))) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), b), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}, RLines.Entry.is_of(i, e), et => Shared.Bool.or_true_right(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i)), ef => {==}))
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# the request of an id made one of the versions vs by id exactly when it made
+# one of vs
+def Ids.of_has(
+  +vs: List<&2, Types.Entry>,
+  +i: Ledgers.Id
+) -> {RKnown.Ids.has(RKnown.Ids.of(vs), i) == Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i): Bool}:
+  Equal.trans(
+    Bool,
+    RKnown.Ids.has(RKnown.Ids.of(vs), i),
+    Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i), False{}),
+    Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i),
+    Ids.go_has(vs, Crits.Crit.new(List<&2, RKnown.Found>), 0n, i)({==}),
+    Equal.sym(
+      Bool,
+      Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i),
+      Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i), False{}),
+      Shared.Bool.or_false(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i))
+    )
+  )
+
+# ys after xs, without as many items as xs has, is ys
+def Past.append(
+  xs: List<&2, Types.Entry>,
+  +zs: List<&2, Types.Entry>
+) -> {RKnown.Entries.past(xs, List.append(&2, Types.Entry, xs, zs)) == zs: List<&2, Types.Entry>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, rest}:
+      Past.append(rest, zs)
+
+# the versions by id with vs and then zs are those with vs, with zs
+def Ids.go_append(
+  vs: List<&2, Types.Entry>,
+  +zs: List<&2, Types.Entry>,
+  +acc: RKnown.Ids
+) -> {RKnown.Ids.go(List.append(&2, Types.Entry, vs, zs), acc) == RKnown.Ids.go(zs, RKnown.Ids.go(vs, acc)): RKnown.Ids}:
+  match vs:
+    case Nil{}:
+      {==}
+    case Con{+e, rest}:
+      Ids.go_append(rest, zs, RKnown.Ids.put(acc, e))
+
+#END NEWIDS
 # the first entry of a right table is right
 def Ok.head(
   e: RKnown.Kept,
