@@ -195,7 +195,11 @@ by copying it into `src/vend_node/` and running `bend <driver> -o <binary>` (`bu
 
 ## Not done
 
-- No IO: a node is the pure core. `tools/build.ts` has no `main` to build.
+- IO: `src/main.bend` is a command line around the core (README, Caveats). `bun run build`
+  checks it and builds it (about 100 s); `tools/e2e.sh` builds and runs a scenario with two
+  nodes. Not built: network Sync, a node that keeps running, mounts. A resume replays the log
+  with a Sync into an empty node (43 ms at 50 writes, 430 ms at 200); a vote stores its whole
+  request again (decision 5).
 - No test was added to a test suite (each needs your approval); see Tested, not proven.
 - bend-synth was not the first step of each proof, against AGENTS.md: it was run on one proof
   ("no step applies"); the agents wrote the other proofs by hand.

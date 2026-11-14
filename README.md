@@ -46,11 +46,16 @@ unless marked "not checked". `HANDOFF.md` has the details.
 
 ## Whole program
 
-- There is no program yet. The code is a pure core: a node is a value, and each thing it does is a
-  function. Nothing reads a file, opens a connection, or watches a folder. No binary is built.
-- So these are not built: a node that "runs anywhere", "starts or resumes on a data address",
-  "only one Vend Node can run on an address", "catches up by itself" (the core has the step that
-  takes in what another node holds; nothing calls it), and a writer's connection over a wire.
+- The program is a command line, `vend` (`src/main.bend`, built by `bun run build`), around the
+  proven core: each command resumes the node from its data address, does one request or question
+  as one writer, works until nothing changes, saves, and exits. `tools/e2e.sh` runs a scenario.
+  The command line itself is not proven; it only reads and writes what the core decides.
+- "Starts or resumes on a data address": a directory with the node's name, a log of its facts,
+  each written once, and its parts by hash. "Only one Vend Node can run on an address": a lock
+  file, made with an exclusive create; a node that crashed leaves it, and a person removes it.
+- Not built: a node that keeps running, so nothing "catches up by itself"; Sync over a network
+  (a node takes in another data address on the same machine only); a writer's connection over a
+  wire. Mounts and connected writers are not saved between commands.
 - Nothing is signed. A ballot carries the name of its voter, and the core trusts that name.
   Signatures are assumed to sit outside the core.
 
