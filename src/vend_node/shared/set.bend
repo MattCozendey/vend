@@ -1,5 +1,6 @@
 import Base
 import ../../shared/shared/shared/shared/crit.bend as Crits
+import ../../shared/shared/shared/shared/crit_order.bend as Orders
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../run/set.bend as Checks
 
@@ -1607,3 +1608,144 @@ def ValSet.ext(
   match a b:
     case Tuple{ma, pa} Tuple{mb, pb}:
       h => ValSet.ext.at(~A, ~same, ~key, ~laws, ~agree, ma, mb, pa, pb)(h)
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# the entries of a checked map, then rest, sit under the keys of their values
+# when those of rest do
+def ValSet.ok_entries(
+  ~A: Data,
+  ~key: A -> List<&2, U32>,
+  m: Crits.Crit<A>,
+  +rest: List<&2, Crits.Bind<A>>
+) -> {
+  Checks.ValSet.ok(~A, ~key, m) == True{}: Bool
+} -> {
+  Orders.Binds.keyed(~A, ~key, rest) == True{}: Bool
+} -> {Orders.Binds.keyed(~A, ~key, Crits.Crit.entries.go(A, m, rest)) == True{}: Bool}:
+  match m:
+    case Crits.Crit.Tip{}:
+      h => hr => hr
+    case Crits.Crit.Leaf{k, v}:
+      h => hr => Crits.Crit.and_true(
+        Crits.Key.is_eq(k, key(v)),
+        Orders.Binds.keyed(~A, ~key, rest)
+      )(h)(hr)
+    case Crits.Crit.Fork{r, p, None{}, +z, +o}:
+      +h => hr => ValSet.ok_entries(
+        ~A,
+        ~key,
+        z,
+        Crits.Crit.entries.go(A, o, rest)
+      )(
+        Shared.Bool.and_true_left(Checks.ValSet.ok(~A, ~key, z), Checks.ValSet.ok(~A, ~key, o))(h)
+      )(
+        ValSet.ok_entries(
+          ~A,
+          ~key,
+          o,
+          rest
+        )(
+          Shared.Bool.and_true_right(
+            Checks.ValSet.ok(~A, ~key, z),
+            Checks.ValSet.ok(~A, ~key, o)
+          )(h)
+        )(hr)
+      )
+    case Crits.Crit.Fork{+r, p, Some{+v}, +z, +o}:
+      +h => hr => Crits.Crit.and_true(
+        Crits.Key.is_eq(r, key(v)),
+        Orders.Binds.keyed(~A, ~key, Crits.Crit.entries.go(A, z, Crits.Crit.entries.go(A, o, rest)))
+      )(
+        Shared.Bool.and_true_left(
+          Crits.Key.is_eq(r, key(v)),
+          Bool.and(Checks.ValSet.ok(~A, ~key, z), Checks.ValSet.ok(~A, ~key, o))
+        )(h)
+      )(
+        ValSet.ok_entries(
+          ~A,
+          ~key,
+          z,
+          Crits.Crit.entries.go(A, o, rest)
+        )(
+          Shared.Bool.and_true_left(
+            Checks.ValSet.ok(~A, ~key, z),
+            Checks.ValSet.ok(~A, ~key, o)
+          )(
+            Shared.Bool.and_true_right(
+              Crits.Key.is_eq(r, key(v)),
+              Bool.and(Checks.ValSet.ok(~A, ~key, z), Checks.ValSet.ok(~A, ~key, o))
+            )(h)
+          )
+        )(
+          ValSet.ok_entries(
+            ~A,
+            ~key,
+            o,
+            rest
+          )(
+            Shared.Bool.and_true_right(
+              Checks.ValSet.ok(~A, ~key, z),
+              Checks.ValSet.ok(~A, ~key, o)
+            )(
+              Shared.Bool.and_true_right(
+                Crits.Key.is_eq(r, key(v)),
+                Bool.and(Checks.ValSet.ok(~A, ~key, z), Checks.ValSet.ok(~A, ~key, o))
+              )(h)
+            )
+          )(hr)
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# the values of a set are sorted by their keys
+def ValSet.list_sorted(
+  ~A: Data,
+  ~key: A -> List<&2, U32>,
+  +s: ValSet(~A, ~key)
+) -> {
+  Orders.Values.sorted(
+    ~A,
+    ~key,
+    Crits.Binds.values(A, Crits.Crit.entries(A, ValSet.crit(~A, ~key, s)))
+  )
+    == True{}: Bool
+}:
+  Orders.Crit.values_sorted(
+    ~A,
+    ~key,
+    ValSet.crit(~A, ~key, s)
+  )(
+    ValSet.wf(~A, ~key, s)
+  )(ValSet.ok_entries(~A, ~key, ValSet.crit(~A, ~key, s), [])(ValSet.checked(~A, ~key, s))({==}))
+
+# the values of the map of a set, after a write of a value under its key, are
+# an insert of the value into the values of the set
+def ValSet.list_set(
+  ~A: Data,
+  ~key: A -> List<&2, U32>,
+  +s: ValSet(~A, ~key),
+  x: A
+) -> {
+  Crits.Binds.values(
+    A,
+    Crits.Crit.entries(A, Crits.Crit.set(~A, ValSet.crit(~A, ~key, s), key(x), x))
+  )
+    == Orders.Values.insert(
+      ~A,
+      ~key,
+      Crits.Binds.values(A, Crits.Crit.entries(A, ValSet.crit(~A, ~key, s))),
+      x
+    ): List<&2, A>
+}:
+  Orders.Crit.values_set(
+    ~A,
+    ~key,
+    ValSet.crit(~A, ~key, s),
+    x
+  )(
+    ValSet.wf(~A, ~key, s)
+  )(ValSet.ok_entries(~A, ~key, ValSet.crit(~A, ~key, s), [])(ValSet.checked(~A, ~key, s))({==}))

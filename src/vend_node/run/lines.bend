@@ -305,6 +305,65 @@ def Line.bound(fs: List<&2, Types.Fact>, +c: Ledgers.Line) -> Nat:
     case Con{Types.Fact.Vote{v, Types.Step.At{c2, k, t}, pk}, rest}:
       Nat.max(Line.bound.at(Ledgers.Line.is_eq(c2, c), k), Line.bound(rest, c))
 
+# Slots, read from a list of facts
+# -------------------------------
+# A run reads the ballots of each slot from all the facts. A node that holds
+# the ballots that still count in a shorter list reads them from it: these
+# defs are the run over a list of facts. known.bend proves that it is the
+# run over the facts of the node.
+
+# the pick that the nodes ds decided for the slot k of the line c, among the
+# facts fs
+def Votes.decided.in(
+  fs: List<&2, Types.Fact>,
+  c: Ledgers.Line,
+  +k: Nat,
+  +ds: List<&2, String>
+) -> Maybe<&2, Types.Pick>:
+  Rounds.Slot.decided(Rounds.Slot.ballots(fs, c, k), ds, k)
+
+# the state after the next slot of st, read from the facts fs, once the rule
+# u of the slot is known
+def Line.step.at.in(
+  fs: List<&2, Types.Fact>,
+  c: Ledgers.Line,
+  +st: State,
+  u: Maybe<&2, Rule>
+) -> Maybe<&2, State>:
+  match u:
+    case None{}:
+      None{}
+    case Some{rule}:
+      Line.step.of(st, Votes.decided.in(fs, c, State.slot(st), Rule.nodes(rule)))
+
+# the state of the line c after the next slot of st, read from the facts fs
+def Line.step.in(
+  fs: List<&2, Types.Fact>,
+  r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: State
+) -> Maybe<&2, State>:
+  Line.step.at.in(fs, c, st, Line.rule(r, c, State.versions(st)))
+
+# the state of the line c after each decided slot from st on, read from the
+# facts fs, at most fuel of them; m is the state after the next slot of st,
+# if it is decided
+def Line.run.in(
+  fuel: Nat,
+  +fs: List<&2, Types.Fact>,
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  st: State,
+  m: Maybe<&2, State>
+) -> State:
+  match fuel m:
+    case 0n _:
+      st
+    case 1n+f None{}:
+      st
+    case 1n+f Some{+st2}:
+      Line.run.in(f, fs, r, c, st2, Line.step.in(fs, r, c, st2))
+
 # Version 0
 # ---------
 

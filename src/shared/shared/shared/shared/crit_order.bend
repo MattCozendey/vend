@@ -15,6 +15,7 @@ import ./shared.bend as Shared
 def Key.lt(a: List<&2, U32>, b: List<&2, U32>) -> Bool:
   Crits.Bits.lt(Crits.Key.bits(a), Crits.Key.bits(b))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this is said only in laws, and never runs
 # p holds of g and the key of each of the entries es
 def Binds.all(
   ~V: Data,
@@ -28,16 +29,20 @@ def Binds.all(
       True{}
     case Con{Crits.Bind{k, v}, r}:
       Bool.and(p(g)(k), Binds.all(~V, ~G, ~p, r, g))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this is said only in laws, and never runs
 # the entries es are in the strict order of their keys: each key comes before
 # the keys of the entries after it
 def Binds.sorted(~V: Data, es: List<&2, Crits.Bind<V>>) -> Bool:
   match es:
     case Nil{}:
       True{}
-    case Con{Crits.Bind{+k, v}, +r}:
+    case Con{Crits.Bind{k, v}, +r}:
       Bool.and(Binds.all(~V, ~List<&2, U32>, ~Key.lt, r, k), Binds.sorted(~V, r))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this is said only in laws, and never runs
 # the value of the first of the entries es whose key is k
 def Binds.get(-V: Data, es: List<&2, Crits.Bind<V>>, +k: List<&2, U32>) -> Maybe<&2, V>:
   match es:
@@ -45,6 +50,7 @@ def Binds.get(-V: Data, es: List<&2, Crits.Bind<V>>, +k: List<&2, U32>) -> Maybe
       None{}
     case Con{Crits.Bind{k2, v}, r}:
       Bool.pick(Maybe<&2, V>, Crits.Key.is_eq(k2, k), Some{v}, Binds.get(V, r, k))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the sorted entries es with the key k bound to v: a new entry at the place of
 # k, or v in the entry of k
@@ -89,6 +95,7 @@ def Values.insert(~V: Data, ~key: V -> List<&2, U32>, xs: List<&2, V>, +x: V) ->
         )
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this is said only in laws, and never runs
 # each of the entries es sits under the key of its value
 def Binds.keyed(~V: Data, ~key: V -> List<&2, U32>, es: List<&2, Crits.Bind<V>>) -> Bool:
   match es:
@@ -96,6 +103,7 @@ def Binds.keyed(~V: Data, ~key: V -> List<&2, U32>, es: List<&2, Crits.Bind<V>>)
       True{}
     case Con{Crits.Bind{k, v}, r}:
       Bool.and(Crits.Key.is_eq(k, key(v)), Binds.keyed(~V, ~key, r))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Laws of the order of bits
 # -------------------------
@@ -113,6 +121,7 @@ def Bool.by(
     case False{}:
       f({==})
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # bits that come before others do not come after them
 def Bits.lt_asym(
   a: List<&2, Bool>,
@@ -136,7 +145,9 @@ def Bits.lt_asym(
       )
     case Con{False{}, ra} Con{True{}, rb}:
       h => {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the order of bits is transitive
 def Bits.lt_trans(
   a: List<&2, Bool>,
@@ -190,7 +201,9 @@ def Bits.lt_trans(
       )
     case Con{True{}, ra} Con{True{}, rb} Con{True{}, rc}:
       h1 => h2 => Bits.lt_trans(ra, rb, rc)(h1)(h2)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # bits of which neither come before the others are the same
 def Bits.lt_none(
   a: List<&2, Bool>,
@@ -233,7 +246,9 @@ def Bits.lt_none(
         {False{} <> ra == True{} <> rb: List<&2, Bool>},
         Shared.Bool.true_ne_false(h1)
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # bits a with a zero at n come before bits b that agree with them before n
 # and have a one there
 def Bits.lt_sides(
@@ -294,7 +309,9 @@ def Bits.lt_sides(
       )
     case 1n+q Con{False{}, ra} Con{True{}, rb}:
       h => ha => hb => {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # bits a that end at n come before bits b that agree with them before n and
 # go on
 def Bits.lt_ended(
@@ -343,6 +360,7 @@ def Bits.lt_ended(
       )
     case 1n+q Con{False{}, ra} Con{True{}, rb}:
       h => ha => hb => {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Laws of the order of keys
 # -------------------------
@@ -496,6 +514,7 @@ def Key.lt_ended(
 # Laws of sorted entries
 # ----------------------
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this is said only in laws, and never runs
 # each key of xs comes before each key of ys
 def Binds.cross(~V: Data, xs: List<&2, Crits.Bind<V>>, +ys: List<&2, Crits.Bind<V>>) -> Bool:
   match xs:
@@ -503,7 +522,9 @@ def Binds.cross(~V: Data, xs: List<&2, Crits.Bind<V>>, +ys: List<&2, Crits.Bind<
       True{}
     case Con{Crits.Bind{k, v}, r}:
       Bool.and(Binds.all(~V, ~List<&2, U32>, ~Key.lt, ys, k), Binds.cross(~V, r, ys))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # what holds of the keys of two lists of entries holds of the keys of both
 def Binds.all_append(
   ~V: Data,
@@ -536,7 +557,9 @@ def Binds.all_append(
           g
         )(Shared.Bool.and_true_right(p(g)(k), Binds.all(~V, ~G, ~p, r, g))(h1))(h2)
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # a key before a key that comes before each key of es comes before each
 def Binds.all_lt(
   ~V: Data,
@@ -580,7 +603,9 @@ def Binds.all_lt(
           )(h2)
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # two sorted lists, each key of the first before each of the second, are
 # sorted one after the other
 def Binds.sorted_append(
@@ -639,7 +664,9 @@ def Binds.sorted_append(
           )(h3)
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # a key on the zero side of a fork comes before each key on its one side
 def Binds.all_sides(
   ~V: Data,
@@ -689,7 +716,9 @@ def Binds.all_sides(
           )(h)
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the key that ends at the bit of a fork comes before each key on a side
 def Binds.all_ended(
   ~V: Data,
@@ -739,7 +768,9 @@ def Binds.all_ended(
           )(h)
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # each key on the zero side of a fork comes before each key on its one side
 def Binds.cross_sides(
   ~V: Data,
@@ -786,7 +817,9 @@ def Binds.cross_sides(
           )(h1)
         )(h2)
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # Crit.entries_go at a fork: the entries x of its sides, then rest, from what
 # holds of each side (y: those of the one side, then rest; w: those of both)
 def Crit.entries_go.fork(
@@ -831,7 +864,10 @@ def Crit.entries_go.fork(
       List.append(&2, A, ez, List.append(&2, A, eo, rest)),
       Shared.List.append_assoc(A, ez, eo, rest)
     )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the entries of a map, then more, are its entries, then those
 def Crit.entries_go(
   -V: Data,
@@ -862,7 +898,7 @@ def Crit.entries_go(
       )(
         Crit.entries_go(V, z, Crits.Crit.entries.go(V, o, rest))
       )(Crit.entries_go(V, o, rest))(Crit.entries_go(V, z, Crits.Crit.entries(V, o)))
-    case Crits.Crit.Fork{+r, p, Some{+v}, +z, +o}:
+    case Crits.Crit.Fork{+r, p, Some{v}, +z, +o}:
       Equal.cong(
         List<&2, Crits.Bind<V>>,
         List<&2, Crits.Bind<V>>,
@@ -881,7 +917,11 @@ def Crit.entries_go(
           Crit.entries_go(V, z, Crits.Crit.entries.go(V, o, rest))
         )(Crit.entries_go(V, o, rest))(Crit.entries_go(V, z, Crits.Crit.entries(V, o)))
       )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # what holds of each key of a map, and of each key of rest, holds of each key
 # of its entries, then rest
 def Crit.all_entries.go(
@@ -899,7 +939,7 @@ def Crit.all_entries.go(
   match m:
     case Crits.Crit.Tip{}:
       h => hr => hr
-    case Crits.Crit.Leaf{+k, v}:
+    case Crits.Crit.Leaf{k, v}:
       h => hr => Crits.Crit.and_true(p(g)(k), Binds.all(~V, ~G, ~p, rest, g))(h)(hr)
     case Crits.Crit.Fork{+r, +ps, None{}, +z, +o}:
       +h => hr => Crit.all_entries.go(
@@ -948,6 +988,8 @@ def Crit.all_entries.go(
           )(Crits.Crit.all.o(~V, ~G, ~p, r, ps, Some{v}, z, o, g)(h))(hr)
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # what holds of each key of a map holds of each key of its entries
 def Crit.all_entries(
@@ -955,7 +997,7 @@ def Crit.all_entries(
   ~G: Data,
   ~p: G -> List<&2, U32> -> Bool,
   m: Crits.Crit<V>,
-  +g: G
+  g: G
 ) -> {
   Crits.Crit.all(~V, ~G, ~p, m, g) == True{}: Bool
 } -> {Binds.all(~V, ~G, ~p, Crits.Crit.entries(V, m), g) == True{}: Bool}:
@@ -1093,6 +1135,8 @@ def Crit.entries_sorted.ended(
       )
     )
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # Crit.entries_sorted, below a fork at a bit before lo
 def Crit.entries_sorted.go(
   ~V: Data,
@@ -1147,6 +1191,8 @@ def Crit.entries_sorted.go(
           Crit.entries_sorted.go(~V, z, 1n+p)(Crits.Crit.wf.wf_z(~V, r, p, Some{v}, z, o, lo)(h))
         )(Crit.entries_sorted.go(~V, o, 1n+p)(Crits.Crit.wf.wf_o(~V, r, p, Some{v}, z, o, lo)(h)))
       )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the entries of a well formed map are in the strict order of their keys
 def Crit.entries_sorted(
@@ -1160,23 +1206,25 @@ def Crit.entries_sorted(
 # Sorted entries are what they hold
 # ---------------------------------
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- this is said only in laws, and never runs
 # the entries a and b hold the same under the key of each of the entries es:
 # a proof of it is data
 def Binds.Same(
   -V: Data,
   es: List<&2, Crits.Bind<V>>,
-  +a: List<&2, Crits.Bind<V>>,
-  +b: List<&2, Crits.Bind<V>>
+  a: List<&2, Crits.Bind<V>>,
+  b: List<&2, Crits.Bind<V>>
 ) -> Data:
   match es:
     case Nil{}:
       Unit
-    case Con{Crits.Bind{+k, v}, r}:
+    case Con{Crits.Bind{k, v}, r}:
       Sigma<
         &2,
         &2,
         {Binds.get(V, a, k) == Binds.get(V, b, k): Maybe<&2, V>},
         _ => Binds.Same(V, r, a, b)>
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Binds.Same of a list with a head: the head
 def Binds.Same.hd(
@@ -1204,6 +1252,7 @@ def Binds.Same.tl(
   (h, t) = c
   t
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # a key that sorted entries hold after the key k comes after k
 def Binds.get_lt(
   ~V: Data,
@@ -1217,7 +1266,7 @@ def Binds.get_lt(
   match r:
     case Nil{}:
       ha => hg => Empty.absurd({Key.lt(k, q) == True{}: Bool}, Shared.Maybe.none_ne_some(V, w, hg))
-    case Con{Crits.Bind{+k2, +v2}, +rest}:
+    case Con{Crits.Bind{+k2, v2}, +rest}:
       +ha => hg => Bool.by(
         c => {Bool.pick(Maybe<&2, V>, c, Some{v2}, Binds.get(V, rest, q)) == Some{w}: Maybe<&2, V>} -> {Key.lt(k, q) == True{}: Bool},
         Crits.Key.is_eq(k2, q),
@@ -1225,17 +1274,20 @@ def Binds.get_lt(
           %Crits.Key.is_eq_sound(k2, q)(t): {Key.lt(k, _) == True{}: Bool}
           Shared.Bool.and_true_left(Key.lt(k, k2), Binds.all(~V, ~List<&2, U32>, ~Key.lt, rest, k))(ha),
         f => hg2 => Binds.get_lt(~V, rest, k, q, w)(Shared.Bool.and_true_right(Key.lt(k, k2), Binds.all(~V, ~List<&2, U32>, ~Key.lt, rest, k))(ha))(hg2))(hg)
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # entries that hold the same under keys after k, once an entry of k is put
 # before each, hold the same under them
 def Binds.same_rest(
   ~V: Data,
   +k: List<&2, U32>,
-  +v1: V,
-  +v2: V,
+  v1: V,
+  v2: V,
   es: List<&2, Crits.Bind<V>>,
-  +r1: List<&2, Crits.Bind<V>>,
-  +r2: List<&2, Crits.Bind<V>>
+  r1: List<&2, Crits.Bind<V>>,
+  r2: List<&2, Crits.Bind<V>>
 ) -> {
   Binds.all(~V, ~List<&2, U32>, ~Key.lt, es, k) == True{}: Bool
 } -> Binds.Same(
@@ -1247,13 +1299,15 @@ def Binds.same_rest(
   match es:
     case Nil{}:
       ha => c => Unit{}
-    case Con{Crits.Bind{+q, +w}, +rest}:
+    case Con{Crits.Bind{+q, w}, +rest}:
       +ha => +c => ((
           %Key.lt_ne(k, q)(Shared.Bool.and_true_left(Key.lt(k, q), Binds.all(~V, ~List<&2, U32>, ~Key.lt, rest, k))(ha)): {Bool.pick(Maybe<&2, V>, _, Some{v1}, Binds.get(V, r1, q)) == Bool.pick(Maybe<&2, V>, _, Some{v2}, Binds.get(V, r2, q)): Maybe<&2, V>}
           Binds.Same.hd(V, q, w, rest, Crits.Bind{k, v1} <> r1, Crits.Bind{k, v2} <> r2, c)), Binds.same_rest(~V, k, v1, v2, rest, r1, r2)(Shared.Bool.and_true_right(Key.lt(k, q), Binds.all(~V, ~List<&2, U32>, ~Key.lt, rest, k))(ha))(Binds.Same.tl(V, q, w, rest, Crits.Bind{k, v1} <> r1, Crits.Bind{k, v2} <> r2, c)))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # what Binds.ext asks of the entries a and b
-def Binds.Ext(~V: Data, +a: List<&2, Crits.Bind<V>>, +b: List<&2, Crits.Bind<V>>) -> Type:
+def Binds.Ext(~V: Data, a: List<&2, Crits.Bind<V>>, b: List<&2, Crits.Bind<V>>) -> Type:
   {
     Binds.sorted(~V, a) == True{}: Bool
   } -> {
@@ -1324,14 +1378,15 @@ def Binds.ext.same(
       )
     )
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # Binds.ext at two lists whose first entries have keys that differ: there are
 # no such sorted lists that hold the same
 def Binds.ext.differ(
   ~V: Data,
   +k1: List<&2, U32>,
-  +v1: V,
+  v1: V,
   +k2: List<&2, U32>,
-  +v2: V,
+  v2: V,
   +r1: List<&2, Crits.Bind<V>>,
   +r2: List<&2, Crits.Bind<V>>
 ) -> {
@@ -1388,6 +1443,7 @@ def Binds.ext.differ(
       )
     )
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # Binds.ext at two lists with a first entry each, from Binds.ext of the
 # entries after them
@@ -1411,6 +1467,7 @@ def Binds.ext.step(
     f => Binds.ext.differ(~V, k1, v1, k2, v2, r1, r2)(f)
   )
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # two sorted lists of entries that hold the same under each of their keys are
 # the same list
 def Binds.ext(
@@ -1425,22 +1482,23 @@ def Binds.ext(
   match a b:
     case Nil{} Nil{}:
       sa => sb => ca => cb => {==}
-    case Nil{} Con{Crits.Bind{+k2, +v2}, +r2}:
+    case Nil{} Con{Crits.Bind{k2, v2}, r2}:
       sa => sb => ca => cb => Empty.absurd(
         {[] == Crits.Bind{k2, v2} <> r2: List<&2, Crits.Bind<V>>},
         Shared.Maybe.none_ne_some(V, v2, (
             %Crits.Key.is_eq_refl(k2): {None{} == Bool.pick(Maybe<&2, V>, _, Some{v2}, Binds.get(V, r2, k2)): Maybe<&2, V>}
             Binds.Same.hd(V, k2, v2, r2, [], Crits.Bind{k2, v2} <> r2, cb)))
       )
-    case Con{Crits.Bind{+k1, +v1}, +r1} Nil{}:
+    case Con{Crits.Bind{k1, v1}, +r1} Nil{}:
       sa => sb => ca => cb => Empty.absurd(
         {Crits.Bind{k1, v1} <> r1 == []: List<&2, Crits.Bind<V>>},
         Crits.Crit.some_ne_none(V, v1, (
             %Crits.Key.is_eq_refl(k1): {Bool.pick(Maybe<&2, V>, _, Some{v1}, Binds.get(V, r1, k1)) == None{}: Maybe<&2, V>}
             Binds.Same.hd(V, k1, v1, r1, Crits.Bind{k1, v1} <> r1, [], ca)))
       )
-    case Con{Crits.Bind{+k1, +v1}, +r1} Con{Crits.Bind{+k2, +v2}, +r2}:
+    case Con{Crits.Bind{+k1, +v1}, +r1} Con{Crits.Bind{k2, v2}, +r2}:
       Binds.ext.step(~V, k1, v1, k2, v2, r1, r2, Binds.ext(~V, r1, r2))
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Laws of an insert
 # -----------------
@@ -1458,14 +1516,15 @@ def Bool.when_true_eq(
     case False{}:
       h => Empty.absurd({e(Unit{}) == k(Unit{}): A}, Shared.Bool.false_ne_true(h))
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # an insert of a key before the first key puts its entry first
 def Binds.insert_lt(
   -V: Data,
-  +k1: List<&2, U32>,
-  +v1: V,
-  +r: List<&2, Crits.Bind<V>>,
-  +k: List<&2, U32>,
-  +v: V
+  k1: List<&2, U32>,
+  v1: V,
+  r: List<&2, Crits.Bind<V>>,
+  k: List<&2, U32>,
+  v: V
 ) -> {
   Key.lt(k, k1) == True{}: Bool
 } -> {
@@ -1490,15 +1549,17 @@ def Binds.insert_lt(
       w => Crits.Bind{k1, v1} <> Binds.insert(V, r, k, v)
     )
   )(hl)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # an insert of a key after the first key goes on after the first entry
 def Binds.insert_gt(
   -V: Data,
   +k1: List<&2, U32>,
-  +v1: V,
-  +r: List<&2, Crits.Bind<V>>,
+  v1: V,
+  r: List<&2, Crits.Bind<V>>,
   +k: List<&2, U32>,
-  +v: V
+  v: V
 ) -> {
   Key.lt(k, k1) == False{}: Bool
 } -> {
@@ -1541,17 +1602,19 @@ def Binds.insert_gt(
       w => Crits.Bind{k1, v1} <> Binds.insert(V, r, k, v)
     )(he)
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # the three cases of an insert into entries with a first entry: what holds of
 # each holds of the insert
 def Binds.insert_cases(
   -V: Data,
   -P: List<&2, Crits.Bind<V>> -> Type,
   +k1: List<&2, U32>,
-  +v1: V,
-  +r: List<&2, Crits.Bind<V>>,
+  v1: V,
+  r: List<&2, Crits.Bind<V>>,
   +k: List<&2, U32>,
-  +v: V,
+  v: V,
   lt: {Key.lt(k, k1) == True{}: Bool} -> P(Crits.Bind{k, v} <> Crits.Bind{k1, v1} <> r),
   eq: {
     Key.lt(k, k1) == False{}: Bool
@@ -1584,7 +1647,9 @@ def Binds.insert_cases(
       he => gt(hn)(he)
     )
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # a key comes before each key of an insert when it comes before each key
 # there was and before the new key
 def Binds.all_insert(
@@ -1635,7 +1700,9 @@ def Binds.all_insert(
           )(hl)
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # an insert into sorted entries is sorted
 def Binds.insert_sorted(
   ~V: Data,
@@ -1713,6 +1780,7 @@ def Binds.insert_sorted(
           )
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the same key is the same, whichever is asked first
 def Key.is_eq_sym(
@@ -1795,6 +1863,8 @@ def Bool.pick_swap(
     case False{} False{}:
       h => {==}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # an insert holds its value under its key, and under each other key what the
 # entries held
 def Binds.get_insert(
@@ -1814,7 +1884,7 @@ def Binds.get_insert(
   match es:
     case Nil{}:
       {==}
-    case Con{Crits.Bind{+k1, +v1}, +r}:
+    case Con{Crits.Bind{+k1, v1}, +r}:
       Binds.insert_cases(
         V,
         x => {Binds.get(V, x, q) == Bool.pick(Maybe<&2, V>, Crits.Key.is_eq(k, q), Some{v}, Bool.pick(Maybe<&2, V>, Crits.Key.is_eq(k1, q), Some{v1}, Binds.get(V, r, q))): Maybe<&2, V>},
@@ -1830,6 +1900,8 @@ def Binds.get_insert(
         hn => he =>
           %Equal.sym(Maybe<&2, V>, Binds.get(V, Binds.insert(V, r, k, v), q), Bool.pick(Maybe<&2, V>, Crits.Key.is_eq(k, q), Some{v}, Binds.get(V, r, q)), Binds.get_insert(V, r, k, v, q)): {Bool.pick(Maybe<&2, V>, Crits.Key.is_eq(k1, q), Some{v1}, _) == Bool.pick(Maybe<&2, V>, Crits.Key.is_eq(k, q), Some{v}, Bool.pick(Maybe<&2, V>, Crits.Key.is_eq(k1, q), Some{v1}, Binds.get(V, r, q))): Maybe<&2, V>}
           Bool.pick_swap(Maybe<&2, V>, Crits.Key.is_eq(k1, q), Crits.Key.is_eq(k, q), Some{v1}, Some{v}, Binds.get(V, r, q))(Key.ne_both(k1, k, q)(he)))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # Entries of a map and what it holds
 # ----------------------------------
@@ -1863,6 +1935,7 @@ def Maybe.or_none(-A: Data, a: Maybe<&2, A>) -> {Maybe.or(&2, A, a, None{}) == a
     case Some{x}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # Crit.get_entries.go at the sides of a fork, from what holds of each side
 # (gz: what the entries of both sides, then rest, hold; gn: those of the one
 # side, then rest)
@@ -1897,7 +1970,10 @@ def Crit.get_entries.sides(
       Maybe.or(&2, A, lz, Maybe.or(&2, A, ln, gr)),
       Maybe.or_assoc(A, lz, ln, gr)
     )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the entries of a map, then rest, hold under a key what the map holds, else
 # what rest holds
 def Crit.get_entries.go(
@@ -1916,7 +1992,7 @@ def Crit.get_entries.go(
   match m:
     case Crits.Crit.Tip{}:
       {==}
-    case Crits.Crit.Leaf{+k, +v}:
+    case Crits.Crit.Leaf{k, v}:
       Bool.by(
         c => {
           Bool.pick(
@@ -1947,7 +2023,7 @@ def Crit.get_entries.go(
       )(
         Crit.get_entries.go(V, z, Crits.Crit.entries.go(V, o, rest), q)
       )(Crit.get_entries.go(V, o, rest, q))
-    case Crits.Crit.Fork{+r, p, Some{+v}, +z, +o}:
+    case Crits.Crit.Fork{+r, p, Some{v}, +z, +o}:
       Bool.by(
         c => {
           Bool.pick(
@@ -1981,6 +2057,8 @@ def Crit.get_entries.go(
           Crit.get_entries.go(V, z, Crits.Crit.entries.go(V, o, rest), q)
         )(Crit.get_entries.go(V, o, rest, q))
       )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the entries of a map hold under each key what the map holds
 def Crit.get_entries(
@@ -2000,6 +2078,7 @@ def Crit.get_entries(
 # A write is an insert
 # --------------------
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the entries of a map after a write hold, under each key, what an insert
 # into its entries holds
 def Crit.get_set(
@@ -2078,7 +2157,9 @@ def Crit.get_set(
         ): Maybe<&2, V>
     }
     Crits.Crit.upsert_lookup(~V, ~(w => x => x), m, k, v, q)(h)
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the entries of a map after a write and an insert into its entries hold the
 # same under the key of each of the entries es
 def Crit.same_set(
@@ -2098,8 +2179,9 @@ def Crit.same_set(
   match es:
     case Nil{}:
       h => Unit{}
-    case Con{Crits.Bind{+q, w}, +rest}:
+    case Con{Crits.Bind{q, w}, rest}:
       +h => (Crit.get_set(~V, m, k, v, q)(h), Crit.same_set(~V, m, k, v, rest)(h))
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the entries of a well formed map after a write are an insert into its
 # entries: a new entry at the place of a new key, a new value in the entry of
@@ -2168,6 +2250,7 @@ def List.cons_pick(
     case False{}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # an insert of a key before each key of es into the kept entries of es puts
 # its entry first
 def Binds.insert_first(
@@ -2234,7 +2317,10 @@ def Binds.insert_first(
           Shared.Bool.and_true_right(Key.lt(k, k1), Binds.all(~V, ~List<&2, U32>, ~Key.lt, r, k))(h)
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the kept entries of an insert of a new key into sorted entries: an insert
 # into the kept entries when the new entry is kept, else the kept entries
 def Binds.filter_insert(
@@ -2289,6 +2375,8 @@ def Binds.filter_insert(
           %Equal.sym(List<&2, Crits.Bind<V>>, Binds.insert(V, Crits.Bind{k1, v1} <> List.filter(~Crits.Bind<V>, ~f, r), k, v), Crits.Bind{k1, v1} <> Binds.insert(V, List.filter(~Crits.Bind<V>, ~f, r), k, v), Binds.insert_gt(V, k1, v1, List.filter(~Crits.Bind<V>, ~f, r), k, v)(hn)(he)): {Crits.Bind{k1, v1} <> Bool.pick(List<&2, Crits.Bind<V>>, f(Crits.Bind{k, v}), Binds.insert(V, List.filter(~Crits.Bind<V>, ~f, r), k, v), List.filter(~Crits.Bind<V>, ~f, r)) == Bool.pick(List<&2, Crits.Bind<V>>, f(Crits.Bind{k, v}), _, Crits.Bind{k1, v1} <> List.filter(~Crits.Bind<V>, ~f, r)): List<&2, Crits.Bind<V>>}
           List.cons_pick(Crits.Bind<V>, Crits.Bind{k1, v1}, f(Crits.Bind{k, v}), Binds.insert(V, List.filter(~Crits.Bind<V>, ~f, r), k, v), List.filter(~Crits.Bind<V>, ~f, r)),
         fl => {==}))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the entries of a map that lacks a key hold nothing under it
 def Crit.get_none(
@@ -2384,13 +2472,14 @@ def Crit.filter_set(
 # list is the values of its entries. A write of a value is then an insert
 # into the list, by the keys of the values.
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # an insert of a value whose key is before the first key puts it first
 def Values.insert_lt(
   ~V: Data,
   ~key: V -> List<&2, U32>,
-  +y: V,
-  +r: List<&2, V>,
-  +x: V
+  y: V,
+  r: List<&2, V>,
+  x: V
 ) -> {
   Key.lt(key(x), key(y)) == True{}: Bool
 } -> {Values.insert(~V, ~key, y <> r, x) == x <> y <> r: List<&2, V>}:
@@ -2405,13 +2494,15 @@ def Values.insert_lt(
       w => y <> Values.insert(~V, ~key, r, x)
     )
   )(hl)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # an insert of a value with the first key takes the place of the first value
 def Values.insert_eq(
   ~V: Data,
   ~key: V -> List<&2, U32>,
   +y: V,
-  +r: List<&2, V>,
+  r: List<&2, V>,
   +x: V
 ) -> {
   Key.lt(key(x), key(y)) == False{}: Bool
@@ -2446,14 +2537,16 @@ def Values.insert_eq(
       w => y <> Values.insert(~V, ~key, r, x)
     )(he)
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # an insert of a value whose key is after the first key goes on after the
 # first value
 def Values.insert_gt(
   ~V: Data,
   ~key: V -> List<&2, U32>,
   +y: V,
-  +r: List<&2, V>,
+  r: List<&2, V>,
   +x: V
 ) -> {
   Key.lt(key(x), key(y)) == False{}: Bool
@@ -2488,7 +2581,9 @@ def Values.insert_gt(
       w => y <> Values.insert(~V, ~key, r, x)
     )(he)
   )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the values of an insert into entries that sit under the keys of their
 # values are an insert into their values
 def Binds.values_insert(
@@ -2582,7 +2677,9 @@ def Binds.values_insert(
             )
           )
         )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the kept values of entries are the values of the entries whose values are
 # kept
 def Binds.values_filter(
@@ -2603,7 +2700,7 @@ def Binds.values_filter(
   match es:
     case Nil{}:
       {==}
-    case Con{Crits.Bind{+k1, +v1}, +r}:
+    case Con{Crits.Bind{k1, v1}, +r}:
       Bool.by(
         c => {
           List.filter.put(
@@ -2636,7 +2733,9 @@ def Binds.values_filter(
         ),
         fl => Binds.values_filter(~V, ~f, r)
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the kept entries of entries that sit under the keys of their values sit
 # under the keys of their values
 def Binds.keyed_filter(
@@ -2686,6 +2785,7 @@ def Binds.keyed_filter(
           r
         )(Shared.Bool.and_true_right(Crits.Key.is_eq(k1, key(v1)), Binds.keyed(~V, ~key, r))(h))
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the values of a choice of two lists of entries are a choice of their values
 def Binds.values_pick(
@@ -2739,6 +2839,7 @@ def Crit.values_set(
     }
     Binds.values_insert(~V, ~key, Crits.Crit.entries(V, m), x)(hk)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the kept values of such a map after a write of a new value: an insert into
 # its kept values when the new value is kept, else its kept values
 def Crit.values_filter_set(
@@ -2935,3 +3036,443 @@ def Crit.values_filter_set(
       ),
       List.filter(~Crits.Bind<V>, ~(b => f(Crits.Crit.bind_val(V, b))), Crits.Crit.entries(V, m))
     )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# Kept values, in order
+# ---------------------
+# An index keeps the values of a map that a test holds of, in the order of
+# their keys. The test may read a value that is known only when the code
+# runs (g). A write of a value to the map is then one insert into the index.
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this check is said only in laws, and never runs
+# the key k comes before the key of each of the values xs
+def Values.all(~V: Data, ~key: V -> List<&2, U32>, xs: List<&2, V>, +k: List<&2, U32>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{y, r}:
+      Bool.and(Key.lt(k, key(y)), Values.all(~V, ~key, r, k))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this check is said only in laws, and never runs
+# the values xs are in the strict order of their keys
+def Values.sorted(~V: Data, ~key: V -> List<&2, U32>, xs: List<&2, V>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{y, +r}:
+      Bool.and(Values.all(~V, ~key, r, key(y)), Values.sorted(~V, ~key, r))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# the values among xs that p holds of, with g
+def Values.keep(~V: Data, ~G: Data, ~p: G -> V -> Bool, xs: List<&2, V>, +g: G) -> List<&2, V>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{+y, r}:
+      List.filter.put(V, y, Values.keep(~V, ~G, ~p, r, g), p(g)(y))
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# a key before a key that comes before the keys of xs comes before them
+def Values.all_lt(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  +g: List<&2, U32>,
+  +k: List<&2, U32>,
+  xs: List<&2, V>
+) -> {
+  Key.lt(g, k) == True{}: Bool
+} -> {Values.all(~V, ~key, xs, k) == True{}: Bool} -> {Values.all(~V, ~key, xs, g) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      h1 => h2 => {==}
+    case Con{+y, +r}:
+      +h1 => +h2 => Crits.Crit.and_true(
+        Key.lt(g, key(y)),
+        Values.all(~V, ~key, r, g)
+      )(
+        Key.lt_trans(
+          g,
+          k,
+          key(y)
+        )(h1)(Shared.Bool.and_true_left(Key.lt(k, key(y)), Values.all(~V, ~key, r, k))(h2))
+      )(
+        Values.all_lt(
+          ~V,
+          ~key,
+          g,
+          k,
+          r
+        )(h1)(Shared.Bool.and_true_right(Key.lt(k, key(y)), Values.all(~V, ~key, r, k))(h2))
+      )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# k comes before the keys of a list with one more value, when it holds (c),
+# if it comes before the key of the value and the keys of the list
+def Values.all_put(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  y: V,
+  xs: List<&2, V>,
+  +k: List<&2, U32>,
+  c: Bool
+) -> {
+  Values.all(~V, ~key, xs, k) == True{}: Bool
+} -> {
+  Key.lt(k, key(y)) == True{}: Bool
+} -> {Values.all(~V, ~key, List.filter.put(V, y, xs, c), k) == True{}: Bool}:
+  match c:
+    case True{}:
+      hx => hy => Crits.Crit.and_true(Key.lt(k, key(y)), Values.all(~V, ~key, xs, k))(hy)(hx)
+    case False{}:
+      hx => hy => hx
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# a key before the keys of xs comes before the keys of the kept values of xs
+def Values.all_keep(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  ~G: Data,
+  ~p: G -> V -> Bool,
+  xs: List<&2, V>,
+  +k: List<&2, U32>,
+  +g: G
+) -> {
+  Values.all(~V, ~key, xs, k) == True{}: Bool
+} -> {Values.all(~V, ~key, Values.keep(~V, ~G, ~p, xs, g), k) == True{}: Bool}:
+  match xs:
+    case Nil{}:
+      h => {==}
+    case Con{+y, +r}:
+      +h => Values.all_put(
+        ~V,
+        ~key,
+        y,
+        Values.keep(~V, ~G, ~p, r, g),
+        k,
+        p(g)(y)
+      )(
+        Values.all_keep(
+          ~V,
+          ~key,
+          ~G,
+          ~p,
+          r,
+          k,
+          g
+        )(Shared.Bool.and_true_right(Key.lt(k, key(y)), Values.all(~V, ~key, r, k))(h))
+      )(Shared.Bool.and_true_left(Key.lt(k, key(y)), Values.all(~V, ~key, r, k))(h))
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# an insert of a value whose key is before the keys of xs puts it first
+def Values.insert_first(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  xs: List<&2, V>,
+  +x: V
+) -> {
+  Values.all(~V, ~key, xs, key(x)) == True{}: Bool
+} -> {Values.insert(~V, ~key, xs, x) == x <> xs: List<&2, V>}:
+  match xs:
+    case Nil{}:
+      h => {==}
+    case Con{+y, r}:
+      h => Values.insert_lt(
+        ~V,
+        ~key,
+        y,
+        r,
+        x
+      )(Shared.Bool.and_true_left(Key.lt(key(x), key(y)), Values.all(~V, ~key, r, key(x)))(h))
+
+# an insert of a value whose key is before the key of y and the keys of xs,
+# into xs with y first when it holds (c), puts it first
+def Values.insert_put(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  y: V,
+  xs: List<&2, V>,
+  x: V,
+  c: Bool
+) -> {
+  Key.lt(key(x), key(y)) == True{}: Bool
+} -> {
+  Values.all(~V, ~key, xs, key(x)) == True{}: Bool
+} -> {
+  Values.insert(
+    ~V,
+    ~key,
+    List.filter.put(V, y, xs, c),
+    x
+  )
+    == x
+    <> List.filter.put(V, y, xs, c): List<&2, V>
+}:
+  match c:
+    case True{}:
+      hl => hx => Values.insert_lt(~V, ~key, y, xs, x)(hl)
+    case False{}:
+      hl => hx => Values.insert_first(~V, ~key, xs, x)(hx)
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
+# a list with x first when it holds (c) is itself after an insert of x, when
+# c holds
+def Values.keep_same(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  c: Bool,
+  +x: V,
+  xs: List<&2, V>
+) -> {
+  List.filter.put(
+    V,
+    x,
+    xs,
+    c
+  )
+    == Bool.pick(
+      List<&2, V>,
+      c,
+      Values.insert(~V, ~key, List.filter.put(V, x, xs, c), x),
+      List.filter.put(V, x, xs, c)
+    ): List<&2, V>
+}:
+  match c:
+    case True{}:
+      Equal.sym(
+        List<&2, V>,
+        Values.insert(~V, ~key, x <> xs, x),
+        x <> xs,
+        Values.insert_eq(
+          ~V,
+          ~key,
+          x,
+          xs,
+          x
+        )(Crits.Bits.lt_self(Crits.Key.bits(key(x))))(Crits.Key.is_eq_refl(key(x)))
+      )
+    case False{}:
+      {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
+# a value y whose key is before that of x, before a list with or without an
+# insert of x (cx), when y holds (cy): the insert of x goes after y
+def Values.keep_step(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  cx: Bool,
+  cy: Bool,
+  y: V,
+  xs: List<&2, V>,
+  x: V
+) -> {
+  Key.lt(key(x), key(y)) == False{}: Bool
+} -> {
+  Crits.Key.is_eq(key(y), key(x)) == False{}: Bool
+} -> {
+  List.filter.put(
+    V,
+    y,
+    Bool.pick(List<&2, V>, cx, Values.insert(~V, ~key, xs, x), xs),
+    cy
+  )
+    == Bool.pick(
+      List<&2, V>,
+      cx,
+      Values.insert(~V, ~key, List.filter.put(V, y, xs, cy), x),
+      List.filter.put(V, y, xs, cy)
+    ): List<&2, V>
+}:
+  match cx cy:
+    case True{} True{}:
+      hn => he => Equal.sym(
+        List<&2, V>,
+        Values.insert(~V, ~key, y <> xs, x),
+        y <> Values.insert(~V, ~key, xs, x),
+        Values.insert_gt(~V, ~key, y, xs, x)(hn)(he)
+      )
+    case True{} False{}:
+      hn => he => {==}
+    case False{} True{}:
+      hn => he => {==}
+    case False{} False{}:
+      hn => he => {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# the kept values of sorted values after an insert of a value: an insert into
+# the kept values when the value is kept, else the kept values; values of one
+# key are one value (inj)
+def Values.keep_insert(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  ~inj: @+a: V -> @+b: V -> {key(a) == key(b): List<&2, U32>} -> {a == b: V},
+  ~G: Data,
+  ~p: G -> V -> Bool,
+  xs: List<&2, V>,
+  +x: V,
+  +g: G
+) -> {
+  Values.sorted(~V, ~key, xs) == True{}: Bool
+} -> {
+  Values.keep(
+    ~V,
+    ~G,
+    ~p,
+    Values.insert(~V, ~key, xs, x),
+    g
+  )
+    == Bool.pick(
+      List<&2, V>,
+      p(g)(x),
+      Values.insert(~V, ~key, Values.keep(~V, ~G, ~p, xs, g), x),
+      Values.keep(~V, ~G, ~p, xs, g)
+    ): List<&2, V>
+}:
+  match xs:
+    case Nil{}:
+      h => List.put_pick(V, x, [], p(g)(x))
+    case Con{+y, +r}:
+      +h => Bool.by(
+        b => {
+          Values.keep(
+            ~V,
+            ~G,
+            ~p,
+            Values.insert(~V, ~key, y <> r, x),
+            g
+          )
+            == Bool.pick(
+              List<&2, V>,
+              p(g)(x),
+              Values.insert(~V, ~key, Values.keep(~V, ~G, ~p, y <> r, g), x),
+              Values.keep(~V, ~G, ~p, y <> r, g)
+            ): List<&2, V>
+        },
+        Key.lt(key(x), key(y)),
+        +hl => (
+          %Equal.sym(List<&2, V>, Values.insert(~V, ~key, y <> r, x), x <> y <> r, Values.insert_lt(~V, ~key, y, r, x)(hl)): {Values.keep(~V, ~G, ~p, _, g) == Bool.pick(List<&2, V>, p(g)(x), Values.insert(~V, ~key, Values.keep(~V, ~G, ~p, y <> r, g), x), Values.keep(~V, ~G, ~p, y <> r, g)): List<&2, V>}
+          %Equal.sym(List<&2, V>, Values.insert(~V, ~key, List.filter.put(V, y, Values.keep(~V, ~G, ~p, r, g), p(g)(y)), x), x <> List.filter.put(V, y, Values.keep(~V, ~G, ~p, r, g), p(g)(y)), Values.insert_put(~V, ~key, y, Values.keep(~V, ~G, ~p, r, g), x, p(g)(y))(hl)(Values.all_keep(~V, ~key, ~G, ~p, r, key(x), g)(Values.all_lt(~V, ~key, key(x), key(y), r)(hl)(Shared.Bool.and_true_left(Values.all(~V, ~key, r, key(y)), Values.sorted(~V, ~key, r))(h))))): {List.filter.put(V, x, List.filter.put(V, y, Values.keep(~V, ~G, ~p, r, g), p(g)(y)), p(g)(x)) == Bool.pick(List<&2, V>, p(g)(x), _, List.filter.put(V, y, Values.keep(~V, ~G, ~p, r, g), p(g)(y))): List<&2, V>}
+          List.put_pick(V, x, List.filter.put(V, y, Values.keep(~V, ~G, ~p, r, g), p(g)(y)), p(g)(x))),
+        +hn => Bool.by(
+          b => {
+            Values.keep(
+              ~V,
+              ~G,
+              ~p,
+              Values.insert(~V, ~key, y <> r, x),
+              g
+            )
+              == Bool.pick(
+                List<&2, V>,
+                p(g)(x),
+                Values.insert(~V, ~key, Values.keep(~V, ~G, ~p, y <> r, g), x),
+                Values.keep(~V, ~G, ~p, y <> r, g)
+              ): List<&2, V>
+          },
+          Crits.Key.is_eq(key(y), key(x)),
+          +he => (
+            %Equal.sym(List<&2, V>, Values.insert(~V, ~key, y <> r, x), x <> r, Values.insert_eq(~V, ~key, y, r, x)(hn)(he)): {Values.keep(~V, ~G, ~p, _, g) == Bool.pick(List<&2, V>, p(g)(x), Values.insert(~V, ~key, Values.keep(~V, ~G, ~p, y <> r, g), x), Values.keep(~V, ~G, ~p, y <> r, g)): List<&2, V>}
+            %Equal.sym(V, y, x, inj(y)(x)(Crits.Key.is_eq_sound(key(y), key(x))(he))): {List.filter.put(V, x, Values.keep(~V, ~G, ~p, r, g), p(g)(x)) == Bool.pick(List<&2, V>, p(g)(x), Values.insert(~V, ~key, List.filter.put(V, _, Values.keep(~V, ~G, ~p, r, g), p(g)(_)), x), List.filter.put(V, _, Values.keep(~V, ~G, ~p, r, g), p(g)(_))): List<&2, V>}
+            Values.keep_same(~V, ~key, p(g)(x), x, Values.keep(~V, ~G, ~p, r, g))),
+          +hne => (
+            %Equal.sym(List<&2, V>, Values.insert(~V, ~key, y <> r, x), y <> Values.insert(~V, ~key, r, x), Values.insert_gt(~V, ~key, y, r, x)(hn)(hne)): {Values.keep(~V, ~G, ~p, _, g) == Bool.pick(List<&2, V>, p(g)(x), Values.insert(~V, ~key, Values.keep(~V, ~G, ~p, y <> r, g), x), Values.keep(~V, ~G, ~p, y <> r, g)): List<&2, V>}
+            %Equal.sym(List<&2, V>, Values.keep(~V, ~G, ~p, Values.insert(~V, ~key, r, x), g), Bool.pick(List<&2, V>, p(g)(x), Values.insert(~V, ~key, Values.keep(~V, ~G, ~p, r, g), x), Values.keep(~V, ~G, ~p, r, g)), Values.keep_insert(~V, ~key, ~inj, ~G, ~p, r, x, g)(Shared.Bool.and_true_right(Values.all(~V, ~key, r, key(y)), Values.sorted(~V, ~key, r))(h))): {List.filter.put(V, y, _, p(g)(y)) == Bool.pick(List<&2, V>, p(g)(x), Values.insert(~V, ~key, List.filter.put(V, y, Values.keep(~V, ~G, ~p, r, g), p(g)(y)), x), List.filter.put(V, y, Values.keep(~V, ~G, ~p, r, g), p(g)(y))): List<&2, V>}
+            Values.keep_step(~V, ~key, p(g)(x), p(g)(y), y, Values.keep(~V, ~G, ~p, r, g), x)(hn)(hne))
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# a key before the keys of entries under the keys of their values comes
+# before the keys of their values
+def Binds.values_all(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  es: List<&2, Crits.Bind<V>>,
+  +k: List<&2, U32>
+) -> {
+  Binds.keyed(~V, ~key, es) == True{}: Bool
+} -> {
+  Binds.all(~V, ~List<&2, U32>, ~Key.lt, es, k) == True{}: Bool
+} -> {Values.all(~V, ~key, Crits.Binds.values(V, es), k) == True{}: Bool}:
+  match es:
+    case Nil{}:
+      hk => ha => {==}
+    case Con{Crits.Bind{+k2, +v}, +r}:
+      +hk => +ha => Crits.Crit.and_true(
+        Key.lt(k, key(v)),
+        Values.all(~V, ~key, Crits.Binds.values(V, r), k)
+      )(
+        %Crits.Key.is_eq_sound(k2, key(v))(Shared.Bool.and_true_left(Crits.Key.is_eq(k2, key(v)), Binds.keyed(~V, ~key, r))(hk)): {Key.lt(k, _) == True{}: Bool}
+        Shared.Bool.and_true_left(Key.lt(k, k2), Binds.all(~V, ~List<&2, U32>, ~Key.lt, r, k))(ha))(
+        Binds.values_all(
+          ~V,
+          ~key,
+          r,
+          k
+        )(
+          Shared.Bool.and_true_right(Crits.Key.is_eq(k2, key(v)), Binds.keyed(~V, ~key, r))(hk)
+        )(
+          Shared.Bool.and_true_right(
+            Key.lt(k, k2),
+            Binds.all(~V, ~List<&2, U32>, ~Key.lt, r, k)
+          )(ha)
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# the values of sorted entries under the keys of their values are sorted
+def Binds.values_sorted(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  es: List<&2, Crits.Bind<V>>
+) -> {
+  Binds.keyed(~V, ~key, es) == True{}: Bool
+} -> {
+  Binds.sorted(~V, es) == True{}: Bool
+} -> {Values.sorted(~V, ~key, Crits.Binds.values(V, es)) == True{}: Bool}:
+  match es:
+    case Nil{}:
+      hk => hs => {==}
+    case Con{Crits.Bind{+k2, +v}, +r}:
+      +hk => +hs => Crits.Crit.and_true(
+        Values.all(~V, ~key, Crits.Binds.values(V, r), key(v)),
+        Values.sorted(~V, ~key, Crits.Binds.values(V, r))
+      )(
+        %Crits.Key.is_eq_sound(k2, key(v))(Shared.Bool.and_true_left(Crits.Key.is_eq(k2, key(v)), Binds.keyed(~V, ~key, r))(hk)): {Values.all(~V, ~key, Crits.Binds.values(V, r), _) == True{}: Bool}
+        Binds.values_all(~V, ~key, r, k2)(Shared.Bool.and_true_right(Crits.Key.is_eq(k2, key(v)), Binds.keyed(~V, ~key, r))(hk))(Shared.Bool.and_true_left(Binds.all(~V, ~List<&2, U32>, ~Key.lt, r, k2), Binds.sorted(~V, r))(hs)))(
+        Binds.values_sorted(
+          ~V,
+          ~key,
+          r
+        )(
+          Shared.Bool.and_true_right(Crits.Key.is_eq(k2, key(v)), Binds.keyed(~V, ~key, r))(hk)
+        )(
+          Shared.Bool.and_true_right(
+            Binds.all(~V, ~List<&2, U32>, ~Key.lt, r, k2),
+            Binds.sorted(~V, r)
+          )(hs)
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# the values of a well formed map of values under their keys are sorted
+def Crit.values_sorted(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  +m: Crits.Crit<V>
+) -> {
+  Crits.Crit.wf(~V, m, 0n) == True{}: Bool
+} -> {
+  Binds.keyed(~V, ~key, Crits.Crit.entries(V, m)) == True{}: Bool
+} -> {Values.sorted(~V, ~key, Crits.Binds.values(V, Crits.Crit.entries(V, m))) == True{}: Bool}:
+  h => hk => Binds.values_sorted(
+    ~V,
+    ~key,
+    Crits.Crit.entries(V, m)
+  )(hk)(Crit.entries_sorted(~V, m)(h))

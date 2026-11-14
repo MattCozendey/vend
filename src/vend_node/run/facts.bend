@@ -345,6 +345,16 @@ def Ask.seq(a: Types.Ask) -> Nat:
     case Types.Ask{i, k, r}:
       k
 
+# the number of the ask that the fact f is or votes for; else 0
+def Seq.of(f: Types.Fact) -> Nat:
+  match f:
+    case Types.Fact.Ask{a}:
+      Ask.seq(a)
+    case Types.Fact.Vote{v, st, Types.Cast.Vote{r, Types.Pick{a, pins}, b}}:
+      Ask.seq(a)
+    case Types.Fact.Vote{v, st, Types.Cast.Pass{r}}:
+      0n
+
 # the greatest number of an ask among fs, as an ask or in a vote
 def Seq.peak(fs: List<&2, Types.Fact>) -> Nat:
   match fs:

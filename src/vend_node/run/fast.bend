@@ -9,6 +9,7 @@ import ./answers.bend as Answers
 import ./content.bend as Contents
 import ./facts.bend as Facts
 import ./known.bend as Known
+import ./lines.bend as Lines
 import ./parts.bend as Parts
 import ./work.bend as Works
 
@@ -22,25 +23,27 @@ import ./work.bend as Works
 # Nodes.Raw.does gives (Fast.does_raw), that its table stays right
 # (Fast.does_ok), and that it answers as its state does (Fast.answer_raw, ...).
 
-# a node and the states that it knows; read says that the table holds what
-# a work reads of the line of each fact, so a work need not learn them again
+# a node and the states that it knows; while its table holds the facts that
+# a work may act on, it holds what a work reads of the line of each of them,
+# so a work need not learn them again
 type Fast is Data:
-  Fast{raw: Nodes.Raw, lines: Known.Known(), read: Bool}
+  Fast{raw: Nodes.Raw, lines: Known.Known()}
 
-# a fast node of the name name, that holds nothing yet
+# a fast node of the name name, that holds nothing yet: a work may act on no
+# fact
 def Fast.new(name: String) -> Fast:
-  Fast{Nodes.Raw.new(name), Known.Known.none(), True{}}
+  Fast{Nodes.Raw.new(name), [Known.Open{[], 0n}]}
 
 # the state of the fast node f
 def Fast.raw(f: Fast) -> Nodes.Raw:
   match f:
-    case Fast{r, kn, ld}:
+    case Fast{r, kn}:
       r
 
 # the states that the fast node f knows
 def Fast.lines(f: Fast) -> Known.Known():
   match f:
-    case Fast{r, kn, ld}:
+    case Fast{r, kn}:
       kn
 
 # What a work reads
@@ -98,42 +101,73 @@ def Learn.work(kn: Known.Known(), +s: Facts.Plain()) -> Known.Known():
   Learn.facts(all, kn, s, all)
 
 # the table kn with the states of the lines that a work reads in the facts
-# s, unless it holds them (read)
+# s, and with the facts that a work may act on, unless it holds them (read)
 def Learn.if(read: Bool, kn: Known.Known(), +s: Facts.Plain()) -> Known.Known():
   match read:
     case True{}:
       kn
     case False{}:
-      Learn.work(kn, s)
+      Known.Known.opened(Learn.work(kn, s), s)
+
+# the table kn holds the facts that a work may act on
+def Table.read(kn: Known.Known()) -> Bool:
+  Maybe.is_some(&2, List<&2, Types.Fact>, Known.Known.open(kn))
 
 # the table kn with the states of the lines that a work reads for the
-# request r, in the facts s
-def Learn.asked(kn: Known.Known(), +s: Facts.Plain(), +r: Spec.Request) -> Known.Known():
-  Learn.request(kn, s, Facts.Facts.list(s), r)
+# request r, in the facts s: the line of a merge is read from the facts that
+# a work may act on, if the table holds them
+def Learn.asked(+kn: Known.Known(), +s: Facts.Plain(), +r: Spec.Request) -> Known.Known():
+  Learn.request(kn, s, Known.Known.facts(kn, s), r)
 
 # What a deed leaves of the table
 # -------------------------------
 
-# a ballot at the step st changes the state of its line only: the line is a
-# branch
-def Step.spares(st: Types.Step) -> Bool:
-  match st:
-    case Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}:
-      True{}
-    case _:
-      False{}
+# the table kn after a ballot for the slot k of the line c, where s is the
+# facts with the ballot, w the facts that a work could act on, with the
+# ballot, if known, and n the greatest number of an ask in s, if w is known
+def Table.moved(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +w: Maybe<&2, List<&2, Types.Fact>>,
+  n: Nat
+) -> Known.Known():
+  Known.Known.moved(
+    Known.Known.learn(Contents.Known.grow(kn, Known.Known.cast(kn, s, c, k, w), s, c), s, c),
+    s,
+    Known.Known.walk.if(
+      Known.Known.safe(c, Known.Known.find(kn, c), Known.Known.find(kn, Known.Known.root(c)), k),
+      w
+    ),
+    n
+  )
 
-# the table kn after a ballot is cast at the step st, where s is the facts
-# with the ballot: without the states that a vote for the line of st may
-# change, with the state of that line continued from its known state, with
-# the contents that the ballot leaves as they are, with the contents of
-# the new versions of the line, and with what a work reads of the line
-def Table.voted(+kn: Known.Known(), +s: Facts.Plain(), st: Types.Step) -> Known.Known():
+# the table kn after the ballot f is cast at the step st, where s is the
+# facts with the ballot: without the states that a vote for the line of st
+# may change, with the state of that line continued from its known state,
+# with the contents that the ballot leaves as they are, with the contents of
+# the new versions of the line, with what a work reads of the line, and, if
+# the ballot leaves the other lines as they are, with the facts that a work
+# may still act on
+def Table.voted(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  st: Types.Step,
+  +f: Types.Fact
+) -> Known.Known():
   match st:
     case Types.Step.Broken{}:
       Known.Known.none()
-    case Types.Step.At{+c, k, t}:
-      Known.Known.learn(Contents.Known.grow(kn, Known.Known.cast(kn, s, c, k), s, c), s, c)
+    case Types.Step.At{+c, +k, t}:
+      Table.moved(
+        kn,
+        s,
+        c,
+        k,
+        Known.Known.walk(kn, f),
+        Nat.max(Facts.Seq.of(f), Known.Shelf.top(Known.Known.shelf(kn)))
+      )
 
 # the table kn after the node takes in the request r: no state if r starts a
 # store, else as before (a request that starts no store changes no state)
@@ -143,29 +177,64 @@ def Table.asked(kn: Known.Known(), r: Spec.Request) -> Known.Known():
 # What a fast node takes in
 # -------------------------
 
-# the facts s after the node name takes in the request r of the id i, as
-# Facts.Facts.ask gives them: the ask of a request that starts no store
-# collides with no ask, so no fact is read for a second start
-def Asked.take(+name: String, +s: Facts.Plain(), +i: Ledgers.Id, +r: Spec.Request) -> Facts.Plain():
+# the ask of the request r of the id i, as a node that holds s takes it in,
+# as Facts.Facts.asked gives it: the greatest number in s is read through
+# the table kn
+def Asked.ask(kn: Known.Known(), s: Facts.Plain(), i: Ledgers.Id, r: Spec.Request) -> Types.Ask:
+  Types.Ask{i, 1n+Known.Known.peak(kn, s), r}
+
+# the facts s after the node name takes in the ask a, as Facts.Facts.take
+# gives them: the ask of a request that starts no store collides with no
+# ask, so no fact is read for a second start
+def Asked.take(+name: String, +s: Facts.Plain(), +a: Types.Ask) -> Facts.Plain():
   Shared.Bool.when(
     Facts.Plain(),
-    Facts.Request.is_start(r),
-    u => Facts.Facts.ask(name, s, i, r),
-    u => Facts.Facts.add(s, Types.Fact.Ask{Facts.Facts.asked(s, i, r)})
+    Facts.Request.is_start(Lines.Ask.request(a)),
+    u => Facts.Facts.take(name, s, Types.Fact.Ask{a}),
+    u => Facts.Facts.add(s, Types.Fact.Ask{a})
   )
 
+# the ask a, as a fact that joins the facts of a node and leaves each line
+# as it is: when the node takes it in (go), and it starts no store
+def Asked.fact(+a: Types.Ask, go: Bool) -> Maybe<&2, Types.Fact>:
+  match go:
+    case False{}:
+      None{}
+    case True{}:
+      Shared.Maybe.when(
+        Types.Fact,
+        Bool.not(Facts.Request.is_start(Lines.Ask.request(a))),
+        u => Some{Types.Fact.Ask{a}}
+      )
+
+# the table kn, when the fact m, if any, joins the facts and leaves each
+# line as it is; s is the facts with it
+def Table.joined(+kn: Known.Known(), s: Facts.Plain(), m: Maybe<&2, Types.Fact>) -> Known.Known():
+  match m:
+    case None{}:
+      kn
+    case Some{f}:
+      Known.Known.joined(kn, s, f)
+
 # the fast node of the state r, after it took in the request q, with the
-# table kn: if the table held what a work reads (read), it learns what a work
-# reads for q; a request that starts a store leaves no table
-def Fast.asked(+r: Nodes.Raw, kn: Known.Known(), read: Bool, +q: Spec.Request) -> Fast:
+# table kn: if the table holds what a work reads (read), it learns what a
+# work reads for q; then the fact m, if any, joins the facts that a work may
+# act on
+def Fast.asked(
+  +r: Nodes.Raw,
+  kn: Known.Known(),
+  read: Bool,
+  +q: Spec.Request,
+  m: Maybe<&2, Types.Fact>
+) -> Fast:
   match read:
     case False{}:
-      Fast{r, kn, False{}}
+      Fast{r, Table.joined(kn, Nodes.Raw.facts(r), m)}
     case True{}:
-      Fast{r, Learn.asked(kn, Nodes.Raw.facts(r), q), Bool.not(Facts.Request.is_start(q))}
+      Fast{r, Table.joined(Learn.asked(kn, Nodes.Raw.facts(r), q), Nodes.Raw.facts(r), m)}
 
-# the state after the node takes in the request r of the id i, when it may
-# (go), as Nodes.Raw.asks gives it
+# the state after the node takes in the ask a, when it may (go), as
+# Nodes.Raw.asks gives it
 def Fast.asks(
   +name: String,
   ws: List<&2, String>,
@@ -173,8 +242,7 @@ def Fast.asks(
   st: Bool,
   fs: Facts.Plain(),
   ps: Parts.Parts,
-  i: Ledgers.Id,
-  +r: Spec.Request,
+  +a: Types.Ask,
   go: Bool
 ) -> Nodes.Raw:
   match go:
@@ -186,9 +254,26 @@ def Fast.asks(
         ws,
         ms,
         st,
-        Asked.take(name, fs, i, r),
-        Nodes.Kept.with(ps, Nodes.Request.content(r))
+        Asked.take(name, fs, a),
+        Nodes.Kept.with(ps, Nodes.Request.content(Lines.Ask.request(a)))
       }
+
+# the fast node after the node takes in the ask a, when it may (go), with
+# the table kn: it learns what a work reads for the request q, if the table
+# holds what a work reads, and a work may act on the ask
+def Fast.asks.to(
+  name: String,
+  ws: List<&2, String>,
+  ms: List<&2, Nodes.Mounted>,
+  st: Bool,
+  fs: Facts.Plain(),
+  ps: Parts.Parts,
+  +kn: Known.Known(),
+  +a: Types.Ask,
+  q: Spec.Request,
+  +go: Bool
+) -> Fast:
+  Fast.asked(Fast.asks(name, ws, ms, st, fs, ps, a, go), kn, Table.read(kn), q, Asked.fact(a, go))
 
 # What a fast node casts
 # ----------------------
@@ -215,11 +300,32 @@ def Fact.sits(g: Facts.Seat, f: Types.Fact) -> Bool:
     case Facts.Seat{name, st} Types.Fact.Ask{a}:
       False{}
 
-# s holds a vote of the node name for the step st, as Facts.Facts.cast says
-def Seat.cast(s: Facts.Plain(), name: String, st: Types.Step) -> Bool:
-  Shared.List.some(~Types.Fact, ~Facts.Seat, ~Fact.sits, Facts.Facts.list(s), Facts.Seat{name, st})
+# the facts that hold each ballot of s at the step st: those that a work
+# may act on, if the table kn holds them and a ballot at st waits; else all
+# the facts of s
+def Seat.facts(+kn: Known.Known(), +s: Facts.Plain(), st: Types.Step) -> List<&2, Types.Fact>:
+  match st:
+    case Types.Step.Broken{}:
+      Facts.Facts.list(s)
+    case Types.Step.At{+c, k, t}:
+      Shared.Bool.when(
+        List<&2, Types.Fact>,
+        Known.Slot.waits(Known.Known.state(kn, s, c), k),
+        u => Known.Known.facts(kn, s),
+        u => Facts.Facts.list(s)
+      )
 
-# the fast node with the facts s after its ballot at the step st, and the
+# s holds a vote of the node name for the step st, as Facts.Facts.cast says
+def Seat.cast(+kn: Known.Known(), +s: Facts.Plain(), name: String, +st: Types.Step) -> Bool:
+  Shared.List.some(
+    ~Types.Fact,
+    ~Facts.Seat,
+    ~Fact.sits,
+    Seat.facts(kn, s, st),
+    Facts.Seat{name, st}
+  )
+
+# the fast node with the facts s after its ballot f at the step st, and the
 # table that the ballot leaves of kn
 def Fast.casts.to(
   name: String,
@@ -228,10 +334,10 @@ def Fast.casts.to(
   +s: Facts.Plain(),
   ps: Parts.Parts,
   +kn: Known.Known(),
-  st: Types.Step
+  st: Types.Step,
+  f: Types.Fact
 ) -> Fast:
-  +st = st
-  Fast{Nodes.Raw{name, ws, ms, False{}, s, ps}, Table.voted(kn, s, st), Step.spares(st)}
+  Fast{Nodes.Raw{name, ws, ms, False{}, s, ps}, Table.voted(kn, s, st, f)}
 
 # the fast node after a work that plans the ballot x at the step st: with the
 # ballot, unless its facts hold a ballot of the node at the step (done)
@@ -244,13 +350,22 @@ def Fast.casts.if(
   ps: Parts.Parts,
   +kn: Known.Known(),
   +st: Types.Step,
-  x: Types.Cast
+  +x: Types.Cast
 ) -> Fast:
   match done:
     case True{}:
-      Fast{Nodes.Raw{name, ws, ms, False{}, fs, ps}, kn, True{}}
+      Fast{Nodes.Raw{name, ws, ms, False{}, fs, ps}, kn}
     case False{}:
-      Fast.casts.to(name, ws, ms, Facts.Facts.add(fs, Types.Fact.Vote{name, st, x}), ps, kn, st)
+      Fast.casts.to(
+        name,
+        ws,
+        ms,
+        Facts.Facts.add(fs, Types.Fact.Vote{name, st, x}),
+        ps,
+        kn,
+        st,
+        Types.Fact.Vote{name, st, x}
+      )
 
 # What a fast node does
 # ---------------------
@@ -269,9 +384,9 @@ def Fast.works.at(
 ) -> Fast:
   match m:
     case None{}:
-      Fast{Nodes.Raw{name, ws, ms, False{}, fs, ps}, kn, True{}}
+      Fast{Nodes.Raw{name, ws, ms, False{}, fs, ps}, kn}
     case Some{Works.Plan{+st, x}}:
-      Fast.casts.if(Seat.cast(fs, name, st), name, ws, ms, fs, ps, kn, st, x)
+      Fast.casts.if(Seat.cast(kn, fs, name, st), name, ws, ms, fs, ps, kn, st, x)
 
 # the fast node after a work, read through the table kn of the states that
 # the work reads
@@ -286,7 +401,8 @@ def Fast.works.on(
   Fast.works.at(name, ws, ms, fs, ps, kn, Works.Work.plan(kn, fs, name))
 
 # the fast node after a work, unless it has stopped: the work learns the
-# lines that it reads, unless the table holds them (read)
+# lines that it reads and the facts that it may act on, unless the table
+# holds them
 def Fast.works(
   +name: String,
   ws: List<&2, String>,
@@ -294,83 +410,72 @@ def Fast.works(
   st: Bool,
   +fs: Facts.Plain(),
   ps: Parts.Parts,
-  kn: Known.Known(),
-  read: Bool
+  +kn: Known.Known()
 ) -> Fast:
   match st:
     case True{}:
-      Fast{Nodes.Raw{name, ws, ms, True{}, fs, ps}, kn, read}
+      Fast{Nodes.Raw{name, ws, ms, True{}, fs, ps}, kn}
     case False{}:
-      Fast.works.on(name, ws, ms, fs, ps, Learn.if(read, kn, fs))
+      Fast.works.on(name, ws, ms, fs, ps, Learn.if(Table.read(kn), kn, fs))
 
 # the fast node f after the deed a: its state is the state that
 # Nodes.Raw.does gives, read through the table; the table keeps the states
 # that the deed cannot change
 def Fast.does(f: Fast, a: Nodes.Act) -> Fast:
   match f a:
-    case Fast{r, kn, ld} Nodes.Act.Connect{w}:
-      Fast{Nodes.Raw.does(r, Nodes.Act.Connect{w}), kn, ld}
-    case Fast{r, kn, ld} Nodes.Act.Leave{w}:
-      Fast{Nodes.Raw.does(r, Nodes.Act.Leave{w}), kn, ld}
-    case Fast{Nodes.Raw{name, +ws, ms, +st, fs, ps}, kn, ld} Nodes.Act.Ask{+i, +q}:
-      Fast.asked(
-        Fast.asks(
-          name,
-          ws,
-          ms,
-          st,
-          fs,
-          ps,
-          i,
-          q,
-          Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
-        ),
+    case Fast{r, kn} Nodes.Act.Connect{w}:
+      Fast{Nodes.Raw.does(r, Nodes.Act.Connect{w}), kn}
+    case Fast{r, kn} Nodes.Act.Leave{w}:
+      Fast{Nodes.Raw.does(r, Nodes.Act.Leave{w}), kn}
+    case Fast{Nodes.Raw{name, +ws, ms, +st, +fs, ps}, +kn} Nodes.Act.Ask{+i, +q}:
+      Fast.asks.to(
+        name,
+        ws,
+        ms,
+        st,
+        fs,
+        ps,
         Table.asked(kn, q),
-        ld,
-        q
+        Asked.ask(kn, fs, i, q),
+        q,
+        Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
       )
-    case Fast{r, kn, ld} Nodes.Act.Sync{from}:
-      Fast{Nodes.Raw.does(r, Nodes.Act.Sync{from}), Known.Known.none(), False{}}
-    case Fast{Nodes.Raw{+name, ws, ms, +st, fs, ps}, kn, ld} Nodes.Act.Mount{+a, +b, +p, held}:
-      Fast.asked(
-        Fast.asks(
-          name,
-          ws,
-          Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
-          st,
-          fs,
-          ps,
-          Nodes.Mount.id(name, a),
-          Spec.Request.Write{b, p, Some{held}},
-          Bool.not(st)
-        ),
+    case Fast{r, kn} Nodes.Act.Sync{from}:
+      Fast{Nodes.Raw.does(r, Nodes.Act.Sync{from}), Known.Known.none()}
+    case Fast{Nodes.Raw{+name, ws, ms, +st, +fs, ps}, +kn} Nodes.Act.Mount{+a, +b, +p, held}:
+      Fast.asks.to(
+        name,
+        ws,
+        Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+        st,
+        fs,
+        ps,
         kn,
-        ld,
-        Spec.Request.Write{b, p, None{}}
+        Asked.ask(kn, fs, Nodes.Mount.id(name, a), Spec.Request.Write{b, p, Some{held}}),
+        Spec.Request.Write{b, p, None{}},
+        Bool.not(st)
       )
-    case Fast{r, kn, ld} Nodes.Act.Unmount{a}:
-      Fast{Nodes.Raw.does(r, Nodes.Act.Unmount{a}), kn, ld}
-    case Fast{Nodes.Raw{name, ws, ms, st, fs, ps}, kn, ld} Nodes.Act.Work{}:
-      Fast.works(name, ws, ms, st, fs, ps, kn, ld)
-    case Fast{Nodes.Raw{+name, ws, +ms, st, +fs, ps}, +kn, ld} Nodes.Act.Drop{}:
+    case Fast{r, kn} Nodes.Act.Unmount{a}:
+      Fast{Nodes.Raw.does(r, Nodes.Act.Unmount{a}), kn}
+    case Fast{Nodes.Raw{name, ws, ms, st, fs, ps}, kn} Nodes.Act.Work{}:
+      Fast.works(name, ws, ms, st, fs, ps, kn)
+    case Fast{Nodes.Raw{+name, ws, +ms, st, +fs, ps}, +kn} Nodes.Act.Drop{}:
       Fast{
         Nodes.Raw{name, ws, ms, st, fs, Parts.Parts.only(ps, Nodes.Needs.of(kn, fs, name, ms))},
-        kn,
-        ld
+        kn
       }
-    case Fast{r, kn, ld} Nodes.Act.Stop{force}:
-      Fast{Nodes.Raw.does(r, Nodes.Act.Stop{force}), kn, ld}
+    case Fast{r, kn} Nodes.Act.Stop{force}:
+      Fast{Nodes.Raw.does(r, Nodes.Act.Stop{force}), kn}
 
 # the fast node f with the states of the line c and of its store, and the
 # content of each version of c, in its table: a read of c does not read it
 # again from all the facts
 def Fast.learn(f: Fast, +c: Ledgers.Line) -> Fast:
   match f:
-    case Fast{+r, kn, ld}:
+    case Fast{+r, kn}:
       Fast{
         r,
-        Contents.Known.warm(Known.Known.learn(kn, Nodes.Raw.facts(r), c), Nodes.Raw.facts(r), c),
-        ld
+        Contents.Known.warm(Known.Known.learn(kn, Nodes.Raw.facts(r), c), Nodes.Raw.facts(r), c)
       }
 
 # What a fast node shows
@@ -384,7 +489,7 @@ def Fast.holds(f: Fast, c: Types.Change) -> Bool:
 # fast node f reads them
 def Fast.read(f: Fast, c: Ledgers.Line, k: Nat, p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   match f:
-    case Fast{r, kn, ld}:
+    case Fast{r, kn}:
       Contents.Content.read(kn, Nodes.Raw.facts(r), c, k, p)
 
 # the words of the resource at the path p of the branch b, as the fast node
@@ -396,13 +501,13 @@ def Fast.view(
   p: String
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   match f:
-    case Fast{r, kn, ld}:
+    case Fast{r, kn}:
       Answers.View.at(kn, Nodes.Raw.facts(r), w, b, p)
 
 # the reply of the fast node f to the question q
 def Fast.answer(f: Fast, q: Spec.Question) -> Maybe<&2, Spec.Reply>:
   match f:
-    case Fast{r, kn, ld}:
+    case Fast{r, kn}:
       Answers.Answer.of(kn, Nodes.Raw.facts(r), q)
 
 # the voters that the fast node f proves to be liars
@@ -418,8 +523,9 @@ def Fast.part(f: Fast, h: Hashes.Hash) -> Maybe<&2, List<&2, U32>>:
   Nodes.Raw.part(Fast.raw(f), h)
 
 # the table of the fast node f is right: each state and each content that it
-# holds is what the facts of f give
+# holds is what the facts of f give, and the facts that it holds for a work
+# are those that a work may still act on
 def Fast.ok(f: Fast) -> Bool:
   match f:
-    case Fast{r, kn, ld}:
-      Contents.Known.ok(kn, Nodes.Raw.facts(r))
+    case Fast{+r, +kn}:
+      Contents.Known.fit(kn, Nodes.Raw.facts(r))

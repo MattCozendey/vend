@@ -248,9 +248,15 @@ def Work.open(
   +st = Known.Known.state(kn, s, c)
   Work.open.at(name, st, Work.rule.or(Known.Known.ruled(kn, c), kn, s, c, st))
 
-# the ballots that s holds for the slot k of the line c
-def Work.ballots(s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> List<&2, Rounds.Ballot>:
-  Rounds.Slot.ballots(Facts.Facts.list(s), c, k)
+# the ballots that s holds for the next slot k of the line c: read from the
+# facts that a work may act on, if the table kn holds them
+def Work.ballots(
+  kn: Known.Known(),
+  s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat
+) -> List<&2, Rounds.Ballot>:
+  Rounds.Slot.ballots(Known.Known.facts(kn, s), c, k)
 
 # the plan to cast the ballot m, if any, for the slot k of the line c
 def Plan.of(c: Ledgers.Line, k: Nat, m: Maybe<&2, Rounds.Draft>) -> Maybe<&2, Plan>:
@@ -292,7 +298,7 @@ def Work.offer.at(
           k,
           Work.offer.of(
             u2 => Types.Pick{a, Pins.for(kn, s, c, vs, Era.now(kn, s, c), Lines.Ask.request(a))},
-            Rounds.Slot.chance(Work.ballots(s, c, k), ns, k, name)
+            Rounds.Slot.chance(Work.ballots(kn, s, c, k), ns, k, name)
           )
         )
       )
@@ -360,9 +366,13 @@ def Work.propose.of(
       Work.offer(kn, s, all, name, a)
 
 # the vote that the node name proposes: for the ask that it took in last,
-# among those that it may vote for
-def Work.propose(+kn: Known.Known(), +s: Facts.Plain(), +name: String) -> Maybe<&2, Plan>:
-  +all = Facts.Facts.list(s)
+# among those of the facts all that it may vote for
+def Work.propose.on(
+  +all: List<&2, Types.Fact>,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String
+) -> Maybe<&2, Plan>:
   Work.propose.of(
     Lists.List.top(~Types.Ask, ~Facts.Ask.seq, Work.ready(all, kn, s, all, name)),
     kn,
@@ -371,10 +381,17 @@ def Work.propose(+kn: Known.Known(), +s: Facts.Plain(), +name: String) -> Maybe<
     name
   )
 
+# the vote that the node name proposes: for the ask that it took in last,
+# among those that it may vote for; it walks the facts that a work may act
+# on, if the table kn holds them
+def Work.propose(+kn: Known.Known(), +s: Facts.Plain(), +name: String) -> Maybe<&2, Plan>:
+  Work.propose.on(Known.Known.facts(kn, s), kn, s, name)
+
 # the vote of the node name at the slot k of the line c, when it is the next
 # slot m of the line: as a sound vote that it holds, or as the votes of the
 # rounds before bind it
 def Work.follow.at(
+  kn: Known.Known(),
   +s: Facts.Plain(),
   +name: String,
   +c: Ledgers.Line,
@@ -388,7 +405,7 @@ def Work.follow.at(
       Shared.Maybe.when(
         Plan,
         Nat.is_eq(k2, k),
-        u => Plan.of(c, k, Rounds.Slot.follow(Work.ballots(s, c, k), ns, k, name))
+        u => Plan.of(c, k, Rounds.Slot.follow(Work.ballots(kn, s, c, k), ns, k, name))
       )
 
 # the vote of the node name at the slot of the fact f, if f is a ballot
@@ -400,7 +417,7 @@ def Work.follow.of(
 ) -> Maybe<&2, Plan>:
   match f:
     case Types.Fact.Vote{v, Types.Step.At{+c, +k, t}, x}:
-      Work.follow.at(s, name, c, k, Work.open(kn, s, name, c))
+      Work.follow.at(kn, s, name, c, k, Work.open(kn, s, name, c))
     case _:
       None{}
 
@@ -429,7 +446,7 @@ def Work.follow(
 # slot k, if any, and the request of the id i, if any, made no version of
 # the line yet, as read through the table kn
 def Work.pass.at(
-  kn: Known.Known(),
+  +kn: Known.Known(),
   +s: Facts.Plain(),
   +name: String,
   +c: Ledgers.Line,
@@ -444,13 +461,13 @@ def Work.pass.at(
       Shared.Maybe.when(
         Plan,
         Nat.is_eq(k2, k1),
-        u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(s, c, k2), name))
+        u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(kn, s, c, k2), name))
       )
     case None{} Some{id} Some{Open{vs, +k2, ns}}:
       Shared.Maybe.when(
         Plan,
         Bool.not(Known.Known.made(kn, c, vs, id)),
-        u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(s, c, k2), name))
+        u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(kn, s, c, k2), name))
       )
     case None{} None{} _:
       None{}
@@ -513,17 +530,26 @@ def Work.pass.all(
 ) -> Maybe<&2, Plan>:
   Work.pass(all, kn, s, all, name)
 
+# the ballot that the node name casts next, read from the facts all: the
+# vote that it proposes, else a vote at a slot that it holds a ballot for,
+# else a pass at a slot that waits
+def Work.plan.on(
+  +all: List<&2, Types.Fact>,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String
+) -> Maybe<&2, Plan>:
+  Work.follow.or(
+    Work.propose.on(all, kn, s, name),
+    u => Work.follow.or(Work.follow(kn, s, name, all), u2 => Work.pass.all(all, kn, s, name))
+  )
+
 # the ballot that the node name casts next: the vote that it proposes, else
 # a vote at a slot that it holds a ballot for, else a pass at a slot that
-# waits
+# waits; it walks the facts that a work may act on, if the table kn holds
+# them
 def Work.plan(+kn: Known.Known(), +s: Facts.Plain(), +name: String) -> Maybe<&2, Plan>:
-  Work.follow.or(
-    Work.propose(kn, s, name),
-    u => Work.follow.or(
-      Work.follow(kn, s, name, Facts.Facts.list(s)),
-      u2 => Work.pass.all(Facts.Facts.list(s), kn, s, name)
-    )
-  )
+  Work.plan.on(Known.Known.facts(kn, s), kn, s, name)
 
 # the facts s with the ballot m, if any, of the node name: unless s holds a
 # ballot of the node with the same number

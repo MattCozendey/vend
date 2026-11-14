@@ -1,9 +1,11 @@
 import Base
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/crit.bend as Crits
+import ../../shared/shared/shared/shared/crit_order.bend as Orders
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../codes.bend as Coded
+import ../spec.bend as Spec
 import ../types.bend as Types
 import ./facts.bend as Facts
 import ./files.bend as Files
@@ -28,14 +30,23 @@ import ./lines.bend as Lines
 # versions, as a set (Made): whether a request made a version of the line is
 # then one read of the set, not a read of each version.
 
+# The node also keeps the facts that a work may still act on (Open): the asks
+# whose request made no version of its line yet, and the ballots for a slot
+# that is not decided yet, in the order of the facts. A work walks them, not
+# all the facts. With them it keeps the greatest number of an ask among all
+# the facts, so the next ask gets its number without a walk. Only the first
+# such entry, before the contents, is read.
+
 # what a node keeps: a line and its state, or a version of a line and its
 # content, which a read with the fuel depth gives, or a line and the rule of
-# its next version, or a line and the ids of its versions
+# its next version, or a line and the ids of its versions, or the facts that
+# a work may still act on
 type Kept is Data:
   Kept{line: Ledgers.Line, state: Lines.State}
   Held{line: Ledgers.Line, version: Nat, depth: Nat, files: Files.Files()}
   Ruled{line: Ledgers.Line, rule: Lines.Rule}
   Made{line: Ledgers.Line, ids: Crits.Crit<List<&2, Ledgers.Id>>}
+  Open{facts: List<&2, Types.Fact>, peak: Nat}
 
 # what a node keeps: the newest entry of a line first; the states before the
 # contents
@@ -64,6 +75,8 @@ def Known.find(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.State>:
       Known.find(rest, c)
     case Con{Made{c2, x}, rest}:
       Known.find(rest, c)
+    case Con{Open{fs, n}, rest}:
+      Known.find(rest, c)
 
 # the rule of the next version of the line c that the table kn holds, if any
 def Known.ruled(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.Rule>:
@@ -82,6 +95,8 @@ def Known.ruled(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.Rule>:
         u2 => Known.ruled(rest, c)
       )
     case Con{Made{c2, x}, rest}:
+      Known.ruled(rest, c)
+    case Con{Open{fs, n}, rest}:
       Known.ruled(rest, c)
 
 # the content of version k of the line c that the table kn holds, with the
@@ -102,6 +117,8 @@ def Known.held(kn: Known(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Kept>:
     case Con{Ruled{c2, u}, rest}:
       Known.held(rest, c, k)
     case Con{Made{c2, y}, rest}:
+      Known.held(rest, c, k)
+    case Con{Open{fs, n}, rest}:
       Known.held(rest, c, k)
 
 # the files of the entry m, if it is a content that a read with the fuel f
@@ -143,6 +160,8 @@ def Known.hold(kn: Known(), e: Kept) -> Known():
       Ruled{c, u} <> Known.hold(rest, e)
     case Con{Made{c, x}, rest}:
       Made{c, x} <> Known.hold(rest, e)
+    case Con{Open{fs, n}, rest}:
+      Open{fs, n} <> Known.hold(rest, e)
     case Con{Held{c, k, d, x}, rest}:
       e <> Held{c, k, d, x} <> rest
 
@@ -159,6 +178,91 @@ def Known.contents(kn: Known()) -> Known():
       Known.contents(rest)
     case Con{Made{c, x}, rest}:
       Known.contents(rest)
+    case Con{Open{fs, n}, rest}:
+      Known.contents(rest)
+
+# Open facts
+# ----------
+
+# what the table kn holds for a work: the first such entry, before the
+# contents
+def Known.shelf(kn: Known()) -> Maybe<&2, Kept>:
+  match kn:
+    case Nil{}:
+      None{}
+    case Con{Kept{c, st}, rest}:
+      Known.shelf(rest)
+    case Con{Held{c, k, d, x}, rest}:
+      None{}
+    case Con{Ruled{c, u}, rest}:
+      Known.shelf(rest)
+    case Con{Made{c, x}, rest}:
+      Known.shelf(rest)
+    case Con{Open{fs, n}, rest}:
+      Some{Open{fs, n}}
+
+# the facts that a work may still act on, of the entry m, if it holds them
+def Shelf.facts(m: Maybe<&2, Kept>) -> Maybe<&2, List<&2, Types.Fact>>:
+  match m:
+    case Some{Open{fs, n}}:
+      Some{fs}
+    case _:
+      None{}
+
+# the facts that a work may still act on, that the table kn holds
+def Known.open(kn: Known()) -> Maybe<&2, List<&2, Types.Fact>>:
+  Shelf.facts(Known.shelf(kn))
+
+# the facts m that a work may act on, or else all the facts of s
+def Open.or(m: Maybe<&2, List<&2, Types.Fact>>, s: Facts.Plain()) -> List<&2, Types.Fact>:
+  match m:
+    case None{}:
+      Facts.Facts.list(s)
+    case Some{fs}:
+      fs
+
+# the facts that a work walks: those that the table kn holds for it, else
+# all the facts of s
+def Known.facts(kn: Known(), s: Facts.Plain()) -> List<&2, Types.Fact>:
+  Open.or(Known.open(kn), s)
+
+# the greatest number of an ask in the facts s: as the entry m holds it, else
+# read from the facts
+def Shelf.peak(m: Maybe<&2, Kept>, s: Facts.Plain()) -> Nat:
+  match m:
+    case Some{Open{fs, n}}:
+      n
+    case _:
+      Facts.Seq.peak(Facts.Facts.list(s))
+
+# the greatest number of an ask in the facts s, read through the table kn
+def Known.peak(kn: Known(), s: Facts.Plain()) -> Nat:
+  Shelf.peak(Known.shelf(kn), s)
+
+# the greatest number of an ask that the entry m holds; else 0
+def Shelf.top(m: Maybe<&2, Kept>) -> Nat:
+  match m:
+    case Some{Open{fs, n}}:
+      n
+    case _:
+      0n
+
+# the table kn with the facts fs and the number n in the place of what it
+# holds for a work, if it holds it
+def Known.reopen(kn: Known(), fs: List<&2, Types.Fact>, n: Nat) -> Known():
+  match kn:
+    case Nil{}:
+      []
+    case Con{Kept{c, st}, rest}:
+      Kept{c, st} <> Known.reopen(rest, fs, n)
+    case Con{Held{c, k, d, x}, rest}:
+      Held{c, k, d, x} <> rest
+    case Con{Ruled{c, u}, rest}:
+      Ruled{c, u} <> Known.reopen(rest, fs, n)
+    case Con{Made{c, x}, rest}:
+      Made{c, x} <> Known.reopen(rest, fs, n)
+    case Con{Open{old, m}, rest}:
+      Open{fs, n} <> rest
 
 # Known ids
 # ---------
@@ -250,6 +354,8 @@ def Known.ids(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Ids()>:
         u2 => Some{x},
         u2 => Known.ids(rest, c)
       )
+    case Con{Open{fs, n}, rest}:
+      Known.ids(rest, c)
 
 # the request of the id i made one of the versions vs: read from their ids
 # m, if known
@@ -389,6 +495,149 @@ def Known.rule.next(
     case Some{Lines.State{vs, k}}:
       Known.rule(kn, s, c, vs)
 
+# What a work may still act on
+# ----------------------------
+# A work casts a ballot for an ask only while its request made no version of
+# its line, and at the slot of a ballot only while that slot is the next one
+# of its line. So a fact that waits no more never gives a ballot again: the
+# versions and the next slot of a line only grow. A merge and a request that
+# resolves one always wait: a work reads the line of a merge from its ask.
+
+# the facts of a node, and the table through which they are read
+type Scene is Data:
+  Scene{known: Known(), facts: Facts.Plain()}
+
+# a ballot for the slot k of a line in the state m waits: the next slot of
+# the line is not past k
+def Slot.waits(m: Maybe<&2, Lines.State>, k: Nat) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Lines.State{vs, j}}:
+      Nat.is_le(j, k)
+
+# the request of the id i waits on the line c in the state m: it made no
+# version of the line, as read through the table kn
+def Id.waits(m: Maybe<&2, Lines.State>, kn: Known(), +c: Ledgers.Line, i: Ledgers.Id) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Lines.State{vs, k}}:
+      Bool.not(Known.made(kn, c, vs, i))
+
+# the request of the id i waits on the line c in the facts s
+def Line.waits(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, i: Ledgers.Id) -> Bool:
+  Id.waits(Known.state(kn, s, c), kn, c, i)
+
+# the request r of the id i waits: it made no version of the line that it is
+# for; a start never waits
+def Request.waits(+kn: Known(), +s: Facts.Plain(), i: Ledgers.Id, r: Spec.Request) -> Bool:
+  match r:
+    case Spec.Request.Start{os}:
+      False{}
+    case Spec.Request.Write{+b, p, w}:
+      Line.waits(kn, s, b, i)
+    case Spec.Request.Merge{f, x}:
+      True{}
+    case Spec.Request.Resolve{m, p, w}:
+      True{}
+    case Spec.Request.Mark{+b, m, v}:
+      Line.waits(kn, s, b, i)
+    case Spec.Request.Move{+b, t, v}:
+      Line.waits(kn, s, b, i)
+    case Spec.Request.Group{h, g, ms}:
+      Line.waits(kn, s, Ledgers.Line{h, None{}}, i)
+    case Spec.Request.Own{Ledgers.Line{h, b}, g}:
+      Line.waits(kn, s, Ledgers.Line{h, None{}}, i)
+
+# a work may still act on the fact f, in the scene g
+def Fact.waits(g: Scene, f: Types.Fact) -> Bool:
+  match g f:
+    case Scene{kn, s} Types.Fact.Vote{v, Types.Step.Broken{}, x}:
+      False{}
+    case Scene{+kn, +s} Types.Fact.Vote{v, Types.Step.At{+c, k, t}, x}:
+      Slot.waits(Known.state(kn, s, c), k)
+    case Scene{+kn, +s} Types.Fact.Ask{Types.Ask{i, n, r}}:
+      Request.waits(kn, s, i, r)
+
+# the facts among fs that a work may still act on, in the scene g
+def Open.of(fs: List<&2, Types.Fact>, +g: Scene) -> List<&2, Types.Fact>:
+  Orders.Values.keep(~Types.Fact, ~Scene, ~Fact.waits, fs, g)
+
+# the facts fs, in the order of the facts of a node, with the fact f
+def Open.put(fs: List<&2, Types.Fact>, +f: Types.Fact) -> List<&2, Types.Fact>:
+  Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)
+
+# the facts fs that a work may act on, with the fact f if a work may act on
+# it in the scene g
+def Open.with(+fs: List<&2, Types.Fact>, +f: Types.Fact, g: Scene) -> List<&2, Types.Fact>:
+  Shared.Bool.when(List<&2, Types.Fact>, Fact.waits(g, f), u => Open.put(fs, f), u => fs)
+
+# the table kn, when the fact f joins the facts and leaves each line as it
+# is: what the entry m holds for a work, with f; s is the facts with f
+def Known.joined.of(m: Maybe<&2, Kept>, +kn: Known(), s: Facts.Plain(), +f: Types.Fact) -> Known():
+  match m:
+    case Some{Open{fs, n}}:
+      Known.reopen(kn, Open.with(fs, f, Scene{kn, s}), Nat.max(Facts.Seq.of(f), n))
+    case _:
+      kn
+
+# the table kn, when the fact f joins the facts and leaves each line as it
+# is; s is the facts with f
+def Known.joined(+kn: Known(), s: Facts.Plain(), f: Types.Fact) -> Known():
+  Known.joined.of(Known.shelf(kn), kn, s, f)
+
+# the table kn with the facts of s that a work may act on, and the greatest
+# number of an ask among all, the facts of s
+def Known.opened.of(+kn: Known(), +s: Facts.Plain(), +all: List<&2, Types.Fact>) -> Known():
+  Open{Open.of(all, Scene{kn, s}), Facts.Seq.peak(all)} <> kn
+
+# the table kn with the facts of s that a work may act on
+def Known.opened(+kn: Known(), +s: Facts.Plain()) -> Known():
+  Known.opened.of(kn, s, Facts.Facts.list(s))
+
+# the facts m that a work could act on, if known, with the fact f
+def Known.walk.of(
+  m: Maybe<&2, List<&2, Types.Fact>>,
+  f: Types.Fact
+) -> Maybe<&2, List<&2, Types.Fact>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{fs}:
+      Some{Open.put(fs, f)}
+
+# the facts that the table kn holds for a work, if any, with the fact f
+def Known.walk(kn: Known(), f: Types.Fact) -> Maybe<&2, List<&2, Types.Fact>>:
+  Known.walk.of(Known.open(kn), f)
+
+# the facts w, when a ballot leaves the other lines as they are (safe); else
+# none
+def Known.walk.if(
+  safe: Bool,
+  w: Maybe<&2, List<&2, Types.Fact>>
+) -> Maybe<&2, List<&2, Types.Fact>>:
+  match safe:
+    case True{}:
+      w
+    case False{}:
+      None{}
+
+# the table kn with the facts that a work may act on in the facts s, among
+# the facts m that it could act on before with the fact that joined them, if
+# known; n is the greatest number of an ask in s
+def Known.moved(
+  +kn: Known(),
+  +s: Facts.Plain(),
+  m: Maybe<&2, List<&2, Types.Fact>>,
+  n: Nat
+) -> Known():
+  match m:
+    case None{}:
+      kn
+    case Some{fs}:
+      Open{Open.of(fs, Scene{kn, s}), n} <> kn
+
 # What a node learns
 # ------------------
 
@@ -492,9 +741,12 @@ def Known.voted.put(c: Ledgers.Line, e: Kept, rest: Known()) -> Known():
       List.filter.put(Kept, Ruled{c2, u}, rest, Bool.not(Known.hit(c, c2)))
     case Made{+c2, +y}:
       List.filter.put(Kept, Made{c2, y}, rest, Bool.not(Known.hit(c, c2)))
+    case Open{fs, n}:
+      rest
 
 # the table kn after a vote for a slot of the line c: without the states and
-# the rules that the vote may change, and without the contents
+# the rules that the vote may change, without the contents, and without the
+# facts that a work may act on
 def Known.voted(kn: Known(), +c: Ledgers.Line) -> Known():
   match kn:
     case Nil{}:
@@ -636,10 +888,38 @@ def Known.over(
     case Ledgers.Line{h, Some{b}}:
       Known.over.of(m)
 
+# the state of the line c after each decided slot from st on, read from the
+# facts fs: a run that may go one slot past the greatest slot of c that a
+# ballot among fs is for
+def Known.go.in(
+  +fs: List<&2, Types.Fact>,
+  +c: Ledgers.Line,
+  +st: Lines.State,
+  +r: Maybe<&2, List<&2, Types.Entry>>
+) -> Lines.State:
+  Lines.Line.run.in(1n+Lines.Line.bound(fs, c), fs, r, c, st, Lines.Line.step.in(fs, r, c, st))
+
+# the state of the line c after each decided slot from st on, in the facts
+# s: read from the facts w that hold each ballot that still counts, if known
+def Known.go.of(
+  w: Maybe<&2, List<&2, Types.Fact>>,
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +st: Lines.State,
+  +r: Maybe<&2, List<&2, Types.Entry>>
+) -> Lines.State:
+  match w:
+    case None{}:
+      Known.go.at(s, c, st, r)
+    case Some{+fs}:
+      Known.go.in(fs, c, st, r)
+
 # the state of the line c in the facts s, after a ballot for its slot k:
 # the run from its known state m, when k is the next slot of m and the
-# versions r that the run reads are known
+# versions r that the run reads are known; the run reads the facts w, if
+# known
 def Known.next.of(
+  w: Maybe<&2, List<&2, Types.Fact>>,
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   k: Nat,
@@ -651,7 +931,7 @@ def Known.next.of(
       Shared.Maybe.when(
         Lines.State,
         Nat.is_eq(Lines.State.slot(st), k),
-        u => Some{Known.go.at(s, c, st, rr)}
+        u => Some{Known.go.of(w, s, c, st, rr)}
       )
     case _ _:
       None{}
@@ -715,8 +995,15 @@ def Known.cast.to(
 # the table kn after a ballot for the slot k of the line c, where s is the
 # facts with the ballot: without the states that the ballot may change, with
 # the state of c continued from the state that kn holds for it, with the ids
-# of its versions, and with the contents that the ballot leaves as they are
-def Known.cast(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Known():
+# of its versions, and with the contents that the ballot leaves as they are;
+# w is the facts that a work could act on, with the ballot, if known
+def Known.cast(
+  +kn: Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  w: Maybe<&2, List<&2, Types.Fact>>
+) -> Known():
   Known.cast.to(
     kn,
     c,
@@ -726,5 +1013,5 @@ def Known.cast(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Kn
       Known.voted(kn, c),
       Known.spared(Known.safe(c, Known.find(kn, c), Known.find(kn, Known.root(c)), k), kn)
     ),
-    Known.next.of(s, c, k, Known.find(kn, c), Known.over(c, Known.find(kn, Known.root(c))))
+    Known.next.of(w, s, c, k, Known.find(kn, c), Known.over(c, Known.find(kn, Known.root(c))))
   )

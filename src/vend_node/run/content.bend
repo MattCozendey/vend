@@ -1,6 +1,7 @@
 import Base
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/shared.bend as Shared
+import ../codes.bend as Coded
 import ../shared/format.bend as Formats
 import ../spec.bend as Spec
 import ../types.bend as Types
@@ -432,7 +433,8 @@ def Content.read(
 # the entry e is right: its state is the state that the facts s give its
 # line, or its content is what a read of the facts s with its fuel gives, or
 # its rule is the rule of the next version of its line in the facts s, or its
-# ids are those of the versions of its line in the facts s
+# ids are those of the versions of its line in the facts s; the facts that a
+# work may act on are checked apart (Known.fit), since only the first counts
 def Kept.ok(+s: Facts.Plain(), e: Knowns.Kept) -> Bool:
   match e:
     case Knowns.Kept{c, st}:
@@ -443,6 +445,8 @@ def Kept.ok(+s: Facts.Plain(), e: Knowns.Kept) -> Bool:
       Knowns.Rule.fits(Knowns.Known.rule.next(Knowns.Known.none(), s, c, Lines.Line.state(s, c)), u)
     case Knowns.Made{c, x}:
       Knowns.Made.fits(Lines.Line.state(s, c), x)
+    case Knowns.Open{fs, n}:
+      True{}
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a table that is wrong, which then costs no more than a right table, where both sides run
 # the table kn is right for the facts s: each state and each content that it
@@ -453,6 +457,31 @@ def Known.ok(kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
       True{}
     case Con{e, rest}:
       Bool.and(Kept.ok(s, e), Known.ok(rest, s))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a table that is wrong, which then costs no more than a right table, where both sides run
+# what the entry m holds for a work, if it does, is right: the facts that a
+# work may still act on in the facts s, and the greatest number of an ask in
+# s
+def Shelf.fits(m: Maybe<&2, Knowns.Kept>, +s: Facts.Plain()) -> Bool:
+  match m:
+    case Some{Knowns.Open{fs, n}}:
+      Bool.and(
+        Shared.List.is_eq(
+          ~Types.Fact,
+          ~Coded.Fact.is_eq,
+          fs,
+          Knowns.Open.of(Facts.Facts.list(s), Knowns.Scene{Knowns.Known.none(), s})
+        ),
+        Nat.is_eq(n, Facts.Seq.peak(Facts.Facts.list(s)))
+      )
+    case _:
+      True{}
+
+# the table kn fits the facts s: it is right, and what it holds for a work
+# is right
+def Known.fit(+kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
+  Bool.and(Known.ok(kn, s), Shelf.fits(Knowns.Known.shelf(kn), s))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # What a node learns of the contents
@@ -517,6 +546,70 @@ def Known.fill.at(
   Known.fill.of(kn, c, k, d, Content.at(d, kn, s, c, k))
 
 # the table kn with the content of version k of the line c in the facts s,
+# read from the facts with a fuel that reaches it
+def Known.fill.slow(
+  +kn: Knowns.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat
+) -> Knowns.Known():
+  +d = Fill.fuel(k, kn, c, Knowns.Known.at(kn, s, c, k), Facts.Facts.fuel(s))
+  Known.fill.at(d, kn, s, c, k)
+
+# the table kn with the content of the version after j of the line c, made
+# by the request r, when the table holds the content x of version j, read
+# with the fuel d: a write is one change of x, and reads no other content
+def Known.fill.write(
+  r: Spec.Request,
+  +kn: Knowns.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +j: Nat,
+  +d: Nat,
+  x: Files.Files()
+) -> Knowns.Known():
+  match r:
+    case Spec.Request.Write{b, p, w}:
+      Known.fill.of(kn, c, 1n+j, 1n+d, Some{Files.Files.set(x, p, w)})
+    case Spec.Request.Resolve{m, p, w}:
+      Known.fill.of(kn, c, 1n+j, 1n+d, Some{Files.Files.set(x, p, w)})
+    case _:
+      Known.fill.slow(kn, s, c, 1n+j)
+
+# the table kn with the content of the version after j of the line c, the
+# entry e if the node holds it, when prev is what the table holds of the
+# content of version j
+def Known.fill.next(
+  prev: Maybe<&2, Knowns.Kept>,
+  e: Maybe<&2, Types.Entry>,
+  +kn: Knowns.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +j: Nat
+) -> Knowns.Known():
+  match prev e:
+    case Some{
+      Knowns.Held{c2, k2, d, x}
+    } Some{Types.Entry{Types.Pick{Types.Ask{i, n, r}, pins}, slot}}:
+      Known.fill.write(r, kn, s, c, j, d, x)
+    case _ _:
+      Known.fill.slow(kn, s, c, 1n+j)
+
+# the table kn with the content of version k of the line c in the facts s
+def Known.fill.new(
+  +kn: Knowns.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  k: Nat
+) -> Knowns.Known():
+  match k:
+    case 0n:
+      Known.fill.slow(kn, s, c, 0n)
+    case 1n+j:
+      +j = j
+      Known.fill.next(Knowns.Known.held(kn, c, j), Knowns.Known.at(kn, s, c, 1n+j), kn, s, c, j)
+
+# the table kn with the content of version k of the line c in the facts s,
 # unless the table holds it (old)
 def Known.fill.if(
   old: Bool,
@@ -529,13 +622,7 @@ def Known.fill.if(
     case True{}:
       kn
     case False{}:
-      Known.fill.at(
-        Fill.fuel(k, kn, c, Knowns.Known.at(kn, s, c, k), Facts.Facts.fuel(s)),
-        kn,
-        s,
-        c,
-        k
-      )
+      Known.fill.new(kn, s, c, k)
 
 # the table kn with the content of version k of the line c in the facts s
 def Known.fill(+kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Knowns.Known():
