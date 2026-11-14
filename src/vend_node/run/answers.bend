@@ -134,6 +134,36 @@ def Clashes.at(
     case _ _ _ _:
       None{}
 
+# the paths that clash in a merge, as Clashes.at gives them, when theirs is
+# base with the writes ws
+def Clashes.at.few(
+  ws: List<&2, Contents.Write>,
+  fits: Bool,
+  base: Maybe<&2, Files.Files()>,
+  ours: Maybe<&2, Files.Files()>,
+  theirs: Maybe<&2, Files.Files()>
+) -> Maybe<&2, List<&2, String>>:
+  match fits base ours theirs:
+    case True{} Some{b} Some{o} Some{t}:
+      Some{Contents.Merge.clashes.few(b, o, t, ws)}
+    case _ _ _ _:
+      None{}
+
+# the paths that clash in a merge, as Clashes.at gives them: when the writes
+# h that make theirs from base are known, only their paths are merged
+def Clashes.quick(
+  h: Maybe<&2, List<&2, Contents.Write>>,
+  fits: Bool,
+  base: Maybe<&2, Files.Files()>,
+  ours: Maybe<&2, Files.Files()>,
+  theirs: Maybe<&2, Files.Files()>
+) -> Maybe<&2, List<&2, String>>:
+  match h:
+    case None{}:
+      Clashes.at(fits, base, ours, theirs)
+    case Some{ws}:
+      Clashes.at.few(ws, fits, base, ours, theirs)
+
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- for an entry that is no merge, Merge.fits finds no base and stops
 # the paths that clash in the merge e, version k of the line c
 def Clashes.of(
@@ -150,7 +180,8 @@ def Clashes.of(
       +j = j
       +a = Contents.Entry.based(c, Some{e})
       +t = Contents.Entry.taken(c, Some{e})
-      Clashes.at(
+      Clashes.quick(
+        Contents.Merge.hint(Known.Known.find(kn, Spec.Point.line(t)), t, a),
         Bool.and(Contents.Request.is_merge(Entry.request(e)), Contents.Merge.fits(kn, s, c, j, e)),
         Contents.Content.of(kn, s, Spec.Point.line(a), Spec.Point.n(a)),
         Contents.Content.of(kn, s, c, j),

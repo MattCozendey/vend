@@ -242,6 +242,150 @@ def Merge.clashes.go(
 def Merge.clashes(+b: Files.Files(), +o: Files.Files(), +t: Files.Files()) -> List<&2, String>:
   Merge.clashes.go(b, o, t, Merge.paths(b, o, t))
 
+# Merges of a few writes
+# ----------------------
+# When what a merge takes is its base with a few writes, the merge changes
+# ours at most at the paths of those writes: a path that theirs left as the
+# base stays as ours. A node that holds the state of the line that the merge
+# takes from reads the writes from its versions, and merges only their paths.
+# merges.bend proves that this is the merge of every path (Merge.files).
+
+# a write: the words at a path (none: no resource)
+type Write is Data:
+  Write{path: String, words: Maybe<&2, List<&2, U32>>}
+
+# the writes m, if any, after the write of w at the path p
+def Write.put(
+  p: String,
+  w: Maybe<&2, List<&2, U32>>,
+  m: Maybe<&2, List<&2, Write>>
+) -> Maybe<&2, List<&2, Write>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{ws}:
+      Some{Write{p, w} <> ws}
+
+# the write of the request r, then the writes that rest gives: none when r
+# may change more than one path
+def Request.wrote(
+  r: Spec.Request,
+  rest: Unit -> Maybe<&2, List<&2, Write>>
+) -> Maybe<&2, List<&2, Write>>:
+  match r:
+    case Spec.Request.Start{os}:
+      rest(Unit{})
+    case Spec.Request.Write{b, p, w}:
+      Write.put(p, w, rest(Unit{}))
+    case Spec.Request.Merge{f, x}:
+      None{}
+    case Spec.Request.Resolve{m, p, w}:
+      Write.put(p, w, rest(Unit{}))
+    case Spec.Request.Mark{b, m, v}:
+      rest(Unit{})
+    case Spec.Request.Move{b, t, v}:
+      None{}
+    case Spec.Request.Group{h, g, ms}:
+      rest(Unit{})
+    case Spec.Request.Own{c, g}:
+      rest(Unit{})
+
+# the writes of the first n of the entries es, the oldest first: none when
+# one of them may change more than one path, or es has less than n entries
+def Writes.of(n: Nat, es: List<&2, Types.Entry>) -> Maybe<&2, List<&2, Write>>:
+  match n es:
+    case 0n es:
+      Some{[]}
+    case 1n+d Nil{}:
+      None{}
+    case 1n+d Con{e, rest}:
+      Request.wrote(Lines.Ask.request(Lines.Entry.ask(e)), u => Writes.of(d, rest))
+
+# the writes that make the content of the point t from the content of the
+# point a, when both are versions of one line, a is not after t, and the
+# table holds the state m of the line
+def Merge.hint(
+  m: Maybe<&2, Lines.State>,
+  t: Spec.Point,
+  a: Spec.Point
+) -> Maybe<&2, List<&2, Write>>:
+  match m t a:
+    case None{} t a:
+      None{}
+    case Some{Lines.State{vs, k}} Spec.Point{tl, +tn} Spec.Point{al, +an}:
+      Shared.Maybe.when(
+        List<&2, Write>,
+        List.all.if(u => Nat.is_le(an, tn), Ledgers.Line.is_eq(al, tl)),
+        u => Writes.of(Nat.sub(tn, an), List.drop(&2, Types.Entry, vs, 1n+an))
+      )
+
+# the paths of the writes ws
+def Writes.paths(ws: List<&2, Write>) -> List<&2, String>:
+  match ws:
+    case Nil{}:
+      []
+    case Con{Write{p, w}, rest}:
+      p <> Writes.paths(rest)
+
+# the merge of ours o and theirs t from the base b, when t is b with the
+# writes ws: only the paths of ws are merged
+def Merge.few(
+  +b: Files.Files(),
+  +o: Files.Files(),
+  +t: Files.Files(),
+  ws: List<&2, Write>
+) -> Files.Files():
+  Merge.fold(b, o, t, Writes.paths(ws), o)
+
+# the paths among ps that are among cs
+def Paths.among(ps: List<&2, String>, +cs: List<&2, String>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      []
+    case Con{+p, rest}:
+      List.filter.put(
+        String,
+        p,
+        Paths.among(rest, cs),
+        List.contains(~String, ~String.eq, cs, p)
+      )
+
+# the paths among those that ps gives that are among cs: none when cs is
+# empty, and then ps is not read
+def Merge.clashes.few.of(cs: List<&2, String>, ps: Unit -> List<&2, String>) -> List<&2, String>:
+  match cs:
+    case Nil{}:
+      []
+    case Con{p, rest}:
+      Paths.among(ps(Unit{}), p <> rest)
+
+# the paths that clash in the merge of o and t from b, as Merge.clashes
+# gives them, when t is b with the writes ws: only the paths of ws are
+# merged, and the paths of the three are walked only when one of those
+# clashes
+def Merge.clashes.few(
+  +b: Files.Files(),
+  +o: Files.Files(),
+  +t: Files.Files(),
+  ws: List<&2, Write>
+) -> List<&2, String>:
+  Merge.clashes.few.of(Merge.clashes.go(b, o, t, Writes.paths(ws)), u => Merge.paths(b, o, t))
+
+# the merge of ours and theirs from base, as Merge.of gives it, when theirs
+# is base with the writes ws
+def Merge.of.few(
+  ws: List<&2, Write>,
+  fits: Bool,
+  ours: Maybe<&2, Files.Files()>,
+  theirs: Maybe<&2, Files.Files()>,
+  base: Maybe<&2, Files.Files()>
+) -> Maybe<&2, Files.Files()>:
+  match fits ours theirs base:
+    case True{} Some{o} Some{t} Some{b}:
+      Some{Merge.few(b, o, t, ws)}
+    case _ _ _ _:
+      None{}
+
 # The content of a version
 # ------------------------
 
@@ -307,6 +451,52 @@ def Content.next(
     case Some{e}:
       Content.apply(Lines.Ask.request(Lines.Entry.ask(e)), fits, prev, other, base)
 
+# the content after the request r, as Content.apply gives it, when other is
+# base with the writes ws
+def Content.apply.few(
+  ws: List<&2, Write>,
+  r: Spec.Request,
+  fits: Bool,
+  prev: Maybe<&2, Files.Files()>,
+  other: Maybe<&2, Files.Files()>,
+  base: Maybe<&2, Files.Files()>
+) -> Maybe<&2, Files.Files()>:
+  match r:
+    case Spec.Request.Merge{f, x}:
+      Merge.of.few(ws, fits, prev, other, base)
+    case Spec.Request.Start{os}:
+      prev
+    case Spec.Request.Write{b, p, w}:
+      Content.write(p, w, prev)
+    case Spec.Request.Resolve{m, p, w}:
+      Content.write(p, w, prev)
+    case Spec.Request.Mark{b, m, v}:
+      prev
+    case Spec.Request.Move{b, t, v}:
+      other
+    case Spec.Request.Group{h, g, ms}:
+      prev
+    case Spec.Request.Own{c, g}:
+      prev
+
+# the content of a version, as Content.next gives it: when the writes h that
+# make other from base are known, a merge reads only their paths
+def Content.quick(
+  h: Maybe<&2, List<&2, Write>>,
+  m: Maybe<&2, Types.Entry>,
+  fits: Bool,
+  prev: Maybe<&2, Files.Files()>,
+  other: Maybe<&2, Files.Files()>,
+  base: Maybe<&2, Files.Files()>
+) -> Maybe<&2, Files.Files()>:
+  match h m:
+    case None{} m:
+      Content.next(m, fits, prev, other, base)
+    case Some{ws} None{}:
+      None{}
+    case Some{ws} Some{e}:
+      Content.apply.few(ws, Lines.Ask.request(Lines.Entry.ask(e)), fits, prev, other, base)
+
 # the content of version 0, the entry m if the node holds it: nothing yet
 def Content.first(m: Maybe<&2, Types.Entry>) -> Maybe<&2, Files.Files()>:
   match m:
@@ -359,7 +549,9 @@ def Content.or(
 
 # the content of version k of the line c in the facts s, read through at most
 # fuel versions (nothing while the node does not hold enough); a content that
-# the table kn holds is not read again
+# the table kn holds is not read again, and a merge reads only the paths
+# that what it takes changed from its base, when the table holds the state
+# of the line that it takes from
 def Content.at(
   +fuel: Nat,
   +kn: Knowns.Known(),
@@ -376,7 +568,8 @@ def Content.at(
       +e = Knowns.Known.at(kn, s, c, 1n+j)
       +t = Entry.taken(c, e)
       +a = Entry.based(c, e)
-      Content.next(
+      Content.quick(
+        Merge.hint(Knowns.Known.find(kn, Spec.Point.line(t)), t, a),
         e,
         Entry.fits(kn, s, c, j, e),
         Content.or(Knowns.Known.files(kn, c, j, f), u => Content.at(f, kn, s, c, j)),

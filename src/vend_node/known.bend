@@ -10,6 +10,7 @@ import ./content.bend as Contents
 import ./facts.bend as Facts
 import ./groups.bend as Groups
 import ./lines.bend as Lines
+import ./merges.bend as Merges
 import ./moves.bend as Moves
 import ./reads.bend as Reads
 import ./run/answers.bend as RAnswers
@@ -5998,6 +5999,179 @@ def Or.ok(
     )
   )({==})
 
+# A merge reads a few paths through a right table
+# -----------------------------------------------
+
+# what a merge takes is its base with the writes that the hint gives, when
+# the state st is that of the line that the merge takes from
+def Hint.at(
+  st: RLines.State,
+  +s: RFacts.Plain(),
+  +f: Nat,
+  +tl: Ledgers.Line,
+  +tn: Nat,
+  +al: Ledgers.Line,
+  +an: Nat,
+  +ws: List<&2, RContents.Write>,
+  -x: RFiles.Files(),
+  +b: RFiles.Files()
+) -> {
+  RLines.Line.state(s, tl) == Some{st}: Maybe<&2, RLines.State>
+} -> {
+  RContents.Merge.hint(Some{st}, Spec.Point{tl, tn}, Spec.Point{al, an}) == Some{ws}: Maybe<&2, List<&2, RContents.Write>>
+} -> {
+  RContents.Content.at(f, RKnown.Known.none(), s, tl, tn) == Some{x}: Maybe<&2, RFiles.Files()>
+} -> {
+  RContents.Content.at(f, RKnown.Known.none(), s, al, an) == Some{b}: Maybe<&2, RFiles.Files()>
+} -> {x == Merges.Writes.apply(ws, b): RFiles.Files()}:
+  match st:
+    case RLines.State{+vs, +k}:
+      hst => +h => hx => hb => Shared.Maybe.some_inj(
+        RFiles.Files(),
+        x,
+        Merges.Writes.apply(ws, b),
+        Equal.trans(
+          Maybe<&2, RFiles.Files()>,
+          Some{x},
+          RContents.Content.at(Nat.add(Nat.sub(tn, an), f), RKnown.Known.none(), s, tl, tn),
+          Some{Merges.Writes.apply(ws, b)},
+          Equal.sym(
+            Maybe<&2, RFiles.Files()>,
+            RContents.Content.at(Nat.add(Nat.sub(tn, an), f), RKnown.Known.none(), s, tl, tn),
+            Some{x},
+            Plain.at_le(Nat.add(Nat.sub(tn, an), f), f, s, tl, tn, x)(Shared.Nat.le_add(Nat.sub(tn, an), f))(hx)
+          ),
+          Reads.Eq.to(
+          Nat,
+          y => {RContents.Content.at(Nat.add(Nat.sub(tn, an), f), RKnown.Known.none(), s, tl, y) == Some{Merges.Writes.apply(ws, b)}: Maybe<&2, RFiles.Files()>},
+          Nat.add(Nat.sub(tn, an), an),
+          tn,
+          Merges.Nat.sub_add(tn, an)(Shared.List.all.if_rest(Ledgers.Line.is_eq(al, tl), u => Nat.is_le(an, tn))(Merges.When.cond(List<&2, RContents.Write>, List.all.if(u => Nat.is_le(an, tn), Ledgers.Line.is_eq(al, tl)), u => RContents.Writes.of(Nat.sub(tn, an), List.drop(&2, Types.Entry, vs, 1n+an)), ws)(h))),
+          Reads.Eq.to(
+            Maybe<&2, RFiles.Files()>,
+            m => {RContents.Content.at(Nat.add(Nat.sub(tn, an), f), RKnown.Known.none(), s, tl, Nat.add(Nat.sub(tn, an), an)) == Merges.Writes.over(ws, m): Maybe<&2, RFiles.Files()>},
+            RContents.Content.at(f, RKnown.Known.none(), s, tl, an),
+            Some{b},
+            Reads.Eq.to(Ledgers.Line, y => {RContents.Content.at(f, RKnown.Known.none(), s, y, an) == Some{b}: Maybe<&2, RFiles.Files()>}, al, tl, Ledgers.Line.is_eq_sound(al, tl)(Shared.List.all.if_hit(Ledgers.Line.is_eq(al, tl), u => Nat.is_le(an, tn))(Merges.When.cond(List<&2, RContents.Write>, List.all.if(u => Nat.is_le(an, tn), Ledgers.Line.is_eq(al, tl)), u => RContents.Writes.of(Nat.sub(tn, an), List.drop(&2, Types.Entry, vs, 1n+an)), ws)(h))), hb),
+            Merges.Writes.at(Nat.sub(tn, an), List.drop(&2, Types.Entry, vs, 1n+an), f, s, tl, an, vs, ws)(Reads.Eq.back(
+              Maybe<&2, RLines.State>,
+              m => {
+                Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, m)
+                  == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
+              },
+              RLines.Line.state(s, tl),
+              Some{RLines.State{vs, k}},
+              hst,
+              {==}
+            ))({==})(Merges.When.then(List<&2, RContents.Write>, List.all.if(u => Nat.is_le(an, tn), Ledgers.Line.is_eq(al, tl)), u => RContents.Writes.of(Nat.sub(tn, an), List.drop(&2, Types.Entry, vs, 1n+an)), ws)(h))
+          )
+        )
+        )
+      )
+
+# what a merge takes is its base with the writes that the hint gives, read
+# through a right table
+def Hint.ok(
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +f: Nat,
+  t: Spec.Point,
+  a: Spec.Point,
+  +ws: List<&2, RContents.Write>,
+  -x: RFiles.Files(),
+  +b: RFiles.Files()
+) -> {
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {
+  RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(t)), t, a) == Some{ws}: Maybe<&2, List<&2, RContents.Write>>
+} -> {
+  RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(t), Spec.Point.n(t)) == Some{x}: Maybe<&2, RFiles.Files()>
+} -> {
+  RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(a), Spec.Point.n(a)) == Some{b}: Maybe<&2, RFiles.Files()>
+} -> {x == Merges.Writes.apply(ws, b): RFiles.Files()}:
+  match t a:
+    case Spec.Point{+tl, +tn} Spec.Point{+al, +an}:
+      ok => h => hx => hb => Lists.Maybe.by(
+        RLines.State,
+        m => {
+          RContents.Merge.hint(m, Spec.Point{tl, tn}, Spec.Point{al, an}) == Some{ws}: Maybe<&2, List<&2, RContents.Write>>
+        } -> {x == Merges.Writes.apply(ws, b): RFiles.Files()},
+        RKnown.Known.find(kn, tl),
+        en => h2 => Empty.absurd(
+          {x == Merges.Writes.apply(ws, b): RFiles.Files()},
+          Shared.Maybe.none_ne_some(List<&2, RContents.Write>, ws, h2)
+        ),
+        +st => es => h2 => Hint.at(
+          st,
+          s,
+          f,
+          tl,
+          tn,
+          al,
+          an,
+          ws,
+          x,
+          b
+        )(Known.find_ok(kn, s, tl, st)(ok)(es))(h2)(hx)(hb)
+      )(h)
+
+# a version read through a right table, where a merge reads only the paths
+# that the hint gives, has the content that it has when a merge reads every
+# path
+def Hint.next(
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +j: Nat,
+  +f: Nat
+) -> {
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {
+  RContents.Content.quick(
+    RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)))), RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)), RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))),
+    RLines.Line.at(s, c, 1n+j),
+    RContents.Entry.fits(RKnown.Known.none(), s, c, j, RLines.Line.at(s, c, 1n+j)),
+    RContents.Content.at(f, RKnown.Known.none(), s, c, j),
+    RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)))),
+    RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))))
+  )
+    == RContents.Content.next(
+      RLines.Line.at(s, c, 1n+j),
+      RContents.Entry.fits(RKnown.Known.none(), s, c, j, RLines.Line.at(s, c, 1n+j)),
+      RContents.Content.at(f, RKnown.Known.none(), s, c, j),
+      RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)))),
+      RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))))
+    ): Maybe<&2, RFiles.Files()>
+}:
+  ok => Merges.Few.next(
+    RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)))), RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)), RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))),
+    RLines.Line.at(s, c, 1n+j),
+    RContents.Entry.fits(RKnown.Known.none(), s, c, j, RLines.Line.at(s, c, 1n+j)),
+    RContents.Content.at(f, RKnown.Known.none(), s, c, j),
+    RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)))),
+    RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))))
+  )(
+    Contents.Content.at_sound(f, s, c, j)
+  )(
+    Contents.Content.at_sound(f, s, Spec.Point.line(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j))))
+  )(
+    ws => t => b => eh => et => eb => Hint.ok(kn, s, f, RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)), RContents.Entry.based(c, RLines.Line.at(s, c, 1n+j)), ws, t, b)(ok)(eh)(et)(eb)
+  )(
+    +ws => +o => +b => eh => ep => eb => Merges.Content.at_clean_all(
+      f,
+      s,
+      c,
+      j,
+      List.append(
+        &2,
+        String,
+        RContents.Writes.paths(ws),
+        RContents.Merge.paths(b, o, Merges.Writes.apply(ws, b))
+      ),
+      o
+    )(ep)
+  )
+
 # a right table changes no content of a version
 def Content.at_ok(
   fuel: Nat,
@@ -6031,11 +6205,12 @@ def Content.at_ok(
       )
     case 1n+(+f) 1n+(+j):
       +ok => (
-        %Known.at_ok(kn, s, c, 1n+j)(ok): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == RContents.Content.next(_, RContents.Entry.fits(RKnown.Known.none(), s, c, j, _), RContents.Content.at(f, RKnown.Known.none(), s, c, j), RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, _)), Spec.Point.n(RContents.Entry.taken(c, _))), RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, _)), Spec.Point.n(RContents.Entry.based(c, _)))): Maybe<&2, RFiles.Files()>}
-        %Entry.fits_ok(kn, s, c, j, RKnown.Known.at(kn, s, c, 1n+j))(ok): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == RContents.Content.next(RKnown.Known.at(kn, s, c, 1n+j), _, RContents.Content.at(f, RKnown.Known.none(), s, c, j), RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)))), RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))))): Maybe<&2, RFiles.Files()>}
-        %Or.ok(kn, s, c, j, f, RContents.Content.at(f, kn, s, c, j))(ok)(Content.at_ok(f, kn, s, c, j)(ok)): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == RContents.Content.next(RKnown.Known.at(kn, s, c, 1n+j), RContents.Entry.fits(kn, s, c, j, RKnown.Known.at(kn, s, c, 1n+j)), _, RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)))), RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))))): Maybe<&2, RFiles.Files()>}
-        %Or.ok(kn, s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), f, RContents.Content.at(f, kn, s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)))))(ok)(Content.at_ok(f, kn, s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))))(ok)): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == RContents.Content.next(RKnown.Known.at(kn, s, c, 1n+j), RContents.Entry.fits(kn, s, c, j, RKnown.Known.at(kn, s, c, 1n+j)), RContents.Content.or(RKnown.Known.files(kn, c, j, f), u => RContents.Content.at(f, kn, s, c, j)), _, RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))))): Maybe<&2, RFiles.Files()>}
-        %Or.ok(kn, s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), f, RContents.Content.at(f, kn, s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j)))))(ok)(Content.at_ok(f, kn, s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))))(ok)): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == RContents.Content.next(RKnown.Known.at(kn, s, c, 1n+j), RContents.Entry.fits(kn, s, c, j, RKnown.Known.at(kn, s, c, 1n+j)), RContents.Content.or(RKnown.Known.files(kn, c, j, f), u => RContents.Content.at(f, kn, s, c, j)), RContents.Content.or(RKnown.Known.files(kn, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), f), u => RContents.Content.at(f, kn, s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))))), _): Maybe<&2, RFiles.Files()>}
+        %Hint.next(kn, s, c, j, f)(ok): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == _: Maybe<&2, RFiles.Files()>}
+        %Known.at_ok(kn, s, c, 1n+j)(ok): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == RContents.Content.quick(RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, _))), RContents.Entry.taken(c, _), RContents.Entry.based(c, _)), _, RContents.Entry.fits(RKnown.Known.none(), s, c, j, _), RContents.Content.at(f, RKnown.Known.none(), s, c, j), RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, _)), Spec.Point.n(RContents.Entry.taken(c, _))), RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, _)), Spec.Point.n(RContents.Entry.based(c, _)))): Maybe<&2, RFiles.Files()>}
+        %Entry.fits_ok(kn, s, c, j, RKnown.Known.at(kn, s, c, 1n+j))(ok): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == RContents.Content.quick(RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)))), RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)), RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), RKnown.Known.at(kn, s, c, 1n+j), _, RContents.Content.at(f, RKnown.Known.none(), s, c, j), RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)))), RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))))): Maybe<&2, RFiles.Files()>}
+        %Or.ok(kn, s, c, j, f, RContents.Content.at(f, kn, s, c, j))(ok)(Content.at_ok(f, kn, s, c, j)(ok)): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == RContents.Content.quick(RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)))), RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)), RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), RKnown.Known.at(kn, s, c, 1n+j), RContents.Entry.fits(kn, s, c, j, RKnown.Known.at(kn, s, c, 1n+j)), _, RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)))), RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))))): Maybe<&2, RFiles.Files()>}
+        %Or.ok(kn, s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), f, RContents.Content.at(f, kn, s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)))))(ok)(Content.at_ok(f, kn, s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))))(ok)): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == RContents.Content.quick(RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)))), RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)), RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), RKnown.Known.at(kn, s, c, 1n+j), RContents.Entry.fits(kn, s, c, j, RKnown.Known.at(kn, s, c, 1n+j)), RContents.Content.or(RKnown.Known.files(kn, c, j, f), u => RContents.Content.at(f, kn, s, c, j)), _, RContents.Content.at(f, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))))): Maybe<&2, RFiles.Files()>}
+        %Or.ok(kn, s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), f, RContents.Content.at(f, kn, s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j)))))(ok)(Content.at_ok(f, kn, s, Spec.Point.line(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))))(ok)): {RContents.Content.at(1n+f, kn, s, c, 1n+j) == RContents.Content.quick(RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)))), RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j)), RContents.Entry.based(c, RKnown.Known.at(kn, s, c, 1n+j))), RKnown.Known.at(kn, s, c, 1n+j), RContents.Entry.fits(kn, s, c, j, RKnown.Known.at(kn, s, c, 1n+j)), RContents.Content.or(RKnown.Known.files(kn, c, j, f), u => RContents.Content.at(f, kn, s, c, j)), RContents.Content.or(RKnown.Known.files(kn, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), f), u => RContents.Content.at(f, kn, s, Spec.Point.line(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))), Spec.Point.n(RContents.Entry.taken(c, RKnown.Known.at(kn, s, c, 1n+j))))), _): Maybe<&2, RFiles.Files()>}
         {==})
 
 # the number that a right table holds with its first contents is at most
@@ -6767,6 +6942,43 @@ def Content.read_ok(
     Content.of_ok(kn, s, c, k)(ok)
   )
 
+# the clashes of a merge read through a right table, from the paths that
+# the hint gives, are the clashes read from every path
+def Hint.clashes(
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +j: Nat,
+  +e: Types.Entry
+) -> {
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {
+  RAnswers.Clashes.quick(
+    RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, Some{e}))), RContents.Entry.taken(c, Some{e}), RContents.Entry.based(c, Some{e})),
+    Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), RContents.Merge.fits(RKnown.Known.none(), s, c, j, e)),
+    RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e}))),
+    RContents.Content.of(RKnown.Known.none(), s, c, j),
+    RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))
+  )
+    == RAnswers.Clashes.at(
+      Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), RContents.Merge.fits(RKnown.Known.none(), s, c, j, e)),
+      RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e}))),
+      RContents.Content.of(RKnown.Known.none(), s, c, j),
+      RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))
+    ): Maybe<&2, List<&2, String>>
+}:
+  ok => Merges.Few.clashes_at(
+    RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, Some{e}))), RContents.Entry.taken(c, Some{e}), RContents.Entry.based(c, Some{e})),
+    Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), RContents.Merge.fits(RKnown.Known.none(), s, c, j, e)),
+    RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e}))),
+    RContents.Content.of(RKnown.Known.none(), s, c, j),
+    RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))
+  )(
+    Contents.Content.at_sound(RFacts.Facts.fuel(s), s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e})))
+  )(
+    ws => t => b => eh => et => eb => Hint.ok(kn, s, RFacts.Facts.fuel(s), RContents.Entry.taken(c, Some{e}), RContents.Entry.based(c, Some{e}), ws, t, b)(ok)(eh)(et)(eb)
+  )
+
 # a right table changes no clash
 def Clashes.of_ok(
   +kn: RKnown.Known(),
@@ -6791,10 +7003,11 @@ def Clashes.of_ok(
       ok => {==}
     case 1n+(+j):
       +ok => (
-        %Merge.fits_ok(kn, s, c, j, e)(ok): {RAnswers.Clashes.of(kn, s, c, 1n+j, e) == RAnswers.Clashes.at(Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), _), RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e}))), RContents.Content.of(RKnown.Known.none(), s, c, j), RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))): Maybe<&2, List<&2, String>>}
-        %Content.of_ok(kn, s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e})))(ok): {RAnswers.Clashes.of(kn, s, c, 1n+j, e) == RAnswers.Clashes.at(Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), RContents.Merge.fits(kn, s, c, j, e)), _, RContents.Content.of(RKnown.Known.none(), s, c, j), RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))): Maybe<&2, List<&2, String>>}
-        %Content.of_ok(kn, s, c, j)(ok): {RAnswers.Clashes.of(kn, s, c, 1n+j, e) == RAnswers.Clashes.at(Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), RContents.Merge.fits(kn, s, c, j, e)), RContents.Content.of(kn, s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e}))), _, RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))): Maybe<&2, List<&2, String>>}
-        %Content.of_ok(kn, s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))(ok): {RAnswers.Clashes.of(kn, s, c, 1n+j, e) == RAnswers.Clashes.at(Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), RContents.Merge.fits(kn, s, c, j, e)), RContents.Content.of(kn, s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e}))), RContents.Content.of(kn, s, c, j), _): Maybe<&2, List<&2, String>>}
+        %Hint.clashes(kn, s, c, j, e)(ok): {RAnswers.Clashes.of(kn, s, c, 1n+j, e) == _: Maybe<&2, List<&2, String>>}
+        %Merge.fits_ok(kn, s, c, j, e)(ok): {RAnswers.Clashes.of(kn, s, c, 1n+j, e) == RAnswers.Clashes.quick(RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, Some{e}))), RContents.Entry.taken(c, Some{e}), RContents.Entry.based(c, Some{e})), Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), _), RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e}))), RContents.Content.of(RKnown.Known.none(), s, c, j), RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))): Maybe<&2, List<&2, String>>}
+        %Content.of_ok(kn, s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e})))(ok): {RAnswers.Clashes.of(kn, s, c, 1n+j, e) == RAnswers.Clashes.quick(RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, Some{e}))), RContents.Entry.taken(c, Some{e}), RContents.Entry.based(c, Some{e})), Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), RContents.Merge.fits(kn, s, c, j, e)), _, RContents.Content.of(RKnown.Known.none(), s, c, j), RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))): Maybe<&2, List<&2, String>>}
+        %Content.of_ok(kn, s, c, j)(ok): {RAnswers.Clashes.of(kn, s, c, 1n+j, e) == RAnswers.Clashes.quick(RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, Some{e}))), RContents.Entry.taken(c, Some{e}), RContents.Entry.based(c, Some{e})), Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), RContents.Merge.fits(kn, s, c, j, e)), RContents.Content.of(kn, s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e}))), _, RContents.Content.of(RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))): Maybe<&2, List<&2, String>>}
+        %Content.of_ok(kn, s, Spec.Point.line(RContents.Entry.taken(c, Some{e})), Spec.Point.n(RContents.Entry.taken(c, Some{e})))(ok): {RAnswers.Clashes.of(kn, s, c, 1n+j, e) == RAnswers.Clashes.quick(RContents.Merge.hint(RKnown.Known.find(kn, Spec.Point.line(RContents.Entry.taken(c, Some{e}))), RContents.Entry.taken(c, Some{e}), RContents.Entry.based(c, Some{e})), Bool.and(RContents.Request.is_merge(RAnswers.Entry.request(e)), RContents.Merge.fits(kn, s, c, j, e)), RContents.Content.of(kn, s, Spec.Point.line(RContents.Entry.based(c, Some{e})), Spec.Point.n(RContents.Entry.based(c, Some{e}))), RContents.Content.of(kn, s, c, j), _): Maybe<&2, List<&2, String>>}
         {==})
 
 # a right table changes no base of a merge
