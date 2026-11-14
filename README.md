@@ -56,9 +56,10 @@ unless marked "not checked". `HANDOFF.md` has the details.
 
 ## Vend Node
 
-- "Checks everything it receives before it keeps it": a node refuses a vote under its own name
-  that it did not cast and a second start with the hash of another. It keeps every other fact;
-  each reader then checks a ballot when it reads it.
+- "Checks everything it receives before it keeps it": a node does not take a vote under its own
+  name that contradicts one that it holds; it then records that its trust broke, as it does when
+  it sees a second start of one store. It keeps every other fact; each reader then checks a
+  ballot when it reads it.
 - "Unless forced, only stops when no resources are mounted and no writers are connected": holds.
 - "Two Vend Nodes that hold the same changes give the same answers": holds, proven.
 
