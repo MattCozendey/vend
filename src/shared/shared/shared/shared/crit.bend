@@ -99,9 +99,26 @@ def Key.diff.go(a: List<&2, U32>, b: List<&2, U32>, +at: Nat) -> Maybe<&2, Nat>:
     case _ _:
       Some{at}
 
+# the first position where the keys a and b differ, after at bits, as
+# Key.diff.go gives it: two equal words are passed with one compare, and no
+# read of their bits
+def Key.diff.fast(a: List<&2, U32>, b: List<&2, U32>, +at: Nat) -> Maybe<&2, Nat>:
+  match a b:
+    case Nil{} Nil{}:
+      None{}
+    case Con{+x, +ra} Con{+y, +rb}:
+      Shared.Bool.when(
+        Maybe<&2, Nat>,
+        U32.is_eq(x, y),
+        u => Key.diff.fast(ra, rb, Nat.add(at, 32n)),
+        u => Key.diff.go(x <> ra, y <> rb, at)
+      )
+    case _ _:
+      Some{at}
+
 # the first position where the keys a and b differ (none: equal)
 def Key.diff(a: List<&2, U32>, b: List<&2, U32>) -> Maybe<&2, Nat>:
-  Key.diff.go(a, b, 0n)
+  Key.diff.fast(a, b, 0n)
 
 # Cursors
 # -------
@@ -1177,10 +1194,70 @@ def Key.diff_go_bits(+a: List<&2, U32>, +b: List<&2, U32>, +at: Nat) -> {
       %Equal.sym(Nat, Nat.add(at, 0n), at, Shared.Nat.add_zero(at)): {Some{at} == Some{_}: Maybe<&2, Nat>}
       {==}
 
+# what holds of a test that is true, and of one that is false, holds of the
+# test b
+def Bool.split(
+  -P: Bool -> Type,
+  b: Bool,
+  t: {b == True{}: Bool} -> P(True{}),
+  f: {b == False{}: Bool} -> P(False{})
+) -> P(b):
+  match b:
+    case True{}:
+      t({==})
+    case False{}:
+      f({==})
+
+# the bits of the number x
+def U32.word(x: U32) -> Word(32n):
+  match x:
+    case U32{w}:
+      w
+
+# a word differs from itself nowhere
+def Word.diff_self(n: Nat, w: Word(n)) -> {Word.diff(n, w, w) == None{}: Maybe<&2, Nat>}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+np:
+      match w:
+        case WCon{head, tail}:
+          %Equal.sym(Bool, Shared.Bool.is_eq(head, head), True{}, Shared.Bool.is_eq_refl(head)): {Shared.Bool.when(Maybe<&2, Nat>, _, u => Maybe.map(&2, Nat, Nat, m => 1n+m, Word.diff(np, tail, tail)), u => Some{0n}) == None{}: Maybe<&2, Nat>}
+          %Equal.sym(Maybe<&2, Nat>, Word.diff(np, tail, tail), None{}, Word.diff_self(np, tail)): {Maybe.map(&2, Nat, Nat, m => 1n+m, _) == None{}: Maybe<&2, Nat>}
+          {==}
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# Key.diff.fast gives what Key.diff.go gives
+def Key.diff_fast_go(a: List<&2, U32>, b: List<&2, U32>, at: Nat) -> {
+  Key.diff.fast(a, b, at) == Key.diff.go(a, b, at): Maybe<&2, Nat>
+}:
+  match a b:
+    case Nil{} Nil{}:
+      {==}
+    case Con{U32{+w}, ra} Con{U32{+v}, rb}:
+      Bool.split(
+        c => {
+          Shared.Bool.when(Maybe<&2, Nat>, c, u => Key.diff.fast(ra, rb, Nat.add(at, 32n)), u => Key.diff.go(U32{w} <> ra, U32{v} <> rb, at))
+            == Key.diff.go(U32{w} <> ra, U32{v} <> rb, at): Maybe<&2, Nat>
+        },
+        U32.is_eq(U32{w}, U32{v}),
+        he => (
+          %Equal.cong(U32, Word(32n), U32.word, U32{w}, U32{v}, Shared.U32.is_eq_sound(U32{w}, U32{v})(he)): {Key.diff.fast(ra, rb, Nat.add(at, 32n)) == Key.diff.go(U32{w} <> ra, U32{_} <> rb, at): Maybe<&2, Nat>}
+          %Equal.sym(Maybe<&2, Nat>, Word.diff(32n, w, w), None{}, Word.diff_self(32n, w)): {Key.diff.fast(ra, rb, Nat.add(at, 32n)) == Shared.Bool.when(Maybe<&2, Nat>, Maybe.is_none(&2, Nat, _), u => Key.diff.go(ra, rb, Nat.add(at, 32n)), u => Maybe.map(&2, Nat, Nat, n => Nat.add(at, n), Word.diff(32n, w, w))): Maybe<&2, Nat>}
+          Key.diff_fast_go(ra, rb, Nat.add(at, 32n))),
+        ef => {==}
+      )
+    case Nil{} Con{y, rb}:
+      {==}
+    case Con{x, ra} Nil{}:
+      {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
 # the keys a and b differ first where their bits do
 def Key.diff_bits(+a: List<&2, U32>, +b: List<&2, U32>) -> {
   Key.diff(a, b) == Bits.diff(Key.bits(a), Key.bits(b)): Maybe<&2, Nat>
 }:
+  %Equal.sym(Maybe<&2, Nat>, Key.diff.fast(a, b, 0n), Key.diff.go(a, b, 0n), Key.diff_fast_go(a, b, 0n)): {_ == Bits.diff(Key.bits(a), Key.bits(b)): Maybe<&2, Nat>}
   %Equal.sym(
     Maybe<&2, Nat>,
     Key.diff.go(a, b, 0n),
@@ -2447,7 +2524,7 @@ def Key.diff_go_none(+a: List<&2, U32>, +b: List<&2, U32>, +at: Nat) -> {Key.dif
 
 # keys that differ nowhere are equal
 def Key.diff_none(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.diff(a, b) == None{}: Maybe<&2, Nat>} -> {a == b: List<&2, U32>}:
-  Key.diff_go_none(a, b, 0n)
+  h => Key.diff_go_none(a, b, 0n)(Equal.trans(Maybe<&2, Nat>, Key.diff.go(a, b, 0n), Key.diff.fast(a, b, 0n), None{}, Equal.sym(Maybe<&2, Nat>, Key.diff.fast(a, b, 0n), Key.diff.go(a, b, 0n), Key.diff_fast_go(a, b, 0n)), h))
 
 # a difference that is none is None
 def Crit.none_of(d: Maybe<&2, Nat>) -> {Maybe.is_none(&2, Nat, d) == True{}: Bool} -> {d == None{}: Maybe<&2, Nat>}:

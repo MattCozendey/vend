@@ -1,7 +1,9 @@
 import Base
 import ../../shared/shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
+import ../codes.bend as Coded
 import ../node.bend as Nodes
 import ../spec.bend as Spec
 import ../types.bend as Types
@@ -32,7 +34,7 @@ type Fast is Data:
 # a fast node of the name name, that holds nothing yet: a work may act on no
 # fact
 def Fast.new(name: String) -> Fast:
-  Fast{Nodes.Raw.new(name), [Known.Open{[], 0n}]}
+  Fast{Nodes.Raw.new(name), [Known.Open{[], 0n, Crits.Crit.new(Types.Ask)}]}
 
 # the state of the fast node f
 def Fast.raw(f: Fast) -> Nodes.Raw:
@@ -124,14 +126,16 @@ def Learn.asked(+kn: Known.Known(), +s: Facts.Plain(), +r: Spec.Request) -> Know
 
 # the table kn after a ballot for the slot k of the line c, where s is the
 # facts with the ballot, w the facts that a work could act on, with the
-# ballot, if known, and n the greatest number of an ask in s, if w is known
+# ballot, if known, n the greatest number of an ask in s, if w is known, and
+# t the newest writes of s, if known
 def Table.moved(
   +kn: Known.Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   +k: Nat,
   +w: Maybe<&2, List<&2, Types.Fact>>,
-  n: Nat
+  n: Nat,
+  t: Maybe<&2, Crits.Crit<Types.Ask>>
 ) -> Known.Known():
   Known.Known.moved(
     Known.Known.learn(Contents.Known.grow(kn, Known.Known.cast(kn, s, c, k, w), s, c), s, c),
@@ -140,7 +144,8 @@ def Table.moved(
       Known.Known.safe(c, Known.Known.find(kn, c), Known.Known.find(kn, Known.Known.root(c)), k),
       w
     ),
-    n
+    n,
+    t
   )
 
 # the table kn after the ballot f is cast at the step st, where s is the
@@ -166,7 +171,8 @@ def Table.voted(
         c,
         k,
         Known.Known.walk(kn, f),
-        Nat.max(Facts.Seq.of(f), Known.Shelf.top(Known.Known.shelf(kn)))
+        Nat.max(Facts.Seq.of(f), Known.Shelf.top(Known.Known.shelf(kn))),
+        Known.Shelf.tops(Known.Known.shelf(kn))
       )
 
 # the table kn after the node takes in the request r: no state if r starts a
@@ -209,7 +215,7 @@ def Asked.fact(+a: Types.Ask, go: Bool) -> Maybe<&2, Types.Fact>:
 
 # the table kn, when the fact m, if any, joins the facts and leaves each
 # line as it is; s is the facts with it
-def Table.joined(+kn: Known.Known(), s: Facts.Plain(), m: Maybe<&2, Types.Fact>) -> Known.Known():
+def Table.joined(+kn: Known.Known(), +s: Facts.Plain(), m: Maybe<&2, Types.Fact>) -> Known.Known():
   match m:
     case None{}:
       kn
@@ -418,6 +424,41 @@ def Fast.works(
     case False{}:
       Fast.works.on(name, ws, ms, fs, ps, Learn.if(Table.read(kn), kn, fs))
 
+# the facts a and b are the same: fact by fact, in the same shape; the
+# facts are read only while each part before them is the same
+def Plain.same(a: Facts.Plain(), b: Facts.Plain()) -> Bool:
+  match a b:
+    case Crits.Crit.Tip{} Crits.Crit.Tip{}:
+      True{}
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Leaf{k2, v2}:
+      List.all.if(u => Coded.Fact.is_eq(v1, v2), Crits.Key.is_eq(k1, k2))
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      List.all.if(
+        u => List.all.if(
+          u2 => List.all.if(
+            u3 => List.all.if(u4 => Plain.same(o1, o2), Plain.same(z1, z2)),
+            Shared.Maybe.is_eq(~Types.Fact, ~Coded.Fact.is_eq, e1, e2)
+          ),
+          Nat.is_eq(p1, p2)
+        ),
+        Crits.Key.is_eq(r1, r2)
+      )
+    case _ _:
+      False{}
+
+# the table kn, when the facts are the same as before (same); else no table
+def Table.kept(kn: Known.Known(), same: Bool) -> Known.Known():
+  match same:
+    case True{}:
+      kn
+    case False{}:
+      Known.Known.none()
+
+# the fast node of the state r after a Sync, with the table kn of the facts
+# old that it held before: the table stays when the Sync added no fact
+def Fast.synced(+r: Nodes.Raw, kn: Known.Known(), old: Facts.Plain()) -> Fast:
+  Fast{r, Table.kept(kn, Plain.same(old, Nodes.Raw.facts(r)))}
+
 # the fast node f after the deed a: its state is the state that
 # Nodes.Raw.does gives, read through the table; the table keeps the states
 # that the deed cannot change
@@ -440,8 +481,8 @@ def Fast.does(f: Fast, a: Nodes.Act) -> Fast:
         q,
         Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
       )
-    case Fast{r, kn} Nodes.Act.Sync{from}:
-      Fast{Nodes.Raw.does(r, Nodes.Act.Sync{from}), Known.Known.none()}
+    case Fast{+r, kn} Nodes.Act.Sync{from}:
+      Fast.synced(Nodes.Raw.does(r, Nodes.Act.Sync{from}), kn, Nodes.Raw.facts(r))
     case Fast{Nodes.Raw{+name, ws, ms, +st, +fs, ps}, +kn} Nodes.Act.Mount{+a, +b, +p, held}:
       Fast.asks.to(
         name,

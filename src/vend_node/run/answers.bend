@@ -2,7 +2,6 @@ import Base
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
-import ../codes.bend as Coded
 import ../groups.bend as Groups
 import ../shared/format.bend as Formats
 import ../shared/lists.bend as Lists
@@ -28,17 +27,19 @@ def Entry.request(e: Types.Entry) -> Spec.Request:
 type Clash is Data:
   Clash{merge: Ledgers.Id, path: String}
 
-# a writer, a branch and a path
-type Place is Data:
-  Place{writer: String, branch: Ledgers.Line, path: String}
-
 # the entry of the version m, if any, among the versions vs
 def Versions.find.at(+vs: List<&2, Types.Entry>, m: Maybe<&2, Nat>) -> Maybe<&2, Known.Found>:
   match m:
     case None{}:
       None{}
     case Some{+k}:
-      Maybe.map(&2, Types.Entry, Known.Found, e => Known.Found{k, e}, List.get(&2, Types.Entry, vs, k))
+      Maybe.map(
+        &2,
+        Types.Entry,
+        Known.Found,
+        e => Known.Found{k, e},
+        List.get(&2, Types.Entry, vs, k)
+      )
 
 # the entry of the id i among the versions vs, and its version
 def Versions.find(+vs: List<&2, Types.Entry>, i: Ledgers.Id) -> Maybe<&2, Known.Found>:
@@ -697,13 +698,13 @@ def Request.writes(b: Ledgers.Line, p: String, r: Spec.Request) -> Bool:
       False{}
 
 # the ask a is a write of the writer w at the path p of the branch b
-def Ask.writes(g: Place, a: Types.Ask) -> Bool:
+def Ask.writes(g: Known.Place, a: Types.Ask) -> Bool:
   match g a:
-    case Place{w, b, p} Types.Ask{Ledgers.Id{author, name}, k, r}:
+    case Known.Place{w, b, p} Types.Ask{Ledgers.Id{author, name}, k, r}:
       Bool.and(String.eq(author, w), Request.writes(b, p, r))
 
 # the asks among fs that are writes as g says
-def Writes.of(fs: List<&2, Types.Fact>, +g: Place) -> List<&2, Types.Ask>:
+def Writes.of(fs: List<&2, Types.Fact>, +g: Known.Place) -> List<&2, Types.Ask>:
   match fs:
     case Nil{}:
       []
@@ -819,6 +820,15 @@ def View.of(
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   View.of.by(Known.Known.ids(kn, b), kn, s, b, p, m)
 
+# the newest write at the place g in the facts s: as the entry m holds it,
+# else read from the facts
+def View.top(m: Maybe<&2, Known.Kept>, s: Facts.Plain(), +g: Known.Place) -> Maybe<&2, Types.Ask>:
+  match m:
+    case Some{Known.Open{fs, n, tx}}:
+      Known.Tops.get(tx, g)
+    case _:
+      Lists.List.top(~Types.Ask, ~Facts.Ask.seq, Writes.of(Facts.Facts.list(s), g))
+
 # the words that the writer w reads at the path p of the newest version of
 # the branch b, its own writes included
 def View.at(
@@ -828,10 +838,4 @@ def View.at(
   +b: Ledgers.Line,
   +p: String
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
-  View.of(
-    kn,
-    s,
-    b,
-    p,
-    Lists.List.top(~Types.Ask, ~Facts.Ask.seq, Writes.of(Facts.Facts.list(s), Place{w, b, p}))
-  )
+  View.of(kn, s, b, p, View.top(Known.Known.shelf(kn), s, Known.Place{w, b, p}))

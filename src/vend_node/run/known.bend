@@ -62,7 +62,7 @@ type Kept is Data:
   Kept{line: Ledgers.Line, state: Lines.State}
   Ruled{line: Ledgers.Line, era: Nat, rule: Lines.Rule}
   Made{line: Ledgers.Line, ids: Ids}
-  Open{facts: List<&2, Types.Fact>, peak: Nat}
+  Open{facts: List<&2, Types.Fact>, peak: Nat, tops: Crits.Crit<Types.Ask>}
   Stock{held: Crits.Crit<Held>, low: Nat}
 
 # what a node keeps: the newest entry of a line first; the states before the
@@ -92,7 +92,7 @@ def Known.find(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.State>:
       Known.find(rest, c)
     case Con{Made{c2, x}, rest}:
       Known.find(rest, c)
-    case Con{Open{fs, n}, rest}:
+    case Con{Open{fs, n, tx}, rest}:
       Known.find(rest, c)
 
 # the rule of the next version of the line c that the table kn holds, if any
@@ -113,7 +113,7 @@ def Known.ruled(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.Rule>:
       )
     case Con{Made{c2, x}, rest}:
       Known.ruled(rest, c)
-    case Con{Open{fs, n}, rest}:
+    case Con{Open{fs, n, tx}, rest}:
       Known.ruled(rest, c)
 
 # the key of the content of version k of the line c: the version first, so
@@ -139,7 +139,7 @@ def Known.era(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Nat>:
       )
     case Con{Made{c2, x}, rest}:
       Known.era(rest, c)
-    case Con{Open{fs, n}, rest}:
+    case Con{Open{fs, n, tx}, rest}:
       Known.era(rest, c)
 
 # the content m, when it is of version k of the line c
@@ -178,7 +178,7 @@ def Known.held(kn: Known(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Held>:
       Known.held(rest, c, k)
     case Con{Made{c2, y}, rest}:
       Known.held(rest, c, k)
-    case Con{Open{fs, n}, rest}:
+    case Con{Open{fs, n, tx}, rest}:
       Known.held(rest, c, k)
     case Con{Stock{m, q}, rest}:
       Held.or(Stock.get(m, c, k), u => Known.held(rest, c, k))
@@ -227,8 +227,8 @@ def Known.hold(kn: Known(), e: Held) -> Known():
       Ruled{c, m, u} <> Known.hold(rest, e)
     case Con{Made{c, x}, rest}:
       Made{c, x} <> Known.hold(rest, e)
-    case Con{Open{fs, n}, rest}:
-      Open{fs, n} <> Known.hold(rest, e)
+    case Con{Open{fs, n, tx}, rest}:
+      Open{fs, n, tx} <> Known.hold(rest, e)
     case Con{Stock{+m, q}, rest}:
       Stock{Stock.put(m, e), q} <> rest
 
@@ -243,7 +243,7 @@ def Known.contents(kn: Known()) -> Known():
       Known.contents(rest)
     case Con{Made{c, x}, rest}:
       Known.contents(rest)
-    case Con{Open{fs, n}, rest}:
+    case Con{Open{fs, n, tx}, rest}:
       Known.contents(rest)
     case Con{Stock{m, q}, rest}:
       Stock{m, q} <> Known.contents(rest)
@@ -260,7 +260,7 @@ def Known.low(kn: Known()) -> Nat:
       Known.low(rest)
     case Con{Made{c, x}, rest}:
       Known.low(rest)
-    case Con{Open{fs, n}, rest}:
+    case Con{Open{fs, n, tx}, rest}:
       Known.low(rest)
     case Con{Stock{m, q}, rest}:
       q
@@ -277,8 +277,8 @@ def Known.deeper(kn: Known()) -> Known():
       Ruled{c, m, u} <> Known.deeper(rest)
     case Con{Made{c, x}, rest}:
       Made{c, x} <> Known.deeper(rest)
-    case Con{Open{fs, n}, rest}:
-      Open{fs, n} <> Known.deeper(rest)
+    case Con{Open{fs, n, tx}, rest}:
+      Open{fs, n, tx} <> Known.deeper(rest)
     case Con{Stock{m, q}, rest}:
       Stock{m, 1n+q} <> Known.deeper(rest)
 
@@ -294,8 +294,8 @@ def Known.sync(kn: Known(), g: Nat) -> Known():
       Ruled{c, m, u} <> Known.sync(rest, g)
     case Con{Made{c, x}, rest}:
       Made{c, x} <> Known.sync(rest, g)
-    case Con{Open{fs, n}, rest}:
-      Open{fs, n} <> Known.sync(rest, g)
+    case Con{Open{fs, n, tx}, rest}:
+      Open{fs, n, tx} <> Known.sync(rest, g)
     case Con{Stock{m, q}, rest}:
       Stock{m, g} <> rest
 
@@ -316,13 +316,13 @@ def Known.shelf(kn: Known()) -> Maybe<&2, Kept>:
       Known.shelf(rest)
     case Con{Made{c, x}, rest}:
       Known.shelf(rest)
-    case Con{Open{fs, n}, rest}:
-      Some{Open{fs, n}}
+    case Con{Open{fs, n, tx}, rest}:
+      Some{Open{fs, n, tx}}
 
 # the facts that a work may still act on, of the entry m, if it holds them
 def Shelf.facts(m: Maybe<&2, Kept>) -> Maybe<&2, List<&2, Types.Fact>>:
   match m:
-    case Some{Open{fs, n}}:
+    case Some{Open{fs, n, tx}}:
       Some{fs}
     case _:
       None{}
@@ -348,7 +348,7 @@ def Known.facts(kn: Known(), s: Facts.Plain()) -> List<&2, Types.Fact>:
 # read from the facts
 def Shelf.peak(m: Maybe<&2, Kept>, s: Facts.Plain()) -> Nat:
   match m:
-    case Some{Open{fs, n}}:
+    case Some{Open{fs, n, tx}}:
       n
     case _:
       Facts.Seq.peak(Facts.Facts.list(s))
@@ -360,30 +360,32 @@ def Known.peak(kn: Known(), s: Facts.Plain()) -> Nat:
 # the greatest number of an ask that the entry m holds; else 0
 def Shelf.top(m: Maybe<&2, Kept>) -> Nat:
   match m:
-    case Some{Open{fs, n}}:
+    case Some{Open{fs, n, tx}}:
       n
     case _:
       0n
 
-# the table kn with the facts fs and the number n in the place of what it
-# holds for a work, if it holds it
-def Known.reopen(kn: Known(), fs: List<&2, Types.Fact>, n: Nat) -> Known():
+# the table kn with the facts fs, the number n and the newest writes tx in
+# the place of what it holds for a work, if it holds it
+def Known.reopen(
+  kn: Known(),
+  fs: List<&2, Types.Fact>,
+  n: Nat,
+  tx: Crits.Crit<Types.Ask>
+) -> Known():
   match kn:
     case Nil{}:
       []
     case Con{Kept{c, st}, rest}:
-      Kept{c, st} <> Known.reopen(rest, fs, n)
+      Kept{c, st} <> Known.reopen(rest, fs, n, tx)
     case Con{Stock{m, q}, rest}:
       Stock{m, q} <> rest
     case Con{Ruled{c, m, u}, rest}:
-      Ruled{c, m, u} <> Known.reopen(rest, fs, n)
+      Ruled{c, m, u} <> Known.reopen(rest, fs, n, tx)
     case Con{Made{c, x}, rest}:
-      Made{c, x} <> Known.reopen(rest, fs, n)
-    case Con{Open{old, m}, rest}:
-      Open{fs, n} <> rest
-
-# Known ids
-# ---------
+      Made{c, x} <> Known.reopen(rest, fs, n, tx)
+    case Con{Open{old, m, old2}, rest}:
+      Open{fs, n, tx} <> rest
 
 # the number h, mixed with the characters of t
 def Id.mix(t: String, h: U32) -> U32:
@@ -392,6 +394,127 @@ def Id.mix(t: String, h: U32) -> U32:
       h
     case SCon{Chr{x}, rest}:
       Id.mix(rest, ((h * 31) + x: U32))
+
+# Newest writes
+# -------------
+# A writer reads its own newest write at a path of a branch (View). The node
+# keeps, with the facts that a work may act on, the newest write of each
+# writer at each path of each branch, in a map: a view is then one read of
+# the map, not a walk of all the facts.
+
+# a writer, a branch and a path
+type Place is Data:
+  Place{writer: String, branch: Ledgers.Line, path: String}
+
+# the place that the request r of the writer w writes, if it is a write
+def Request.place(w: String, r: Spec.Request) -> Maybe<&2, Place>:
+  match r:
+    case Spec.Request.Write{c, q, ws}:
+      Some{Place{w, c, q}}
+    case _:
+      None{}
+
+# the place that the ask a writes, if it is a write
+def Ask.place(a: Types.Ask) -> Maybe<&2, Place>:
+  match a:
+    case Types.Ask{Ledgers.Id{author, name}, k, r}:
+      Request.place(author, r)
+
+# an ask that writes the place g: asks of two places differ
+def Place.ask(g: Place) -> Types.Ask:
+  match g:
+    case Place{w, b, p}:
+      Types.Ask{Ledgers.Id{w, ""}, 0n, Spec.Request.Write{b, p, None{}}}
+
+# a number that differs for most places
+def Place.mix(g: Place) -> U32:
+  match g:
+    case Place{w, Ledgers.Line{h, None{}}, p}:
+      Id.mix(p, Id.mix(w, 0))
+    case Place{w, Ledgers.Line{h, Some{b}}, p}:
+      Id.mix(p, Id.mix(b, Id.mix(w, 0)))
+
+# the key of the place g in a map: a number that differs for most places,
+# then the words of an ask that writes it, so two places have two keys
+def Place.key(+g: Place) -> List<&2, U32>:
+  Place.mix(g) <> Coded.Ask.words(Place.ask(g))
+
+# the newer of two asks: new, when the node took it in after old
+def Ask.later(old: Types.Ask, new: Types.Ask) -> Types.Ask:
+  +old = old
+  +new = new
+  Bool.pick(Types.Ask, Nat.is_lt(Facts.Ask.seq(old), Facts.Ask.seq(new)), new, old)
+
+# the newest writes tx with the ask a at the place m, if any, unless tx
+# holds a write there that is not older
+def Tops.put(
+  +tx: Crits.Crit<Types.Ask>,
+  a: Types.Ask,
+  m: Maybe<&2, Place>
+) -> Crits.Crit<Types.Ask>:
+  match m:
+    case None{}:
+      tx
+    case Some{+g}:
+      Crits.Crit.upsert(~Types.Ask, ~Ask.later, tx, Place.key(g), a)
+
+# the newest writes tx with the fact f
+def Tops.step(tx: Crits.Crit<Types.Ask>, f: Types.Fact) -> Crits.Crit<Types.Ask>:
+  match f:
+    case Types.Fact.Vote{v, st, x}:
+      tx
+    case Types.Fact.Ask{+a}:
+      Tops.put(tx, a, Ask.place(a))
+
+# the newest writes tx with each of the facts fs, in their order
+def Tops.go(fs: List<&2, Types.Fact>, tx: Crits.Crit<Types.Ask>) -> Crits.Crit<Types.Ask>:
+  match fs:
+    case Nil{}:
+      tx
+    case Con{f, rest}:
+      Tops.go(rest, Tops.step(tx, f))
+
+# the newest write of each writer at each path of each branch, among the
+# facts fs: of two writes with one number, the first
+def Tops.of(fs: List<&2, Types.Fact>) -> Crits.Crit<Types.Ask>:
+  Tops.go(fs, Crits.Crit.new(Types.Ask))
+
+# the newest writes tx with the ask a at the place m, if any: for an ask
+# that is newer than each ask that tx was read from
+def Tops.set(
+  +tx: Crits.Crit<Types.Ask>,
+  a: Types.Ask,
+  m: Maybe<&2, Place>
+) -> Crits.Crit<Types.Ask>:
+  match m:
+    case None{}:
+      tx
+    case Some{+g}:
+      Crits.Crit.set(~Types.Ask, tx, Place.key(g), a)
+
+# the newest writes tx with the fact f, which is newer than each ask that tx
+# was read from
+def Tops.join(tx: Crits.Crit<Types.Ask>, f: Types.Fact) -> Crits.Crit<Types.Ask>:
+  match f:
+    case Types.Fact.Vote{v, st, x}:
+      tx
+    case Types.Fact.Ask{+a}:
+      Tops.set(tx, a, Ask.place(a))
+
+# the newest write at the place g among the newest writes tx
+def Tops.get(tx: Crits.Crit<Types.Ask>, +g: Place) -> Maybe<&2, Types.Ask>:
+  Crits.Crit.get(Types.Ask, tx, Place.key(g))
+
+# the newest writes that the entry m holds, if it holds them
+def Shelf.tops(m: Maybe<&2, Kept>) -> Maybe<&2, Crits.Crit<Types.Ask>>:
+  match m:
+    case Some{Open{fs, n, tx}}:
+      Some{tx}
+    case _:
+      None{}
+
+# Known ids
+# ---------
 
 # a short key of the id i: one word; ids of one key share an entry of a set
 def Id.key(i: Ledgers.Id) -> List<&2, U32>:
@@ -544,7 +667,7 @@ def Known.ids(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Ids>:
         u2 => Some{x},
         u2 => Known.ids(rest, c)
       )
-    case Con{Open{fs, n}, rest}:
+    case Con{Open{fs, n, tx}, rest}:
       Known.ids(rest, c)
 
 # the request of the id i made one of the versions vs: read from their ids
@@ -766,22 +889,32 @@ def Open.with(+fs: List<&2, Types.Fact>, +f: Types.Fact, g: Scene) -> List<&2, T
 
 # the table kn, when the fact f joins the facts and leaves each line as it
 # is: what the entry m holds for a work, with f; s is the facts with f
-def Known.joined.of(m: Maybe<&2, Kept>, +kn: Known(), s: Facts.Plain(), +f: Types.Fact) -> Known():
+def Known.joined.of(m: Maybe<&2, Kept>, +kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
   match m:
-    case Some{Open{fs, n}}:
-      Known.reopen(kn, Open.with(fs, f, Scene{kn, s}), Nat.max(Facts.Seq.of(f), n))
+    case Some{Open{+fs, +n, +tx}}:
+      Known.reopen(
+        kn,
+        Open.with(fs, f, Scene{kn, s}),
+        Nat.max(Facts.Seq.of(f), n),
+        Shared.Bool.when(
+          Crits.Crit<Types.Ask>,
+          Nat.is_lt(n, Facts.Seq.of(f)),
+          u => Tops.join(tx, f),
+          u => Tops.of(Facts.Facts.list(s))
+        )
+      )
     case _:
       kn
 
 # the table kn, when the fact f joins the facts and leaves each line as it
 # is; s is the facts with f
-def Known.joined(+kn: Known(), s: Facts.Plain(), f: Types.Fact) -> Known():
+def Known.joined(+kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
   Known.joined.of(Known.shelf(kn), kn, s, f)
 
 # the table kn with the facts of s that a work may act on, and the greatest
 # number of an ask among all, the facts of s
 def Known.opened.of(+kn: Known(), +s: Facts.Plain(), +all: List<&2, Types.Fact>) -> Known():
-  Open{Open.of(all, Scene{kn, s}), Facts.Seq.peak(all)} <> kn
+  Open{Open.of(all, Scene{kn, s}), Facts.Seq.peak(all), Tops.of(all)} <> kn
 
 # the table kn with the facts of s that a work may act on
 def Known.opened(+kn: Known(), +s: Facts.Plain()) -> Known():
@@ -816,18 +949,20 @@ def Known.walk.if(
 
 # the table kn with the facts that a work may act on in the facts s, among
 # the facts m that it could act on before with the fact that joined them, if
-# known; n is the greatest number of an ask in s
+# known; n is the greatest number of an ask in s, and t the newest writes of
+# s, if known
 def Known.moved(
   +kn: Known(),
   +s: Facts.Plain(),
   m: Maybe<&2, List<&2, Types.Fact>>,
-  n: Nat
+  n: Nat,
+  t: Maybe<&2, Crits.Crit<Types.Ask>>
 ) -> Known():
-  match m:
-    case None{}:
+  match m t:
+    case Some{fs} Some{tx}:
+      Open{Open.of(fs, Scene{kn, s}), n, tx} <> kn
+    case _ _:
       kn
-    case Some{fs}:
-      Open{Open.of(fs, Scene{kn, s}), n} <> kn
 
 # What a node learns
 # ------------------
@@ -946,7 +1081,7 @@ def Known.voted.put(c: Ledgers.Line, e: Kept, rest: Known()) -> Known():
       List.filter.put(Kept, Ruled{c2, m, u}, rest, Bool.not(Known.hit(c, c2)))
     case Made{+c2, +y}:
       List.filter.put(Kept, Made{c2, y}, rest, Bool.not(Known.hit(c, c2)))
-    case Open{fs, n}:
+    case Open{fs, n, tx}:
       rest
 
 # the table kn after a vote for a slot of the line c: without the states and
@@ -1021,11 +1156,13 @@ def State.fits(m: Maybe<&2, Lines.State>, st: Lines.State) -> Bool:
     case Some{x}:
       State.same(x, st)
 
-# the versions a and b are the same
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for versions that differ, which then costs no more than equal versions, where both sides run
+# the versions a and b, each with its number, are the same
 def Found.same(a: Found, b: Found) -> Bool:
   match a b:
     case Found{n1, e1} Found{n2, e2}:
       Bool.and(Nat.is_eq(n1, n2), Entry.same(e1, e2))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the versions a and b are the same
 def Bucket.same(a: List<&2, Found>, b: List<&2, Found>) -> Bool:
@@ -1047,6 +1184,29 @@ def Map.same(a: Crits.Crit<List<&2, Found>>, b: Crits.Crit<List<&2, Found>>) -> 
           Bool.and(
             Shared.Maybe.is_eq(~List<&2, Found>, ~Bucket.same, e1, e2),
             Bool.and(Map.same(z1, z2), Map.same(o1, o2))
+          )
+        )
+      )
+    case _ _:
+      False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for maps that differ, which then costs no more than equal maps, where both sides run
+# the newest writes a and b are the same: key by key, in the same shape
+def Tops.same(a: Crits.Crit<Types.Ask>, b: Crits.Crit<Types.Ask>) -> Bool:
+  match a b:
+    case Crits.Crit.Tip{} Crits.Crit.Tip{}:
+      True{}
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Leaf{k2, v2}:
+      Bool.and(Crits.Key.is_eq(k1, k2), Coded.Ask.is_eq(v1, v2))
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      Bool.and(
+        Crits.Key.is_eq(r1, r2),
+        Bool.and(
+          Nat.is_eq(p1, p2),
+          Bool.and(
+            Shared.Maybe.is_eq(~Types.Ask, ~Coded.Ask.is_eq, e1, e2),
+            Bool.and(Tops.same(z1, z2), Tops.same(o1, o2))
           )
         )
       )

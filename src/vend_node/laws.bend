@@ -12,10 +12,10 @@ import ./lines.bend as Lines
 import ./mirror.bend as Mirror
 import ./rounds.bend as Rounds
 import ./run/answers.bend as RAnswers
-import ./run/known.bend as RKnown
 import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
 import ./run/files.bend as Files
+import ./run/known.bend as RKnown
 import ./run/lines.bend as RLines
 import ./run/rounds.bend as RRounds
 import ./shared/lists.bend as Lists
@@ -109,12 +109,7 @@ def Line.find_at(
 } -> {
   List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>
 } -> {
-  Answers.Line.find(
-    s,
-    c,
-    RLines.Entry.id(e)
-  )
-    == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>
+  Answers.Line.find(s, c, RLines.Entry.id(e)) == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>
 }:
   +hv => +hg =>
     %Equal.sym(

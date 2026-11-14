@@ -24,6 +24,7 @@ import ./shared/lists.bend as Lists
 import ./shared/set.bend as Sets
 import ./spec.bend as Spec
 import ./stays.bend as Stays
+import ./tops.bend as Newest
 import ./types.bend as Types
 import ./versions.bend as Versions
 
@@ -376,7 +377,10 @@ def Id.laws() -> Shared.Eq.Laws(Ledgers.Id, Ledgers.Id.is_eq):
 def Found.same_refl(a: RKnown.Found) -> {RKnown.Found.same(a, a) == True{}: Bool}:
   match a:
     case RKnown.Found{+n, +e}:
-      Shared.Bool.and_both(Nat.is_eq(n, n), RKnown.Entry.same(e, e))(Shared.Nat.is_eq_refl(n))(Entry.same_refl(e))
+      Shared.Bool.and_both(
+        Nat.is_eq(n, n),
+        RKnown.Entry.same(e, e)
+      )(Shared.Nat.is_eq_refl(n))(Entry.same_refl(e))
 
 # Found.same is True only for equal versions
 def Found.same_sound(
@@ -479,7 +483,10 @@ def Map.same_sound(
       )
     case Crits.Crit.Tip{} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
       h => Empty.absurd(
-        {Crits.Crit.Tip{} == Crits.Crit.Fork{r2, p2, e2, z2, o2}: Crits.Crit<List<&2, RKnown.Found>>},
+        {
+          Crits.Crit.Tip{}
+            == Crits.Crit.Fork{r2, p2, e2, z2, o2}: Crits.Crit<List<&2, RKnown.Found>>
+        },
         Shared.Bool.false_ne_true(h)
       )
     case Crits.Crit.Leaf{k1, v1} Crits.Crit.Tip{}:
@@ -500,7 +507,16 @@ def Map.same_sound(
       )
     case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Tip{}:
       h => Empty.absurd(
-        {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Tip{}: Crits.Crit<List<&2, RKnown.Found>>},
+        {
+          Crits.Crit.Fork{
+            r1,
+            p1,
+            e1,
+            z1,
+            o1
+          }
+            == Crits.Crit.Tip{}: Crits.Crit<List<&2, RKnown.Found>>
+        },
         Shared.Bool.false_ne_true(h)
       )
     case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Leaf{k2, v2}:
@@ -536,7 +552,10 @@ def Map.same_sound(
 def Ids.same_refl(a: RKnown.Ids) -> {RKnown.Ids.same(a, a) == True{}: Bool}:
   match a:
     case RKnown.Ids{+m, +n}:
-      Shared.Bool.and_both(RKnown.Map.same(m, m), Nat.is_eq(n, n))(Map.same_refl(m))(Shared.Nat.is_eq_refl(n))
+      Shared.Bool.and_both(
+        RKnown.Map.same(m, m),
+        Nat.is_eq(n, n)
+      )(Map.same_refl(m))(Shared.Nat.is_eq_refl(n))
 
 # Ids.same is True only for equal versions by id
 def Ids.same_sound(
@@ -598,7 +617,6 @@ def Key.ne_id(
     ef2 => {==}
   )
 
-#BEGIN NEWIDS
 # the map of the versions x by id
 def Ids.map(x: RKnown.Ids) -> Crits.Crit<List<&2, RKnown.Found>>:
   match x:
@@ -638,15 +656,21 @@ def Map.get_put(
   +w =>
     %Equal.sym(
       Maybe<&2, List<&2, RKnown.Found>>,
-      Crits.Crit.get(List<&2, RKnown.Found>, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]), k),
-      Crits.Crit.lookup(List<&2, RKnown.Found>, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]), k),
+      Crits.Crit.get(
+        List<&2, RKnown.Found>,
+        Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]),
+        k
+      ),
+      Crits.Crit.lookup(
+        List<&2, RKnown.Found>,
+        Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]),
+        k
+      ),
       Crits.Crit.get_lookup(
         ~List<&2, RKnown.Found>,
         Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]),
         k
-      )(
-        Crits.Crit.upsert_wf(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f])(w)
-      )
+      )(Crits.Crit.upsert_wf(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f])(w))
     ): {
       _
         == Bool.pick(
@@ -665,7 +689,11 @@ def Map.get_put(
     }
     %Equal.sym(
       Maybe<&2, List<&2, RKnown.Found>>,
-      Crits.Crit.lookup(List<&2, RKnown.Found>, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]), k),
+      Crits.Crit.lookup(
+        List<&2, RKnown.Found>,
+        Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f]),
+        k
+      ),
       Bool.pick(
         Maybe<&2, List<&2, RKnown.Found>>,
         Crits.Key.is_eq(k, kk),
@@ -679,14 +707,7 @@ def Map.get_put(
         },
         Crits.Crit.lookup(List<&2, RKnown.Found>, acc, k)
       ),
-      Crits.Crit.upsert_lookup(
-        ~List<&2, RKnown.Found>,
-        ~RKnown.Ids.join,
-        acc,
-        kk,
-        [f],
-        k
-      )(w)
+      Crits.Crit.upsert_lookup(~List<&2, RKnown.Found>, ~RKnown.Ids.join, acc, kk, [f], k)(w)
     ): {
       _
         == Bool.pick(
@@ -773,7 +794,10 @@ def Bucket.has_put(
   +e: Types.Entry,
   +i: Ledgers.Id
 ) -> {
-  RKnown.Ids.has.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, [RKnown.Found{n, e}])}, i)
+  RKnown.Ids.has.of(
+    Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, [RKnown.Found{n, e}])},
+    i
+  )
     == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has.of(m, i)): Bool
 }:
   match m:
@@ -786,7 +810,13 @@ def Bucket.has_put(
       )
     case Some{+old}:
       Lists.Bool.by(
-        b => {List.any.if(u => RKnown.Ids.holds(old, i), b) == Bool.or(b, RKnown.Ids.holds(old, i)): Bool},
+        b => {
+          List.any.if(
+            u => RKnown.Ids.holds(old, i),
+            b
+          )
+            == Bool.or(b, RKnown.Ids.holds(old, i)): Bool
+        },
         RLines.Entry.is_of(i, e),
         et => {==},
         ef => {==}
@@ -800,19 +830,70 @@ def Ids.put_has(
   +n: Nat,
   +e: Types.Entry,
   +i: Ledgers.Id
-) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
-  RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n}, e), i)
+) -> {
+  Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
+} -> {
+  RKnown.Ids.has(
+    RKnown.Ids.put(RKnown.Ids{m, n}, e),
+    i
+  )
     == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool
 }:
   w =>
     %Equal.sym(
       Maybe<&2, List<&2, RKnown.Found>>,
-      Crits.Crit.get(List<&2, RKnown.Found>, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}]), RKnown.Id.key(i)),
-      Bool.pick(Maybe<&2, List<&2, RKnown.Found>>, Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e))), Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Entry.id(e))), [RKnown.Found{n, e}])}, Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i))),
+      Crits.Crit.get(
+        List<&2, RKnown.Found>,
+        Crits.Crit.upsert(
+          ~List<&2, RKnown.Found>,
+          ~RKnown.Ids.join,
+          m,
+          RKnown.Id.key(RLines.Entry.id(e)),
+          [RKnown.Found{n, e}]
+        ),
+        RKnown.Id.key(i)
+      ),
+      Bool.pick(
+        Maybe<&2, List<&2, RKnown.Found>>,
+        Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e))),
+        Some{
+          Crits.Crit.merge(
+            ~List<&2, RKnown.Found>,
+            ~RKnown.Ids.join,
+            Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Entry.id(e))),
+            [RKnown.Found{n, e}]
+          )
+        },
+        Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i))
+      ),
       Map.get_put(m, RKnown.Id.key(RLines.Entry.id(e)), RKnown.Found{n, e}, RKnown.Id.key(i))(w)
-    ): {RKnown.Ids.has.of(_, i) == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}
+    ): {
+      RKnown.Ids.has.of(
+        _,
+        i
+      )
+        == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool
+    }
     Lists.Bool.by(
-      h => {RKnown.Ids.has.of(Bool.pick(Maybe<&2, List<&2, RKnown.Found>>, h, Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Entry.id(e))), [RKnown.Found{n, e}])}, Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i))), i) == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool},
+      h => {
+        RKnown.Ids.has.of(
+          Bool.pick(
+            Maybe<&2, List<&2, RKnown.Found>>,
+            h,
+            Some{
+              Crits.Crit.merge(
+                ~List<&2, RKnown.Found>,
+                ~RKnown.Ids.join,
+                Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Entry.id(e))),
+                [RKnown.Found{n, e}]
+              )
+            },
+            Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i))
+          ),
+          i
+        )
+          == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool
+      },
       Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e))),
       et => (
         %Crits.Key.is_eq_sound(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e)))(et): {RKnown.Ids.has.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, _), [RKnown.Found{n, e}])}, i) == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}
@@ -828,16 +909,39 @@ def Ids.go_wf(
   vs: List<&2, Types.Entry>,
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat
-) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {Crits.Crit.wf(~List<&2, RKnown.Found>, Ids.map(RKnown.Ids.go(vs, RKnown.Ids{m, n})), 0n) == True{}: Bool}:
+) -> {
+  Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
+} -> {
+  Crits.Crit.wf(
+    ~List<&2, RKnown.Found>,
+    Ids.map(RKnown.Ids.go(vs, RKnown.Ids{m, n})),
+    0n
+  )
+    == True{}: Bool
+}:
   match vs:
     case Nil{}:
       w => w
     case Con{+e, rest}:
       w => Ids.go_wf(
         rest,
-        Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}]),
+        Crits.Crit.upsert(
+          ~List<&2, RKnown.Found>,
+          ~RKnown.Ids.join,
+          m,
+          RKnown.Id.key(RLines.Entry.id(e)),
+          [RKnown.Found{n, e}]
+        ),
         1n+n
-      )(Crits.Crit.upsert_wf(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}])(w))
+      )(
+        Crits.Crit.upsert_wf(
+          ~List<&2, RKnown.Found>,
+          ~RKnown.Ids.join,
+          m,
+          RKnown.Id.key(RLines.Entry.id(e)),
+          [RKnown.Found{n, e}]
+        )(w)
+      )
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the request of an id made one of the versions by id with the versions vs
@@ -847,9 +951,17 @@ def Ids.go_has(
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat,
   +i: Ledgers.Id
-) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
-  RKnown.Ids.has(RKnown.Ids.go(vs, RKnown.Ids{m, n}), i)
-    == Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool
+) -> {
+  Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
+} -> {
+  RKnown.Ids.has(
+    RKnown.Ids.go(vs, RKnown.Ids{m, n}),
+    i
+  )
+    == Bool.or(
+      Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i),
+      RKnown.Ids.has(RKnown.Ids{m, n}, i)
+    ): Bool
 }:
   match vs:
     case Nil{}:
@@ -858,14 +970,34 @@ def Ids.go_has(
       +w => Equal.trans(
         Bool,
         RKnown.Ids.has(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n}, e)), i),
-        Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n}, e), i)),
-        Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, e <> rest, i), RKnown.Ids.has(RKnown.Ids{m, n}, i)),
+        Bool.or(
+          Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i),
+          RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n}, e), i)
+        ),
+        Bool.or(
+          Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, e <> rest, i),
+          RKnown.Ids.has(RKnown.Ids{m, n}, i)
+        ),
         Ids.go_has(
           rest,
-          Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}]),
+          Crits.Crit.upsert(
+            ~List<&2, RKnown.Found>,
+            ~RKnown.Ids.join,
+            m,
+            RKnown.Id.key(RLines.Entry.id(e)),
+            [RKnown.Found{n, e}]
+          ),
           1n+n,
           i
-        )(Crits.Crit.upsert_wf(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}])(w)),
+        )(
+          Crits.Crit.upsert_wf(
+            ~List<&2, RKnown.Found>,
+            ~RKnown.Ids.join,
+            m,
+            RKnown.Id.key(RLines.Entry.id(e)),
+            [RKnown.Found{n, e}]
+          )(w)
+        ),
         (
           %Equal.sym(Bool, RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n}, e), i), Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)), Ids.put_has(m, n, e, i)(w)): {Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), _) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), RLines.Entry.is_of(i, e)), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}
           Lists.Bool.by(b => {Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), Bool.or(b, RKnown.Ids.has(RKnown.Ids{m, n}, i))) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), b), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}, RLines.Entry.is_of(i, e), et => Shared.Bool.or_true_right(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i)), ef => {==}))
@@ -877,7 +1009,13 @@ def Ids.go_has(
 def Ids.of_has(
   +vs: List<&2, Types.Entry>,
   +i: Ledgers.Id
-) -> {RKnown.Ids.has(RKnown.Ids.of(vs), i) == Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i): Bool}:
+) -> {
+  RKnown.Ids.has(
+    RKnown.Ids.of(vs),
+    i
+  )
+    == Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i): Bool
+}:
   Equal.trans(
     Bool,
     RKnown.Ids.has(RKnown.Ids.of(vs), i),
@@ -908,23 +1046,35 @@ def Ids.go_append(
   vs: List<&2, Types.Entry>,
   +zs: List<&2, Types.Entry>,
   +acc: RKnown.Ids
-) -> {RKnown.Ids.go(List.append(&2, Types.Entry, vs, zs), acc) == RKnown.Ids.go(zs, RKnown.Ids.go(vs, acc)): RKnown.Ids}:
+) -> {
+  RKnown.Ids.go(
+    List.append(&2, Types.Entry, vs, zs),
+    acc
+  )
+    == RKnown.Ids.go(zs, RKnown.Ids.go(vs, acc)): RKnown.Ids
+}:
   match vs:
     case Nil{}:
       {==}
     case Con{+e, rest}:
       Ids.go_append(rest, zs, RKnown.Ids.put(acc, e))
 
-#END NEWIDS
-#BEGIN IDS2
 # a version that the request of an id did not make changes no version found
 def Found.or_miss(
   x: Maybe<&2, RKnown.Found>,
   +n: Nat,
   +e: Types.Entry,
   +i: Ledgers.Id
-) -> {RLines.Entry.is_of(i, e) == False{}: Bool} -> {RKnown.Found.or(x, RKnown.Found{n, e}, i) == x: Maybe<&2, RKnown.Found>}:
-  ?TODO
+) -> {
+  RLines.Entry.is_of(i, e) == False{}: Bool
+} -> {RKnown.Found.or(x, RKnown.Found{n, e}, i) == x: Maybe<&2, RKnown.Found>}:
+  match x:
+    case Some{g}:
+      h => {==}
+    case None{}:
+      h => (
+        %Equal.sym(Bool, RLines.Entry.is_of(i, e), False{}, h): {Shared.Maybe.when(RKnown.Found, _, u => Some{RKnown.Found{n, e}}) == None{}: Maybe<&2, RKnown.Found>}
+        {==})
 
 # the oldest version that the request of an id made among the versions m,
 # if any, with a version before them: the oldest among m, else that version
@@ -934,10 +1084,17 @@ def Bucket.find_put(
   +e: Types.Entry,
   +i: Ledgers.Id
 ) -> {
-  RKnown.Ids.find.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, [RKnown.Found{n, e}])}, i)
+  RKnown.Ids.find.of(
+    Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, [RKnown.Found{n, e}])},
+    i
+  )
     == RKnown.Found.or(RKnown.Ids.find.of(m, i), RKnown.Found{n, e}, i): Maybe<&2, RKnown.Found>
 }:
-  ?TODO
+  match m:
+    case None{}:
+      {==}
+    case Some{old}:
+      {==}
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the oldest version that the request of an id made in the versions by id
@@ -947,21 +1104,114 @@ def Ids.put_find(
   +n: Nat,
   +e: Types.Entry,
   +i: Ledgers.Id
-) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
-  RKnown.Ids.find(RKnown.Ids.put(RKnown.Ids{m, n}, e), i)
-    == RKnown.Found.or(RKnown.Ids.find(RKnown.Ids{m, n}, i), RKnown.Found{n, e}, i): Maybe<&2, RKnown.Found>
+) -> {
+  Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
+} -> {
+  RKnown.Ids.find(
+    RKnown.Ids.put(RKnown.Ids{m, n}, e),
+    i
+  )
+    == RKnown.Found.or(
+      RKnown.Ids.find(RKnown.Ids{m, n}, i),
+      RKnown.Found{n, e},
+      i
+    ): Maybe<&2, RKnown.Found>
 }:
-  ?TODO
+  w =>
+    %Equal.sym(
+      Maybe<&2, List<&2, RKnown.Found>>,
+      Crits.Crit.get(
+        List<&2, RKnown.Found>,
+        Crits.Crit.upsert(
+          ~List<&2, RKnown.Found>,
+          ~RKnown.Ids.join,
+          m,
+          RKnown.Id.key(RLines.Entry.id(e)),
+          [RKnown.Found{n, e}]
+        ),
+        RKnown.Id.key(i)
+      ),
+      Bool.pick(
+        Maybe<&2, List<&2, RKnown.Found>>,
+        Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e))),
+        Some{
+          Crits.Crit.merge(
+            ~List<&2, RKnown.Found>,
+            ~RKnown.Ids.join,
+            Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Entry.id(e))),
+            [RKnown.Found{n, e}]
+          )
+        },
+        Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i))
+      ),
+      Map.get_put(m, RKnown.Id.key(RLines.Entry.id(e)), RKnown.Found{n, e}, RKnown.Id.key(i))(w)
+    ): {
+      RKnown.Ids.find.of(
+        _,
+        i
+      )
+        == RKnown.Found.or(
+          RKnown.Ids.find(RKnown.Ids{m, n}, i),
+          RKnown.Found{n, e},
+          i
+        ): Maybe<&2, RKnown.Found>
+    }
+    Lists.Bool.by(
+      h => {
+        RKnown.Ids.find.of(
+          Bool.pick(
+            Maybe<&2, List<&2, RKnown.Found>>,
+            h,
+            Some{
+              Crits.Crit.merge(
+                ~List<&2, RKnown.Found>,
+                ~RKnown.Ids.join,
+                Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Entry.id(e))),
+                [RKnown.Found{n, e}]
+              )
+            },
+            Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i))
+          ),
+          i
+        )
+          == RKnown.Found.or(
+            RKnown.Ids.find(RKnown.Ids{m, n}, i),
+            RKnown.Found{n, e},
+            i
+          ): Maybe<&2, RKnown.Found>
+      },
+      Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e))),
+      et => (
+        %Crits.Key.is_eq_sound(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e)))(et): {RKnown.Ids.find.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, _), [RKnown.Found{n, e}])}, i) == RKnown.Found.or(RKnown.Ids.find(RKnown.Ids{m, n}, i), RKnown.Found{n, e}, i): Maybe<&2, RKnown.Found>}
+        Bucket.find_put(Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i)), n, e, i)),
+      ef => Equal.sym(
+        Maybe<&2, RKnown.Found>,
+        RKnown.Found.or(RKnown.Ids.find(RKnown.Ids{m, n}, i), RKnown.Found{n, e}, i),
+        RKnown.Ids.find(RKnown.Ids{m, n}, i),
+        Found.or_miss(
+          RKnown.Ids.find(RKnown.Ids{m, n}, i),
+          n,
+          e,
+          i
+        )(Key.ne_id(RLines.Entry.id(e), i)(ef))
+      )
+    )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the oldest version that the request of the id i made: m, if any, else the
 # first of vs that it made, where the versions vs are numbered from n on
-def Found.over(m: Maybe<&2, RKnown.Found>, n: Nat, vs: List<&2, Types.Entry>, +i: Ledgers.Id) -> Maybe<&2, RKnown.Found>:
+def Found.over(
+  vs: List<&2, Types.Entry>,
+  m: Maybe<&2, RKnown.Found>,
+  n: Nat,
+  +i: Ledgers.Id
+) -> Maybe<&2, RKnown.Found>:
   match vs:
     case Nil{}:
       m
     case Con{+e, rest}:
       +n = n
-      Found.over(RKnown.Found.or(m, RKnown.Found{n, e}, i), 1n+n, rest, i)
+      Found.over(rest, RKnown.Found.or(m, RKnown.Found{n, e}, i), 1n+n, i)
 
 # the oldest version that the request of an id made in the versions by id
 # with the versions vs: the oldest before, else the first of vs
@@ -970,20 +1220,37 @@ def Ids.go_find(
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat,
   +i: Ledgers.Id
-) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
-  RKnown.Ids.find(RKnown.Ids.go(vs, RKnown.Ids{m, n}), i)
-    == Found.over(RKnown.Ids.find(RKnown.Ids{m, n}, i), n, vs, i): Maybe<&2, RKnown.Found>
+) -> {
+  Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
+} -> {
+  RKnown.Ids.find(
+    RKnown.Ids.go(vs, RKnown.Ids{m, n}),
+    i
+  )
+    == Found.over(vs, RKnown.Ids.find(RKnown.Ids{m, n}, i), n, i): Maybe<&2, RKnown.Found>
 }:
-  ?TODO
+  match vs:
+    case Nil{}:
+      w => {==}
+    case Con{+e, +rest}:
+      +w => (
+        %Ids.put_find(m, n, e, i)(w): {RKnown.Ids.find(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n}, e)), i) == Found.over(rest, _, 1n+n, i): Maybe<&2, RKnown.Found>}
+        Ids.go_find(rest, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}]), 1n+n, i)(Crits.Crit.upsert_wf(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}])(w)))
 
+# bend-lint: expect-begin bend-lint-rules/performance/dead_accumulator@information -- a proof does not run
 # a version that was found stays the oldest
 def Found.over_some(
+  vs: List<&2, Types.Entry>,
   +g: RKnown.Found,
   n: Nat,
-  vs: List<&2, Types.Entry>,
   +i: Ledgers.Id
-) -> {Found.over(Some{g}, n, vs, i) == Some{g}: Maybe<&2, RKnown.Found>}:
-  ?TODO
+) -> {Found.over(vs, Some{g}, n, i) == Some{g}: Maybe<&2, RKnown.Found>}:
+  match vs:
+    case Nil{}:
+      {==}
+    case Con{+e, rest}:
+      Found.over_some(rest, g, 1n+n, i)
+# bend-lint: expect-end bend-lint-rules/performance/dead_accumulator@information
 
 # the version m, if any, with n more as its number
 def Found.shift(n: Nat, m: Maybe<&2, RKnown.Found>) -> Maybe<&2, RKnown.Found>:
@@ -1000,10 +1267,28 @@ def Find.up_get(
   +j: Nat,
   +n: Nat
 ) -> {
-  Found.shift(n, Maybe.map(&2, Types.Entry, RKnown.Found, e => RKnown.Found{1n+j, e}, g))
-    == Found.shift(1n+n, Maybe.map(&2, Types.Entry, RKnown.Found, e => RKnown.Found{j, e}, g)): Maybe<&2, RKnown.Found>
+  Found.shift(
+    n,
+    Maybe.map(&2, Types.Entry, RKnown.Found, e => RKnown.Found{1n+j, e}, g)
+  )
+    == Found.shift(
+      1n+n,
+      Maybe.map(&2, Types.Entry, RKnown.Found, e => RKnown.Found{j, e}, g)
+    ): Maybe<&2, RKnown.Found>
 }:
-  ?TODO
+  match g:
+    case None{}:
+      {==}
+    case Some{x}:
+      %Equal.sym(
+        Nat,
+        Nat.add(j, 1n+n),
+        1n+Nat.add(j, n),
+        Shared.Nat.add_succ(j, n)
+      ): {
+        Some{RKnown.Found{1n+Nat.add(j, n), x}} == Some{RKnown.Found{_, x}}: Maybe<&2, RKnown.Found>
+      }
+      {==}
 
 # the version at an index after the one of mi, among versions with one more
 # before them, numbered from n, is the version at mi, numbered from 1+n
@@ -1013,10 +1298,17 @@ def Find.up(
   mi: Maybe<&2, Nat>,
   +n: Nat
 ) -> {
-  Found.shift(n, RAnswers.Versions.find.at(e <> rest, Lists.List.index.up(mi)))
+  Found.shift(
+    n,
+    RAnswers.Versions.find.at(e <> rest, Lists.List.index.up(mi))
+  )
     == Found.shift(1n+n, RAnswers.Versions.find.at(rest, mi)): Maybe<&2, RKnown.Found>
 }:
-  ?TODO
+  match mi:
+    case None{}:
+      {==}
+    case Some{+j}:
+      Find.up_get(List.get(&2, Types.Entry, rest, j), j, n)
 
 # the first of the versions vs, numbered from n on, that the request of an
 # id made is the version that Versions.find gives, with n more as its number
@@ -1024,20 +1316,115 @@ def Found.over_none(
   vs: List<&2, Types.Entry>,
   +n: Nat,
   +i: Ledgers.Id
-) -> {Found.over(None{}, n, vs, i) == Found.shift(n, RAnswers.Versions.find(vs, i)): Maybe<&2, RKnown.Found>}:
-  ?TODO
+) -> {
+  Found.over(
+    vs,
+    None{},
+    n,
+    i
+  )
+    == Found.shift(n, RAnswers.Versions.find(vs, i)): Maybe<&2, RKnown.Found>
+}:
+  match vs:
+    case Nil{}:
+      {==}
+    case Con{+e, +rest}:
+      Lists.Bool.by(
+        b => {
+          Found.over(
+            rest,
+            Shared.Maybe.when(RKnown.Found, b, u => Some{RKnown.Found{n, e}}),
+            1n+n,
+            i
+          )
+            == Found.shift(
+              n,
+              RAnswers.Versions.find.at(
+                e <> rest,
+                Lists.List.index.if(
+                  u => Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i),
+                  b
+                )
+              )
+            ): Maybe<&2, RKnown.Found>
+        },
+        RLines.Entry.is_of(i, e),
+        et => Found.over_some(rest, RKnown.Found{n, e}, 1n+n, i),
+        ef => Equal.trans(
+          Maybe<&2, RKnown.Found>,
+          Found.over(rest, None{}, 1n+n, i),
+          Found.shift(1n+n, RAnswers.Versions.find(rest, i)),
+          Found.shift(
+            n,
+            RAnswers.Versions.find.at(
+              e <> rest,
+              Lists.List.index.up(
+                Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i)
+              )
+            )
+          ),
+          Found.over_none(rest, 1n+n, i),
+          Equal.sym(
+            Maybe<&2, RKnown.Found>,
+            Found.shift(
+              n,
+              RAnswers.Versions.find.at(
+                e <> rest,
+                Lists.List.index.up(
+                  Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i)
+                )
+              )
+            ),
+            Found.shift(1n+n, RAnswers.Versions.find(rest, i)),
+            Find.up(
+              e,
+              rest,
+              Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i),
+              n
+            )
+          )
+        )
+      )
 
 # a version with 0 more as its number is itself
-def Found.shift_zero(m: Maybe<&2, RKnown.Found>) -> {Found.shift(0n, m) == m: Maybe<&2, RKnown.Found>}:
-  ?TODO
+def Found.shift_zero(
+  m: Maybe<&2, RKnown.Found>
+) -> {Found.shift(0n, m) == m: Maybe<&2, RKnown.Found>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{RKnown.Found{j, e}}:
+      %Equal.sym(
+        Nat,
+        Nat.add(j, 0n),
+        j,
+        Shared.Nat.add_zero(j)
+      ): {Some{RKnown.Found{_, e}} == Some{RKnown.Found{j, e}}: Maybe<&2, RKnown.Found>}
+      {==}
 
 # the oldest version that the request of an id made, read from the versions
 # vs by id, is the version that Versions.find gives
 def Ids.of_find(
   +vs: List<&2, Types.Entry>,
   +i: Ledgers.Id
-) -> {RKnown.Ids.find(RKnown.Ids.of(vs), i) == RAnswers.Versions.find(vs, i): Maybe<&2, RKnown.Found>}:
-  ?TODO
+) -> {
+  RKnown.Ids.find(RKnown.Ids.of(vs), i) == RAnswers.Versions.find(vs, i): Maybe<&2, RKnown.Found>
+}:
+  Equal.trans(
+    Maybe<&2, RKnown.Found>,
+    RKnown.Ids.find(RKnown.Ids.of(vs), i),
+    Found.over(vs, None{}, 0n, i),
+    RAnswers.Versions.find(vs, i),
+    Ids.go_find(vs, Crits.Crit.new(List<&2, RKnown.Found>), 0n, i)({==}),
+    Equal.trans(
+      Maybe<&2, RKnown.Found>,
+      Found.over(vs, None{}, 0n, i),
+      Found.shift(0n, RAnswers.Versions.find(vs, i)),
+      RAnswers.Versions.find(vs, i),
+      Found.over_none(vs, 0n, i),
+      Found.shift_zero(RAnswers.Versions.find(vs, i))
+    )
+  )
 
 # an ask made one of the versions m, if any, with a version before them,
 # exactly when it made that version or one of m
@@ -1047,10 +1434,33 @@ def Bucket.made_put(
   +e: Types.Entry,
   +a: Types.Ask
 ) -> {
-  RKnown.Ids.made.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, [RKnown.Found{n, e}])}, a)
+  RKnown.Ids.made.of(
+    Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, [RKnown.Found{n, e}])},
+    a
+  )
     == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made.of(m, a)): Bool
 }:
-  ?TODO
+  match m:
+    case None{}:
+      Lists.Bool.by(
+        b => {List.any.if(u => False{}, b) == Bool.or(b, False{}): Bool},
+        RKnown.Entry.made_by(a, e),
+        et => {==},
+        ef => {==}
+      )
+    case Some{+old}:
+      Lists.Bool.by(
+        b => {
+          List.any.if(
+            u => RKnown.Ids.made.in(old, a),
+            b
+          )
+            == Bool.or(b, RKnown.Ids.made.in(old, a)): Bool
+        },
+        RKnown.Entry.made_by(a, e),
+        et => {==},
+        ef => {==}
+      )
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # an ask made one of the versions by id with one more version exactly when
@@ -1060,11 +1470,84 @@ def Ids.put_made(
   +n: Nat,
   +e: Types.Entry,
   +a: Types.Ask
-) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
-  RKnown.Ids.made(RKnown.Ids.put(RKnown.Ids{m, n}, e), a)
+) -> {
+  Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
+} -> {
+  RKnown.Ids.made(
+    RKnown.Ids.put(RKnown.Ids{m, n}, e),
+    a
+  )
     == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool
 }:
-  ?TODO
+  w =>
+    %Equal.sym(
+      Maybe<&2, List<&2, RKnown.Found>>,
+      Crits.Crit.get(
+        List<&2, RKnown.Found>,
+        Crits.Crit.upsert(
+          ~List<&2, RKnown.Found>,
+          ~RKnown.Ids.join,
+          m,
+          RKnown.Id.key(RLines.Entry.id(e)),
+          [RKnown.Found{n, e}]
+        ),
+        RKnown.Id.key(RLines.Ask.id(a))
+      ),
+      Bool.pick(
+        Maybe<&2, List<&2, RKnown.Found>>,
+        Crits.Key.is_eq(RKnown.Id.key(RLines.Ask.id(a)), RKnown.Id.key(RLines.Entry.id(e))),
+        Some{
+          Crits.Crit.merge(
+            ~List<&2, RKnown.Found>,
+            ~RKnown.Ids.join,
+            Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Entry.id(e))),
+            [RKnown.Found{n, e}]
+          )
+        },
+        Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Ask.id(a)))
+      ),
+      Map.get_put(
+        m,
+        RKnown.Id.key(RLines.Entry.id(e)),
+        RKnown.Found{n, e},
+        RKnown.Id.key(RLines.Ask.id(a))
+      )(w)
+    ): {
+      RKnown.Ids.made.of(
+        _,
+        a
+      )
+        == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool
+    }
+    Lists.Bool.by(
+      h => {
+        RKnown.Ids.made.of(
+          Bool.pick(
+            Maybe<&2, List<&2, RKnown.Found>>,
+            h,
+            Some{
+              Crits.Crit.merge(
+                ~List<&2, RKnown.Found>,
+                ~RKnown.Ids.join,
+                Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Entry.id(e))),
+                [RKnown.Found{n, e}]
+              )
+            },
+            Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Ask.id(a)))
+          ),
+          a
+        )
+          == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool
+      },
+      Crits.Key.is_eq(RKnown.Id.key(RLines.Ask.id(a)), RKnown.Id.key(RLines.Entry.id(e))),
+      et => (
+        %Crits.Key.is_eq_sound(RKnown.Id.key(RLines.Ask.id(a)), RKnown.Id.key(RLines.Entry.id(e)))(et): {RKnown.Ids.made.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, _), [RKnown.Found{n, e}])}, a) == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool}
+        Bucket.made_put(Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Ask.id(a))), n, e, a)),
+      ef => (
+        %Equal.sym(Bool, Ledgers.Id.is_eq(RLines.Entry.id(e), RLines.Ask.id(a)), False{}, Key.ne_id(RLines.Entry.id(e), RLines.Ask.id(a))(ef)): {RKnown.Ids.made(RKnown.Ids{m, n}, a) == Bool.or(List.all.if(u => Coded.Ask.is_eq(RLines.Entry.ask(e), a), _), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool}
+        {==})
+    )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # an ask made one of the versions by id with the versions vs exactly when it
@@ -1074,34 +1557,128 @@ def Ids.go_made(
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat,
   +a: Types.Ask
-) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
-  RKnown.Ids.made(RKnown.Ids.go(vs, RKnown.Ids{m, n}), a)
-    == Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool
+) -> {
+  Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
+} -> {
+  RKnown.Ids.made(
+    RKnown.Ids.go(vs, RKnown.Ids{m, n}),
+    a
+  )
+    == Bool.or(
+      Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a),
+      RKnown.Ids.made(RKnown.Ids{m, n}, a)
+    ): Bool
 }:
-  ?TODO
+  match vs:
+    case Nil{}:
+      w => {==}
+    case Con{+e, +rest}:
+      +w => Equal.trans(
+        Bool,
+        RKnown.Ids.made(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n}, e)), a),
+        Bool.or(
+          Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a),
+          RKnown.Ids.made(RKnown.Ids.put(RKnown.Ids{m, n}, e), a)
+        ),
+        Bool.or(
+          Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, e <> rest, a),
+          RKnown.Ids.made(RKnown.Ids{m, n}, a)
+        ),
+        Ids.go_made(
+          rest,
+          Crits.Crit.upsert(
+            ~List<&2, RKnown.Found>,
+            ~RKnown.Ids.join,
+            m,
+            RKnown.Id.key(RLines.Entry.id(e)),
+            [RKnown.Found{n, e}]
+          ),
+          1n+n,
+          a
+        )(
+          Crits.Crit.upsert_wf(
+            ~List<&2, RKnown.Found>,
+            ~RKnown.Ids.join,
+            m,
+            RKnown.Id.key(RLines.Entry.id(e)),
+            [RKnown.Found{n, e}]
+          )(w)
+        ),
+        (
+          %Equal.sym(Bool, RKnown.Ids.made(RKnown.Ids.put(RKnown.Ids{m, n}, e), a), Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)), Ids.put_made(m, n, e, a)(w)): {Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), _) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), RKnown.Entry.made_by(a, e)), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool}
+          Lists.Bool.by(b => {Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), Bool.or(b, RKnown.Ids.made(RKnown.Ids{m, n}, a))) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), b), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool}, RKnown.Entry.made_by(a, e), et => Shared.Bool.or_true_right(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a)), ef => {==}))
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # an ask made one of the versions vs by id exactly when it made one of vs
 def Ids.of_made(
   +vs: List<&2, Types.Entry>,
   +a: Types.Ask
-) -> {RKnown.Ids.made(RKnown.Ids.of(vs), a) == Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a): Bool}:
-  ?TODO
+) -> {
+  RKnown.Ids.made(
+    RKnown.Ids.of(vs),
+    a
+  )
+    == Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a): Bool
+}:
+  Equal.trans(
+    Bool,
+    RKnown.Ids.made(RKnown.Ids.of(vs), a),
+    Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a), False{}),
+    Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a),
+    Ids.go_made(vs, Crits.Crit.new(List<&2, RKnown.Found>), 0n, a)({==}),
+    Equal.sym(
+      Bool,
+      Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a),
+      Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a), False{}),
+      Shared.Bool.or_false(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a))
+    )
+  )
 
 # the count of the versions by id with the versions vs: as many more
 def Ids.go_count(
   vs: List<&2, Types.Entry>,
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat
-) -> {RKnown.Ids.count(RKnown.Ids.go(vs, RKnown.Ids{m, n})) == Nat.add(List.length(&2, Types.Entry, vs), n): Nat}:
-  ?TODO
+) -> {
+  RKnown.Ids.count(
+    RKnown.Ids.go(vs, RKnown.Ids{m, n})
+  )
+    == Nat.add(List.length(&2, Types.Entry, vs), n): Nat
+}:
+  match vs:
+    case Nil{}:
+      {==}
+    case Con{+e, +rest}:
+      %Shared.Nat.add_succ(
+        List.length(&2, Types.Entry, rest),
+        n
+      ): {RKnown.Ids.count(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n}, e))) == _: Nat}
+      Ids.go_count(
+        rest,
+        Crits.Crit.upsert(
+          ~List<&2, RKnown.Found>,
+          ~RKnown.Ids.join,
+          m,
+          RKnown.Id.key(RLines.Entry.id(e)),
+          [RKnown.Found{n, e}]
+        ),
+        1n+n
+      )
 
 # the count of the versions vs by id is the number of vs
 def Ids.of_count(
   +vs: List<&2, Types.Entry>
 ) -> {RKnown.Ids.count(RKnown.Ids.of(vs)) == List.length(&2, Types.Entry, vs): Nat}:
-  ?TODO
+  Equal.trans(
+    Nat,
+    RKnown.Ids.count(RKnown.Ids.of(vs)),
+    Nat.add(List.length(&2, Types.Entry, vs), 0n),
+    List.length(&2, Types.Entry, vs),
+    Ids.go_count(vs, Crits.Crit.new(List<&2, RKnown.Found>), 0n),
+    Shared.Nat.add_zero(List.length(&2, Types.Entry, vs))
+  )
 
-#END IDS2
 # the first entry of a right table is right
 def Ok.head(
   e: RKnown.Kept,
@@ -1240,8 +1817,8 @@ def Known.find_ok(
       ok => e => Known.find_ok(rest, s, c, st)(Ok.tail(RKnown.Ruled{c2, zu2, u2}, rest, s)(ok))(e)
     case Con{RKnown.Made{+c2, +y2}, +rest}:
       ok => e => Known.find_ok(rest, s, c, st)(Ok.tail(RKnown.Made{c2, y2}, rest, s)(ok))(e)
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
-      ok => e => Known.find_ok(rest, s, c, st)(Ok.tail(RKnown.Open{fs2, pk2}, rest, s)(ok))(e)
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
+      ok => e => Known.find_ok(rest, s, c, st)(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok))(e)
 
 # the ids that a right table holds for a line fit the state that the facts
 # give the line
@@ -1267,8 +1844,8 @@ def Known.ids_ok(
       ok => e => Known.ids_ok(rest, s, c, x)(Ok.tail(RKnown.Stock{m2, lwm2}, rest, s)(ok))(e)
     case Con{RKnown.Ruled{+c2, +zu2, +u2}, +rest}:
       ok => e => Known.ids_ok(rest, s, c, x)(Ok.tail(RKnown.Ruled{c2, zu2, u2}, rest, s)(ok))(e)
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
-      ok => e => Known.ids_ok(rest, s, c, x)(Ok.tail(RKnown.Open{fs2, pk2}, rest, s)(ok))(e)
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
+      ok => e => Known.ids_ok(rest, s, c, x)(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok))(e)
     case Con{RKnown.Made{+c2, +y2}, +rest}:
       +ok => Lists.Bool.by(
         b => {
@@ -1326,6 +1903,42 @@ def Known.made_ok(
       %Equal.sym(RKnown.Ids, y, RKnown.Ids.of(vs), Made.fits_sound(RLines.Line.state(s, c), y, vs, k)(e)(Known.ids_ok(kn, s, c, y)(ok)(ey))): {RKnown.Ids.has(_, i) == Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i): Bool}
       Ids.of_has(vs, i))
   )
+
+# the versions by id that fit a state are those of its versions
+def Made.at(
+  +y: RKnown.Ids,
+  -m: Maybe<&2, RLines.State>,
+  st: RLines.State
+) -> {
+  m == Some{st}: Maybe<&2, RLines.State>
+} -> {
+  RKnown.Made.fits(m, y) == True{}: Bool
+} -> {y == RKnown.Ids.of(RLines.State.versions(st)): RKnown.Ids}:
+  match st:
+    case RLines.State{+vs, k}:
+      e => h => Made.fits_sound(m, y, vs, k)(e)(h)
+
+# what holds of the versions y by id that a right table holds for the line
+# c: the line has a state, and y is its versions by id
+def Made.case(
+  -P: Type,
+  kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +y: RKnown.Ids,
+  ok: {RContents.Known.ok(kn, s) == True{}: Bool},
+  ey: {RKnown.Known.ids(kn, c) == Some{y}: Maybe<&2, RKnown.Ids>},
+  k: @st: RLines.State -> {
+    RLines.Line.state(s, c) == Some{st}: Maybe<&2, RLines.State>
+  } -> {y == RKnown.Ids.of(RLines.State.versions(st)): RKnown.Ids} -> P
+) -> P:
+  Lists.Maybe.by(
+    RLines.State,
+    m => {RKnown.Made.fits(m, y) == True{}: Bool} -> P,
+    RLines.Line.state(s, c),
+    en => h => Empty.absurd(P, Shared.Bool.false_ne_true(h)),
+    +st => est => h => k(st)(est)(Made.at(y, Some{st}, st)({==})(h))
+  )(Known.ids_ok(kn, s, c, y)(ok)(ey))
 
 # Rule.same is True for a rule and itself
 def Rule.same_refl(a: RLines.Rule) -> {RKnown.Rule.same(a, a) == True{}: Bool}:
@@ -1443,8 +2056,8 @@ def Known.ruled_ok(
       )
     case Con{RKnown.Made{+c2, +y2}, +rest}:
       ok => e => Known.ruled_ok(rest, s, c, u)(Ok.tail(RKnown.Made{c2, y2}, rest, s)(ok))(e)
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
-      ok => e => Known.ruled_ok(rest, s, c, u)(Ok.tail(RKnown.Open{fs2, pk2}, rest, s)(ok))(e)
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
+      ok => e => Known.ruled_ok(rest, s, c, u)(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok))(e)
 
 # the era that a right table holds for a line is the era of the next version
 # of the line in the facts
@@ -1488,8 +2101,8 @@ def Known.era_ok(
       )
     case Con{RKnown.Made{+c2, +y2}, +rest}:
       ok => e => Known.era_ok(rest, s, c, m)(Ok.tail(RKnown.Made{c2, y2}, rest, s)(ok))(e)
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
-      ok => e => Known.era_ok(rest, s, c, m)(Ok.tail(RKnown.Open{fs2, pk2}, rest, s)(ok))(e)
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
+      ok => e => Known.era_ok(rest, s, c, m)(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok))(e)
 
 # the state of a line, computed with the state rs and k of its store, is the
 # state that the facts give it
@@ -2213,7 +2826,7 @@ def Known.voted_ok(
           )(Ok.tail(RKnown.Made{c2, y}, rest, Facts.Facts.crit(s))(ok))
         )
       )
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
       ok => Known.voted_ok(
         rest,
         name,
@@ -2222,7 +2835,7 @@ def Known.voted_ok(
         k,
         t,
         x
-      )(Ok.tail(RKnown.Open{fs2, pk2}, rest, Facts.Facts.crit(s))(ok))
+      )(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, Facts.Facts.crit(s))(ok))
 
 # Open facts: laws
 # ----------------
@@ -2276,6 +2889,150 @@ def Fit.both(
   RContents.Shelf.fits(RKnown.Known.shelf(kn), s) == True{}: Bool
 } -> {RContents.Known.fit(kn, s) == True{}: Bool}:
   Shared.Bool.and_both(RContents.Known.ok(kn, s), RContents.Shelf.fits(RKnown.Known.shelf(kn), s))
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# the facts and the number of an entry for a work that is right are right
+def Open.fits_old(
+  +fs: List<&2, Types.Fact>,
+  +n: Nat,
+  +tx: Crits.Crit<Types.Ask>,
+  +s: RFacts.Plain()
+) -> {
+  RContents.Shelf.fits(Some{RKnown.Open{fs, n, tx}}, s) == True{}: Bool
+} -> {
+  Bool.and(
+    Shared.List.is_eq(
+      ~Types.Fact,
+      ~Coded.Fact.is_eq,
+      fs,
+      RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})
+    ),
+    Nat.is_eq(n, RFacts.Seq.peak(RFacts.Facts.list(s)))
+  )
+    == True{}: Bool
+}:
+  Shared.Bool.and_true_left(
+    Bool.and(
+      Shared.List.is_eq(
+        ~Types.Fact,
+        ~Coded.Fact.is_eq,
+        fs,
+        RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})
+      ),
+      Nat.is_eq(n, RFacts.Seq.peak(RFacts.Facts.list(s)))
+    ),
+    RKnown.Tops.same(tx, RKnown.Tops.of(RFacts.Facts.list(s)))
+  )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# the newest writes of an entry for a work that is right are those of the
+# facts
+def Open.fits_tops(
+  +fs: List<&2, Types.Fact>,
+  +n: Nat,
+  +tx: Crits.Crit<Types.Ask>,
+  +s: RFacts.Plain()
+) -> {
+  RContents.Shelf.fits(Some{RKnown.Open{fs, n, tx}}, s) == True{}: Bool
+} -> {tx == RKnown.Tops.of(RFacts.Facts.list(s)): Crits.Crit<Types.Ask>}:
+  h => Newest.Tops.same_sound(
+    tx,
+    RKnown.Tops.of(RFacts.Facts.list(s))
+  )(
+    Shared.Bool.and_true_right(
+      Bool.and(
+        Shared.List.is_eq(
+          ~Types.Fact,
+          ~Coded.Fact.is_eq,
+          fs,
+          RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})
+        ),
+        Nat.is_eq(n, RFacts.Seq.peak(RFacts.Facts.list(s)))
+      ),
+      RKnown.Tops.same(tx, RKnown.Tops.of(RFacts.Facts.list(s)))
+    )(h)
+  )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# an entry for a work is right when its facts and its number are, and its
+# newest writes are those of the facts
+def Open.fits_of(
+  +fs: List<&2, Types.Fact>,
+  +n: Nat,
+  +tx: Crits.Crit<Types.Ask>,
+  +s: RFacts.Plain()
+) -> {
+  Bool.and(
+    Shared.List.is_eq(
+      ~Types.Fact,
+      ~Coded.Fact.is_eq,
+      fs,
+      RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})
+    ),
+    Nat.is_eq(n, RFacts.Seq.peak(RFacts.Facts.list(s)))
+  )
+    == True{}: Bool
+} -> {
+  tx == RKnown.Tops.of(RFacts.Facts.list(s)): Crits.Crit<Types.Ask>
+} -> {RContents.Shelf.fits(Some{RKnown.Open{fs, n, tx}}, s) == True{}: Bool}:
+  ha => et => Shared.Bool.and_both(
+    Bool.and(
+      Shared.List.is_eq(
+        ~Types.Fact,
+        ~Coded.Fact.is_eq,
+        fs,
+        RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})
+      ),
+      Nat.is_eq(n, RFacts.Seq.peak(RFacts.Facts.list(s)))
+    ),
+    RKnown.Tops.same(tx, RKnown.Tops.of(RFacts.Facts.list(s)))
+  )(ha)((
+      %Equal.sym(Crits.Crit<Types.Ask>, tx, RKnown.Tops.of(RFacts.Facts.list(s)), et): {RKnown.Tops.same(_, RKnown.Tops.of(RFacts.Facts.list(s))) == True{}: Bool}
+      Newest.Tops.same_refl(RKnown.Tops.of(RFacts.Facts.list(s)))))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# the newest writes that an entry that is right holds are those of the facts
+def Shelf.tops_fit(
+  m: Maybe<&2, RKnown.Kept>,
+  +s: RFacts.Plain(),
+  +tx: Crits.Crit<Types.Ask>
+) -> {
+  RContents.Shelf.fits(m, s) == True{}: Bool
+} -> {
+  RKnown.Shelf.tops(m) == Some{tx}: Maybe<&2, Crits.Crit<Types.Ask>>
+} -> {tx == RKnown.Tops.of(RFacts.Facts.list(s)): Crits.Crit<Types.Ask>}:
+  match m:
+    case None{}:
+      h => e => Empty.absurd(
+        {tx == RKnown.Tops.of(RFacts.Facts.list(s)): Crits.Crit<Types.Ask>},
+        Shared.Maybe.none_ne_some(Crits.Crit<Types.Ask>, tx, e)
+      )
+    case Some{RKnown.Kept{c2, st2}}:
+      h => e => Empty.absurd(
+        {tx == RKnown.Tops.of(RFacts.Facts.list(s)): Crits.Crit<Types.Ask>},
+        Shared.Maybe.none_ne_some(Crits.Crit<Types.Ask>, tx, e)
+      )
+    case Some{RKnown.Stock{m2, lwm2}}:
+      h => e => Empty.absurd(
+        {tx == RKnown.Tops.of(RFacts.Facts.list(s)): Crits.Crit<Types.Ask>},
+        Shared.Maybe.none_ne_some(Crits.Crit<Types.Ask>, tx, e)
+      )
+    case Some{RKnown.Ruled{c2, zu2, u2}}:
+      h => e => Empty.absurd(
+        {tx == RKnown.Tops.of(RFacts.Facts.list(s)): Crits.Crit<Types.Ask>},
+        Shared.Maybe.none_ne_some(Crits.Crit<Types.Ask>, tx, e)
+      )
+    case Some{RKnown.Made{c2, y2}}:
+      h => e => Empty.absurd(
+        {tx == RKnown.Tops.of(RFacts.Facts.list(s)): Crits.Crit<Types.Ask>},
+        Shared.Maybe.none_ne_some(Crits.Crit<Types.Ask>, tx, e)
+      )
+    case Some{RKnown.Open{fs2, pk2, +tx2}}:
+      h => e => (
+        %Shared.Maybe.some_inj(Crits.Crit<Types.Ask>, tx2, tx, e): {_ == RKnown.Tops.of(RFacts.Facts.list(s)): Crits.Crit<Types.Ask>}
+        Open.fits_tops(fs2, pk2, tx2, s)(h))
 
 # the facts that an entry that is right holds for a work are those that a
 # work may act on
@@ -2350,10 +3107,10 @@ def Shelf.open_fit(
         },
         Shared.Maybe.none_ne_some(List<&2, Types.Fact>, fs, e)
       )
-    case Some{RKnown.Open{+fs2, +pk2}}:
+    case Some{RKnown.Open{+fs2, +pk2, +tx9}}:
       h => e => (
         %Shared.Maybe.some_inj(List<&2, Types.Fact>, fs2, fs, e): {_ == RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s}): List<&2, Types.Fact>}
-        Shared.List.is_eq_sound(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), fs2, RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s}))(Shared.Bool.and_true_left(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, fs2, RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})), Nat.is_eq(pk2, RFacts.Seq.peak(RFacts.Facts.list(s))))(h)))
+        Shared.List.is_eq_sound(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), fs2, RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s}))(Shared.Bool.and_true_left(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, fs2, RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})), Nat.is_eq(pk2, RFacts.Seq.peak(RFacts.Facts.list(s))))(Open.fits_old(fs2, pk2, tx9, s)(h))))
 
 # the greatest number of an ask, read from an entry that is right, is the
 # one read from the facts
@@ -2374,7 +3131,7 @@ def Shelf.peak_fit(
       h => {==}
     case Some{RKnown.Made{c2, y2}}:
       h => {==}
-    case Some{RKnown.Open{+fs2, +pk2}}:
+    case Some{RKnown.Open{+fs2, +pk2, +tx9}}:
       h => Shared.Nat.is_eq_sound(
         pk2,
         RFacts.Seq.peak(RFacts.Facts.list(s))
@@ -2387,7 +3144,7 @@ def Shelf.peak_fit(
             RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})
           ),
           Nat.is_eq(pk2, RFacts.Seq.peak(RFacts.Facts.list(s)))
-        )(h)
+        )(Open.fits_old(fs2, pk2, tx9, s)(h))
       )
 
 # the greatest number of an ask, read through a table that fits, is the one
@@ -5059,7 +5816,7 @@ def Known.held_ok(
         d,
         x
       )(Ok.tail(RKnown.Made{c3, y3}, rest, s)(ok))(e)
-    case Con{RKnown.Open{+fs3, +pk3}, +rest}:
+    case Con{RKnown.Open{+fs3, +pk3, +tx9}, +rest}:
       ok => e => Known.held_ok(
         rest,
         s,
@@ -5069,7 +5826,7 @@ def Known.held_ok(
         k2,
         d,
         x
-      )(Ok.tail(RKnown.Open{fs3, pk3}, rest, s)(ok))(e)
+      )(Ok.tail(RKnown.Open{fs3, pk3, tx9}, rest, s)(ok))(e)
     case Con{RKnown.Stock{+m3, +lwm3}, +rest}:
       +ok => Lists.Maybe.by(
         RKnown.Held,
@@ -5298,8 +6055,8 @@ def Known.low_ok(
       ok => Known.low_ok(rest, s)(Ok.tail(RKnown.Ruled{c2, zu2, u2}, rest, s)(ok))
     case Con{RKnown.Made{+c2, +y2}, +rest}:
       ok => Known.low_ok(rest, s)(Ok.tail(RKnown.Made{c2, y2}, rest, s)(ok))
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
-      ok => Known.low_ok(rest, s)(Ok.tail(RKnown.Open{fs2, pk2}, rest, s)(ok))
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
+      ok => Known.low_ok(rest, s)(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok))
     case Con{RKnown.Stock{+m2, +lwm2}, +rest}:
       ok => Stock.head_low(m2, lwm2, rest, s)(ok)
 
@@ -5467,14 +6224,14 @@ def Known.hold_ok(
       )(
         Ok.head(RKnown.Made{c, y}, rest, s)(ok)
       )(Known.hold_ok(rest, s, e)(he)(Ok.tail(RKnown.Made{c, y}, rest, s)(ok)))
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
       he => +ok => Ok.cons(
-        RKnown.Open{fs2, pk2},
+        RKnown.Open{fs2, pk2, tx9},
         RKnown.Known.hold(rest, e),
         s
       )(
-        Ok.head(RKnown.Open{fs2, pk2}, rest, s)(ok)
-      )(Known.hold_ok(rest, s, e)(he)(Ok.tail(RKnown.Open{fs2, pk2}, rest, s)(ok)))
+        Ok.head(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok)
+      )(Known.hold_ok(rest, s, e)(he)(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok)))
 
 # a right table with the content m, if any, that a read with the fuel d
 # gives, is right
@@ -5907,14 +6664,14 @@ def Known.sync_ok(
       )(
         Ok.head(RKnown.Made{c2, y2}, rest, s)(ok)
       )(Known.sync_ok(rest, s)(Ok.tail(RKnown.Made{c2, y2}, rest, s)(ok)))
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
       +ok => Ok.cons(
-        RKnown.Open{fs2, pk2},
+        RKnown.Open{fs2, pk2, tx9},
         RKnown.Known.sync(rest, RFacts.Facts.fuel(s)),
         s
       )(
-        Ok.head(RKnown.Open{fs2, pk2}, rest, s)(ok)
-      )(Known.sync_ok(rest, s)(Ok.tail(RKnown.Open{fs2, pk2}, rest, s)(ok)))
+        Ok.head(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok)
+      )(Known.sync_ok(rest, s)(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok)))
     case Con{RKnown.Stock{+m2, +lwm2}, +rest}:
       +ok => Stock.cons(
         m2,
@@ -5974,13 +6731,9 @@ def Known.grow_ok(
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {RContents.Known.ok(RContents.Known.grow(old, kn, s, c), s) == True{}: Bool}:
   Known.grow_if_ok(
-    Maybe.is_some(
-      &2,
-      Nat,
-      RKnown.Known.depth(kn, c, Nat.sub(RContents.State.count(RKnown.Known.find(old, c)), 1n))
-    ),
-    RContents.State.count(RKnown.Known.find(old, c)),
-    RContents.State.count(RKnown.Known.find(kn, c)),
+    Maybe.is_some(&2, Nat, RKnown.Known.depth(kn, c, Nat.sub(RContents.Known.tally(old, c), 1n))),
+    RContents.Known.tally(old, c),
+    RContents.Known.tally(kn, c),
     kn,
     s,
     c
@@ -6229,7 +6982,7 @@ def Store.read_ok(
     %Known.store_ok(kn, s, h)(ok): {RAnswers.Store.read(A, kn, s, h, m, f) == RAnswers.Store.read.of(A, m, f, _): Maybe<&2, A>}
     {==})
 
-# a right table changes no search of a request
+# a right table changes no entry that is found by its id
 def Line.find_ok(
   +kn: RKnown.Known(),
   +s: RFacts.Plain(),
@@ -6246,13 +6999,98 @@ def Line.find_ok(
   )
     == RAnswers.Line.find(RKnown.Known.none(), s, c, i): Maybe<&2, RKnown.Found>
 }:
-  ok => Equal.cong(
-    Maybe<&2, List<&2, Types.Entry>>,
-    Maybe<&2, RKnown.Found>,
-    m => RAnswers.Line.find.of(i, m),
-    RKnown.Known.versions(kn, s, c),
-    RLines.Line.versions(s, c),
-    Known.versions_ok(kn, s, c)(ok)
+  +ok => Lists.Maybe.by(
+    RKnown.Ids,
+    x => {
+      RAnswers.Line.find.by(
+        x,
+        kn,
+        s,
+        c,
+        i
+      )
+        == RAnswers.Line.find(RKnown.Known.none(), s, c, i): Maybe<&2, RKnown.Found>
+    },
+    RKnown.Known.ids(kn, c),
+    en => Equal.cong(
+      Maybe<&2, List<&2, Types.Entry>>,
+      Maybe<&2, RKnown.Found>,
+      m => RAnswers.Line.find.of(i, m),
+      RKnown.Known.versions(kn, s, c),
+      RLines.Line.versions(s, c),
+      Known.versions_ok(kn, s, c)(ok)
+    ),
+    +y => ey => Made.case(
+      {
+        RKnown.Ids.find(
+          y,
+          i
+        )
+          == RAnswers.Line.find(RKnown.Known.none(), s, c, i): Maybe<&2, RKnown.Found>
+      },
+      kn,
+      s,
+      c,
+      y,
+      ok,
+      ey,
+      +st => est => eq => (
+        %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.state(s, c), Some{st}, est): {RKnown.Ids.find(y, i) == RAnswers.Line.find.of(i, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)): Maybe<&2, RKnown.Found>}
+        %Equal.sym(RKnown.Ids, y, RKnown.Ids.of(RLines.State.versions(st)), eq): {RKnown.Ids.find(_, i) == RAnswers.Versions.find(RLines.State.versions(st), i): Maybe<&2, RKnown.Found>}
+        Ids.of_find(RLines.State.versions(st), i))
+    )
+  )
+
+# a right table changes no count of the versions of a line
+def Reply.count_ok(
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line
+) -> {
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {
+  RAnswers.Reply.count.by(
+    RKnown.Known.ids(kn, c),
+    kn,
+    s,
+    c
+  )
+    == RAnswers.Reply.count(RLines.Line.versions(s, c)): Maybe<&2, Spec.Reply>
+}:
+  +ok => Lists.Maybe.by(
+    RKnown.Ids,
+    x => {
+      RAnswers.Reply.count.by(
+        x,
+        kn,
+        s,
+        c
+      )
+        == RAnswers.Reply.count(RLines.Line.versions(s, c)): Maybe<&2, Spec.Reply>
+    },
+    RKnown.Known.ids(kn, c),
+    en => (
+      %Known.versions_ok(kn, s, c)(ok): {RAnswers.Reply.count(RKnown.Known.versions(kn, s, c)) == RAnswers.Reply.count(_): Maybe<&2, Spec.Reply>}
+      {==}),
+    +y => ey => Made.case(
+      {
+        Some{
+          Spec.Reply.Number{RKnown.Ids.count(y)}
+        }
+          == RAnswers.Reply.count(RLines.Line.versions(s, c)): Maybe<&2, Spec.Reply>
+      },
+      kn,
+      s,
+      c,
+      y,
+      ok,
+      ey,
+      +st => est => eq => (
+        %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.state(s, c), Some{st}, est): {Some{Spec.Reply.Number{RKnown.Ids.count(y)}} == RAnswers.Reply.count(Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)): Maybe<&2, Spec.Reply>}
+        %Equal.sym(RKnown.Ids, y, RKnown.Ids.of(RLines.State.versions(st)), eq): {Some{Spec.Reply.Number{RKnown.Ids.count(_)}} == Some{Spec.Reply.Number{List.length(&2, Types.Entry, RLines.State.versions(st))}}: Maybe<&2, Spec.Reply>}
+        %Equal.sym(Nat, RKnown.Ids.count(RKnown.Ids.of(RLines.State.versions(st))), List.length(&2, Types.Entry, RLines.State.versions(st)), Ids.of_count(RLines.State.versions(st))): {Some{Spec.Reply.Number{_}} == Some{Spec.Reply.Number{List.length(&2, Types.Entry, RLines.State.versions(st))}}: Maybe<&2, Spec.Reply>}
+        {==})
+    )
   )
 
 # a right table changes no reply with a status
@@ -6402,9 +7240,7 @@ def Answer.of_ok(
         %Known.versions_ok(kn, s, c)(ok): {RAnswers.Answer.of(kn, s, Spec.Question.Mark{c, m}) == RAnswers.Reply.number(RAnswers.Mark.of(m, _)): Maybe<&2, Spec.Reply>}
         {==})
     case Spec.Question.Count{+c}:
-      ok => (
-        %Known.versions_ok(kn, s, c)(ok): {RAnswers.Answer.of(kn, s, Spec.Question.Count{c}) == RAnswers.Reply.count(_): Maybe<&2, Spec.Reply>}
-        {==})
+      ok => Reply.count_ok(kn, s, c)(ok)
     case Spec.Question.Clashes{+c, +i}:
       +ok => (
         %Line.find_ok(kn, s, c, i)(ok): {RAnswers.Answer.of(kn, s, Spec.Question.Clashes{c, i}) == RAnswers.Reply.names(RAnswers.Found.then(List<&2, String>, _, k => e => RAnswers.Clashes.of(RKnown.Known.none(), s, c, k, e))): Maybe<&2, Spec.Reply>}
@@ -6459,12 +7295,80 @@ def View.newest_ok(
       ok => Content.read_ok(kn, s, b, Nat.sub(List.length(&2, Types.Entry, vs), 1n), p)(ok)
 
 # a right table changes no view after the write m
-def View.of_ok(
+def View.slow_ok(
   +kn: RKnown.Known(),
   +s: RFacts.Plain(),
   +b: Ledgers.Line,
   +p: String,
   m: Maybe<&2, Types.Ask>
+) -> {
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {
+  RAnswers.View.slow(
+    kn,
+    s,
+    b,
+    p,
+    m
+  )
+    == RAnswers.View.slow(RKnown.Known.none(), s, b, p, m): Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  match m:
+    case None{}:
+      +ok => (
+        %Known.versions_ok(kn, s, b)(ok): {RAnswers.View.slow(kn, s, b, p, None{}) == RAnswers.View.newest(RKnown.Known.none(), s, b, p, _): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        View.newest_ok(kn, s, b, p, RKnown.Known.versions(kn, s, b))(ok))
+    case Some{+a}:
+      +ok => (
+        %Known.versions_ok(kn, s, b)(ok): {RAnswers.View.slow(kn, s, b, p, Some{a}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, RAnswers.View.decided(a, _), u => RAnswers.View.newest(RKnown.Known.none(), s, b, p, _), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        %View.newest_ok(kn, s, b, p, RKnown.Known.versions(kn, s, b))(ok): {RAnswers.View.slow(kn, s, b, p, Some{a}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, RAnswers.View.decided(a, RKnown.Known.versions(kn, s, b)), u => _, u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        {==})
+
+# the view after the write m, read from the versions by id of a state of the
+# branch through a right table, is the view that the facts give
+def View.quick_ok(
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +b: Ledgers.Line,
+  +p: String,
+  m: Maybe<&2, Types.Ask>,
+  +st: RLines.State
+) -> {
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {
+  RLines.Line.state(s, b) == Some{st}: Maybe<&2, RLines.State>
+} -> {
+  RAnswers.View.quick(
+    RKnown.Ids.of(RLines.State.versions(st)),
+    kn,
+    s,
+    b,
+    p,
+    m
+  )
+    == RAnswers.View.slow(RKnown.Known.none(), s, b, p, m): Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
+  match m:
+    case None{}:
+      ok => est => (
+        %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.state(s, b), Some{st}, est): {RAnswers.View.last(kn, s, b, p, RKnown.Ids.of(RLines.State.versions(st))) == RAnswers.View.newest(RKnown.Known.none(), s, b, p, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        %Equal.sym(Nat, RKnown.Ids.count(RKnown.Ids.of(RLines.State.versions(st))), List.length(&2, Types.Entry, RLines.State.versions(st)), Ids.of_count(RLines.State.versions(st))): {RContents.Content.read(kn, s, b, Nat.sub(_, 1n), p) == RContents.Content.read(RKnown.Known.none(), s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        Content.read_ok(kn, s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p)(ok))
+    case Some{+a}:
+      ok => est => (
+        %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.state(s, b), Some{st}, est): {RAnswers.View.quick(RKnown.Ids.of(RLines.State.versions(st)), kn, s, b, p, Some{a}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, RAnswers.View.decided(a, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)), u => RAnswers.View.newest(RKnown.Known.none(), s, b, p, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        %Equal.sym(Bool, RKnown.Ids.made(RKnown.Ids.of(RLines.State.versions(st)), a), Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), Ids.of_made(RLines.State.versions(st), a)): {Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, _, u => RAnswers.View.last(kn, s, b, p, RKnown.Ids.of(RLines.State.versions(st))), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => RContents.Content.read(RKnown.Known.none(), s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        %Equal.sym(Nat, RKnown.Ids.count(RKnown.Ids.of(RLines.State.versions(st))), List.length(&2, Types.Entry, RLines.State.versions(st)), Ids.of_count(RLines.State.versions(st))): {Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => RContents.Content.read(kn, s, b, Nat.sub(_, 1n), p), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => RContents.Content.read(RKnown.Known.none(), s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        %Content.read_ok(kn, s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p)(ok): {Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => RContents.Content.read(kn, s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => _, u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        {==})
+
+# a right table changes no view after the write m
+def View.of_ok(
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +b: Ledgers.Line,
+  +p: String,
+  +m: Maybe<&2, Types.Ask>
 ) -> {
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {
@@ -6477,18 +7381,88 @@ def View.of_ok(
   )
     == RAnswers.View.of(RKnown.Known.none(), s, b, p, m): Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
+  +ok => Lists.Maybe.by(
+    RKnown.Ids,
+    x => {
+      RAnswers.View.of.by(
+        x,
+        kn,
+        s,
+        b,
+        p,
+        m
+      )
+        == RAnswers.View.slow(RKnown.Known.none(), s, b, p, m): Maybe<&2, Maybe<&2, List<&2, U32>>>
+    },
+    RKnown.Known.ids(kn, b),
+    en => View.slow_ok(kn, s, b, p, m)(ok),
+    +y => ey => Made.case(
+      {
+        RAnswers.View.quick(
+          y,
+          kn,
+          s,
+          b,
+          p,
+          m
+        )
+          == RAnswers.View.slow(
+            RKnown.Known.none(),
+            s,
+            b,
+            p,
+            m
+          ): Maybe<&2, Maybe<&2, List<&2, U32>>>
+      },
+      kn,
+      s,
+      b,
+      y,
+      ok,
+      ey,
+      +st => est => eq => (
+        %Equal.sym(RKnown.Ids, y, RKnown.Ids.of(RLines.State.versions(st)), eq): {RAnswers.View.quick(_, kn, s, b, p, m) == RAnswers.View.slow(RKnown.Known.none(), s, b, p, m): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        View.quick_ok(kn, s, b, p, m, st)(ok)(est))
+    )
+  )
+
+# the newest write at a place, read from an entry that is right, is the one
+# read from the facts
+def View.top_fit(
+  m: Maybe<&2, RKnown.Kept>,
+  +s: RFacts.Plain(),
+  +g: RKnown.Place
+) -> {
+  RContents.Shelf.fits(m, s) == True{}: Bool
+} -> {
+  RAnswers.View.top(
+    m,
+    s,
+    g
+  )
+    == Lists.List.top(
+      ~Types.Ask,
+      ~RFacts.Ask.seq,
+      RAnswers.Writes.of(RFacts.Facts.list(s), g)
+    ): Maybe<&2, Types.Ask>
+}:
   match m:
     case None{}:
-      +ok => (
-        %Known.versions_ok(kn, s, b)(ok): {RAnswers.View.of(kn, s, b, p, None{}) == RAnswers.View.newest(RKnown.Known.none(), s, b, p, _): Maybe<&2, Maybe<&2, List<&2, U32>>>}
-        View.newest_ok(kn, s, b, p, RKnown.Known.versions(kn, s, b))(ok))
-    case Some{+a}:
-      +ok => (
-        %Known.versions_ok(kn, s, b)(ok): {RAnswers.View.of(kn, s, b, p, Some{a}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, RAnswers.View.decided(a, _), u => RAnswers.View.newest(RKnown.Known.none(), s, b, p, _), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
-        %View.newest_ok(kn, s, b, p, RKnown.Known.versions(kn, s, b))(ok): {RAnswers.View.of(kn, s, b, p, Some{a}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, RAnswers.View.decided(a, RKnown.Known.versions(kn, s, b)), u => _, u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
-        {==})
+      h => {==}
+    case Some{RKnown.Kept{c2, st2}}:
+      h => {==}
+    case Some{RKnown.Stock{m2, lwm2}}:
+      h => {==}
+    case Some{RKnown.Ruled{c2, zu2, u2}}:
+      h => {==}
+    case Some{RKnown.Made{c2, y2}}:
+      h => {==}
+    case Some{RKnown.Open{+fs2, +pk2, +tx2}}:
+      h => (
+        %Equal.sym(Crits.Crit<Types.Ask>, tx2, RKnown.Tops.of(RFacts.Facts.list(s)), Open.fits_tops(fs2, pk2, tx2, s)(h)): {RKnown.Tops.get(_, g) == Lists.List.top(~Types.Ask, ~RFacts.Ask.seq, RAnswers.Writes.of(RFacts.Facts.list(s), g)): Maybe<&2, Types.Ask>}
+        Newest.Tops.of_get(RFacts.Facts.list(s), g))
 
-# a right table changes no view
+# a table that fits changes no view
 def View.at_ok(
   +kn: RKnown.Known(),
   +s: RFacts.Plain(),
@@ -6496,7 +7470,7 @@ def View.at_ok(
   +b: Ledgers.Line,
   +p: String
 ) -> {
-  RContents.Known.ok(kn, s) == True{}: Bool
+  RContents.Known.fit(kn, s) == True{}: Bool
 } -> {
   RAnswers.View.at(
     kn,
@@ -6507,17 +7481,9 @@ def View.at_ok(
   )
     == RAnswers.View.at(RKnown.Known.none(), s, w, b, p): Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
-  ok => View.of_ok(
-    kn,
-    s,
-    b,
-    p,
-    Lists.List.top(
-      ~Types.Ask,
-      ~RFacts.Ask.seq,
-      RAnswers.Writes.of(RFacts.Facts.list(s), RAnswers.Place{w, b, p})
-    )
-  )(ok)
+  +h => (
+    %View.top_fit(RKnown.Known.shelf(kn), s, RKnown.Place{w, b, p})(Fit.open(kn, s)(h)): {RAnswers.View.at(kn, s, w, b, p) == RAnswers.View.of(RKnown.Known.none(), s, b, p, _): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+    View.of_ok(kn, s, b, p, RAnswers.View.top(RKnown.Known.shelf(kn), s, RKnown.Place{w, b, p}))(Fit.ok(kn, s)(h)))
 
 # A vote continues a run
 # ----------------------
@@ -8090,8 +9056,8 @@ def Known.contents_ok(
       )(Known.contents_ok(rest, s)(Ok.tail(RKnown.Stock{m, lwm}, rest, s)(ok)))
     case Con{RKnown.Made{+c, +y}, +rest}:
       ok => Known.contents_ok(rest, s)(Ok.tail(RKnown.Made{c, y}, rest, s)(ok))
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
-      ok => Known.contents_ok(rest, s)(Ok.tail(RKnown.Open{fs2, pk2}, rest, s)(ok))
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
+      ok => Known.contents_ok(rest, s)(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok))
 
 # a set with a fact that it did not hold has one more fact
 def Fuel.add_new(
@@ -8272,7 +9238,7 @@ def Known.spared_kept(
         t,
         x
       )(hs)(hf)(Ok.tail(RKnown.Made{c2, y2}, rest, Facts.Facts.crit(s))(ok))
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
       hs => hf => ok => Known.spared_kept(
         rest,
         name,
@@ -8281,7 +9247,7 @@ def Known.spared_kept(
         k,
         t,
         x
-      )(hs)(hf)(Ok.tail(RKnown.Open{fs2, pk2}, rest, Facts.Facts.crit(s))(ok))
+      )(hs)(hf)(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, Facts.Facts.crit(s))(ok))
     case Con{RKnown.Stock{+m, +lwm}, +rest}:
       +hs => +hf => +ok => Stock.cons(
         m,
@@ -8426,13 +9392,13 @@ def Known.asked_ok(
           a
         )(e)(Ok.tail(RKnown.Made{c, y}, rest, Facts.Facts.crit(s))(ok))
       )
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
       e => ok => Known.asked_ok(
         rest,
         name,
         s,
         a
-      )(e)(Ok.tail(RKnown.Open{fs2, pk2}, rest, Facts.Facts.crit(s))(ok))
+      )(e)(Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, Facts.Facts.crit(s))(ok))
 
 # the state m, if any, is the state x
 def Put.Ok(x: Maybe<&2, RLines.State>, m: Maybe<&2, RLines.State>) -> Type:
@@ -8936,7 +9902,7 @@ def Made.next_ok.at(
       %Ids.go_append(
         vs,
         zs,
-        Crits.Crit.new(List<&2, Ledgers.Id>)
+        RKnown.Ids.new()
       ): {RKnown.Ids.same(_, RKnown.Ids.of(List.append(&2, Types.Entry, vs, zs))) == True{}: Bool}
       Ids.same_refl(RKnown.Ids.of(List.append(&2, Types.Entry, vs, zs)))
 
@@ -9389,7 +10355,7 @@ def Known.hold_open(
       Known.hold_open(rest, c, k, d, x)
     case Con{RKnown.Made{c2, y2}, rest}:
       Known.hold_open(rest, c, k, d, x)
-    case Con{RKnown.Open{fs2, pk2}, rest}:
+    case Con{RKnown.Open{fs2, pk2, tx9}, rest}:
       {==}
 
 # a table with the content m, if any, holds the same facts for a work
@@ -9669,7 +10635,7 @@ def Known.sync_open(
       Known.sync_open(rest, g)
     case Con{RKnown.Made{c2, y2}, rest}:
       Known.sync_open(rest, g)
-    case Con{RKnown.Open{fs2, pk2}, rest}:
+    case Con{RKnown.Open{fs2, pk2, tx9}, rest}:
       {==}
     case Con{RKnown.Stock{m2, lwm2}, rest}:
       {==}
@@ -9731,19 +10697,26 @@ def Known.opened_fit(
   )(
     ok
   )(
-    Shared.Bool.and_both(
-      Shared.List.is_eq(
-        ~Types.Fact,
-        ~Coded.Fact.is_eq,
-        RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{kn, s}),
-        RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})
-      ),
-      Nat.is_eq(RFacts.Seq.peak(RFacts.Facts.list(s)), RFacts.Seq.peak(RFacts.Facts.list(s)))
-    )((
-        %Open.of_ok(kn, s, RFacts.Facts.list(s))(ok): {Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{kn, s}), _) == True{}: Bool}
-        Shared.List.is_eq_refl(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{kn, s}))))(
-      Shared.Nat.is_eq_refl(RFacts.Seq.peak(RFacts.Facts.list(s)))
-    )
+    Open.fits_of(
+      RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{kn, s}),
+      RFacts.Seq.peak(RFacts.Facts.list(s)),
+      RKnown.Tops.of(RFacts.Facts.list(s)),
+      s
+    )(
+      Shared.Bool.and_both(
+        Shared.List.is_eq(
+          ~Types.Fact,
+          ~Coded.Fact.is_eq,
+          RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{kn, s}),
+          RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})
+        ),
+        Nat.is_eq(RFacts.Seq.peak(RFacts.Facts.list(s)), RFacts.Seq.peak(RFacts.Facts.list(s)))
+      )((
+          %Open.of_ok(kn, s, RFacts.Facts.list(s))(ok): {Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{kn, s}), _) == True{}: Bool}
+          Shared.List.is_eq_refl(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{kn, s}))))(
+        Shared.Nat.is_eq_refl(RFacts.Seq.peak(RFacts.Facts.list(s)))
+      )
+    )({==})
   )
 
 # a right table with other facts for a work is right
@@ -9751,41 +10724,42 @@ def Known.reopen_ok(
   kn: RKnown.Known(),
   +s: RFacts.Plain(),
   +fs: List<&2, Types.Fact>,
-  +n: Nat
+  +n: Nat,
+  +tx: Crits.Crit<Types.Ask>
 ) -> {
   RContents.Known.ok(kn, s) == True{}: Bool
-} -> {RContents.Known.ok(RKnown.Known.reopen(kn, fs, n), s) == True{}: Bool}:
+} -> {RContents.Known.ok(RKnown.Known.reopen(kn, fs, n, tx), s) == True{}: Bool}:
   match kn:
     case Nil{}:
       ok => {==}
     case Con{RKnown.Kept{+c2, +st2}, +rest}:
       +ok => Ok.cons(
         RKnown.Kept{c2, st2},
-        RKnown.Known.reopen(rest, fs, n),
+        RKnown.Known.reopen(rest, fs, n, tx),
         s
       )(
         Ok.head(RKnown.Kept{c2, st2}, rest, s)(ok)
-      )(Known.reopen_ok(rest, s, fs, n)(Ok.tail(RKnown.Kept{c2, st2}, rest, s)(ok)))
+      )(Known.reopen_ok(rest, s, fs, n, tx)(Ok.tail(RKnown.Kept{c2, st2}, rest, s)(ok)))
     case Con{RKnown.Stock{m2, lwm2}, rest}:
       ok => ok
     case Con{RKnown.Ruled{+c2, +zu2, +u2}, +rest}:
       +ok => Ok.cons(
         RKnown.Ruled{c2, zu2, u2},
-        RKnown.Known.reopen(rest, fs, n),
+        RKnown.Known.reopen(rest, fs, n, tx),
         s
       )(
         Ok.head(RKnown.Ruled{c2, zu2, u2}, rest, s)(ok)
-      )(Known.reopen_ok(rest, s, fs, n)(Ok.tail(RKnown.Ruled{c2, zu2, u2}, rest, s)(ok)))
+      )(Known.reopen_ok(rest, s, fs, n, tx)(Ok.tail(RKnown.Ruled{c2, zu2, u2}, rest, s)(ok)))
     case Con{RKnown.Made{+c2, +y2}, +rest}:
       +ok => Ok.cons(
         RKnown.Made{c2, y2},
-        RKnown.Known.reopen(rest, fs, n),
+        RKnown.Known.reopen(rest, fs, n, tx),
         s
       )(
         Ok.head(RKnown.Made{c2, y2}, rest, s)(ok)
-      )(Known.reopen_ok(rest, s, fs, n)(Ok.tail(RKnown.Made{c2, y2}, rest, s)(ok)))
-    case Con{RKnown.Open{+fs2, +pk2}, +rest}:
-      ok => Ok.tail(RKnown.Open{fs2, pk2}, rest, s)(ok)
+      )(Known.reopen_ok(rest, s, fs, n, tx)(Ok.tail(RKnown.Made{c2, y2}, rest, s)(ok)))
+    case Con{RKnown.Open{+fs2, +pk2, +tx9}, +rest}:
+      ok => Ok.tail(RKnown.Open{fs2, pk2, tx9}, rest, s)(ok)
 
 # a table that holds an entry for a work holds what it is given in its
 # place
@@ -9793,34 +10767,36 @@ def Known.reopen_shelf(
   kn: RKnown.Known(),
   +fs: List<&2, Types.Fact>,
   +n: Nat,
+  +tx: Crits.Crit<Types.Ask>,
   -old: List<&2, Types.Fact>,
-  -n0: Nat
+  -n0: Nat,
+  -tx0: Crits.Crit<Types.Ask>
 ) -> {
-  RKnown.Known.shelf(kn) == Some{RKnown.Open{old, n0}}: Maybe<&2, RKnown.Kept>
+  RKnown.Known.shelf(kn) == Some{RKnown.Open{old, n0, tx0}}: Maybe<&2, RKnown.Kept>
 } -> {
   RKnown.Known.shelf(
-    RKnown.Known.reopen(kn, fs, n)
+    RKnown.Known.reopen(kn, fs, n, tx)
   )
-    == Some{RKnown.Open{fs, n}}: Maybe<&2, RKnown.Kept>
+    == Some{RKnown.Open{fs, n, tx}}: Maybe<&2, RKnown.Kept>
 }:
   match kn:
     case Nil{}:
       e => Empty.absurd(
-        {None{} == Some{RKnown.Open{fs, n}}: Maybe<&2, RKnown.Kept>},
-        Shared.Maybe.none_ne_some(RKnown.Kept, RKnown.Open{old, n0}, e)
+        {None{} == Some{RKnown.Open{fs, n, tx}}: Maybe<&2, RKnown.Kept>},
+        Shared.Maybe.none_ne_some(RKnown.Kept, RKnown.Open{old, n0, tx0}, e)
       )
     case Con{RKnown.Kept{c2, st2}, rest}:
-      e => Known.reopen_shelf(rest, fs, n, old, n0)(e)
+      e => Known.reopen_shelf(rest, fs, n, tx, old, n0, tx0)(e)
     case Con{RKnown.Stock{m2, lwm2}, rest}:
       e => Empty.absurd(
-        {None{} == Some{RKnown.Open{fs, n}}: Maybe<&2, RKnown.Kept>},
-        Shared.Maybe.none_ne_some(RKnown.Kept, RKnown.Open{old, n0}, e)
+        {None{} == Some{RKnown.Open{fs, n, tx}}: Maybe<&2, RKnown.Kept>},
+        Shared.Maybe.none_ne_some(RKnown.Kept, RKnown.Open{old, n0, tx0}, e)
       )
     case Con{RKnown.Ruled{c2, zu2, u2}, rest}:
-      e => Known.reopen_shelf(rest, fs, n, old, n0)(e)
+      e => Known.reopen_shelf(rest, fs, n, tx, old, n0, tx0)(e)
     case Con{RKnown.Made{c2, y2}, rest}:
-      e => Known.reopen_shelf(rest, fs, n, old, n0)(e)
-    case Con{RKnown.Open{fs2, pk2}, rest}:
+      e => Known.reopen_shelf(rest, fs, n, tx, old, n0, tx0)(e)
+    case Con{RKnown.Open{fs2, pk2, tx9}, rest}:
       e => {==}
 
 # The facts of a node, in order
@@ -10427,7 +11403,7 @@ def Known.joined_fit.at(
       )(ok)((
           %Equal.sym(Maybe<&2, RKnown.Kept>, RKnown.Known.shelf(kn), Some{RKnown.Made{c2, y2}}, em): {RContents.Shelf.fits(_, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))) == True{}: Bool}
           {==}))
-    case Some{RKnown.Open{+fs, +n0}}:
+    case Some{RKnown.Open{+fs, +n0, +tx9}}:
       em => +e => +ok => +hf => Fit.both(
         RKnown.Known.reopen(
           kn,
@@ -10439,7 +11415,17 @@ def Known.joined_fit.at(
               Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))
             }
           ),
-          Nat.max(n, n0)
+          Nat.max(n, n0),
+          Shared.Bool.when(
+            Crits.Crit<Types.Ask>,
+            Nat.is_lt(n0, n),
+            u => RKnown.Tops.join(tx9, Types.Fact.Ask{Types.Ask{i, n, r}}),
+            u => RKnown.Tops.of(
+              RFacts.Facts.list(
+                Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))
+              )
+            )
+          )
         ),
         Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))
       )(
@@ -10454,16 +11440,31 @@ def Known.joined_fit.at(
               Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))
             }
           ),
-          Nat.max(n, n0)
+          Nat.max(n, n0),
+          Shared.Bool.when(
+            Crits.Crit<Types.Ask>,
+            Nat.is_lt(n0, n),
+            u => RKnown.Tops.join(tx9, Types.Fact.Ask{Types.Ask{i, n, r}}),
+            u => RKnown.Tops.of(
+              RFacts.Facts.list(
+                Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))
+              )
+            )
+          )
         )(ok)
       )((
-          %Equal.sym(Maybe<&2, RKnown.Kept>, RKnown.Known.shelf(RKnown.Known.reopen(kn, RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), Nat.max(n, n0))), Some{RKnown.Open{RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), Nat.max(n, n0)}}, Known.reopen_shelf(kn, RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), Nat.max(n, n0), fs, n0)(em)): {RContents.Shelf.fits(_, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))) == True{}: Bool}
-          Shared.Bool.and_both(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))})), Nat.is_eq(Nat.max(n, n0), RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))))))((
-            %Asked.open(name, s, i, n, r, fs, kn)(e)(ok)(Shared.List.is_eq_sound(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), fs, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}))(Shared.Bool.and_true_left(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, fs, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), Nat.is_eq(n0, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s)))))(hf))): {Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), _) == True{}: Bool}
-            Shared.List.is_eq_refl(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}))))((
-            %Equal.sym(Nat, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})))), Nat.max(n, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s)))), Asked.peak(name, s, i, n, r)(e)): {Nat.is_eq(Nat.max(n, n0), _) == True{}: Bool}
-            %Shared.Nat.is_eq_sound(n0, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s))))(Shared.Bool.and_true_right(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, fs, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), Nat.is_eq(n0, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s)))))(hf)): {Nat.is_eq(Nat.max(n, n0), Nat.max(n, _)) == True{}: Bool}
-            Shared.Nat.is_eq_refl(Nat.max(n, n0))))))
+          %Equal.sym(Maybe<&2, RKnown.Kept>, RKnown.Known.shelf(RKnown.Known.reopen(kn, RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), Nat.max(n, n0), Shared.Bool.when(Crits.Crit<Types.Ask>, Nat.is_lt(n0, n), u => RKnown.Tops.join(tx9, Types.Fact.Ask{Types.Ask{i, n, r}}), u => RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))))))), Some{RKnown.Open{RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), Nat.max(n, n0), Shared.Bool.when(Crits.Crit<Types.Ask>, Nat.is_lt(n0, n), u => RKnown.Tops.join(tx9, Types.Fact.Ask{Types.Ask{i, n, r}}), u => RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})))))}}, Known.reopen_shelf(kn, RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), Nat.max(n, n0), Shared.Bool.when(Crits.Crit<Types.Ask>, Nat.is_lt(n0, n), u => RKnown.Tops.join(tx9, Types.Fact.Ask{Types.Ask{i, n, r}}), u => RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))))), fs, n0, tx9)(em)): {RContents.Shelf.fits(_, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))) == True{}: Bool}
+          Open.fits_of(RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), Nat.max(n, n0), Shared.Bool.when(Crits.Crit<Types.Ask>, Nat.is_lt(n0, n), u => RKnown.Tops.join(tx9, Types.Fact.Ask{Types.Ask{i, n, r}}), u => RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))))), Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})))(Shared.Bool.and_both(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))})), Nat.is_eq(Nat.max(n, n0), RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))))))((
+              %Asked.open(name, s, i, n, r, fs, kn)(e)(ok)(Shared.List.is_eq_sound(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), fs, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}))(Shared.Bool.and_true_left(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, fs, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), Nat.is_eq(n0, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s)))))(Open.fits_old(fs, n0, tx9, Facts.Facts.crit(s))(hf)))): {Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}), _) == True{}: Bool}
+              Shared.List.is_eq_refl(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), RKnown.Open.with(fs, Types.Fact.Ask{Types.Ask{i, n, r}}, RKnown.Scene{kn, Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))}))))((
+              %Equal.sym(Nat, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})))), Nat.max(n, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s)))), Asked.peak(name, s, i, n, r)(e)): {Nat.is_eq(Nat.max(n, n0), _) == True{}: Bool}
+              %Shared.Nat.is_eq_sound(n0, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s))))(Shared.Bool.and_true_right(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, fs, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), Nat.is_eq(n0, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s)))))(Open.fits_old(fs, n0, tx9, Facts.Facts.crit(s))(hf))): {Nat.is_eq(Nat.max(n, n0), Nat.max(n, _)) == True{}: Bool}
+              Shared.Nat.is_eq_refl(Nat.max(n, n0)))))(Lists.Bool.by(c => {Nat.is_lt(n0, n) == c: Bool} -> {Shared.Bool.when(Crits.Crit<Types.Ask>, c, u => RKnown.Tops.join(tx9, Types.Fact.Ask{Types.Ask{i, n, r}}), u => RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))))) == RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})))): Crits.Crit<Types.Ask>}, Nat.is_lt(n0, n), et => hl => (
+              %Equal.sym(Crits.Crit<Types.Ask>, tx9, RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(s))), Open.fits_tops(fs, n0, tx9, Facts.Facts.crit(s))(hf)): {RKnown.Tops.join(_, Types.Fact.Ask{Types.Ask{i, n, r}}) == RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})))): Crits.Crit<Types.Ask>}
+              %Equal.sym(List<&2, Types.Fact>, RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))), Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Ask{Types.Ask{i, n, r}}), Asked.list(name, s, i, n, r)(e)): {RKnown.Tops.join(RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(s))), Types.Fact.Ask{Types.Ask{i, n, r}}) == RKnown.Tops.of(_): Crits.Crit<Types.Ask>}
+              Equal.sym(Crits.Crit<Types.Ask>, RKnown.Tops.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Ask{Types.Ask{i, n, r}})), RKnown.Tops.join(RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(s))), Types.Fact.Ask{Types.Ask{i, n, r}}), Newest.Tops.of_insert(RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Ask{Types.Ask{i, n, r}})((
+                  %Shared.Nat.is_eq_sound(n0, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s))))(Shared.Bool.and_true_right(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, fs, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), Nat.is_eq(n0, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s)))))(Open.fits_old(fs, n0, tx9, Facts.Facts.crit(s))(hf))): {Nat.is_lt(_, n) == True{}: Bool}
+                  hl)))), ef => hl => {==})({==}))))
 
 # a table that is right after a node takes in an ask that starts no store,
 # and that held the right entry for a work before, fits once the ask joined
@@ -12092,14 +13093,23 @@ def Moved.Top(m: Maybe<&2, List<&2, Types.Fact>>, n: Nat, +s: RFacts.Plain()) ->
     case Some{fs}:
       {n == RFacts.Seq.peak(RFacts.Facts.list(s)): Nat}
 
+# what is known of the newest writes t, if any: they are those of the facts s
+def Moved.Tops(t: Maybe<&2, Crits.Crit<Types.Ask>>, +s: RFacts.Plain()) -> Type:
+  match t:
+    case None{}:
+      Unit
+    case Some{tx}:
+      {tx == RKnown.Tops.of(RFacts.Facts.list(s)): Crits.Crit<Types.Ask>}
+
 # a right table that holds nothing for a work, with the facts that a work
-# may act on after a fact joined them and the greatest number of an ask,
-# fits
+# may act on after a fact joined them, the greatest number of an ask and the
+# newest writes, fits
 def Known.moved_fit(
   +kn: RKnown.Known(),
   +s: RFacts.Plain(),
   m: Maybe<&2, List<&2, Types.Fact>>,
-  +n: Nat
+  +n: Nat,
+  t: Maybe<&2, Crits.Crit<Types.Ask>>
 ) -> {
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {
@@ -12111,35 +13121,53 @@ def Known.moved_fit(
   m,
   n,
   s
-) -> {RContents.Known.fit(RKnown.Known.moved(kn, s, m, n), s) == True{}: Bool}:
-  match m:
-    case None{}:
-      ok => sh => u => u2 => Fit.both(kn, s)(ok)((
+) -> Moved.Tops(
+  t,
+  s
+) -> {RContents.Known.fit(RKnown.Known.moved(kn, s, m, n, t), s) == True{}: Bool}:
+  match m t:
+    case None{} None{}:
+      ok => sh => u => u2 => u3 => Fit.both(kn, s)(ok)((
           %Equal.sym(Maybe<&2, RKnown.Kept>, RKnown.Known.shelf(kn), None{}, sh): {RContents.Shelf.fits(_, s) == True{}: Bool}
           {==}))
-    case Some{+fs}:
-      +ok => sh => e => et => Fit.both(
-        RKnown.Open{RKnown.Open.of(fs, RKnown.Scene{kn, s}), n} <> kn,
+    case None{} Some{tx}:
+      ok => sh => u => u2 => u3 => Fit.both(kn, s)(ok)((
+          %Equal.sym(Maybe<&2, RKnown.Kept>, RKnown.Known.shelf(kn), None{}, sh): {RContents.Shelf.fits(_, s) == True{}: Bool}
+          {==}))
+    case Some{fs} None{}:
+      ok => sh => u => u2 => u3 => Fit.both(kn, s)(ok)((
+          %Equal.sym(Maybe<&2, RKnown.Kept>, RKnown.Known.shelf(kn), None{}, sh): {RContents.Shelf.fits(_, s) == True{}: Bool}
+          {==}))
+    case Some{+fs} Some{+tx}:
+      +ok => sh => e => et => e3 => Fit.both(
+        RKnown.Open{RKnown.Open.of(fs, RKnown.Scene{kn, s}), n, tx} <> kn,
         s
       )(
         ok
       )(
-        Shared.Bool.and_both(
-          Shared.List.is_eq(
-            ~Types.Fact,
-            ~Coded.Fact.is_eq,
-            RKnown.Open.of(fs, RKnown.Scene{kn, s}),
-            RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})
-          ),
-          Nat.is_eq(n, RFacts.Seq.peak(RFacts.Facts.list(s)))
-        )((
-            %e: {Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, RKnown.Open.of(fs, RKnown.Scene{kn, s}), _) == True{}: Bool}
-            %Open.of_ok(kn, s, fs)(ok): {Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, RKnown.Open.of(fs, RKnown.Scene{kn, s}), _) == True{}: Bool}
-            Shared.List.is_eq_refl(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), RKnown.Open.of(fs, RKnown.Scene{kn, s}))))(
-          (
-            %et: {Nat.is_eq(n, _) == True{}: Bool}
-            Shared.Nat.is_eq_refl(n))
-        )
+        Open.fits_of(
+          RKnown.Open.of(fs, RKnown.Scene{kn, s}),
+          n,
+          tx,
+          s
+        )(
+          Shared.Bool.and_both(
+            Shared.List.is_eq(
+              ~Types.Fact,
+              ~Coded.Fact.is_eq,
+              RKnown.Open.of(fs, RKnown.Scene{kn, s}),
+              RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s})
+            ),
+            Nat.is_eq(n, RFacts.Seq.peak(RFacts.Facts.list(s)))
+          )((
+              %e: {Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, RKnown.Open.of(fs, RKnown.Scene{kn, s}), _) == True{}: Bool}
+              %Open.of_ok(kn, s, fs)(ok): {Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, RKnown.Open.of(fs, RKnown.Scene{kn, s}), _) == True{}: Bool}
+              Shared.List.is_eq_refl(~Types.Fact, ~Coded.Fact.is_eq, ~Coded.Fact.laws(), RKnown.Open.of(fs, RKnown.Scene{kn, s}))))(
+            (
+              %et: {Nat.is_eq(n, _) == True{}: Bool}
+              Shared.Nat.is_eq_refl(n))
+          )
+        )(e3)
       )
 
 # the greatest number of an ask after a ballot is the greater of the number
@@ -12193,10 +13221,10 @@ def Voted.top.at(
       h => Unit{}
     case Some{RKnown.Made{c2, y2}}:
       h => Unit{}
-    case Some{RKnown.Open{+fs2, +pk2}}:
+    case Some{RKnown.Open{+fs2, +pk2, +tx9}}:
       h => (
         %Equal.sym(Nat, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})))), Nat.max(RFacts.Seq.of(Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s)))), Voted.peak(name, s, c, k, t, x)): {Nat.max(RFacts.Seq.of(Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), pk2) == _: Nat}
-        %Shared.Nat.is_eq_sound(pk2, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s))))(Shared.Bool.and_true_right(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, fs2, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), Nat.is_eq(pk2, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s)))))(h)): {Nat.max(RFacts.Seq.of(Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), pk2) == Nat.max(RFacts.Seq.of(Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), _): Nat}
+        %Shared.Nat.is_eq_sound(pk2, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s))))(Shared.Bool.and_true_right(Shared.List.is_eq(~Types.Fact, ~Coded.Fact.is_eq, fs2, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), Nat.is_eq(pk2, RFacts.Seq.peak(RFacts.Facts.list(Facts.Facts.crit(s)))))(Open.fits_old(fs2, pk2, tx9, Facts.Facts.crit(s))(h))): {Nat.max(RFacts.Seq.of(Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), pk2) == Nat.max(RFacts.Seq.of(Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), _): Nat}
         {==})
 
 # the number that a table that fits gives for the facts after a ballot is
@@ -12246,6 +13274,63 @@ def Voted.top(
     )(Fit.open(kn, Facts.Facts.crit(s))(h)),
     ef => Unit{}
   )
+
+# Voted.tops, with the entry m that the table holds for a work
+def Voted.tops.at(
+  m: Maybe<&2, RKnown.Kept>,
+  +name: String,
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +x: Types.Cast
+) -> {
+  RContents.Shelf.fits(m, Facts.Facts.crit(s)) == True{}: Bool
+} -> Moved.Tops(
+  RKnown.Shelf.tops(m),
+  Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+):
+  match m:
+    case None{}:
+      h => Unit{}
+    case Some{RKnown.Kept{c2, st2}}:
+      h => Unit{}
+    case Some{RKnown.Stock{m2, lwm2}}:
+      h => Unit{}
+    case Some{RKnown.Ruled{c2, zu2, u2}}:
+      h => Unit{}
+    case Some{RKnown.Made{c2, y2}}:
+      h => Unit{}
+    case Some{RKnown.Open{+fs2, +pk2, +tx2}}:
+      h => (
+        %Equal.sym(List<&2, Types.Fact>, RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))), Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), Listed.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})): {tx2 == RKnown.Tops.of(_): Crits.Crit<Types.Ask>}
+        Equal.trans(Crits.Crit<Types.Ask>, tx2, RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(s))), RKnown.Tops.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), Open.fits_tops(fs2, pk2, tx2, Facts.Facts.crit(s))(h), Equal.sym(Crits.Crit<Types.Ask>, RKnown.Tops.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), RKnown.Tops.of(RFacts.Facts.list(Facts.Facts.crit(s))), Newest.Tops.of_insert(RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})({==}))))
+
+# the newest writes that a table that fits holds are those of the facts
+# after a ballot
+def Voted.tops(
+  +kn: RKnown.Known(),
+  +name: String,
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +x: Types.Cast
+) -> {
+  RContents.Known.fit(kn, Facts.Facts.crit(s)) == True{}: Bool
+} -> Moved.Tops(
+  RKnown.Shelf.tops(RKnown.Known.shelf(kn)),
+  Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+):
+  h => Voted.tops.at(
+    RKnown.Known.shelf(kn),
+    name,
+    s,
+    c,
+    k,
+    t,
+    x
+  )(Fit.open(kn, Facts.Facts.crit(s))(h))
 
 # Voted.moved_ok, with the states m of the line and ms of its store that the
 # table holds
@@ -12479,7 +13564,7 @@ def Known.voted_append(
         et => Known.voted_append(rest, c, ys),
         ef => Known.voted_append(rest, c, ys)
       )
-    case Con{RKnown.Open{fs2, pk2}, rest}:
+    case Con{RKnown.Open{fs2, pk2, tx9}, rest}:
       Known.voted_append(rest, c, ys)
 
 # the contents of a table hold no facts for a work
@@ -12497,7 +13582,7 @@ def Known.contents_shut(
       Known.contents_shut(rest)
     case Con{RKnown.Made{c2, y2}, rest}:
       Known.contents_shut(rest)
-    case Con{RKnown.Open{fs2, pk2}, rest}:
+    case Con{RKnown.Open{fs2, pk2, tx9}, rest}:
       Known.contents_shut(rest)
 
 # the contents of a table, each with one more as its number, hold no facts
@@ -12521,7 +13606,7 @@ def Known.deeper_shut(
       Known.deeper_shut(rest)
     case Con{RKnown.Made{c2, y2}, rest}:
       Known.deeper_shut(rest)
-    case Con{RKnown.Open{fs2, pk2}, rest}:
+    case Con{RKnown.Open{fs2, pk2, tx9}, rest}:
       Known.deeper_shut(rest)
 
 # the contents that a ballot spares hold no facts for a work
@@ -12745,7 +13830,7 @@ def Run.put_of.if(
       +m = Lists.List.peak(~Types.Entry, ~RLines.Entry.era, vs)
       +m2 = Nat.max(RLines.Entry.era(e), m)
       +vs2 = List.append(&2, Types.Entry, vs, [e])
-      +x2 = RKnown.Ids.put(RKnown.Ids.of(vs), RLines.Ask.id(a))
+      +x2 = RKnown.Ids.put(RKnown.Ids.of(vs), e)
       +u2 = RKnown.Run.rule(Nat.is_eq(m2, m), r, c, m2, RLines.Rule.at(r, c, m))
       %Equal.sym(
         Nat,
@@ -12770,7 +13855,7 @@ def Run.put_of.if(
         RKnown.Ids,
         RKnown.Ids.of(vs2),
         x2,
-        Ids.go_append(vs, [e], Crits.Crit.new(List<&2, Ledgers.Id>))
+        Ids.go_append(vs, [e], RKnown.Ids.new())
       ): {
         RKnown.Run{
           RLines.State{vs2, 1n+k},

@@ -54,15 +54,17 @@ Measured, native build, one node, one owner:
   parameter; `known.bend` and `fast.bend` prove that it does and answers what `Raw` does. 80
   writes take 0.25 s, 320 take 6 s; a read of the newest version is one lookup.
 - Indexes: the table also keeps the facts that a work may still act on (in set order, by the
-  order laws of `crit_order.bend`), the newest ask number, the ids of the versions of each line,
-  the contents in one map, and the rule and era of each line. The codec writes a number without a
-  loop (same words), and the turn of a round is one division. Writes on one branch, each with a
-  Work: 1280 take 0.59 s, 2560 take 1.5 s, 5120 take 4.1 s. From 160 to 2560 writes: an ask
-  stays at 0.05 ms, a read at 0.01 ms, a Work that casts goes from 0.27 to 0.6 ms.
-- Still linear in the history: a view (`Writes.of` scans the facts: 6 ms at 2560), a status
-  (`Versions.find`: 1.4 ms at 2560), the append of a version to the oldest-first list. Merge and
-  resolve asks never leave the open list (an idle Work with 16 merges: 1.3 ms). The table is a
-  list by line. A ballot on a store line, a Start and a Sync drop the table. In work.
+  order laws of `crit_order.bend`), the newest ask number, the versions of each line by request
+  id, the newest write per writer and place (`tops.bend`), the contents in one map, and the rule
+  and era of each line. The codec writes a number without a loop (same words), the turn of a
+  round is one division, and `Key.diff` skips equal words.
+- One branch, from 160 to 5120 writes, per call: an ask 0.07 ms, a view 0.03 ms, a status
+  0.04 ms, a read 0.015 ms: all flat. A Work that casts: 0.24 to 0.68 ms. 5120 writes, each with a
+  Work: 3 s. 50 branches and two writers, 400 to 6400 writes: all flat (a cast 0.5 ms).
+- Still growing: a cast appends to the oldest-first list of versions; merge and resolve asks never
+  leave the open list (11 us per such ask per Work); a merge and its status walk every path of the
+  three sides (not only the changed ones); the table is a list by line; a Sync that adds facts, a
+  Start and a ballot on a store line drop the table.
 
 ## Lint
 

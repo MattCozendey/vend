@@ -11,9 +11,9 @@ import ./lines.bend as Lines
 import ./reads.bend as Reads
 import ./rounds.bend as Rounds
 import ./run/answers.bend as RAnswers
-import ./run/known.bend as RKnown
 import ./run/content.bend as RContents
 import ./run/files.bend as Files
+import ./run/known.bend as RKnown
 import ./run/lines.bend as RLines
 import ./run/rounds.bend as RRounds
 import ./shared/lists.bend as Lists
@@ -583,9 +583,7 @@ def Find.ext(
 ) -> {RAnswers.Versions.find(vs2, i) == Some{RKnown.Found{j, x}}: Maybe<&2, RKnown.Found>}:
   Eq.up(
     Maybe<&2, Nat>,
-    m => {
-      RAnswers.Versions.find.at(vs2, m) == Some{RKnown.Found{j, x}}: Maybe<&2, RKnown.Found>
-    },
+    m => {RAnswers.Versions.find.at(vs2, m) == Some{RKnown.Found{j, x}}: Maybe<&2, RKnown.Found>},
     Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs2, i),
     Some{j},
     Lists.List.index_ext(

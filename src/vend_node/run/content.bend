@@ -468,7 +468,7 @@ def Kept.ok(+s: Facts.Plain(), e: Knowns.Kept) -> Bool:
       )
     case Knowns.Made{c, x}:
       Knowns.Made.fits(Lines.Line.state(s, c), x)
-    case Knowns.Open{fs, n}:
+    case Knowns.Open{fs, n, tx}:
       True{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
@@ -485,19 +485,22 @@ def Known.ok(kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a table that is wrong, which then costs no more than a right table, where both sides run
 # what the entry m holds for a work, if it does, is right: the facts that a
-# work may still act on in the facts s, and the greatest number of an ask in
-# s
+# work may still act on in the facts s, the greatest number of an ask in s,
+# and the newest writes of s
 def Shelf.fits(m: Maybe<&2, Knowns.Kept>, +s: Facts.Plain()) -> Bool:
   match m:
-    case Some{Knowns.Open{fs, n}}:
+    case Some{Knowns.Open{fs, n, tx}}:
       Bool.and(
-        Shared.List.is_eq(
-          ~Types.Fact,
-          ~Coded.Fact.is_eq,
-          fs,
-          Knowns.Open.of(Facts.Facts.list(s), Knowns.Scene{Knowns.Known.none(), s})
+        Bool.and(
+          Shared.List.is_eq(
+            ~Types.Fact,
+            ~Coded.Fact.is_eq,
+            fs,
+            Knowns.Open.of(Facts.Facts.list(s), Knowns.Scene{Knowns.Known.none(), s})
+          ),
+          Nat.is_eq(n, Facts.Seq.peak(Facts.Facts.list(s)))
         ),
-        Nat.is_eq(n, Facts.Seq.peak(Facts.Facts.list(s)))
+        Knowns.Tops.same(tx, Knowns.Tops.of(Facts.Facts.list(s)))
       )
     case _:
       True{}
@@ -689,6 +692,19 @@ def Known.warm(+kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Know
 def State.count(m: Maybe<&2, Lines.State>) -> Nat:
   Versions.count(Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, m))
 
+# the number of the versions that the table kn holds for the line c: as the
+# versions x of c by id hold it, if known; else counted
+def Tally.by(x: Maybe<&2, Knowns.Ids>, kn: Knowns.Known(), c: Ledgers.Line) -> Nat:
+  match x:
+    case None{}:
+      State.count(Knowns.Known.find(kn, c))
+    case Some{ids}:
+      Knowns.Ids.count(ids)
+
+# the number of the versions that the table kn holds for the line c
+def Known.tally(+kn: Knowns.Known(), +c: Ledgers.Line) -> Nat:
+  Tally.by(Knowns.Known.ids(kn, c), kn, c)
+
 # the table kn with the contents of the versions of the line c in the facts
 # s from the version a on, up to b versions, when it holds the one before
 # (near); else with the content of each of the b versions
@@ -711,16 +727,16 @@ def Known.grow.if(
 # old holds for c, if kn holds the content of the last of them; else all the
 # versions of the state that kn holds for c
 def Known.grow(
-  old: Knowns.Known(),
+  +old: Knowns.Known(),
   +kn: Knowns.Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line
 ) -> Knowns.Known():
-  +a = State.count(Knowns.Known.find(old, c))
+  +a = Known.tally(old, c)
   Known.grow.if(
     Maybe.is_some(&2, Nat, Knowns.Known.depth(kn, c, Nat.sub(a, 1n))),
     a,
-    State.count(Knowns.Known.find(kn, c)),
+    Known.tally(kn, c),
     kn,
     s,
     c

@@ -359,7 +359,7 @@ def Asks.put_by(
 # an ask among fs that writes as g says is one of the writes of fs
 def Writes.of_in(
   fs: List<&2, Types.Fact>,
-  +g: RAnswers.Place,
+  +g: RKnown.Place,
   +a: Types.Ask
 ) -> {
   List.contains(~Types.Fact, ~Coded.Fact.is_eq, fs, Types.Fact.Ask{a}) == True{}: Bool
@@ -436,7 +436,7 @@ def Writes.of_in(
 # each of the writes of fs is an ask among fs
 def Writes.of_from(
   fs: List<&2, Types.Fact>,
-  +g: RAnswers.Place,
+  +g: RKnown.Place,
   +y: Types.Ask
 ) -> {
   List.contains(~Types.Ask, ~Coded.Ask.is_eq, RAnswers.Writes.of(fs, g), y) == True{}: Bool
@@ -523,7 +523,7 @@ def Writes.top(
   +name: String,
   +s: Facts.Facts(),
   +a: Types.Ask,
-  +g: RAnswers.Place
+  +g: RKnown.Place
 ) -> {
   Nat.is_lt(RFacts.Seq.peak(Facts.Facts.list(s)), RFacts.Ask.seq(a)) == True{}: Bool
 } -> {
@@ -750,7 +750,7 @@ def View.reads_own.at(
 ) -> {
   Nat.is_lt(RFacts.Seq.peak(Facts.Facts.list(s)), RFacts.Ask.seq(a)) == True{}: Bool
 } -> {
-  RAnswers.Ask.writes(RAnswers.Place{w, b, p}, a) == True{}: Bool
+  RAnswers.Ask.writes(RKnown.Place{w, b, p}, a) == True{}: Bool
 } -> {
   Answers.View.at(
     Facts.Facts.take(name, s, Types.Fact.Ask{a}),
@@ -761,7 +761,7 @@ def View.reads_own.at(
     == Some{RAnswers.Request.words(RLines.Ask.request(a))}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   +hlt => hw => (
-    %Equal.sym(Maybe<&2, Types.Ask>, Lists.List.top(~Types.Ask, ~RFacts.Ask.seq, RAnswers.Writes.of(Facts.Facts.list(Facts.Facts.take(name, s, Types.Fact.Ask{a})), RAnswers.Place{w, b, p})), Some{a}, Writes.top(name, s, a, RAnswers.Place{w, b, p})(hlt)(hw)): {Answers.View.of(Facts.Facts.take(name, s, Types.Fact.Ask{a}), b, p, _) == Some{RAnswers.Request.words(RLines.Ask.request(a))}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+    %Equal.sym(Maybe<&2, Types.Ask>, Lists.List.top(~Types.Ask, ~RFacts.Ask.seq, RAnswers.Writes.of(Facts.Facts.list(Facts.Facts.take(name, s, Types.Fact.Ask{a})), RKnown.Place{w, b, p})), Some{a}, Writes.top(name, s, a, RKnown.Place{w, b, p})(hlt)(hw)): {Answers.View.of(Facts.Facts.take(name, s, Types.Fact.Ask{a}), b, p, _) == Some{RAnswers.Request.words(RLines.Ask.request(a))}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
     %Equal.sym(Bool, RAnswers.View.decided(a, Lines.Line.versions(Facts.Facts.take(name, s, Types.Fact.Ask{a}), b)), False{}, View.fresh(name, s, a, b, Lines.Line.versions(Facts.Facts.take(name, s, Types.Fact.Ask{a}), b))(hlt)({==})): {Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, _, u => Answers.View.newest(Facts.Facts.take(name, s, Types.Fact.Ask{a}), b, p, Lines.Line.versions(Facts.Facts.take(name, s, Types.Fact.Ask{a}), b)), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}) == Some{RAnswers.Request.words(RLines.Ask.request(a))}: Maybe<&2, Maybe<&2, List<&2, U32>>>}
     {==})
 

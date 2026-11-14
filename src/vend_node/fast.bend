@@ -1,5 +1,6 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
+import ../shared/shared/shared/shared/crit.bend as Crits
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
 import ./codes.bend as Coded
@@ -1019,7 +1020,7 @@ def Table.mid_shut(
 ) -> {RKnown.Known.shelf(Table.mid(kn, s, c, k, w)) == None{}: Maybe<&2, RKnown.Kept>}:
   (
     %Knowns.Known.learn_open(RContents.Known.grow(kn, RKnown.Known.cast(kn, s, c, k, w), s, c), s, c): {_ == None{}: Maybe<&2, RKnown.Kept>}
-    %Knowns.Known.grow_open(Maybe.is_some(&2, Nat, RKnown.Known.depth(RKnown.Known.cast(kn, s, c, k, w), c, Nat.sub(RContents.State.count(RKnown.Known.find(kn, c)), 1n))), RContents.State.count(RKnown.Known.find(kn, c)), RContents.State.count(RKnown.Known.find(RKnown.Known.cast(kn, s, c, k, w), c)), RKnown.Known.cast(kn, s, c, k, w), s, c): {_ == None{}: Maybe<&2, RKnown.Kept>}
+    %Knowns.Known.grow_open(Maybe.is_some(&2, Nat, RKnown.Known.depth(RKnown.Known.cast(kn, s, c, k, w), c, Nat.sub(RContents.Known.tally(kn, c), 1n))), RContents.Known.tally(kn, c), RContents.Known.tally(RKnown.Known.cast(kn, s, c, k, w), c), RKnown.Known.cast(kn, s, c, k, w), s, c): {_ == None{}: Maybe<&2, RKnown.Kept>}
     Knowns.Known.cast_shuts(kn, s, c, k, w))
 
 # the table that a ballot at the step st leaves of a table that fits fits
@@ -1071,7 +1072,8 @@ def Table.voted_fit(
         Nat.max(
           RFacts.Seq.of(Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
           RKnown.Shelf.top(RKnown.Known.shelf(kn))
-        )
+        ),
+        RKnown.Shelf.tops(RKnown.Known.shelf(kn))
       )(
         Table.mid_ok(
           kn,
@@ -1092,7 +1094,7 @@ def Table.voted_fit(
         )
       )(
         Knowns.Voted.moved_ok(kn, name, s, c, k, t, x)(h)
-      )(Knowns.Voted.top(kn, name, s, c, k, t, x)(h))
+      )(Knowns.Voted.top(kn, name, s, c, k, t, x)(h))(Knowns.Voted.tops(kn, name, s, c, k, t, x)(h))
 
 # the table kn after a work of the node name on the facts s casts the ballot
 # m, if any (as Works.Work.cast does: not when s holds a ballot of the node
@@ -1241,7 +1243,7 @@ def Needs.of_ok(
   +name: String,
   ms: List<&2, Nodes.Mounted>
 ) -> {
-  RContents.Known.ok(kn, s) == True{}: Bool
+  RContents.Known.fit(kn, s) == True{}: Bool
 } -> {
   Nodes.Needs.of(
     kn,
@@ -1280,6 +1282,99 @@ def Fast.works_fit(
       +h => (
         %Fast.works_at_sym(name, ws, ms, fs, ps, RFasts.Learn.if(RFasts.Table.read(kn), kn, fs), RWorks.Work.plan(RFasts.Learn.if(RFasts.Table.read(kn), kn, fs), fs, name))(Learn.if_fit(RFasts.Table.read(kn), kn, fs)(h)): {RFasts.Fast.ok(_) == True{}: Bool}
         Table.cast_fit(RFasts.Learn.if(RFasts.Table.read(kn), kn, fs), name, Impl.Node.set(name, fs, ps, okr), RWorks.Work.plan(RFasts.Learn.if(RFasts.Table.read(kn), kn, fs), fs, name))(Learn.if_fit(RFasts.Table.read(kn), kn, fs)(h)))
+# a test that holds with what follows it holds
+def All.if_left(
+  c: Bool,
+  -x: Bool
+) -> {List.all.if(u => x, c) == True{}: Bool} -> {c == True{}: Bool}:
+  match c:
+    case True{}:
+      h => {==}
+    case False{}:
+      h => h
+
+# what follows a test, when both hold, holds
+def All.if_right(
+  c: Bool,
+  -x: Bool
+) -> {List.all.if(u => x, c) == True{}: Bool} -> {x == True{}: Bool}:
+  match c:
+    case True{}:
+      h => h
+    case False{}:
+      h => Empty.absurd({x == True{}: Bool}, Shared.Bool.false_ne_true(h))
+
+# Plain.same is True only for equal facts
+def Plain.same_sound(
+  a: Crits.Crit<Types.Fact>,
+  b: Crits.Crit<Types.Fact>
+) -> {RFasts.Plain.same(a, b) == True{}: Bool} -> {a == b: Crits.Crit<Types.Fact>}:
+  match a b:
+    case Crits.Crit.Tip{} Crits.Crit.Tip{}:
+      h => {==}
+    case Crits.Crit.Tip{} Crits.Crit.Leaf{k2, v2}:
+      h => Empty.absurd(
+        {Crits.Crit.Tip{} == Crits.Crit.Leaf{k2, v2}: Crits.Crit<Types.Fact>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Tip{} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      h => Empty.absurd(
+        {Crits.Crit.Tip{} == Crits.Crit.Fork{r2, p2, e2, z2, o2}: Crits.Crit<Types.Fact>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Tip{}:
+      h => Empty.absurd(
+        {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Tip{}: Crits.Crit<Types.Fact>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Leaf{+k1, +v1} Crits.Crit.Leaf{+k2, +v2}:
+      +h => (
+        %Crits.Key.is_eq_sound(k1, k2)(All.if_left(Crits.Key.is_eq(k1, k2), Coded.Fact.is_eq(v1, v2))(h)): {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Leaf{_, v2}: Crits.Crit<Types.Fact>}
+        %Coded.Fact.is_eq_sound(v1, v2)(All.if_right(Crits.Key.is_eq(k1, k2), Coded.Fact.is_eq(v1, v2))(h)): {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Leaf{k1, _}: Crits.Crit<Types.Fact>}
+        {==})
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      h => Empty.absurd(
+        {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Fork{r2, p2, e2, z2, o2}: Crits.Crit<Types.Fact>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Tip{}:
+      h => Empty.absurd(
+        {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Tip{}: Crits.Crit<Types.Fact>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Leaf{k2, v2}:
+      h => Empty.absurd(
+        {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Leaf{k2, v2}: Crits.Crit<Types.Fact>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Fork{+r1, +p1, +e1, +z1, +o1} Crits.Crit.Fork{+r2, +p2, +e2, +z2, +o2}:
+      +h => (
+        +h2 = All.if_right(Crits.Key.is_eq(r1, r2), List.all.if(u2 => List.all.if(u3 => List.all.if(u4 => RFasts.Plain.same(o1, o2), RFasts.Plain.same(z1, z2)), Shared.Maybe.is_eq(~Types.Fact, ~Coded.Fact.is_eq, e1, e2)), Nat.is_eq(p1, p2)))(h)
+        +h3 = All.if_right(Nat.is_eq(p1, p2), List.all.if(u3 => List.all.if(u4 => RFasts.Plain.same(o1, o2), RFasts.Plain.same(z1, z2)), Shared.Maybe.is_eq(~Types.Fact, ~Coded.Fact.is_eq, e1, e2)))(h2)
+        +h4 = All.if_right(Shared.Maybe.is_eq(~Types.Fact, ~Coded.Fact.is_eq, e1, e2), List.all.if(u4 => RFasts.Plain.same(o1, o2), RFasts.Plain.same(z1, z2)))(h3)
+        %Crits.Key.is_eq_sound(r1, r2)(All.if_left(Crits.Key.is_eq(r1, r2), List.all.if(u2 => List.all.if(u3 => List.all.if(u4 => RFasts.Plain.same(o1, o2), RFasts.Plain.same(z1, z2)), Shared.Maybe.is_eq(~Types.Fact, ~Coded.Fact.is_eq, e1, e2)), Nat.is_eq(p1, p2)))(h)): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{_, p2, e2, z2, o2}: Crits.Crit<Types.Fact>}
+        %Shared.Nat.is_eq_sound(p1, p2)(All.if_left(Nat.is_eq(p1, p2), List.all.if(u3 => List.all.if(u4 => RFasts.Plain.same(o1, o2), RFasts.Plain.same(z1, z2)), Shared.Maybe.is_eq(~Types.Fact, ~Coded.Fact.is_eq, e1, e2)))(h2)): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, _, e2, z2, o2}: Crits.Crit<Types.Fact>}
+        %Shared.Maybe.is_eq_sound(~Types.Fact, ~Coded.Fact.is_eq, x => y => Coded.Fact.is_eq_sound(x, y), e1, e2)(All.if_left(Shared.Maybe.is_eq(~Types.Fact, ~Coded.Fact.is_eq, e1, e2), List.all.if(u4 => RFasts.Plain.same(o1, o2), RFasts.Plain.same(z1, z2)))(h3)): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, _, z2, o2}: Crits.Crit<Types.Fact>}
+        %Plain.same_sound(z1, z2)(All.if_left(RFasts.Plain.same(z1, z2), RFasts.Plain.same(o1, o2))(h4)): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, e1, _, o2}: Crits.Crit<Types.Fact>}
+        %Plain.same_sound(o1, o2)(All.if_right(RFasts.Plain.same(z1, z2), RFasts.Plain.same(o1, o2))(h4)): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, e1, z1, _}: Crits.Crit<Types.Fact>}
+        {==})
+
+# the table that a Sync leaves fits: it is kept only when no fact joined
+def Table.kept_fit(
+  +kn: RKnown.Known(),
+  +old: RFacts.Plain(),
+  +new: RFacts.Plain()
+) -> {
+  RContents.Known.fit(kn, old) == True{}: Bool
+} -> {RContents.Known.fit(RFasts.Table.kept(kn, RFasts.Plain.same(old, new)), new) == True{}: Bool}:
+  ok => Lists.Bool.by(
+    c => {RContents.Known.fit(RFasts.Table.kept(kn, c), new) == True{}: Bool},
+    RFasts.Plain.same(old, new),
+    et => (
+      %Plain.same_sound(old, new)(et): {RContents.Known.fit(kn, _) == True{}: Bool}
+      ok),
+    ef => {==}
+  )
 
 # the table of a fast node whose state can be a node stays right after any
 # deed
@@ -1302,8 +1397,12 @@ def Fast.does_ok(
         Fast.asks_fit(Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))), name, ws, ms, st, fs, ps, i, q, q, RFasts.Table.asked(kn, q), okr)(Table.asked_fit(kn, fs, q)(ok))(et => (
           %Equal.sym(Bool, RFacts.Request.is_start(q), True{}, et): {RContents.Known.fit(Shared.Bool.when(RKnown.Known(), _, u => RKnown.Known.none(), u => kn), RFacts.Facts.take(name, fs, Types.Fact.Ask{RFacts.Facts.asked(fs, i, q)})) == True{}: Bool}
           {==})))
-    case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn} Nodes.Act.Sync{from}:
-      okr => ok => {==}
+    case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn} Nodes.Act.Sync{+from}:
+      okr => ok => Table.kept_fit(
+        kn,
+        fs,
+        Nodes.Raw.facts(Nodes.Raw.does(Nodes.Raw{name, ws, ms, st, fs, ps}, Nodes.Act.Sync{from}))
+      )(ok)
     case RFasts.Fast{
       Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
       +kn
@@ -1383,7 +1482,7 @@ def Fast.does_raw(
         hs => Nodes.Raw{name, ws, ms, st, fs, RParts.Parts.only(ps, hs)},
         Nodes.Needs.of(kn, fs, name, ms),
         Nodes.Needs.of(RKnown.Known.none(), fs, name, ms),
-        Needs.of_ok(kn, fs, name, ms)(Knowns.Fit.ok(kn, fs)(ok))
+        Needs.of_ok(kn, fs, name, ms)(ok)
       )
     case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn} Nodes.Act.Stop{force}:
       ok => {==}
@@ -1480,10 +1579,4 @@ def Fast.view_raw(
 }:
   match f:
     case RFasts.Fast{+r, +kn}:
-      ok => Knowns.View.at_ok(
-        kn,
-        Nodes.Raw.facts(r),
-        w,
-        b,
-        p
-      )(Knowns.Fit.ok(kn, Nodes.Raw.facts(r))(ok))
+      ok => Knowns.View.at_ok(kn, Nodes.Raw.facts(r), w, b, p)(ok)
