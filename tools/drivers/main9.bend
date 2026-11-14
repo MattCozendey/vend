@@ -168,7 +168,7 @@ def voted(+kn: Known.Known(), +fs: Facts.Plain(), m: Maybe<&2, Works.Plan>) -> N
     case None{}:
       0n
     case Some{Works.Plan{+st, +x}}:
-      klen(Fasts.Table.voted(kn, Facts.Facts.add(fs, Types.Fact.Vote{"a", st, x}), st, Types.Fact.Vote{"a", st, x}))
+      klen(Fasts.Table.voted(kn, fs, Facts.Facts.add(fs, Types.Fact.Vote{"a", st, x}), st, Types.Fact.Vote{"a", st, x}))
 
 def casted(+kn: Known.Known(), +fs: Facts.Plain(), m: Maybe<&2, Works.Plan>) -> Nat:
   match m:
@@ -388,7 +388,7 @@ def one(mode: Nat, +b: Ledgers.Line, +kn: Known.Known(), +fs: Facts.Plain(), +m:
     case 37n:
       klen(Known.Known.learn(kn, fs, b))
     case 38n:
-      klen(Known.Known.moved(kn, fs, Some{Known.Known.facts(kn, fs)}, 0n, Known.Shelf.tops(Known.Known.shelf(kn)), Known.Shelf.merges(Known.Known.shelf(kn))))
+      klen(Known.Known.moved(kn, fs, Some{Known.Known.facts(kn, fs)}, 0n, Known.Shelf.tops(Known.Known.shelf(kn)), Known.Shelf.merges(Known.Known.shelf(kn)), Known.Shelf.roots(Known.Known.shelf(kn))))
     case 39n:
       rlen(Known.Known.rule.next(kn, fs, b, Known.Known.find(kn, b)))
     case 40n:

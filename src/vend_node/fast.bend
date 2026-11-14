@@ -1043,6 +1043,7 @@ def Table.mid_shut(
 # the table that a ballot for the slot k of the line c leaves of a table
 # that fits, as Table.move leaves it, fits the facts with the ballot
 def Table.move_fit(
+  sound: Bool,
   +kn: RKnown.Known(),
   +name: String,
   +s: Facts.Facts(),
@@ -1051,12 +1052,15 @@ def Table.move_fit(
   +t: Nat,
   +x: Types.Cast
 ) -> {
+  RKnown.Known.sound(kn, c, k) == sound: Bool
+} -> {
   RContents.Known.fit(kn, Facts.Facts.crit(s)) == True{}: Bool
 } -> {
   RFacts.Facts.cast(Facts.Facts.crit(s), name, Types.Step.At{c, k, t}) == False{}: Bool
 } -> {
   RContents.Known.fit(
     RFasts.Table.move(
+      sound,
       kn,
       RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
       c,
@@ -1067,7 +1071,33 @@ def Table.move_fit(
   )
     == True{}: Bool
 }:
-  +h => hc =>
+  hs => +h => hc =>
+    %hs: {
+      RContents.Known.fit(
+        RKnown.Known.moved(
+          Table.mid(
+            kn,
+            RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+            c,
+            k,
+            RKnown.Known.walk(kn, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})
+          ),
+          RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+          RKnown.Known.walk.if(
+            _,
+            RKnown.Known.walk(kn, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})
+          ),
+          Nat.max(
+            RFacts.Seq.of(Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+            RKnown.Shelf.top(RKnown.Known.shelf(kn))
+          ),
+          RKnown.Shelf.tops(RKnown.Known.shelf(kn)),
+          RKnown.Shelf.merges(RKnown.Known.shelf(kn))
+        ),
+        RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})
+      )
+        == True{}: Bool
+    }
     %Equal.sym(
       Bool,
       RKnown.Known.sound(kn, c, k),
@@ -1167,6 +1197,8 @@ def Table.voted.at_fit(
   +t: Nat,
   +x: Types.Cast
 ) -> {
+  RKnown.Known.sound(kn, c, k) == sound: Bool
+} -> {
   RContents.Known.fit(kn, Facts.Facts.crit(s)) == True{}: Bool
 } -> {
   RFacts.Facts.cast(Facts.Facts.crit(s), name, Types.Step.At{c, k, t}) == False{}: Bool
@@ -1175,6 +1207,7 @@ def Table.voted.at_fit(
     RFasts.Table.voted.at(
       sound,
       kn,
+      Facts.Facts.crit(s),
       RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
       c,
       k,
@@ -1186,9 +1219,9 @@ def Table.voted.at_fit(
 }:
   match sound:
     case True{}:
-      h => hc => Table.move_fit(kn, name, s, c, k, t, x)(h)(hc)
+      hs => h => hc => Table.move_fit(True{}, kn, name, s, c, k, t, x)(hs)(h)(hc)
     case False{}:
-      +h => +hc => Lists.Bool.by(
+      hs => +h => +hc => Lists.Bool.by(
         y => {
           RContents.Known.fit(
             RFasts.Table.kept(
@@ -1206,10 +1239,12 @@ def Table.voted.at_fit(
           )
             == True{}: Bool
         },
-        RKnown.Known.kept(
+        RKnown.Known.late(
           kn,
+          Facts.Facts.crit(s),
           RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
-          c
+          c,
+          k
         ),
         +et => Knowns.Known.moved_fit(
           RKnown.Known.shut(kn),
@@ -1233,7 +1268,7 @@ def Table.voted.at_fit(
           )(
             Knowns.Fit.ok(kn, Facts.Facts.crit(s))(h)
           )(
-            Knowns.Known.kept_ok(
+            Knowns.Known.late_ok(
               kn,
               name,
               s,
@@ -1257,7 +1292,7 @@ def Table.voted.at_fit(
           )(
             h
           )(
-            Knowns.Known.kept_ok(
+            Knowns.Known.late_ok(
               kn,
               name,
               s,
@@ -1280,7 +1315,7 @@ def Table.voted.at_fit(
         )(
           Knowns.Voted.tops(kn, name, s, c, k, t, x)(h)
         )(Knowns.Voted.merges(kn, name, s, c, k, t, x)(h)),
-        ef => Table.move_fit(kn, name, s, c, k, t, x)(h)(hc)
+        ef => Table.move_fit(False{}, kn, name, s, c, k, t, x)(hs)(h)(hc)
       )
 
 # the table that a ballot at the step st leaves of a table that fits fits
@@ -1299,6 +1334,7 @@ def Table.voted_fit(
   RContents.Known.fit(
     RFasts.Table.voted(
       kn,
+      Facts.Facts.crit(s),
       RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, st, x}),
       st,
       Types.Fact.Vote{name, st, x}
@@ -1313,7 +1349,7 @@ def Table.voted_fit(
         RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.Broken{}, x})
       )
     case Types.Step.At{+c, +k, +t}:
-      h => hc => Table.voted.at_fit(RKnown.Known.sound(kn, c, k), kn, name, s, c, k, t, x)(h)(hc)
+      h => hc => Table.voted.at_fit(RKnown.Known.sound(kn, c, k), kn, name, s, c, k, t, x)({==})(h)(hc)
 
 # the table kn after a work of the node name on the facts s casts the ballot
 # m, if any (as Works.Work.cast does: not when s holds a ballot of the node
@@ -1334,6 +1370,7 @@ def Table.cast(
         u => kn,
         u => RFasts.Table.voted(
           kn,
+          s,
           RFacts.Facts.add(s, Types.Fact.Vote{name, st, x}),
           st,
           Types.Fact.Vote{name, st, x}
@@ -1374,7 +1411,7 @@ def Fast.works_at_eq(
     case Some{RWorks.Plan{+st, +x}}:
       h => (
         %Equal.sym(Bool, RFasts.Seat.cast(kn, fs, name, st), RFacts.Facts.cast(fs, name, st), Seat.cast_fit(kn, fs, name, st)(h)): {RFasts.Fast.casts.if(_, name, ws, ms, fs, ps, kn, st, x) == RFasts.Fast{Nodes.Raw{name, ws, ms, False{}, RWorks.Work.cast(fs, name, Some{RWorks.Plan{st, x}}), ps}, Table.cast(kn, fs, name, Some{RWorks.Plan{st, x}})}: RFasts.Fast}
-        Lists.Bool.by(b => {RFasts.Fast.casts.if(b, name, ws, ms, fs, ps, kn, st, x) == RFasts.Fast{Nodes.Raw{name, ws, ms, False{}, Shared.Bool.when(RFacts.Plain(), b, u => fs, u => RFacts.Facts.add(fs, Types.Fact.Vote{name, st, x})), ps}, Shared.Bool.when(RKnown.Known(), b, u => kn, u => RFasts.Table.voted(kn, RFacts.Facts.add(fs, Types.Fact.Vote{name, st, x}), st, Types.Fact.Vote{name, st, x}))}: RFasts.Fast}, RFacts.Facts.cast(fs, name, st), et => {==}, ef => {==}))
+        Lists.Bool.by(b => {RFasts.Fast.casts.if(b, name, ws, ms, fs, ps, kn, st, x) == RFasts.Fast{Nodes.Raw{name, ws, ms, False{}, Shared.Bool.when(RFacts.Plain(), b, u => fs, u => RFacts.Facts.add(fs, Types.Fact.Vote{name, st, x})), ps}, Shared.Bool.when(RKnown.Known(), b, u => kn, u => RFasts.Table.voted(kn, fs, RFacts.Facts.add(fs, Types.Fact.Vote{name, st, x}), st, Types.Fact.Vote{name, st, x}))}: RFasts.Fast}, RFacts.Facts.cast(fs, name, st), et => {==}, ef => {==}))
 
 # Fast.works_at_eq, read from right to left
 def Fast.works_at_sym(
@@ -1433,6 +1470,7 @@ def Table.cast_fit(
               u => kn,
               u => RFasts.Table.voted(
                 kn,
+                Facts.Facts.crit(s),
                 RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, st, x}),
                 st,
                 Types.Fact.Vote{name, st, x}
@@ -1579,6 +1617,7 @@ def Table.heard_fit(
           u => RKnown.Known.none(),
           u => RFasts.Table.voted(
             kn,
+            Facts.Facts.crit(s),
             RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{v, st, x}),
             st,
             Types.Fact.Vote{v, st, x}

@@ -86,7 +86,8 @@ type Kept is Data:
     facts: List<&2, Types.Fact>,
     peak: Nat,
     tops: Crits.Crit<Types.Ask>,
-    merges: Crits.Crit<Ledgers.Line>
+    merges: Crits.Crit<Ledgers.Line>,
+    roots: Crits.Crit<Unit>
   }
   Stock{held: Crits.Crit<Held>, low: Nat}
 
@@ -425,8 +426,8 @@ def Known.add(e: Kept, +kn: Known()) -> Known():
         Known.stock(kn),
         Known.low(kn)
       }
-    case Open{fs, n, tx, mx}:
-      Table{Known.lines(kn), Some{Open{fs, n, tx, mx}}, Known.stock(kn), Known.low(kn)}
+    case Open{fs, n, tx, mx, rx}:
+      Table{Known.lines(kn), Some{Open{fs, n, tx, mx, rx}}, Known.stock(kn), Known.low(kn)}
     case Stock{m, g}:
       Table{Known.lines(kn), Known.shelf(kn), m, g}
 
@@ -436,7 +437,7 @@ def Known.add(e: Kept, +kn: Known()) -> Known():
 # the facts that a work may still act on, of the entry m, if it holds them
 def Shelf.facts(m: Maybe<&2, Kept>) -> Maybe<&2, List<&2, Types.Fact>>:
   match m:
-    case Some{Open{fs, n, tx, mx}}:
+    case Some{Open{fs, n, tx, mx, rx}}:
       Some{fs}
     case _:
       None{}
@@ -462,7 +463,7 @@ def Known.facts(kn: Known(), s: Facts.Plain()) -> List<&2, Types.Fact>:
 # read from the facts
 def Shelf.peak(m: Maybe<&2, Kept>, s: Facts.Plain()) -> Nat:
   match m:
-    case Some{Open{fs, n, tx, mx}}:
+    case Some{Open{fs, n, tx, mx, rx}}:
       n
     case _:
       Facts.Seq.peak(Facts.Facts.list(s))
@@ -474,38 +475,42 @@ def Known.peak(kn: Known(), s: Facts.Plain()) -> Nat:
 # the greatest number of an ask that the entry m holds; else 0
 def Shelf.top(m: Maybe<&2, Kept>) -> Nat:
   match m:
-    case Some{Open{fs, n, tx, mx}}:
+    case Some{Open{fs, n, tx, mx, rx}}:
       n
     case _:
       0n
 
-# the entry m with the facts fs, the number n, the newest writes tx and the
-# lines mx of merges in the place of what it holds for a work, if it does
+# the entry m with the facts fs, the number n, the newest writes tx, the
+# lines mx of merges and the roots rx of stores in the place of what it
+# holds for a work, if it does
 def Shelf.reopen(
   m: Maybe<&2, Kept>,
   fs: List<&2, Types.Fact>,
   n: Nat,
   tx: Crits.Crit<Types.Ask>,
-  mx: Crits.Crit<Ledgers.Line>
+  mx: Crits.Crit<Ledgers.Line>,
+  rx: Crits.Crit<Unit>
 ) -> Maybe<&2, Kept>:
   match m:
-    case Some{Open{old, m2, old2, old3}}:
-      Some{Open{fs, n, tx, mx}}
+    case Some{Open{old, m2, old2, old3, old4}}:
+      Some{Open{fs, n, tx, mx, rx}}
     case other:
       other
 
-# the table kn with the facts fs, the number n, the newest writes tx and the
-# lines mx of merges in the place of what it holds for a work, if it holds it
+# the table kn with the facts fs, the number n, the newest writes tx, the
+# lines mx of merges and the roots rx of stores in the place of what it
+# holds for a work, if it holds it
 def Known.reopen(
   +kn: Known(),
   fs: List<&2, Types.Fact>,
   n: Nat,
   tx: Crits.Crit<Types.Ask>,
-  mx: Crits.Crit<Ledgers.Line>
+  mx: Crits.Crit<Ledgers.Line>,
+  rx: Crits.Crit<Unit>
 ) -> Known():
   Table{
     Known.lines(kn),
-    Shelf.reopen(Known.shelf(kn), fs, n, tx, mx),
+    Shelf.reopen(Known.shelf(kn), fs, n, tx, mx, rx),
     Known.stock(kn),
     Known.low(kn)
   }
@@ -631,7 +636,7 @@ def Tops.get(tx: Crits.Crit<Types.Ask>, +g: Place) -> Maybe<&2, Types.Ask>:
 # the newest writes that the entry m holds, if it holds them
 def Shelf.tops(m: Maybe<&2, Kept>) -> Maybe<&2, Crits.Crit<Types.Ask>>:
   match m:
-    case Some{Open{fs, n, tx, mx}}:
+    case Some{Open{fs, n, tx, mx, rx}}:
       Some{tx}
     case _:
       None{}
@@ -728,7 +733,7 @@ def Mergers.fresh(mx: Crits.Crit<Ledgers.Line>, f: Types.Fact) -> Bool:
 # the lines of merges that the entry m holds, if it holds them
 def Shelf.merges(m: Maybe<&2, Kept>) -> Maybe<&2, Crits.Crit<Ledgers.Line>>:
   match m:
-    case Some{Open{fs, n, tx, mx}}:
+    case Some{Open{fs, n, tx, mx, rx}}:
       Some{mx}
     case _:
       None{}
@@ -741,10 +746,110 @@ def Shelf.line(
   i: Ledgers.Id
 ) -> Maybe<&2, Ledgers.Line>:
   match m:
-    case Some{Open{fs, n, tx, mx}}:
+    case Some{Open{fs, n, tx, mx, rx}}:
       Mergers.get(mx, i)
     case _:
       Merge.line(all(Unit{}), i)
+
+# Roots of stores
+# ---------------
+# A Start keeps the table when no ask among the facts starts its store. The
+# node keeps, with the facts that a work may act on, the root of each store
+# that an ask among all the facts starts, in a set: whether an ask starts a
+# store is then one read of the set, not a walk of the facts.
+
+# the key of the root h in a set: its code, so two roots have two keys
+def Root.key(h: Hashes.Hash) -> List<&2, U32>:
+  Hashes.Hash.code(h, [])
+
+# of two marks of one root, the one that the set held
+def Root.keep(old: Unit, new: Unit) -> Unit:
+  old
+
+# the roots rx with the root of the store that the request r of the id i
+# starts, when it starts one (start)
+def Roots.put.if(start: Bool, +rx: Crits.Crit<Unit>, +i: Ledgers.Id, +r: Spec.Request) -> Crits.Crit<Unit>:
+  match start:
+    case True{}:
+      Crits.Crit.upsert(~Unit, ~Root.keep, rx, Root.key(Facts.Start.root(i, r)), Unit{})
+    case False{}:
+      rx
+
+# the roots rx with the root of the store that the fact f starts, if any
+def Roots.step(+rx: Crits.Crit<Unit>, f: Types.Fact) -> Crits.Crit<Unit>:
+  match f:
+    case Types.Fact.Vote{v, st, x}:
+      rx
+    case Types.Fact.Ask{Types.Ask{+i, n, +r}}:
+      Roots.put.if(Facts.Request.is_start(r), rx, i, r)
+
+# the roots rx with the roots of the stores that the facts fs start
+def Roots.go(fs: List<&2, Types.Fact>, +rx: Crits.Crit<Unit>) -> Crits.Crit<Unit>:
+  match fs:
+    case Nil{}:
+      rx
+    case Con{f, rest}:
+      Roots.go(rest, Roots.step(rx, f))
+
+# the roots of the stores that an ask among the facts fs starts
+def Roots.of(fs: List<&2, Types.Fact>) -> Crits.Crit<Unit>:
+  Roots.go(fs, Crits.Crit.new(Unit))
+
+# the request r of the id i, which starts a store or not (start), starts no
+# store whose root the roots rx hold
+def Roots.fresh.if(start: Bool, rx: Crits.Crit<Unit>, +i: Ledgers.Id, +r: Spec.Request) -> Bool:
+  match start:
+    case True{}:
+      Maybe.is_none(&2, Unit, Crits.Crit.get(Unit, rx, Root.key(Facts.Start.root(i, r))))
+    case False{}:
+      True{}
+
+# the request r of the id i starts no store whose root the roots rx hold
+def Roots.fresh(rx: Crits.Crit<Unit>, +i: Ledgers.Id, +r: Spec.Request) -> Bool:
+  Roots.fresh.if(Facts.Request.is_start(r), rx, i, r)
+
+# the roots of stores that the entry m holds, if it holds them
+def Shelf.roots(m: Maybe<&2, Kept>) -> Maybe<&2, Crits.Crit<Unit>>:
+  match m:
+    case Some{Open{fs, n, tx, mx, rx}}:
+      Some{rx}
+    case _:
+      None{}
+
+# the request r of the id i starts no store that an ask among the facts s
+# starts, as the roots that the entry m holds say, else as the facts say
+def Shelf.fresh(m: Maybe<&2, Kept>, +s: Facts.Plain(), +i: Ledgers.Id, +r: Spec.Request) -> Bool:
+  match m:
+    case Some{Open{fs, n, tx, mx, rx}}:
+      Roots.fresh(rx, i, r)
+    case _:
+      Lines.Request.fresh(s, i, r)
+
+# the request r of the id i starts no store that an ask among the facts s
+# starts (Lines.Request.fresh), read through the table kn
+def Known.fresh_ask(kn: Known(), +s: Facts.Plain(), +i: Ledgers.Id, +r: Spec.Request) -> Bool:
+  Shelf.fresh(Known.shelf(kn), s, i, r)
+
+# the roots a and b of stores are the same
+def Roots.same(a: Crits.Crit<Unit>, b: Crits.Crit<Unit>) -> Bool:
+  match a b:
+    case Crits.Crit.Tip{} Crits.Crit.Tip{}:
+      True{}
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Leaf{k2, v2}:
+      Crits.Key.is_eq(k1, k2)
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      List.all.if(
+        u => List.all.if(
+          u2 => List.all.if(
+            u3 => List.all.if(u4 => Roots.same(o1, o2), Roots.same(z1, z2)),
+            Shared.Bool.is_eq(Maybe.is_some(&2, Unit, e1), Maybe.is_some(&2, Unit, e2))
+          ),
+          Nat.is_eq(p1, p2)
+        ),
+        Crits.Key.is_eq(r1, r2)
+      )
+    case _ _:
+      False{}
 
 # Known ids
 # ---------
@@ -1276,8 +1381,8 @@ def Known.shut(+kn: Known()) -> Known():
 # the facts s with f: with the facts that a work may act on in s
 def Known.sift.of(m: Maybe<&2, Kept>, +kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
   match m:
-    case Some{Open{fs, n, tx, mx}}:
-      Known.reopen(kn, Open.join(Fact.retests(f), fs, f, Scene{kn, s}), n, tx, mx)
+    case Some{Open{fs, n, tx, mx, rx}}:
+      Known.reopen(kn, Open.join(Fact.retests(f), fs, f, Scene{kn, s}), n, tx, mx, rx)
     case _:
       kn
 
@@ -1293,7 +1398,7 @@ def Known.sift(+kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
 # what it holds for a work: the next work reads it again
 def Known.joined.of(m: Maybe<&2, Kept>, +kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
   match m:
-    case Some{Open{+fs, +n, +tx, +mx}}:
+    case Some{Open{+fs, +n, +tx, +mx, +rx}}:
       Shared.Bool.when(
         Known(),
         Mergers.fresh(mx, f),
@@ -1308,7 +1413,8 @@ def Known.joined.of(m: Maybe<&2, Kept>, +kn: Known(), +s: Facts.Plain(), +f: Typ
               u2 => Tops.join(tx, f),
               u2 => Tops.of(Facts.Facts.list(s))
             ),
-            Mergers.step(mx, f)
+            Mergers.step(mx, f),
+            Roots.step(rx, f)
           ),
           s,
           f
@@ -1324,8 +1430,9 @@ def Known.joined(+kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
   Known.joined.of(Known.shelf(kn), kn, s, f)
 
 # the table kn with the facts of s that a work may act on, the greatest
-# number of an ask among all, the facts of s, and the lines mx of their
-# merges: a work may act on a fact as read through kn and mx
+# number of an ask among all, the facts of s, the lines mx of their merges,
+# and the roots of the stores that they start: a work may act on a fact as
+# read through kn and mx
 def Known.opened.by(
   +kn: Known(),
   +s: Facts.Plain(),
@@ -1334,10 +1441,14 @@ def Known.opened.by(
 ) -> Known():
   Known.add(
     Open{
-      Open.of(all, Scene{Known.add(Open{[], 0n, Crits.Crit.new(Types.Ask), mx}, kn), s}),
+      Open.of(
+        all,
+        Scene{Known.add(Open{[], 0n, Crits.Crit.new(Types.Ask), mx, Crits.Crit.new(Unit)}, kn), s}
+      ),
       Facts.Seq.peak(all),
       Tops.of(all),
-      mx
+      mx,
+      Roots.of(all)
     },
     kn
   )
@@ -1381,19 +1492,23 @@ def Known.walk.if(
 # the table kn with the facts that a work may act on in the facts s, among
 # the facts m that it could act on before with the fact that joined them, if
 # known; n is the greatest number of an ask in s, t the newest writes of s,
-# and x the lines of the merges of s, if known
+# x the lines of the merges of s and y the roots of its stores, if known
 def Known.moved(
   +kn: Known(),
   +s: Facts.Plain(),
   m: Maybe<&2, List<&2, Types.Fact>>,
   +n: Nat,
   t: Maybe<&2, Crits.Crit<Types.Ask>>,
-  x: Maybe<&2, Crits.Crit<Ledgers.Line>>
+  x: Maybe<&2, Crits.Crit<Ledgers.Line>>,
+  y: Maybe<&2, Crits.Crit<Unit>>
 ) -> Known():
-  match m t x:
-    case Some{fs} Some{+tx} Some{+mx}:
-      Known.add(Open{Open.of(fs, Scene{Known.add(Open{[], n, tx, mx}, kn), s}), n, tx, mx}, kn)
-    case _ _ _:
+  match m t x y:
+    case Some{fs} Some{+tx} Some{+mx} Some{+rx}:
+      Known.add(
+        Open{Open.of(fs, Scene{Known.add(Open{[], n, tx, mx, rx}, kn), s}), n, tx, mx, rx},
+        kn
+      )
+    case _ _ _ _:
       kn
 
 # the table kn with the state m, if any, of the line c
@@ -1877,40 +1992,99 @@ def Seen.safe(c: Ledgers.Line, m: Maybe<&2, Seen>, ms: Maybe<&2, Seen>, k: Nat) 
 def Known.sound(+kn: Known(), +c: Ledgers.Line, k: Nat) -> Bool:
   Seen.safe(c, Known.seen(kn, c), Known.seen(kn, Known.root(c)), k)
 
-# the state of the line c in the facts s, read again from its votes, with
-# the state ms of its store when c is a branch: none while ms is not known
-def Known.reread(
+# A late ballot
+# -------------
+# A ballot for a slot k of a line that is not its next slot changes the state
+# of the line only if it changes what the slot k decides. The run of the line
+# from version 0 reaches the slot k at the state that the versions below k
+# give (State.at), and no other slot reads the ballot: so the slot k alone is
+# read, with the ballot and without it.
+
+# the versions among vs that a slot below k made, with version 0
+def Entries.below(vs: List<&2, Types.Entry>, +k: Nat) -> List<&2, Types.Entry>:
+  match vs:
+    case Nil{}:
+      []
+    case Con{+e, rest}:
+      List.filter.put(Types.Entry, e, Entries.below(rest, k), Nat.is_lt(Lines.Entry.slot(e), k))
+
+# the state of a line at its slot k, read from a later state st of it
+def State.at(st: Lines.State, +k: Nat) -> Lines.State:
+  Lines.State{Entries.below(Lines.State.versions(st), k), k}
+
+# the slot k of the line c decides one pick in the facts s and s0, or none
+# in both, by the rule u, if any
+def Late.decides(
+  +s0: Facts.Plain(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
+  +k: Nat,
+  u: Maybe<&2, Lines.Rule>
+) -> Bool:
+  match u:
+    case None{}:
+      True{}
+    case Some{+rule}:
+      Shared.Maybe.is_eq(
+        ~Types.Pick,
+        ~Coded.Pick.is_eq,
+        Lines.Votes.decided(s, c, k, Lines.Rule.nodes(rule)),
+        Lines.Votes.decided(s0, c, k, Lines.Rule.nodes(rule))
+      )
+
+# the slot k of the line c decides the same in the facts s and s0 at the
+# state a, with the versions r of its store (none for a store)
+def Late.at(
+  +s0: Facts.Plain(),
+  +s: Facts.Plain(),
+  r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +a: Lines.State,
+  +k: Nat
+) -> Bool:
+  Late.decides(s0, s, c, k, Lines.Line.rule(r, c, Lines.State.versions(a)))
+
+# the facts s, with a ballot for the slot k of the line c that the facts s0
+# do not hold, give c the state st that s0 give it: the slot k decides the
+# same at the state that st had then, with the state ms of the store of c
+# when c is a branch (unknown: no)
+def Late.kept(
+  +s0: Facts.Plain(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  st: Lines.State,
   ms: Maybe<&2, Lines.State>
-) -> Maybe<&2, Lines.State>:
+) -> Bool:
   match c ms:
     case Ledgers.Line{+h, None{}} ms:
-      Lines.Store.state.in(Facts.Facts.list(s), h)
+      Late.at(s0, s, None{}, Ledgers.Line{h, None{}}, State.at(st, k), k)
     case Ledgers.Line{h, Some{b}} None{}:
-      None{}
-    case Ledgers.Line{+h, Some{+b}} Some{Lines.State{rs, k}}:
-      Known.fresh.at(s, Ledgers.Line{h, Some{b}}, rs, k)
+      False{}
+    case Ledgers.Line{+h, Some{+b}} Some{Lines.State{rs, j}}:
+      Late.at(s0, s, Some{rs}, Ledgers.Line{h, Some{b}}, State.at(st, k), k)
 
-# the facts s give the line c the state m that a node keeps of it, read
-# again with the state ms of its store
-def Known.kept.of(
+# Known.late, with the state m that the table holds of the line c, and the
+# state ms of its store
+def Known.late.of(
   m: Maybe<&2, Seen>,
+  +s0: Facts.Plain(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
+  +k: Nat,
   ms: Maybe<&2, Lines.State>
 ) -> Bool:
   match m:
     case None{}:
       False{}
     case Some{x}:
-      State.fits(Known.reread(s, c, ms), Seen.state(x))
+      Late.kept(s0, s, c, k, Seen.state(x), ms)
 
-# the facts s give the line c the state that the table kn holds of it: a
-# ballot for a slot of c that left the state of c as it was leaves each line
-# as it was
-def Known.kept(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Bool:
-  Known.kept.of(Known.seen(kn, c), s, c, Known.find(kn, Known.root(c)))
+# the facts s, with a ballot for the slot k of the line c that the facts s0
+# do not hold, give c the state that the table kn holds of it: a ballot that
+# leaves the state of its line as it was leaves each line as it was
+def Known.late(+kn: Known(), +s0: Facts.Plain(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Bool:
+  Known.late.of(Known.seen(kn, c), s0, s, c, k, Known.find(kn, Known.root(c)))
 
 # the contents of the table kn, when a ballot leaves them as they are (safe),
 # for the facts with the ballot, one more fact; else none

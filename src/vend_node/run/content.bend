@@ -760,7 +760,7 @@ def Kept.ok(+s: Facts.Plain(), e: Knowns.Kept) -> Bool:
       )
     case Knowns.Made{c, x}:
       Knowns.Made.fits(Lines.Line.state(s, c), x)
-    case Knowns.Open{fs, n, tx, mx}:
+    case Knowns.Open{fs, n, tx, mx, rx}:
       True{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
@@ -831,7 +831,7 @@ def Known.ok(+kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
 # the facts s
 def Shelf.led(m: Maybe<&2, Knowns.Kept>, s: Facts.Plain()) -> Bool:
   match m:
-    case Some{Knowns.Open{fs, n, tx, mx}}:
+    case Some{Knowns.Open{fs, n, tx, mx, rx}}:
       Knowns.Mergers.same(mx, Knowns.Mergers.of(Facts.Facts.list(s)))
     case _:
       True{}
@@ -842,21 +842,24 @@ def Shelf.led(m: Maybe<&2, Knowns.Kept>, s: Facts.Plain()) -> Bool:
 # the newest writes of s, and the lines of the merges of s
 def Shelf.fits(m: Maybe<&2, Knowns.Kept>, +s: Facts.Plain()) -> Bool:
   match m:
-    case Some{Knowns.Open{fs, n, tx, mx}}:
+    case Some{Knowns.Open{fs, n, tx, mx, rx}}:
       Bool.and(
         Bool.and(
           Bool.and(
-            Shared.List.is_eq(
-              ~Types.Fact,
-              ~Coded.Fact.is_eq,
-              fs,
-              Knowns.Open.of(Facts.Facts.list(s), Knowns.Scene{Knowns.Known.none(), s})
+            Bool.and(
+              Shared.List.is_eq(
+                ~Types.Fact,
+                ~Coded.Fact.is_eq,
+                fs,
+                Knowns.Open.of(Facts.Facts.list(s), Knowns.Scene{Knowns.Known.none(), s})
+              ),
+              Nat.is_eq(n, Facts.Seq.peak(Facts.Facts.list(s)))
             ),
-            Nat.is_eq(n, Facts.Seq.peak(Facts.Facts.list(s)))
+            Knowns.Tops.same(tx, Knowns.Tops.of(Facts.Facts.list(s)))
           ),
-          Knowns.Tops.same(tx, Knowns.Tops.of(Facts.Facts.list(s)))
+          Knowns.Mergers.same(mx, Knowns.Mergers.of(Facts.Facts.list(s)))
         ),
-        Knowns.Mergers.same(mx, Knowns.Mergers.of(Facts.Facts.list(s)))
+        Knowns.Roots.same(rx, Knowns.Roots.of(Facts.Facts.list(s)))
       )
     case _:
       True{}
