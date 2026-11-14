@@ -372,21 +372,43 @@ def Bool.or_false_right(
 def Id.laws() -> Shared.Eq.Laws(Ledgers.Id, Ledgers.Id.is_eq):
   (Ledgers.Id.is_eq_refl, Ledgers.Id.is_eq_sound)
 
-# Bucket.same is True for ids and themselves
-def Bucket.same_refl(a: List<&2, Ledgers.Id>) -> {RKnown.Bucket.same(a, a) == True{}: Bool}:
-  Shared.List.is_eq_refl(~Ledgers.Id, ~Ledgers.Id.is_eq, ~Id.laws(), a)
+# Found.same is True for a version and itself
+def Found.same_refl(a: RKnown.Found) -> {RKnown.Found.same(a, a) == True{}: Bool}:
+  match a:
+    case RKnown.Found{+n, +e}:
+      Shared.Bool.and_both(Nat.is_eq(n, n), RKnown.Entry.same(e, e))(Shared.Nat.is_eq_refl(n))(Entry.same_refl(e))
 
-# Bucket.same is True only for equal ids
+# Found.same is True only for equal versions
+def Found.same_sound(
+  a: RKnown.Found,
+  b: RKnown.Found
+) -> {RKnown.Found.same(a, b) == True{}: Bool} -> {a == b: RKnown.Found}:
+  match a b:
+    case RKnown.Found{+n1, +e1} RKnown.Found{+n2, +e2}:
+      +h => (
+        %Shared.Nat.is_eq_sound(n1, n2)(Shared.Bool.and_true_left(Nat.is_eq(n1, n2), RKnown.Entry.same(e1, e2))(h)): {RKnown.Found{n1, e1} == RKnown.Found{_, e2}: RKnown.Found}
+        %Entry.same_sound(e1, e2)(Shared.Bool.and_true_right(Nat.is_eq(n1, n2), RKnown.Entry.same(e1, e2))(h)): {RKnown.Found{n1, e1} == RKnown.Found{n1, _}: RKnown.Found}
+        {==})
+
+# the laws of Found.same
+def Found.laws() -> Shared.Eq.Laws(RKnown.Found, RKnown.Found.same):
+  (Found.same_refl, Found.same_sound)
+
+# Bucket.same is True for versions and themselves
+def Bucket.same_refl(a: List<&2, RKnown.Found>) -> {RKnown.Bucket.same(a, a) == True{}: Bool}:
+  Shared.List.is_eq_refl(~RKnown.Found, ~RKnown.Found.same, ~Found.laws(), a)
+
+# Bucket.same is True only for equal versions
 def Bucket.same_sound(
-  a: List<&2, Ledgers.Id>,
-  b: List<&2, Ledgers.Id>
-) -> {RKnown.Bucket.same(a, b) == True{}: Bool} -> {a == b: List<&2, Ledgers.Id>}:
-  Shared.List.is_eq_sound(~Ledgers.Id, ~Ledgers.Id.is_eq, ~Id.laws(), a, b)
+  a: List<&2, RKnown.Found>,
+  b: List<&2, RKnown.Found>
+) -> {RKnown.Bucket.same(a, b) == True{}: Bool} -> {a == b: List<&2, RKnown.Found>}:
+  Shared.List.is_eq_sound(~RKnown.Found, ~RKnown.Found.same, ~Found.laws(), a, b)
 
 # ids, if any, are the same as themselves
 def Tip.same_refl(
-  e: Maybe<&2, List<&2, Ledgers.Id>>
-) -> {Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e, e) == True{}: Bool}:
+  e: Maybe<&2, List<&2, RKnown.Found>>
+) -> {Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e, e) == True{}: Bool}:
   match e:
     case None{}:
       {==}
@@ -395,8 +417,8 @@ def Tip.same_refl(
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
-# Ids.same is True for a set and itself
-def Ids.same_refl(a: Crits.Crit<List<&2, Ledgers.Id>>) -> {RKnown.Ids.same(a, a) == True{}: Bool}:
+# Map.same is True for a set and itself
+def Map.same_refl(a: Crits.Crit<List<&2, RKnown.Found>>) -> {RKnown.Map.same(a, a) == True{}: Bool}:
   match a:
     case Crits.Crit.Tip{}:
       {==}
@@ -411,8 +433,8 @@ def Ids.same_refl(a: Crits.Crit<List<&2, Ledgers.Id>>) -> {RKnown.Ids.same(a, a)
         Bool.and(
           Nat.is_eq(p, p),
           Bool.and(
-            Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e, e),
-            Bool.and(RKnown.Ids.same(z, z), RKnown.Ids.same(o, o))
+            Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e, e),
+            Bool.and(RKnown.Map.same(z, z), RKnown.Map.same(o, o))
           )
         )
       )(
@@ -421,48 +443,48 @@ def Ids.same_refl(a: Crits.Crit<List<&2, Ledgers.Id>>) -> {RKnown.Ids.same(a, a)
         Shared.Bool.and_both(
           Nat.is_eq(p, p),
           Bool.and(
-            Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e, e),
-            Bool.and(RKnown.Ids.same(z, z), RKnown.Ids.same(o, o))
+            Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e, e),
+            Bool.and(RKnown.Map.same(z, z), RKnown.Map.same(o, o))
           )
         )(
           Shared.Nat.is_eq_refl(p)
         )(
           Shared.Bool.and_both(
-            Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e, e),
-            Bool.and(RKnown.Ids.same(z, z), RKnown.Ids.same(o, o))
+            Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e, e),
+            Bool.and(RKnown.Map.same(z, z), RKnown.Map.same(o, o))
           )(
             Tip.same_refl(e)
           )(
             Shared.Bool.and_both(
-              RKnown.Ids.same(z, z),
-              RKnown.Ids.same(o, o)
-            )(Ids.same_refl(z))(Ids.same_refl(o))
+              RKnown.Map.same(z, z),
+              RKnown.Map.same(o, o)
+            )(Map.same_refl(z))(Map.same_refl(o))
           )
         )
       )
 # bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
-# Ids.same is True only for equal sets
-def Ids.same_sound(
-  a: Crits.Crit<List<&2, Ledgers.Id>>,
-  b: Crits.Crit<List<&2, Ledgers.Id>>
-) -> {RKnown.Ids.same(a, b) == True{}: Bool} -> {a == b: Crits.Crit<List<&2, Ledgers.Id>>}:
+# Map.same is True only for equal sets
+def Map.same_sound(
+  a: Crits.Crit<List<&2, RKnown.Found>>,
+  b: Crits.Crit<List<&2, RKnown.Found>>
+) -> {RKnown.Map.same(a, b) == True{}: Bool} -> {a == b: Crits.Crit<List<&2, RKnown.Found>>}:
   match a b:
     case Crits.Crit.Tip{} Crits.Crit.Tip{}:
       h => {==}
     case Crits.Crit.Tip{} Crits.Crit.Leaf{k2, v2}:
       h => Empty.absurd(
-        {Crits.Crit.Tip{} == Crits.Crit.Leaf{k2, v2}: Crits.Crit<List<&2, Ledgers.Id>>},
+        {Crits.Crit.Tip{} == Crits.Crit.Leaf{k2, v2}: Crits.Crit<List<&2, RKnown.Found>>},
         Shared.Bool.false_ne_true(h)
       )
     case Crits.Crit.Tip{} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
       h => Empty.absurd(
-        {Crits.Crit.Tip{} == Crits.Crit.Fork{r2, p2, e2, z2, o2}: Crits.Crit<List<&2, Ledgers.Id>>},
+        {Crits.Crit.Tip{} == Crits.Crit.Fork{r2, p2, e2, z2, o2}: Crits.Crit<List<&2, RKnown.Found>>},
         Shared.Bool.false_ne_true(h)
       )
     case Crits.Crit.Leaf{k1, v1} Crits.Crit.Tip{}:
       h => Empty.absurd(
-        {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Tip{}: Crits.Crit<List<&2, Ledgers.Id>>},
+        {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Tip{}: Crits.Crit<List<&2, RKnown.Found>>},
         Shared.Bool.false_ne_true(h)
       )
     case Crits.Crit.Leaf{k1, v1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
@@ -472,13 +494,13 @@ def Ids.same_sound(
             k1,
             v1
           }
-            == Crits.Crit.Fork{r2, p2, e2, z2, o2}: Crits.Crit<List<&2, Ledgers.Id>>
+            == Crits.Crit.Fork{r2, p2, e2, z2, o2}: Crits.Crit<List<&2, RKnown.Found>>
         },
         Shared.Bool.false_ne_true(h)
       )
     case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Tip{}:
       h => Empty.absurd(
-        {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Tip{}: Crits.Crit<List<&2, Ledgers.Id>>},
+        {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Tip{}: Crits.Crit<List<&2, RKnown.Found>>},
         Shared.Bool.false_ne_true(h)
       )
     case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Leaf{k2, v2}:
@@ -491,34 +513,52 @@ def Ids.same_sound(
             z1,
             o1
           }
-            == Crits.Crit.Leaf{k2, v2}: Crits.Crit<List<&2, Ledgers.Id>>
+            == Crits.Crit.Leaf{k2, v2}: Crits.Crit<List<&2, RKnown.Found>>
         },
         Shared.Bool.false_ne_true(h)
       )
     case Crits.Crit.Leaf{+k1, +v1} Crits.Crit.Leaf{+k2, +v2}:
       +h => (
-        %Crits.Key.is_eq_sound(k1, k2)(Shared.Bool.and_true_left(Crits.Key.is_eq(k1, k2), RKnown.Bucket.same(v1, v2))(h)): {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Leaf{_, v2}: Crits.Crit<List<&2, Ledgers.Id>>}
-        %Bucket.same_sound(v1, v2)(Shared.Bool.and_true_right(Crits.Key.is_eq(k1, k2), RKnown.Bucket.same(v1, v2))(h)): {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Leaf{k1, _}: Crits.Crit<List<&2, Ledgers.Id>>}
+        %Crits.Key.is_eq_sound(k1, k2)(Shared.Bool.and_true_left(Crits.Key.is_eq(k1, k2), RKnown.Bucket.same(v1, v2))(h)): {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Leaf{_, v2}: Crits.Crit<List<&2, RKnown.Found>>}
+        %Bucket.same_sound(v1, v2)(Shared.Bool.and_true_right(Crits.Key.is_eq(k1, k2), RKnown.Bucket.same(v1, v2))(h)): {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Leaf{k1, _}: Crits.Crit<List<&2, RKnown.Found>>}
         {==})
     case Crits.Crit.Fork{+r1, +p1, +e1, +z1, +o1} Crits.Crit.Fork{+r2, +p2, +e2, +z2, +o2}:
       +h => (
-        %Crits.Key.is_eq_sound(r1, r2)(Shared.Bool.and_true_left(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2)))))(h)): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{_, p2, e2, z2, o2}: Crits.Crit<List<&2, Ledgers.Id>>}
-        %Shared.Nat.is_eq_sound(p1, p2)(Shared.Bool.and_true_left(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2)))))(h))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, _, e2, z2, o2}: Crits.Crit<List<&2, Ledgers.Id>>}
-        %Shared.Maybe.is_eq_sound(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, x => y => Bucket.same_sound(x, y), e1, e2)(Shared.Bool.and_true_left(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2)))(Shared.Bool.and_true_right(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2)))))(h)))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, _, z2, o2}: Crits.Crit<List<&2, Ledgers.Id>>}
-        %Ids.same_sound(z1, z2)(Shared.Bool.and_true_left(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2))(Shared.Bool.and_true_right(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2)))(Shared.Bool.and_true_right(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2)))))(h))))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, e1, _, o2}: Crits.Crit<List<&2, Ledgers.Id>>}
-        %Ids.same_sound(o1, o2)(Shared.Bool.and_true_right(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2))(Shared.Bool.and_true_right(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2)))(Shared.Bool.and_true_right(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Ids.same(z1, z2), RKnown.Ids.same(o1, o2)))))(h))))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, e1, z1, _}: Crits.Crit<List<&2, Ledgers.Id>>}
+        %Crits.Key.is_eq_sound(r1, r2)(Shared.Bool.and_true_left(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2)))))(h)): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{_, p2, e2, z2, o2}: Crits.Crit<List<&2, RKnown.Found>>}
+        %Shared.Nat.is_eq_sound(p1, p2)(Shared.Bool.and_true_left(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2)))))(h))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, _, e2, z2, o2}: Crits.Crit<List<&2, RKnown.Found>>}
+        %Shared.Maybe.is_eq_sound(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, x => y => Bucket.same_sound(x, y), e1, e2)(Shared.Bool.and_true_left(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2)))(Shared.Bool.and_true_right(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2)))))(h)))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, _, z2, o2}: Crits.Crit<List<&2, RKnown.Found>>}
+        %Map.same_sound(z1, z2)(Shared.Bool.and_true_left(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2))(Shared.Bool.and_true_right(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2)))(Shared.Bool.and_true_right(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2)))))(h))))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, e1, _, o2}: Crits.Crit<List<&2, RKnown.Found>>}
+        %Map.same_sound(o1, o2)(Shared.Bool.and_true_right(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2))(Shared.Bool.and_true_right(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2)))(Shared.Bool.and_true_right(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~List<&2, RKnown.Found>, ~RKnown.Bucket.same, e1, e2), Bool.and(RKnown.Map.same(z1, z2), RKnown.Map.same(o1, o2)))))(h))))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, e1, z1, _}: Crits.Crit<List<&2, RKnown.Found>>}
         {==})
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# Ids.same is True for versions by id and themselves
+def Ids.same_refl(a: RKnown.Ids) -> {RKnown.Ids.same(a, a) == True{}: Bool}:
+  match a:
+    case RKnown.Ids{+m, +n}:
+      Shared.Bool.and_both(RKnown.Map.same(m, m), Nat.is_eq(n, n))(Map.same_refl(m))(Shared.Nat.is_eq_refl(n))
+
+# Ids.same is True only for equal versions by id
+def Ids.same_sound(
+  a: RKnown.Ids,
+  b: RKnown.Ids
+) -> {RKnown.Ids.same(a, b) == True{}: Bool} -> {a == b: RKnown.Ids}:
+  match a b:
+    case RKnown.Ids{+m1, +n1} RKnown.Ids{+m2, +n2}:
+      +h => (
+        %Map.same_sound(m1, m2)(Shared.Bool.and_true_left(RKnown.Map.same(m1, m2), Nat.is_eq(n1, n2))(h)): {RKnown.Ids{m1, n1} == RKnown.Ids{_, n2}: RKnown.Ids}
+        %Shared.Nat.is_eq_sound(n1, n2)(Shared.Bool.and_true_right(RKnown.Map.same(m1, m2), Nat.is_eq(n1, n2))(h)): {RKnown.Ids{m1, n1} == RKnown.Ids{m1, _}: RKnown.Ids}
+        {==})
 
 # the ids that fit a state are the ids of its versions
 def Made.fits_sound(
   -m: Maybe<&2, RLines.State>,
-  +x: RKnown.Ids(),
+  +x: RKnown.Ids,
   +vs: List<&2, Types.Entry>,
   -k: Nat
 ) -> {
   m == Some{RLines.State{vs, k}}: Maybe<&2, RLines.State>
-} -> {RKnown.Made.fits(m, x) == True{}: Bool} -> {x == RKnown.Ids.of(vs): RKnown.Ids()}:
+} -> {RKnown.Made.fits(m, x) == True{}: Bool} -> {x == RKnown.Ids.of(vs): RKnown.Ids}:
   e => h => Ids.same_sound(x, RKnown.Ids.of(vs))((
       %e: {RKnown.Made.fits(_, x) == True{}: Bool}
       h))
@@ -558,395 +598,7 @@ def Key.ne_id(
     ef2 => {==}
   )
 
-# the ids m, if any, with the id e before them, hold an id exactly when it
-# is e or m holds it
-def Bucket.has_put(
-  m: Maybe<&2, List<&2, Ledgers.Id>>,
-  +e: Ledgers.Id,
-  +i: Ledgers.Id
-) -> {
-  RKnown.Ids.has.of(
-    Some{Crits.Crit.merge(~List<&2, Ledgers.Id>, ~RKnown.Ids.join, m, [e])},
-    i
-  )
-    == Bool.or(Ledgers.Id.is_eq(e, i), RKnown.Ids.has.of(m, i)): Bool
-}:
-  match m:
-    case None{}:
-      Lists.Bool.by(
-        b => {List.any.if(u => False{}, b) == Bool.or(b, False{}): Bool},
-        Ledgers.Id.is_eq(e, i),
-        et => {==},
-        ef => {==}
-      )
-    case Some{+old}:
-      Lists.Bool.by(
-        b => {
-          List.any.if(
-            u => RKnown.Ids.holds(old, i),
-            b
-          )
-            == Bool.or(b, RKnown.Ids.holds(old, i)): Bool
-        },
-        Ledgers.Id.is_eq(e, i),
-        et => {==},
-        ef => {==}
-      )
-
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
-# what a set with one more id holds under a key: under the key of the id,
-# the id before the ids that the set held there
-def Ids.get_put(
-  +acc: RKnown.Ids(),
-  +e: Ledgers.Id,
-  +k: List<&2, U32>
-) -> {
-  Crits.Crit.wf(~List<&2, Ledgers.Id>, acc, 0n) == True{}: Bool
-} -> {
-  Crits.Crit.get(
-    List<&2, Ledgers.Id>,
-    RKnown.Ids.put(acc, e),
-    k
-  )
-    == Bool.pick(
-      Maybe<&2, List<&2, Ledgers.Id>>,
-      Crits.Key.is_eq(k, RKnown.Id.key(e)),
-      Some{
-        Crits.Crit.merge(
-          ~List<&2, Ledgers.Id>,
-          ~RKnown.Ids.join,
-          Crits.Crit.get(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-          [e]
-        )
-      },
-      Crits.Crit.get(List<&2, Ledgers.Id>, acc, k)
-    ): Maybe<&2, List<&2, Ledgers.Id>>
-}:
-  +w =>
-    %Equal.sym(
-      Maybe<&2, List<&2, Ledgers.Id>>,
-      Crits.Crit.get(List<&2, Ledgers.Id>, RKnown.Ids.put(acc, e), k),
-      Crits.Crit.lookup(List<&2, Ledgers.Id>, RKnown.Ids.put(acc, e), k),
-      Crits.Crit.get_lookup(
-        ~List<&2, Ledgers.Id>,
-        RKnown.Ids.put(acc, e),
-        k
-      )(
-        Crits.Crit.upsert_wf(~List<&2, Ledgers.Id>, ~RKnown.Ids.join, acc, RKnown.Id.key(e), [e])(w)
-      )
-    ): {
-      _
-        == Bool.pick(
-          Maybe<&2, List<&2, Ledgers.Id>>,
-          Crits.Key.is_eq(k, RKnown.Id.key(e)),
-          Some{
-            Crits.Crit.merge(
-              ~List<&2, Ledgers.Id>,
-              ~RKnown.Ids.join,
-              Crits.Crit.get(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-              [e]
-            )
-          },
-          Crits.Crit.get(List<&2, Ledgers.Id>, acc, k)
-        ): Maybe<&2, List<&2, Ledgers.Id>>
-    }
-    %Equal.sym(
-      Maybe<&2, List<&2, Ledgers.Id>>,
-      Crits.Crit.lookup(List<&2, Ledgers.Id>, RKnown.Ids.put(acc, e), k),
-      Bool.pick(
-        Maybe<&2, List<&2, Ledgers.Id>>,
-        Crits.Key.is_eq(k, RKnown.Id.key(e)),
-        Some{
-          Crits.Crit.merge(
-            ~List<&2, Ledgers.Id>,
-            ~RKnown.Ids.join,
-            Crits.Crit.lookup(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-            [e]
-          )
-        },
-        Crits.Crit.lookup(List<&2, Ledgers.Id>, acc, k)
-      ),
-      Crits.Crit.upsert_lookup(
-        ~List<&2, Ledgers.Id>,
-        ~RKnown.Ids.join,
-        acc,
-        RKnown.Id.key(e),
-        [e],
-        k
-      )(w)
-    ): {
-      _
-        == Bool.pick(
-          Maybe<&2, List<&2, Ledgers.Id>>,
-          Crits.Key.is_eq(k, RKnown.Id.key(e)),
-          Some{
-            Crits.Crit.merge(
-              ~List<&2, Ledgers.Id>,
-              ~RKnown.Ids.join,
-              Crits.Crit.get(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-              [e]
-            )
-          },
-          Crits.Crit.get(List<&2, Ledgers.Id>, acc, k)
-        ): Maybe<&2, List<&2, Ledgers.Id>>
-    }
-    %Equal.sym(
-      Maybe<&2, List<&2, Ledgers.Id>>,
-      Crits.Crit.get(List<&2, Ledgers.Id>, acc, k),
-      Crits.Crit.lookup(List<&2, Ledgers.Id>, acc, k),
-      Crits.Crit.get_lookup(~List<&2, Ledgers.Id>, acc, k)(w)
-    ): {
-      Bool.pick(
-        Maybe<&2, List<&2, Ledgers.Id>>,
-        Crits.Key.is_eq(k, RKnown.Id.key(e)),
-        Some{
-          Crits.Crit.merge(
-            ~List<&2, Ledgers.Id>,
-            ~RKnown.Ids.join,
-            Crits.Crit.lookup(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-            [e]
-          )
-        },
-        Crits.Crit.lookup(List<&2, Ledgers.Id>, acc, k)
-      )
-        == Bool.pick(
-          Maybe<&2, List<&2, Ledgers.Id>>,
-          Crits.Key.is_eq(k, RKnown.Id.key(e)),
-          Some{
-            Crits.Crit.merge(
-              ~List<&2, Ledgers.Id>,
-              ~RKnown.Ids.join,
-              Crits.Crit.get(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-              [e]
-            )
-          },
-          _
-        ): Maybe<&2, List<&2, Ledgers.Id>>
-    }
-    %Equal.sym(
-      Maybe<&2, List<&2, Ledgers.Id>>,
-      Crits.Crit.get(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-      Crits.Crit.lookup(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-      Crits.Crit.get_lookup(~List<&2, Ledgers.Id>, acc, RKnown.Id.key(e))(w)
-    ): {
-      Bool.pick(
-        Maybe<&2, List<&2, Ledgers.Id>>,
-        Crits.Key.is_eq(k, RKnown.Id.key(e)),
-        Some{
-          Crits.Crit.merge(
-            ~List<&2, Ledgers.Id>,
-            ~RKnown.Ids.join,
-            Crits.Crit.lookup(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-            [e]
-          )
-        },
-        Crits.Crit.lookup(List<&2, Ledgers.Id>, acc, k)
-      )
-        == Bool.pick(
-          Maybe<&2, List<&2, Ledgers.Id>>,
-          Crits.Key.is_eq(k, RKnown.Id.key(e)),
-          Some{Crits.Crit.merge(~List<&2, Ledgers.Id>, ~RKnown.Ids.join, _, [e])},
-          Crits.Crit.lookup(List<&2, Ledgers.Id>, acc, k)
-        ): Maybe<&2, List<&2, Ledgers.Id>>
-    }
-    {==}
-
-# a set with one more id holds an id exactly when it is that id, or the set
-# held it
-def Ids.put_has(
-  +acc: RKnown.Ids(),
-  +e: Ledgers.Id,
-  +i: Ledgers.Id
-) -> {
-  Crits.Crit.wf(~List<&2, Ledgers.Id>, acc, 0n) == True{}: Bool
-} -> {
-  RKnown.Ids.has(
-    RKnown.Ids.put(acc, e),
-    i
-  )
-    == Bool.or(Ledgers.Id.is_eq(e, i), RKnown.Ids.has(acc, i)): Bool
-}:
-  w =>
-    %Equal.sym(
-      Maybe<&2, List<&2, Ledgers.Id>>,
-      Crits.Crit.get(List<&2, Ledgers.Id>, RKnown.Ids.put(acc, e), RKnown.Id.key(i)),
-      Bool.pick(
-        Maybe<&2, List<&2, Ledgers.Id>>,
-        Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(e)),
-        Some{
-          Crits.Crit.merge(
-            ~List<&2, Ledgers.Id>,
-            ~RKnown.Ids.join,
-            Crits.Crit.get(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-            [e]
-          )
-        },
-        Crits.Crit.get(List<&2, Ledgers.Id>, acc, RKnown.Id.key(i))
-      ),
-      Ids.get_put(acc, e, RKnown.Id.key(i))(w)
-    ): {RKnown.Ids.has.of(_, i) == Bool.or(Ledgers.Id.is_eq(e, i), RKnown.Ids.has(acc, i)): Bool}
-    Lists.Bool.by(
-      h => {
-        RKnown.Ids.has.of(
-          Bool.pick(
-            Maybe<&2, List<&2, Ledgers.Id>>,
-            h,
-            Some{
-              Crits.Crit.merge(
-                ~List<&2, Ledgers.Id>,
-                ~RKnown.Ids.join,
-                Crits.Crit.get(List<&2, Ledgers.Id>, acc, RKnown.Id.key(e)),
-                [e]
-              )
-            },
-            Crits.Crit.get(List<&2, Ledgers.Id>, acc, RKnown.Id.key(i))
-          ),
-          i
-        )
-          == Bool.or(Ledgers.Id.is_eq(e, i), RKnown.Ids.has(acc, i)): Bool
-      },
-      Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(e)),
-      et => (
-        %Crits.Key.is_eq_sound(RKnown.Id.key(i), RKnown.Id.key(e))(et): {RKnown.Ids.has.of(Some{Crits.Crit.merge(~List<&2, Ledgers.Id>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, Ledgers.Id>, acc, _), [e])}, i) == Bool.or(Ledgers.Id.is_eq(e, i), RKnown.Ids.has(acc, i)): Bool}
-        Bucket.has_put(Crits.Crit.get(List<&2, Ledgers.Id>, acc, RKnown.Id.key(i)), e, i)),
-      ef => (
-        %Equal.sym(Bool, Ledgers.Id.is_eq(e, i), False{}, Key.ne_id(e, i)(ef)): {RKnown.Ids.has(acc, i) == Bool.or(_, RKnown.Ids.has(acc, i)): Bool}
-        {==})
-    )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# a set with the ids of some versions is well formed when it was
-def Ids.go_wf(
-  vs: List<&2, Types.Entry>,
-  +acc: RKnown.Ids()
-) -> {
-  Crits.Crit.wf(~List<&2, Ledgers.Id>, acc, 0n) == True{}: Bool
-} -> {Crits.Crit.wf(~List<&2, Ledgers.Id>, RKnown.Ids.go(vs, acc), 0n) == True{}: Bool}:
-  match vs:
-    case Nil{}:
-      w => w
-    case Con{+e, rest}:
-      w => Ids.go_wf(
-        rest,
-        RKnown.Ids.put(acc, RLines.Entry.id(e))
-      )(
-        Crits.Crit.upsert_wf(
-          ~List<&2, Ledgers.Id>,
-          ~RKnown.Ids.join,
-          acc,
-          RKnown.Id.key(RLines.Entry.id(e)),
-          [RLines.Entry.id(e)]
-        )(w)
-      )
-
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
-# a set with the ids of the versions vs holds an id exactly when the id made
-# one of vs, or the set held it
-def Ids.go_has(
-  vs: List<&2, Types.Entry>,
-  +acc: RKnown.Ids(),
-  +i: Ledgers.Id
-) -> {
-  Crits.Crit.wf(~List<&2, Ledgers.Id>, acc, 0n) == True{}: Bool
-} -> {
-  RKnown.Ids.has(
-    RKnown.Ids.go(vs, acc),
-    i
-  )
-    == Bool.or(
-      Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i),
-      RKnown.Ids.has(acc, i)
-    ): Bool
-}:
-  match vs:
-    case Nil{}:
-      w => {==}
-    case Con{+e, +rest}:
-      +w => Equal.trans(
-        Bool,
-        RKnown.Ids.has(RKnown.Ids.go(rest, RKnown.Ids.put(acc, RLines.Entry.id(e))), i),
-        Bool.or(
-          Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i),
-          RKnown.Ids.has(RKnown.Ids.put(acc, RLines.Entry.id(e)), i)
-        ),
-        Bool.or(
-          Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, e <> rest, i),
-          RKnown.Ids.has(acc, i)
-        ),
-        Ids.go_has(
-          rest,
-          RKnown.Ids.put(acc, RLines.Entry.id(e)),
-          i
-        )(
-          Crits.Crit.upsert_wf(
-            ~List<&2, Ledgers.Id>,
-            ~RKnown.Ids.join,
-            acc,
-            RKnown.Id.key(RLines.Entry.id(e)),
-            [RLines.Entry.id(e)]
-          )(w)
-        ),
-        (
-          %Equal.sym(Bool, RKnown.Ids.has(RKnown.Ids.put(acc, RLines.Entry.id(e)), i), Bool.or(Ledgers.Id.is_eq(RLines.Entry.id(e), i), RKnown.Ids.has(acc, i)), Ids.put_has(acc, RLines.Entry.id(e), i)(w)): {Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), _) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), Ledgers.Id.is_eq(RLines.Entry.id(e), i)), RKnown.Ids.has(acc, i)): Bool}
-          Lists.Bool.by(b => {Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), Bool.or(b, RKnown.Ids.has(acc, i))) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), b), RKnown.Ids.has(acc, i)): Bool}, Ledgers.Id.is_eq(RLines.Entry.id(e), i), et => Shared.Bool.or_true_right(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i)), ef => {==}))
-      )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
-
-# the ids of the versions vs hold an id exactly when the id made one of vs
-def Ids.of_has(
-  +vs: List<&2, Types.Entry>,
-  +i: Ledgers.Id
-) -> {
-  RKnown.Ids.has(
-    RKnown.Ids.of(vs),
-    i
-  )
-    == Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i): Bool
-}:
-  Equal.trans(
-    Bool,
-    RKnown.Ids.has(RKnown.Ids.of(vs), i),
-    Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i), False{}),
-    Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i),
-    Ids.go_has(vs, Crits.Crit.new(List<&2, Ledgers.Id>), i)({==}),
-    Equal.sym(
-      Bool,
-      Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i),
-      Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i), False{}),
-      Shared.Bool.or_false(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i))
-    )
-  )
-
-# ys after xs, without as many items as xs has, is ys
-def Past.append(
-  xs: List<&2, Types.Entry>,
-  +zs: List<&2, Types.Entry>
-) -> {RKnown.Entries.past(xs, List.append(&2, Types.Entry, xs, zs)) == zs: List<&2, Types.Entry>}:
-  match xs:
-    case Nil{}:
-      {==}
-    case Con{x, rest}:
-      Past.append(rest, zs)
-
-# a set with the ids of vs and then zs is the set with the ids of vs, with
-# the ids of zs
-def Ids.go_append(
-  vs: List<&2, Types.Entry>,
-  +zs: List<&2, Types.Entry>,
-  +acc: RKnown.Ids()
-) -> {
-  RKnown.Ids.go(
-    List.append(&2, Types.Entry, vs, zs),
-    acc
-  )
-    == RKnown.Ids.go(zs, RKnown.Ids.go(vs, acc)): RKnown.Ids()
-}:
-  match vs:
-    case Nil{}:
-      {==}
-    case Con{+e, rest}:
-      Ids.go_append(rest, zs, RKnown.Ids.put(acc, RLines.Entry.id(e)))
-
+#NEWIDS
 # the first entry of a right table is right
 def Ok.head(
   e: RKnown.Kept,
@@ -1094,17 +746,17 @@ def Known.ids_ok(
   kn: RKnown.Known(),
   +s: RFacts.Plain(),
   +c: Ledgers.Line,
-  +x: RKnown.Ids()
+  +x: RKnown.Ids
 ) -> {
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {
-  RKnown.Known.ids(kn, c) == Some{x}: Maybe<&2, RKnown.Ids()>
+  RKnown.Known.ids(kn, c) == Some{x}: Maybe<&2, RKnown.Ids>
 } -> {RKnown.Made.fits(RLines.Line.state(s, c), x) == True{}: Bool}:
   match kn:
     case Nil{}:
       ok => e => Empty.absurd(
         {RKnown.Made.fits(RLines.Line.state(s, c), x) == True{}: Bool},
-        Shared.Maybe.none_ne_some(RKnown.Ids(), x, e)
+        Shared.Maybe.none_ne_some(RKnown.Ids, x, e)
       )
     case Con{RKnown.Kept{+c2, +st2}, +rest}:
       ok => e => Known.ids_ok(rest, s, c, x)(Ok.tail(RKnown.Kept{c2, st2}, rest, s)(ok))(e)
@@ -1118,17 +770,17 @@ def Known.ids_ok(
       +ok => Lists.Bool.by(
         b => {
           Shared.Bool.when(
-            Maybe<&2, RKnown.Ids()>,
+            Maybe<&2, RKnown.Ids>,
             b,
             w => Some{y2},
             w => RKnown.Known.ids(rest, c)
           )
-            == Some{x}: Maybe<&2, RKnown.Ids()>
+            == Some{x}: Maybe<&2, RKnown.Ids>
         } -> {RKnown.Made.fits(RLines.Line.state(s, c), x) == True{}: Bool},
         Ledgers.Line.is_eq(c2, c),
         +et => +e => (
           %Ledgers.Line.is_eq_sound(c2, c)(et): {RKnown.Made.fits(RLines.Line.state(s, _), x) == True{}: Bool}
-          %Shared.Maybe.some_inj(RKnown.Ids(), y2, x, e): {RKnown.Made.fits(RLines.Line.state(s, c2), _) == True{}: Bool}
+          %Shared.Maybe.some_inj(RKnown.Ids, y2, x, e): {RKnown.Made.fits(RLines.Line.state(s, c2), _) == True{}: Bool}
           Ok.head(RKnown.Made{c2, y2}, rest, s)(ok)),
         ef => e => Known.ids_ok(rest, s, c, x)(Ok.tail(RKnown.Made{c2, y2}, rest, s)(ok))(e)
       )
@@ -1156,7 +808,7 @@ def Known.made_ok(
     == Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i): Bool
 }:
   ok => e => Lists.Maybe.by(
-    RKnown.Ids(),
+    RKnown.Ids,
     m => {
       RKnown.Made.in(
         m,
@@ -1168,7 +820,7 @@ def Known.made_ok(
     RKnown.Known.ids(kn, c),
     en => {==},
     +y => ey => (
-      %Equal.sym(RKnown.Ids(), y, RKnown.Ids.of(vs), Made.fits_sound(RLines.Line.state(s, c), y, vs, k)(e)(Known.ids_ok(kn, s, c, y)(ok)(ey))): {RKnown.Ids.has(_, i) == Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i): Bool}
+      %Equal.sym(RKnown.Ids, y, RKnown.Ids.of(vs), Made.fits_sound(RLines.Line.state(s, c), y, vs, k)(e)(Known.ids_ok(kn, s, c, y)(ok)(ey))): {RKnown.Ids.has(_, i) == Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i): Bool}
       Ids.of_has(vs, i))
   )
 
@@ -1680,7 +1332,7 @@ def Known.ids_learn_ok(
 } -> {RContents.Known.ok(RKnown.Known.ids.learn(kn, c), s) == True{}: Bool}:
   +ok => Lists.Bool.by(
     b => {RContents.Known.ok(RKnown.Known.ids.learn.if(b, kn, c), s) == True{}: Bool},
-    Maybe.is_some(&2, RKnown.Ids(), RKnown.Known.ids(kn, c)),
+    Maybe.is_some(&2, RKnown.Ids, RKnown.Known.ids(kn, c)),
     et => ok,
     ef => Lists.Maybe.by(
       RLines.State,
@@ -1844,7 +1496,7 @@ def Made.same(
   +s: Facts.Facts(),
   +s2: Facts.Facts(),
   +c: Ledgers.Line,
-  +y: RKnown.Ids()
+  +y: RKnown.Ids
 ) -> {
   Lines.Line.state(s2, c) == Lines.Line.state(s, c): Maybe<&2, RLines.State>
 } -> {
@@ -6089,11 +5741,11 @@ def Line.find_ok(
     c,
     i
   )
-    == RAnswers.Line.find(RKnown.Known.none(), s, c, i): Maybe<&2, RAnswers.Found>
+    == RAnswers.Line.find(RKnown.Known.none(), s, c, i): Maybe<&2, RKnown.Found>
 }:
   ok => Equal.cong(
     Maybe<&2, List<&2, Types.Entry>>,
-    Maybe<&2, RAnswers.Found>,
+    Maybe<&2, RKnown.Found>,
     m => RAnswers.Line.find.of(i, m),
     RKnown.Known.versions(kn, s, c),
     RLines.Line.versions(s, c),
@@ -6106,7 +5758,7 @@ def Reply.status_ok(
   +s: RFacts.Plain(),
   +c: Ledgers.Line,
   v: Maybe<&2, List<&2, Types.Entry>>,
-  m: Maybe<&2, RAnswers.Found>
+  m: Maybe<&2, RKnown.Found>
 ) -> {
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {
@@ -6126,7 +5778,7 @@ def Reply.status_ok(
       ok => {==}
     case Some{vs} None{}:
       ok => {==}
-    case Some{+vs} Some{RAnswers.Found{+k, +e}}:
+    case Some{+vs} Some{RKnown.Found{+k, +e}}:
       ok => Equal.cong(
         Spec.Status,
         Maybe<&2, Spec.Reply>,
@@ -6141,7 +5793,7 @@ def Clashes.then_ok(
   +kn: RKnown.Known(),
   +s: RFacts.Plain(),
   +c: Ledgers.Line,
-  m: Maybe<&2, RAnswers.Found>
+  m: Maybe<&2, RKnown.Found>
 ) -> {
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {
@@ -6159,7 +5811,7 @@ def Clashes.then_ok(
   match m:
     case None{}:
       ok => {==}
-    case Some{RAnswers.Found{+k, +e}}:
+    case Some{RKnown.Found{+k, +e}}:
       ok => Clashes.of_ok(kn, s, c, k, e)(ok)
 
 # a right table changes no base of a found merge
@@ -6167,7 +5819,7 @@ def Base.then_ok(
   +kn: RKnown.Known(),
   +s: RFacts.Plain(),
   +c: Ledgers.Line,
-  m: Maybe<&2, RAnswers.Found>
+  m: Maybe<&2, RKnown.Found>
 ) -> {
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {
@@ -6185,7 +5837,7 @@ def Base.then_ok(
   match m:
     case None{}:
       ok => {==}
-    case Some{RAnswers.Found{+k, +e}}:
+    case Some{RKnown.Found{+k, +e}}:
       ok => Base.of_ok(kn, s, c, k, e)(ok)
 
 # a right table changes no reply
@@ -8604,7 +8256,7 @@ def Known.spared_ok(
   )
 
 # the ids m, if any, fit the state x
-def Made.Ok(x: Maybe<&2, RLines.State>, m: Maybe<&2, RKnown.Ids()>) -> Type:
+def Made.Ok(x: Maybe<&2, RLines.State>, m: Maybe<&2, RKnown.Ids>) -> Type:
   match m:
     case None{}:
       Unit
@@ -8617,7 +8269,7 @@ def Known.made_put_ok(
   +kn: RKnown.Known(),
   +s: RFacts.Plain(),
   +c: Ledgers.Line,
-  m: Maybe<&2, RKnown.Ids()>
+  m: Maybe<&2, RKnown.Ids>
 ) -> Made.Ok(
   RLines.Line.state(s, c),
   m
@@ -8640,7 +8292,7 @@ def Known.ids_found(
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> Made.Ok(RLines.Line.state(s, c), RKnown.Known.ids(kn, c)):
   ok => Lists.Maybe.by(
-    RKnown.Ids(),
+    RKnown.Ids,
     m => Made.Ok(RLines.Line.state(s, c), m),
     RKnown.Known.ids(kn, c),
     en => Unit{},
@@ -8726,7 +8378,7 @@ def Made.next_ok.at(
   +k2: Nat,
   +vs: List<&2, Types.Entry>,
   +k: Nat,
-  +y: RKnown.Ids(),
+  +y: RKnown.Ids,
   -x2: Maybe<&2, RLines.State>,
   -x1: Maybe<&2, RLines.State>,
   a: {x2 == Some{RLines.State{vs2, k2}}: Maybe<&2, RLines.State>},
@@ -8755,7 +8407,7 @@ def Made.next_ok.at(
           == True{}: Bool
       }
       %Equal.sym(
-        RKnown.Ids(),
+        RKnown.Ids,
         y,
         RKnown.Ids.of(vs),
         Made.fits_sound(x1, y, vs, k)(b)(i)
@@ -8791,7 +8443,7 @@ def Made.next_ok.at(
 def Made.next_ok(
   m: Maybe<&2, RLines.State>,
   old: Maybe<&2, RLines.State>,
-  ids: Maybe<&2, RKnown.Ids()>,
+  ids: Maybe<&2, RKnown.Ids>,
   -x2: Maybe<&2, RLines.State>,
   -x1: Maybe<&2, RLines.State>
 ) -> Put.Ok(
@@ -9177,7 +8829,7 @@ def Known.learn_open(
         Known.ids_learn_open(
           Maybe.is_some(
             &2,
-            RKnown.Ids(),
+            RKnown.Ids,
             RKnown.Known.ids(
               RKnown.Known.rule.learn(
                 RKnown.Known.learn.one(RKnown.Known.learn.one(kn, s, RKnown.Known.root(c)), s, c),
@@ -12385,7 +12037,7 @@ def Known.spared_shut(
 def Known.made_put_open(
   -kn: RKnown.Known(),
   -c: Ledgers.Line,
-  m: Maybe<&2, RKnown.Ids()>
+  m: Maybe<&2, RKnown.Ids>
 ) -> {
   RKnown.Known.shelf(
     kn
@@ -12612,7 +12264,7 @@ def Run.put_of.if(
           }: RKnown.Run
       }
       %Equal.sym(
-        RKnown.Ids(),
+        RKnown.Ids,
         RKnown.Ids.of(vs2),
         x2,
         Ids.go_append(vs, [e], Crits.Crit.new(List<&2, Ledgers.Id>))
@@ -13362,7 +13014,7 @@ def Known.quick_ok.all(
   +j: Nat,
   +era: Nat,
   +rule: RLines.Rule,
-  +ids: RKnown.Ids()
+  +ids: RKnown.Ids
 ) -> {
   RKnown.Known.walk(
     kn,
@@ -13386,7 +13038,7 @@ def Known.quick_ok.all(
 } -> {
   RKnown.Known.ruled(kn, Ledgers.Line{h, Some{b}}) == Some{rule}: Maybe<&2, RLines.Rule>
 } -> {
-  RKnown.Known.ids(kn, Ledgers.Line{h, Some{b}}) == Some{ids}: Maybe<&2, RKnown.Ids()>
+  RKnown.Known.ids(kn, Ledgers.Line{h, Some{b}}) == Some{ids}: Maybe<&2, RKnown.Ids>
 } -> {
   RContents.Known.fit(kn, Facts.Facts.crit(s)) == True{}: Bool
 } -> {
@@ -13579,7 +13231,7 @@ def Known.quick_ok.all(
         }: Maybe<&2, RKnown.Run>
     }
     %Equal.sym(
-      RKnown.Ids(),
+      RKnown.Ids,
       ids,
       RKnown.Ids.of(vs),
       Made.fits_sound(
@@ -13627,7 +13279,7 @@ def Known.quick_ok.at(
   ms: Maybe<&2, RLines.State>,
   n: Maybe<&2, Nat>,
   u: Maybe<&2, RLines.Rule>,
-  y: Maybe<&2, RKnown.Ids()>
+  y: Maybe<&2, RKnown.Ids>
 ) -> {
   RKnown.Known.walk(
     kn,
@@ -13643,7 +13295,7 @@ def Known.quick_ok.at(
 } -> {
   RKnown.Known.ruled(kn, c) == u: Maybe<&2, RLines.Rule>
 } -> {
-  RKnown.Known.ids(kn, c) == y: Maybe<&2, RKnown.Ids()>
+  RKnown.Known.ids(kn, c) == y: Maybe<&2, RKnown.Ids>
 } -> {
   RContents.Known.fit(kn, Facts.Facts.crit(s)) == True{}: Bool
 } -> Ran.Ok(

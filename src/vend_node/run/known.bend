@@ -38,6 +38,16 @@ import ./lines.bend as Lines
 # the facts, so the next ask gets its number without a walk. Only the first
 # such entry, before the contents, is read.
 
+# a version of a line: its number and its entry
+type Found is Data:
+  Found{n: Nat, entry: Types.Entry}
+
+# the versions of a line by the id of the request that made each: a map from
+# a short key (Id.key) to the versions of that key, the newest first; and
+# the count of the versions
+type Ids is Data:
+  Ids{map: Crits.Crit<List<&2, Found>>, count: Nat}
+
 # the content of a version of a line, which a read with the fuel depth gives
 type Held is Data:
   Held{line: Ledgers.Line, version: Nat, depth: Nat, files: Files.Files()}
@@ -51,7 +61,7 @@ type Held is Data:
 type Kept is Data:
   Kept{line: Ledgers.Line, state: Lines.State}
   Ruled{line: Ledgers.Line, era: Nat, rule: Lines.Rule}
-  Made{line: Ledgers.Line, ids: Crits.Crit<List<&2, Ledgers.Id>>}
+  Made{line: Ledgers.Line, ids: Ids}
   Open{facts: List<&2, Types.Fact>, peak: Nat}
   Stock{held: Crits.Crit<Held>, low: Nat}
 
@@ -375,11 +385,6 @@ def Known.reopen(kn: Known(), fs: List<&2, Types.Fact>, n: Nat) -> Known():
 # Known ids
 # ---------
 
-# the ids of the requests that made the versions of a line, as a set: a map
-# from a short key (Id.key) to the ids of that key
-def Ids() -> Data:
-  Crits.Crit<List<&2, Ledgers.Id>>
-
 # the number h, mixed with the characters of t
 def Id.mix(t: String, h: U32) -> U32:
   match t:
@@ -394,45 +399,122 @@ def Id.key(i: Ledgers.Id) -> List<&2, U32>:
     case Ledgers.Id{w, q}:
       [Id.mix(q, Id.mix(w, 0))]
 
-# the ids new, then the ids old
-def Ids.join(old: List<&2, Ledgers.Id>, new: List<&2, Ledgers.Id>) -> List<&2, Ledgers.Id>:
-  List.append(&2, Ledgers.Id, new, old)
+# the versions new, then the versions old
+def Ids.join(old: List<&2, Found>, new: List<&2, Found>) -> List<&2, Found>:
+  List.append(&2, Found, new, old)
 
-# the id i is among the ids b
-def Ids.holds(b: List<&2, Ledgers.Id>, +i: Ledgers.Id) -> Bool:
+# the request of the id i made one of the versions b
+def Ids.holds(b: List<&2, Found>, +i: Ledgers.Id) -> Bool:
   match b:
     case Nil{}:
       False{}
-    case Con{j, rest}:
-      List.any.if(u => Ids.holds(rest, i), Ledgers.Id.is_eq(j, i))
+    case Con{Found{n, e}, rest}:
+      List.any.if(u => Ids.holds(rest, i), Lines.Entry.is_of(i, e))
 
-# the id i is among the ids m, if any
-def Ids.has.of(m: Maybe<&2, List<&2, Ledgers.Id>>, i: Ledgers.Id) -> Bool:
+# the request of the id i made one of the versions m, if any
+def Ids.has.of(m: Maybe<&2, List<&2, Found>>, i: Ledgers.Id) -> Bool:
   match m:
     case None{}:
       False{}
     case Some{b}:
       Ids.holds(b, i)
 
-# the set x holds the id i
-def Ids.has(x: Crits.Crit<List<&2, Ledgers.Id>>, +i: Ledgers.Id) -> Bool:
-  Ids.has.of(Crits.Crit.get(List<&2, Ledgers.Id>, x, Id.key(i)), i)
+# the request of the id i made one of the versions of x
+def Ids.has(x: Ids, +i: Ledgers.Id) -> Bool:
+  match x:
+    case Ids{m, n}:
+      Ids.has.of(Crits.Crit.get(List<&2, Found>, m, Id.key(i)), i)
 
-# the set acc with the id i
-def Ids.put(+acc: Ids(), +i: Ledgers.Id) -> Ids():
-  Crits.Crit.upsert(~List<&2, Ledgers.Id>, ~Ids.join, acc, Id.key(i), [i])
+# the version m, or else the version f when the request of the id i made it
+def Found.or(m: Maybe<&2, Found>, f: Found, i: Ledgers.Id) -> Maybe<&2, Found>:
+  match m f:
+    case Some{g} _:
+      Some{g}
+    case None{} Found{n, +e}:
+      Shared.Maybe.when(Found, Lines.Entry.is_of(i, e), u => Some{Found{n, e}})
 
-# the set acc with the id of each of the versions vs
-def Ids.go(vs: List<&2, Types.Entry>, acc: Ids()) -> Ids():
+# the oldest of the versions b that the request of the id i made
+def Ids.first(b: List<&2, Found>, +i: Ledgers.Id) -> Maybe<&2, Found>:
+  match b:
+    case Nil{}:
+      None{}
+    case Con{f, rest}:
+      Found.or(Ids.first(rest, i), f, i)
+
+# the oldest of the versions m, if any, that the request of the id i made
+def Ids.find.of(m: Maybe<&2, List<&2, Found>>, i: Ledgers.Id) -> Maybe<&2, Found>:
+  match m:
+    case None{}:
+      None{}
+    case Some{b}:
+      Ids.first(b, i)
+
+# the oldest version of x that the request of the id i made
+def Ids.find(x: Ids, +i: Ledgers.Id) -> Maybe<&2, Found>:
+  match x:
+    case Ids{m, n}:
+      Ids.find.of(Crits.Crit.get(List<&2, Found>, m, Id.key(i)), i)
+
+# the ask b is the ask a: the asks are read only when they are of one id
+def Ask.is(+a: Types.Ask, +b: Types.Ask) -> Bool:
+  List.all.if(u => Coded.Ask.is_eq(b, a), Ledgers.Id.is_eq(Lines.Ask.id(b), Lines.Ask.id(a)))
+
+# the entry e was made by the ask a
+def Entry.made_by(a: Types.Ask, e: Types.Entry) -> Bool:
+  Ask.is(a, Lines.Entry.ask(e))
+
+# one of the versions b was made by the ask a
+def Ids.made.in(b: List<&2, Found>, +a: Types.Ask) -> Bool:
+  match b:
+    case Nil{}:
+      False{}
+    case Con{Found{n, e}, rest}:
+      List.any.if(u => Ids.made.in(rest, a), Entry.made_by(a, e))
+
+# one of the versions m, if any, was made by the ask a
+def Ids.made.of(m: Maybe<&2, List<&2, Found>>, a: Types.Ask) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{b}:
+      Ids.made.in(b, a)
+
+# one of the versions of x was made by the ask a
+def Ids.made(x: Ids, +a: Types.Ask) -> Bool:
+  match x:
+    case Ids{m, n}:
+      Ids.made.of(Crits.Crit.get(List<&2, Found>, m, Id.key(Lines.Ask.id(a))), a)
+
+# the count of the versions of x
+def Ids.count(x: Ids) -> Nat:
+  match x:
+    case Ids{m, n}:
+      n
+
+# the versions of no line
+def Ids.new() -> Ids:
+  Ids{Crits.Crit.new(List<&2, Found>), 0n}
+
+# the versions acc with the entry e as the next version
+def Ids.put(acc: Ids, +e: Types.Entry) -> Ids:
+  match acc:
+    case Ids{+m, +n}:
+      Ids{
+        Crits.Crit.upsert(~List<&2, Found>, ~Ids.join, m, Id.key(Lines.Entry.id(e)), [Found{n, e}]),
+        1n+n
+      }
+
+# the versions acc with each of the entries vs as the next version
+def Ids.go(vs: List<&2, Types.Entry>, acc: Ids) -> Ids:
   match vs:
     case Nil{}:
       acc
-    case Con{e, rest}:
-      Ids.go(rest, Ids.put(acc, Lines.Entry.id(e)))
+    case Con{+e, rest}:
+      Ids.go(rest, Ids.put(acc, e))
 
-# the ids of the versions vs
-def Ids.of(vs: List<&2, Types.Entry>) -> Ids():
-  Ids.go(vs, Crits.Crit.new(List<&2, Ledgers.Id>))
+# the versions vs, by the id of the request that made each
+def Ids.of(vs: List<&2, Types.Entry>) -> Ids:
+  Ids.go(vs, Ids.new())
 
 # ys without as many of its first items as xs has
 def Entries.past(xs: List<&2, Types.Entry>, ys: List<&2, Types.Entry>) -> List<&2, Types.Entry>:
@@ -445,7 +527,7 @@ def Entries.past(xs: List<&2, Types.Entry>, ys: List<&2, Types.Entry>) -> List<&
       Entries.past(xr, yr)
 
 # the ids that the table kn holds for the line c, if any
-def Known.ids(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Ids()>:
+def Known.ids(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Ids>:
   match kn:
     case Nil{}:
       None{}
@@ -457,7 +539,7 @@ def Known.ids(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Ids()>:
       Known.ids(rest, c)
     case Con{Made{c2, x}, rest}:
       Shared.Bool.when(
-        Maybe<&2, Ids()>,
+        Maybe<&2, Ids>,
         Ledgers.Line.is_eq(c2, c),
         u2 => Some{x},
         u2 => Known.ids(rest, c)
@@ -467,7 +549,7 @@ def Known.ids(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Ids()>:
 
 # the request of the id i made one of the versions vs: read from their ids
 # m, if known
-def Made.in(m: Maybe<&2, Ids()>, vs: List<&2, Types.Entry>, i: Ledgers.Id) -> Bool:
+def Made.in(m: Maybe<&2, Ids>, vs: List<&2, Types.Entry>, i: Ledgers.Id) -> Bool:
   match m:
     case None{}:
       Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, i)
@@ -833,7 +915,7 @@ def Known.ids.learn.if(old: Bool, +kn: Known(), +c: Ledgers.Line) -> Known():
 # the table kn with the ids of the versions of the state that kn holds for
 # the line c
 def Known.ids.learn(+kn: Known(), +c: Ledgers.Line) -> Known():
-  Known.ids.learn.if(Maybe.is_some(&2, Ids(), Known.ids(kn, c)), kn, c)
+  Known.ids.learn.if(Maybe.is_some(&2, Ids, Known.ids(kn, c)), kn, c)
 
 # the table kn with the states of the line c and of its store in the facts s,
 # with the rule of the next version of c, and with the ids of its versions
@@ -939,13 +1021,19 @@ def State.fits(m: Maybe<&2, Lines.State>, st: Lines.State) -> Bool:
     case Some{x}:
       State.same(x, st)
 
-# the ids a and b are the same
-def Bucket.same(a: List<&2, Ledgers.Id>, b: List<&2, Ledgers.Id>) -> Bool:
-  Shared.List.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, a, b)
+# the versions a and b are the same
+def Found.same(a: Found, b: Found) -> Bool:
+  match a b:
+    case Found{n1, e1} Found{n2, e2}:
+      Bool.and(Nat.is_eq(n1, n2), Entry.same(e1, e2))
+
+# the versions a and b are the same
+def Bucket.same(a: List<&2, Found>, b: List<&2, Found>) -> Bool:
+  Shared.List.is_eq(~Found, ~Found.same, a, b)
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for sets that differ, which then costs no more than equal sets, where both sides run
 # the sets a and b are the same: key by key, in the same shape
-def Ids.same(a: Ids(), b: Ids()) -> Bool:
+def Map.same(a: Crits.Crit<List<&2, Found>>, b: Crits.Crit<List<&2, Found>>) -> Bool:
   match a b:
     case Crits.Crit.Tip{} Crits.Crit.Tip{}:
       True{}
@@ -957,8 +1045,8 @@ def Ids.same(a: Ids(), b: Ids()) -> Bool:
         Bool.and(
           Nat.is_eq(p1, p2),
           Bool.and(
-            Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~Bucket.same, e1, e2),
-            Bool.and(Ids.same(z1, z2), Ids.same(o1, o2))
+            Shared.Maybe.is_eq(~List<&2, Found>, ~Bucket.same, e1, e2),
+            Bool.and(Map.same(z1, z2), Map.same(o1, o2))
           )
         )
       )
@@ -966,8 +1054,14 @@ def Ids.same(a: Ids(), b: Ids()) -> Bool:
       False{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# the versions a and b, by id, are the same
+def Ids.same(a: Ids, b: Ids) -> Bool:
+  match a b:
+    case Ids{m1, n1} Ids{m2, n2}:
+      Bool.and(Map.same(m1, m2), Nat.is_eq(n1, n2))
+
 # m is a state whose versions have the ids x
-def Made.fits(m: Maybe<&2, Lines.State>, x: Ids()) -> Bool:
+def Made.fits(m: Maybe<&2, Lines.State>, x: Ids) -> Bool:
   match m:
     case None{}:
       False{}
@@ -1097,8 +1191,8 @@ def Known.spared(safe: Bool, kn: Known()) -> Known():
 def Made.next(
   new: Maybe<&2, Lines.State>,
   old: Maybe<&2, Lines.State>,
-  ids: Maybe<&2, Ids()>
-) -> Maybe<&2, Ids()>:
+  ids: Maybe<&2, Ids>
+) -> Maybe<&2, Ids>:
   match new old ids:
     case Some{Lines.State{vs2, k2}} Some{Lines.State{vs, k}} Some{x}:
       Some{Ids.go(Entries.past(vs, vs2), x)}
@@ -1106,7 +1200,7 @@ def Made.next(
       None{}
 
 # the table kn with the ids m, if any, of the versions of the line c
-def Known.made.put(kn: Known(), c: Ledgers.Line, m: Maybe<&2, Ids()>) -> Known():
+def Known.made.put(kn: Known(), c: Ledgers.Line, m: Maybe<&2, Ids>) -> Known():
   match m:
     case None{}:
       kn
@@ -1158,7 +1252,7 @@ def Known.cast.plain(
 # what a run leaves of a line: its state, the era and the rule of its next
 # version, and the ids of its versions
 type Run is Data:
-  Run{state: Lines.State, era: Nat, rule: Maybe<&2, Lines.Rule>, ids: Ids()}
+  Run{state: Lines.State, era: Nat, rule: Maybe<&2, Lines.Rule>, ids: Ids}
 
 # the rule at the era m of the branch c, with the versions r of its store:
 # the rule u before, when the era is as before (same)
@@ -1185,7 +1279,7 @@ def Run.put(
   +k: Nat,
   +m: Nat,
   u: Maybe<&2, Lines.Rule>,
-  +x: Ids(),
+  +x: Ids,
   +pk: Types.Pick
 ) -> Run:
   match dup:
@@ -1197,7 +1291,7 @@ def Run.put(
         Lines.State{List.append(&2, Types.Entry, vs, [Types.Entry{pk, k}]), 1n+k},
         m2,
         Run.rule(Nat.is_eq(m2, m), r, c, m2, u),
-        Ids.put(x, Lines.Pick.id(pk))
+        Ids.put(x, Types.Entry{pk, k})
       }
 
 # the run after the next slot of the run q of the branch c, once its decided
@@ -1294,7 +1388,7 @@ def Known.quick.of(
   ms: Maybe<&2, Lines.State>,
   n: Maybe<&2, Nat>,
   u: Maybe<&2, Lines.Rule>,
-  x: Maybe<&2, Ids()>
+  x: Maybe<&2, Ids>
 ) -> Maybe<&2, Run>:
   match w c m ms n u x:
     case Some{

@@ -8,6 +8,7 @@ import ./groups.bend as Groups
 import ./lines.bend as Lines
 import ./mirror.bend as Mirror
 import ./run/answers.bend as RAnswers
+import ./run/known.bend as RKnown
 import ./run/lines.bend as RLines
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
@@ -1459,7 +1460,7 @@ def Request.make(
     eg
   ): {
     RAnswers.Reply.ask(
-      Maybe.map(&2, Types.Entry, RAnswers.Found, e2 => RAnswers.Found{j, e2}, _)
+      Maybe.map(&2, Types.Entry, RKnown.Found, e2 => RKnown.Found{j, e2}, _)
     )
       == Some{Spec.Reply.Ask{RAnswers.Entry.request(e)}}: Maybe<&2, Spec.Reply>
   }
@@ -1571,7 +1572,7 @@ def At.of_made.of(
           Maybe<&2, Types.Entry>,
           w => {
             RAnswers.Reply.ask(
-              Maybe.map(&2, Types.Entry, RAnswers.Found, e3 => RAnswers.Found{j, e3}, w)
+              Maybe.map(&2, Types.Entry, RKnown.Found, e3 => RKnown.Found{j, e3}, w)
             )
               == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>
           },

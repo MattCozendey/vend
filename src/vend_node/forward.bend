@@ -11,6 +11,7 @@ import ./lines.bend as Lines
 import ./reads.bend as Reads
 import ./rounds.bend as Rounds
 import ./run/answers.bend as RAnswers
+import ./run/known.bend as RKnown
 import ./run/content.bend as RContents
 import ./run/files.bend as Files
 import ./run/lines.bend as RLines
@@ -528,7 +529,7 @@ def Ext.take(
 # what holds of nothing, and of each version of the id i among vs, holds of
 # what Versions.find gives
 def Find.by(
-  -P: Maybe<&2, RAnswers.Found> -> Type,
+  -P: Maybe<&2, RKnown.Found> -> Type,
   +vs: List<&2, Types.Entry>,
   +i: Ledgers.Id,
   n: P(None{}),
@@ -543,7 +544,7 @@ def Find.by(
       == Some{j}: Maybe<&2, Nat>
   } -> {
     List.get(&2, Types.Entry, vs, j) == Some{x}: Maybe<&2, Types.Entry>
-  } -> P(Some{RAnswers.Found{j, x}})
+  } -> P(Some{RKnown.Found{j, x}})
 ) -> P(RAnswers.Versions.find(vs, i)):
   Lists.Maybe.by(
     Nat,
@@ -552,7 +553,7 @@ def Find.by(
     en => n => n,
     +j => +ej => n => Lists.Maybe.by(
       Types.Entry,
-      g => P(None{}) -> P(Maybe.map(&2, Types.Entry, RAnswers.Found, e => RAnswers.Found{j, e}, g)),
+      g => P(None{}) -> P(Maybe.map(&2, Types.Entry, RKnown.Found, e => RKnown.Found{j, e}, g)),
       List.get(&2, Types.Entry, vs, j),
       en => n => n,
       +x => +eg => n => f(j)(x)(ej)(eg)
@@ -579,11 +580,11 @@ def Find.ext(
       == Some{j}: Maybe<&2, Nat>
   },
   eg: {List.get(&2, Types.Entry, vs, j) == Some{x}: Maybe<&2, Types.Entry>}
-) -> {RAnswers.Versions.find(vs2, i) == Some{RAnswers.Found{j, x}}: Maybe<&2, RAnswers.Found>}:
+) -> {RAnswers.Versions.find(vs2, i) == Some{RKnown.Found{j, x}}: Maybe<&2, RKnown.Found>}:
   Eq.up(
     Maybe<&2, Nat>,
     m => {
-      RAnswers.Versions.find.at(vs2, m) == Some{RAnswers.Found{j, x}}: Maybe<&2, RAnswers.Found>
+      RAnswers.Versions.find.at(vs2, m) == Some{RKnown.Found{j, x}}: Maybe<&2, RKnown.Found>
     },
     Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs2, i),
     Some{j},
@@ -602,11 +603,11 @@ def Find.ext(
         Maybe.map(
           &2,
           Types.Entry,
-          RAnswers.Found,
-          e => RAnswers.Found{j, e},
+          RKnown.Found,
+          e => RKnown.Found{j, e},
           g
         )
-          == Some{RAnswers.Found{j, x}}: Maybe<&2, RAnswers.Found>
+          == Some{RKnown.Found{j, x}}: Maybe<&2, RKnown.Found>
       },
       List.get(&2, Types.Entry, vs2, j),
       Some{x},
@@ -2626,10 +2627,10 @@ def Case.request(
             Some{vs2},
             e2,
             Eq.up(
-              Maybe<&2, RAnswers.Found>,
+              Maybe<&2, RKnown.Found>,
               f => {RAnswers.Reply.ask(f) == Some{a}: Maybe<&2, Spec.Reply>},
               RAnswers.Versions.find(vs2, i),
-              Some{RAnswers.Found{j, x}},
+              Some{RKnown.Found{j, x}},
               Find.ext(vs, vs2, zs, ez, i, j, x, ei, eg),
               ha
             )
@@ -2715,7 +2716,7 @@ def Case.clashes(
               Some{vs2},
               e2,
               Eq.up(
-                Maybe<&2, RAnswers.Found>,
+                Maybe<&2, RKnown.Found>,
                 f => {
                   RAnswers.Reply.names(
                     RAnswers.Found.then(
@@ -2727,7 +2728,7 @@ def Case.clashes(
                     == Some{a}: Maybe<&2, Spec.Reply>
                 },
                 RAnswers.Versions.find(vs2, i),
-                Some{RAnswers.Found{j, x}},
+                Some{RKnown.Found{j, x}},
                 Find.ext(vs, vs2, zs, ez, i, j, x, ei, eg),
                 Eq.up(
                   Maybe<&2, List<&2, String>>,
@@ -2821,7 +2822,7 @@ def Case.base(
               Some{vs2},
               e2,
               Eq.up(
-                Maybe<&2, RAnswers.Found>,
+                Maybe<&2, RKnown.Found>,
                 f => {
                   RAnswers.Reply.point(
                     RAnswers.Found.then(Spec.Point, f, k => e => Answers.Base.of(s2, c, k, e))
@@ -2829,7 +2830,7 @@ def Case.base(
                     == Some{a}: Maybe<&2, Spec.Reply>
                 },
                 RAnswers.Versions.find(vs2, i),
-                Some{RAnswers.Found{j, x}},
+                Some{RKnown.Found{j, x}},
                 Find.ext(vs, vs2, zs, ez, i, j, x, ei, eg),
                 Eq.up(
                   Maybe<&2, Spec.Point>,
@@ -2912,7 +2913,7 @@ def Case.status(
                 Some{vs2},
                 e2,
                 Eq.up(
-                  Maybe<&2, RAnswers.Found>,
+                  Maybe<&2, RKnown.Found>,
                   f => {
                     Answers.Reply.status(
                       s2,
@@ -2925,7 +2926,7 @@ def Case.status(
                       }: Maybe<&2, Spec.Reply>
                   },
                   RAnswers.Versions.find(vs2, i),
-                  Some{RAnswers.Found{j, x}},
+                  Some{RKnown.Found{j, x}},
                   Find.ext(vs, vs2, zs, ez, i, j, x, ei, eg),
                   {==}
                 )

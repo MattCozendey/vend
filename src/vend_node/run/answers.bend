@@ -24,10 +24,6 @@ import ./rounds.bend as Rounds
 def Entry.request(e: Types.Entry) -> Spec.Request:
   Lines.Ask.request(Lines.Entry.ask(e))
 
-# a version of a line that was looked for: its number and its entry
-type Found is Data:
-  Found{n: Nat, entry: Types.Entry}
-
 # a merge and one of its paths
 type Clash is Data:
   Clash{merge: Ledgers.Id, path: String}
@@ -37,15 +33,15 @@ type Place is Data:
   Place{writer: String, branch: Ledgers.Line, path: String}
 
 # the entry of the version m, if any, among the versions vs
-def Versions.find.at(+vs: List<&2, Types.Entry>, m: Maybe<&2, Nat>) -> Maybe<&2, Found>:
+def Versions.find.at(+vs: List<&2, Types.Entry>, m: Maybe<&2, Nat>) -> Maybe<&2, Known.Found>:
   match m:
     case None{}:
       None{}
     case Some{+k}:
-      Maybe.map(&2, Types.Entry, Found, e => Found{k, e}, List.get(&2, Types.Entry, vs, k))
+      Maybe.map(&2, Types.Entry, Known.Found, e => Known.Found{k, e}, List.get(&2, Types.Entry, vs, k))
 
 # the entry of the id i among the versions vs, and its version
-def Versions.find(+vs: List<&2, Types.Entry>, i: Ledgers.Id) -> Maybe<&2, Found>:
+def Versions.find(+vs: List<&2, Types.Entry>, i: Ledgers.Id) -> Maybe<&2, Known.Found>:
   Versions.find.at(vs, Lists.List.index(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, i))
 
 # Status
@@ -481,11 +477,11 @@ def Reply.id(m: Maybe<&2, Types.Entry>) -> Maybe<&2, Spec.Reply>:
       Some{Spec.Reply.Id{Lines.Entry.id(e)}}
 
 # the reply of the request of the found entry m, if any
-def Reply.ask(m: Maybe<&2, Found>) -> Maybe<&2, Spec.Reply>:
+def Reply.ask(m: Maybe<&2, Known.Found>) -> Maybe<&2, Spec.Reply>:
   match m:
     case None{}:
       None{}
-    case Some{Found{k, e}}:
+    case Some{Known.Found{k, e}}:
       Some{Spec.Reply.Ask{Entry.request(e)}}
 
 # the reply of the count of the versions m, if known
@@ -547,22 +543,37 @@ def Reply.parents(c: Ledgers.Line, k: Nat, m: Maybe<&2, Types.Entry>) -> Maybe<&
 # what the found entry m of the line c, if any, answers by f
 def Found.then(
   -A: Data,
-  m: Maybe<&2, Found>,
+  m: Maybe<&2, Known.Found>,
   f: Nat -> Types.Entry -> Maybe<&2, A>
 ) -> Maybe<&2, A>:
   match m:
     case None{}:
       None{}
-    case Some{Found{k, e}}:
+    case Some{Known.Found{k, e}}:
       f(k)(e)
 
 # Line.find, once the versions m of the line are known
-def Line.find.of(i: Ledgers.Id, m: Maybe<&2, List<&2, Types.Entry>>) -> Maybe<&2, Found>:
+def Line.find.of(i: Ledgers.Id, m: Maybe<&2, List<&2, Types.Entry>>) -> Maybe<&2, Known.Found>:
   match m:
     case None{}:
       None{}
     case Some{vs}:
       Versions.find(vs, i)
+
+# the entry of the id i in the line c, and its version: read from the
+# versions x of c by id, if known
+def Line.find.by(
+  x: Maybe<&2, Known.Ids>,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  i: Ledgers.Id
+) -> Maybe<&2, Known.Found>:
+  match x:
+    case None{}:
+      Line.find.of(i, Known.Known.versions(kn, s, c))
+    case Some{ids}:
+      Known.Ids.find(ids, i)
 
 # the entry of the id i in the line c, and its version
 def Line.find(
@@ -570,8 +581,8 @@ def Line.find(
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   i: Ledgers.Id
-) -> Maybe<&2, Found>:
-  Line.find.of(i, Known.Known.versions(kn, s, c))
+) -> Maybe<&2, Known.Found>:
+  Line.find.by(Known.Known.ids(kn, c), kn, s, c, i)
 
 # the reply of the status of the found entry m of the line c, with the
 # versions v of the line
@@ -580,10 +591,10 @@ def Reply.status(
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   v: Maybe<&2, List<&2, Types.Entry>>,
-  m: Maybe<&2, Found>
+  m: Maybe<&2, Known.Found>
 ) -> Maybe<&2, Spec.Reply>:
   match v m:
-    case Some{vs} Some{Found{k, e}}:
+    case Some{vs} Some{Known.Found{k, e}}:
       Some{Spec.Reply.Status{Status.of(kn, s, c, vs, k, e)}}
     case _ _:
       None{}
@@ -620,6 +631,20 @@ def Mark.of(m: String, v: Maybe<&2, List<&2, Types.Entry>>) -> Maybe<&2, Nat>:
     case Some{+vs}:
       Mark.at(vs, Lists.List.index(~Types.Entry, ~String, ~Entry.marks, vs, m))
 
+# the reply of the count of the versions of the line c: the count that the
+# versions x of c by id hold, if known
+def Reply.count.by(
+  x: Maybe<&2, Known.Ids>,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line
+) -> Maybe<&2, Spec.Reply>:
+  match x:
+    case None{}:
+      Reply.count(Known.Known.versions(kn, s, c))
+    case Some{ids}:
+      Some{Spec.Reply.Number{Known.Ids.count(ids)}}
+
 # the reply of the facts s to the question q
 def Answer.of(+kn: Known.Known(), +s: Facts.Plain(), q: Spec.Question) -> Maybe<&2, Spec.Reply>:
   match q:
@@ -643,8 +668,8 @@ def Answer.of(+kn: Known.Known(), +s: Facts.Plain(), q: Spec.Question) -> Maybe<
       Reply.yes(Store.read(Bool, kn, s, h, m, R => Groups.Groups.is_group(R, h, g, m)))
     case Spec.Question.Mark{c, m}:
       Reply.number(Mark.of(m, Known.Known.versions(kn, s, c)))
-    case Spec.Question.Count{c}:
-      Reply.count(Known.Known.versions(kn, s, c))
+    case Spec.Question.Count{+c}:
+      Reply.count.by(Known.Known.ids(kn, c), kn, s, c)
     case Spec.Question.Clashes{+c, i}:
       Reply.names(
         Found.then(List<&2, String>, Line.find(kn, s, c, i), k => e => Clashes.of(kn, s, c, k, e))
@@ -695,14 +720,6 @@ def Request.words(r: Spec.Request) -> Maybe<&2, List<&2, U32>>:
     case _:
       None{}
 
-# the ask b is the ask a: the asks are read only when they are of one id
-def Ask.is(+a: Types.Ask, +b: Types.Ask) -> Bool:
-  List.all.if(u => Coded.Ask.is_eq(b, a), Ledgers.Id.is_eq(Lines.Ask.id(b), Lines.Ask.id(a)))
-
-# the entry e was made by the ask a
-def Entry.made_by(a: Types.Ask, e: Types.Entry) -> Bool:
-  Ask.is(a, Lines.Entry.ask(e))
-
 # the words at the path p of the newest of the versions m of the branch b
 def View.newest(
   +kn: Known.Known(),
@@ -723,11 +740,11 @@ def View.decided(a: Types.Ask, m: Maybe<&2, List<&2, Types.Entry>>) -> Bool:
     case None{}:
       False{}
     case Some{vs}:
-      Shared.List.some(~Types.Entry, ~Types.Ask, ~Entry.made_by, vs, a)
+      Shared.List.some(~Types.Entry, ~Types.Ask, ~Known.Entry.made_by, vs, a)
 
 # the view of a writer whose last write there is the ask m, if any: its words
 # while no version was made by it; else what the newest version holds
-def View.of(
+def View.slow(
   +kn: Known.Known(),
   +s: Facts.Plain(),
   +b: Ledgers.Line,
@@ -744,6 +761,63 @@ def View.of(
         u => View.newest(kn, s, b, p, Known.Known.versions(kn, s, b)),
         u => Some{Request.words(Lines.Ask.request(a))}
       )
+
+# the words at the path p of the newest of the versions x of the branch b
+def View.last(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +b: Ledgers.Line,
+  +p: String,
+  x: Known.Ids
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+  Contents.Content.read(kn, s, b, Nat.sub(Known.Ids.count(x), 1n), p)
+
+# View.slow, read from the versions x of the branch b by id
+def View.quick(
+  +x: Known.Ids,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +b: Ledgers.Line,
+  +p: String,
+  m: Maybe<&2, Types.Ask>
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+  match m:
+    case None{}:
+      View.last(kn, s, b, p, x)
+    case Some{+a}:
+      Shared.Bool.when(
+        Maybe<&2, Maybe<&2, List<&2, U32>>>,
+        Known.Ids.made(x, a),
+        u => View.last(kn, s, b, p, x),
+        u => Some{Request.words(Lines.Ask.request(a))}
+      )
+
+# the view of a writer whose last write there is the ask m, if any: read
+# from the versions x of the branch b by id, if known
+def View.of.by(
+  x: Maybe<&2, Known.Ids>,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +b: Ledgers.Line,
+  +p: String,
+  m: Maybe<&2, Types.Ask>
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+  match x:
+    case None{}:
+      View.slow(kn, s, b, p, m)
+    case Some{ids}:
+      View.quick(ids, kn, s, b, p, m)
+
+# the view of a writer whose last write there is the ask m, if any: its words
+# while no version was made by it; else what the newest version holds
+def View.of(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +b: Ledgers.Line,
+  +p: String,
+  m: Maybe<&2, Types.Ask>
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+  View.of.by(Known.Known.ids(kn, b), kn, s, b, p, m)
 
 # the words that the writer w reads at the path p of the newest version of
 # the branch b, its own writes included

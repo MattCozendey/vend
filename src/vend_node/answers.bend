@@ -106,7 +106,7 @@ def Store.read(
 # ----------
 
 # the entry of the id i in the line c, and its version
-def Line.find(+s: Facts.Facts(), +c: Ledgers.Line, i: Ledgers.Id) -> Maybe<&2, RAnswers.Found>:
+def Line.find(+s: Facts.Facts(), +c: Ledgers.Line, i: Ledgers.Id) -> Maybe<&2, RKnown.Found>:
   RAnswers.Line.find(RKnown.Known.none(), Facts.Facts.crit(s), c, i)
 
 # the reply of the status of the found entry m of the line c, with the
@@ -115,7 +115,7 @@ def Reply.status(
   +s: Facts.Facts(),
   +c: Ledgers.Line,
   v: Maybe<&2, List<&2, Types.Entry>>,
-  m: Maybe<&2, RAnswers.Found>
+  m: Maybe<&2, RKnown.Found>
 ) -> Maybe<&2, Spec.Reply>:
   RAnswers.Reply.status(RKnown.Known.none(), Facts.Facts.crit(s), c, v, m)
 

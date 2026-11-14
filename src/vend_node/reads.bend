@@ -9,6 +9,7 @@ import ./facts.bend as Facts
 import ./lines.bend as Lines
 import ./mirror.bend as Mirror
 import ./run/answers.bend as RAnswers
+import ./run/known.bend as RKnown
 import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
 import ./run/files.bend as Files
@@ -590,7 +591,7 @@ def Line.find_at(
     c,
     RLines.Entry.id(e)
   )
-    == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+    == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>
 }:
   +hv => +hg =>
     %Equal.sym(
@@ -603,14 +604,14 @@ def Line.find_at(
         RLines.Entry.id(e),
         _
       )
-        == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+        == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>
     }
     %Equal.sym(
       Maybe<&2, Nat>,
       Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, RLines.Entry.id(e)),
       Some{k},
       Versions.Line.versions_index(s, c, vs, k, e)(hv)(hg)
-    ): {RAnswers.Versions.find.at(vs, _) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>}
+    ): {RAnswers.Versions.find.at(vs, _) == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>}
     %Equal.sym(
       Maybe<&2, Types.Entry>,
       List.get(&2, Types.Entry, vs, k),
@@ -620,11 +621,11 @@ def Line.find_at(
       Maybe.map(
         &2,
         Types.Entry,
-        RAnswers.Found,
-        e2 => RAnswers.Found{k, e2},
+        RKnown.Found,
+        e2 => RKnown.Found{k, e2},
         _
       )
-        == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+        == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>
     }
     {==}
 
@@ -643,7 +644,7 @@ def Made.At(
   }
     & (
       {
-        Answers.Line.find(s, c, i) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+        Answers.Line.find(s, c, i) == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>
       }
         & {RAnswers.Entry.request(e) == r: Spec.Request}
     )
@@ -657,7 +658,7 @@ def Made.at.fin(
   +r: Spec.Request,
   +e: Types.Entry,
   ha: {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>},
-  +hf: {Answers.Line.find(s, c, i) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>},
+  +hf: {Answers.Line.find(s, c, i) == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>},
   hr: {
     Answers.Answer.of(
       s,
@@ -677,10 +678,10 @@ def Made.at.fin(
         Some{Spec.Reply.Ask{RAnswers.Entry.request(e)}},
         Some{Spec.Reply.Ask{r}},
         Eq.to(
-          Maybe<&2, RAnswers.Found>,
+          Maybe<&2, RKnown.Found>,
           y => {RAnswers.Reply.ask(y) == Some{Spec.Reply.Ask{r}}: Maybe<&2, Spec.Reply>},
           Answers.Line.find(s, c, i),
-          Some{RAnswers.Found{k, e}},
+          Some{RKnown.Found{k, e}},
           hf,
           hr
         )
@@ -730,7 +731,7 @@ def Made.at.of(
         Eq.to(
           Ledgers.Id,
           y => {
-            Answers.Line.find(s, c, y) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+            Answers.Line.find(s, c, y) == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>
           },
           RLines.Entry.id(e),
           i,
@@ -798,7 +799,7 @@ def Made.by(
   f: @e: Types.Entry -> {
     Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>
   } -> {
-    Answers.Line.find(s, c, i) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+    Answers.Line.find(s, c, i) == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>
   } -> {RAnswers.Entry.request(e) == r: Spec.Request} -> Q
 ) -> Q:
   Ex.by(
@@ -809,13 +810,13 @@ def Made.by(
     e => w => And.by(
       {Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>},
       {
-        Answers.Line.find(s, c, i) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+        Answers.Line.find(s, c, i) == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>
       }
         & {RAnswers.Entry.request(e) == r: Spec.Request},
       Q,
       w,
       ha => w2 => And.by(
-        {Answers.Line.find(s, c, i) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>},
+        {Answers.Line.find(s, c, i) == Some{RKnown.Found{k, e}}: Maybe<&2, RKnown.Found>},
         {RAnswers.Entry.request(e) == r: Spec.Request},
         Q,
         w2,
@@ -2175,7 +2176,7 @@ def Base.fits(
   +e: Types.Entry,
   -a: Spec.Point
 ) -> {
-  Answers.Line.find(s, c, i) == Some{RAnswers.Found{1n+k, e}}: Maybe<&2, RAnswers.Found>
+  Answers.Line.find(s, c, i) == Some{RKnown.Found{1n+k, e}}: Maybe<&2, RKnown.Found>
 } -> {
   Answers.Answer.of(s, Spec.Question.Base{c, i}) == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>
 } -> {
@@ -2188,7 +2189,7 @@ def Base.fits(
     a
   )(
     Eq.to(
-      Maybe<&2, RAnswers.Found>,
+      Maybe<&2, RKnown.Found>,
       m => {
         RAnswers.Reply.point(
           RAnswers.Found.then(Spec.Point, m, k2 => e2 => Answers.Base.of(s, c, k2, e2))
@@ -2196,7 +2197,7 @@ def Base.fits(
           == Some{Spec.Reply.Point{a}}: Maybe<&2, Spec.Reply>
       },
       Answers.Line.find(s, c, i),
-      Some{RAnswers.Found{1n+k, e}},
+      Some{RKnown.Found{1n+k, e}},
       hf,
       hb
     )
@@ -2211,7 +2212,7 @@ def Clashes.reply(
   +e: Types.Entry,
   -cs: List<&2, String>
 ) -> {
-  Answers.Line.find(s, c, i) == Some{RAnswers.Found{1n+k, e}}: Maybe<&2, RAnswers.Found>
+  Answers.Line.find(s, c, i) == Some{RKnown.Found{1n+k, e}}: Maybe<&2, RKnown.Found>
 } -> {
   Answers.Answer.of(
     s,
@@ -2224,7 +2225,7 @@ def Clashes.reply(
     cs
   )(
     Eq.to(
-      Maybe<&2, RAnswers.Found>,
+      Maybe<&2, RKnown.Found>,
       m => {
         RAnswers.Reply.names(
           RAnswers.Found.then(List<&2, String>, m, k2 => e2 => Answers.Clashes.of(s, c, k2, e2))
@@ -2232,7 +2233,7 @@ def Clashes.reply(
           == Some{Spec.Reply.Names{cs}}: Maybe<&2, Spec.Reply>
       },
       Answers.Line.find(s, c, i),
-      Some{RAnswers.Found{1n+k, e}},
+      Some{RKnown.Found{1n+k, e}},
       hf,
       hc
     )
@@ -3147,7 +3148,7 @@ def Merge.fin(
   +ours: Files.Files(),
   +theirs: Files.Files(),
   +ha: {Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>},
-  +hf: {Answers.Line.find(s, c, i) == Some{RAnswers.Found{1n+k, e}}: Maybe<&2, RAnswers.Found>},
+  +hf: {Answers.Line.find(s, c, i) == Some{RKnown.Found{1n+k, e}}: Maybe<&2, RKnown.Found>},
   +hr: {RAnswers.Entry.request(e) == Spec.Request.Merge{f, x2}: Spec.Request},
   +hfit: {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
   +h_o: {Contents.Content.of(s, c, k) == Some{ours}: Maybe<&2, Files.Files()>},
@@ -3323,7 +3324,7 @@ def Merge.mid(
   -o: Maybe<&2, List<&2, U32>>,
   -t: Maybe<&2, List<&2, U32>>,
   +ha: {Lines.Line.at(s, c, 1n+k) == Some{e}: Maybe<&2, Types.Entry>},
-  +hf: {Answers.Line.find(s, c, i) == Some{RAnswers.Found{1n+k, e}}: Maybe<&2, RAnswers.Found>},
+  +hf: {Answers.Line.find(s, c, i) == Some{RKnown.Found{1n+k, e}}: Maybe<&2, RKnown.Found>},
   +hr: {RAnswers.Entry.request(e) == Spec.Request.Merge{f, x2}: Spec.Request},
   +hfit: {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
   +htk: {RContents.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>},

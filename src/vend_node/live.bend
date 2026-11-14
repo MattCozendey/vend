@@ -652,7 +652,7 @@ def View.fresh.at(
     == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
 } -> {
   List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>
-} -> {RAnswers.Entry.made_by(a, e) == True{}: Bool} -> Empty:
+} -> {RKnown.Entry.made_by(a, e) == True{}: Bool} -> Empty:
   match k:
     case 0n:
       hlt => hv => hg => he => Ask.fresh.zero(
@@ -724,16 +724,16 @@ def View.fresh(
       hlt => hv => {==}
     case Some{+vs}:
       hlt => hv => Facts.Case.false_of(
-        Shared.List.some(~Types.Entry, ~Types.Ask, ~RAnswers.Entry.made_by, vs, a)
+        Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a)
       )(
         ht => List.some_at.by(
           Types.Entry,
           Types.Ask,
-          RAnswers.Entry.made_by,
+          RKnown.Entry.made_by,
           vs,
           a,
           Empty,
-          List.some_at(~Types.Entry, ~Types.Ask, ~RAnswers.Entry.made_by, vs, a)(ht),
+          List.some_at(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a)(ht),
           +k => +e => hg => he => View.fresh.at(name, s, a, c, vs, k, e)(hlt)(hv)(hg)(he)
         )
       )
@@ -1689,7 +1689,7 @@ def Status.written(
   +hv => +hg => (
     %Equal.sym(Maybe<&2, List<&2, Types.Entry>>, Lines.Line.versions(s, c), Some{vs2}, hv): {Answers.Reply.status(s, c, _, RAnswers.Line.find.of(i, _)) == Some{Spec.Reply.Status{Spec.Status.Written{}}}: Maybe<&2, Spec.Reply>}
     %Equal.sym(Maybe<&2, Nat>, Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs2, i), Some{n}, Versions.Line.versions_index(s, c, vs2, n, Types.Entry{Types.Pick{Types.Ask{i, q, Spec.Request.Write{b2, p, ws}}, pins}, slot})(hv)(hg)): {Answers.Reply.status(s, c, Some{vs2}, RAnswers.Versions.find.at(vs2, _)) == Some{Spec.Reply.Status{Spec.Status.Written{}}}: Maybe<&2, Spec.Reply>}
-    %Equal.sym(Maybe<&2, Types.Entry>, List.get(&2, Types.Entry, vs2, n), Some{Types.Entry{Types.Pick{Types.Ask{i, q, Spec.Request.Write{b2, p, ws}}, pins}, slot}}, hg): {Answers.Reply.status(s, c, Some{vs2}, Maybe.map(&2, Types.Entry, RAnswers.Found, e => RAnswers.Found{n, e}, _)) == Some{Spec.Reply.Status{Spec.Status.Written{}}}: Maybe<&2, Spec.Reply>}
+    %Equal.sym(Maybe<&2, Types.Entry>, List.get(&2, Types.Entry, vs2, n), Some{Types.Entry{Types.Pick{Types.Ask{i, q, Spec.Request.Write{b2, p, ws}}, pins}, slot}}, hg): {Answers.Reply.status(s, c, Some{vs2}, Maybe.map(&2, Types.Entry, RKnown.Found, e => RKnown.Found{n, e}, _)) == Some{Spec.Reply.Status{Spec.Status.Written{}}}: Maybe<&2, Spec.Reply>}
     {==})
 
 # the number of the reply m, or d
@@ -1853,7 +1853,7 @@ def Status.none.at(
               Spec.Reply,
               Spec.Reply.Status{Answers.Status.of(s, c, vs, k2, x)},
               (
-                %hgx: {Answers.Reply.status(s, c, Some{vs}, Maybe.map(&2, Types.Entry, RAnswers.Found, e => RAnswers.Found{k2, e}, _)) == None{}: Maybe<&2, Spec.Reply>}
+                %hgx: {Answers.Reply.status(s, c, Some{vs}, Maybe.map(&2, Types.Entry, RKnown.Found, e => RKnown.Found{k2, e}, _)) == None{}: Maybe<&2, Spec.Reply>}
                 h)
             )
           )
