@@ -169,11 +169,34 @@ def Infos.of(l: Crits.Crit<Info>, +c: Ledgers.Line) -> Info:
 def Infos.with(+l: Crits.Crit<Info>, +i: Info) -> Crits.Crit<Info>:
   Crits.Crit.set(~Info, l, Info.key(i), i)
 
-# what the table kn holds of the line c
-def Known.info(kn: Known(), +c: Ledgers.Line) -> Info:
+# what the table kn has read of each line
+def Known.lines(kn: Known()) -> Crits.Crit<Info>:
   match kn:
     case Table{l, sh, h, q}:
-      Infos.of(l, c)
+      l
+
+# what the table kn holds for a work, if any
+def Known.shelf(kn: Known()) -> Maybe<&2, Kept>:
+  match kn:
+    case Table{l, sh, h, q}:
+      sh
+
+# the contents that the table kn holds
+def Known.stock(kn: Known()) -> Crits.Crit<Held>:
+  match kn:
+    case Table{l, sh, h, q}:
+      h
+
+# the number that is at most the count of the facts, that the table kn holds
+# with its contents
+def Known.low(kn: Known()) -> Nat:
+  match kn:
+    case Table{l, sh, h, q}:
+      q
+
+# what the table kn holds of the line c
+def Known.info(kn: Known(), +c: Ledgers.Line) -> Info:
+  Infos.of(Known.lines(kn), c)
 
 # the state that the table kn holds for the line c, if any
 def Known.find(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.State>:
@@ -227,9 +250,7 @@ def Stock.get(m: Crits.Crit<Held>, +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Held>
 # the content of version k of the line c that the table kn holds, with the
 # fuel that reads it
 def Known.held(kn: Known(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Held>:
-  match kn:
-    case Table{l, sh, h, q}:
-      Stock.get(h, c, k)
+  Stock.get(Known.stock(kn), c, k)
 
 # the files of the content m, if a read with the fuel f gives it
 def Known.files.of(m: Maybe<&2, Held>, f: Nat) -> Maybe<&2, Files.Files()>:
@@ -264,67 +285,57 @@ def Stock.put(+m: Crits.Crit<Held>, e: Held) -> Crits.Crit<Held>:
       Crits.Crit.set(~Held, m, Held.key(c, k), Held{c, k, d, x})
 
 # the table kn with the content e
-def Known.hold(kn: Known(), e: Held) -> Known():
-  match kn:
-    case Table{l, sh, h, q}:
-      Table{l, sh, Stock.put(h, e), q}
+def Known.hold(+kn: Known(), e: Held) -> Known():
+  Table{Known.lines(kn), Known.shelf(kn), Stock.put(Known.stock(kn), e), Known.low(kn)}
 
 # the contents that the table kn holds, and nothing else
-def Known.contents(kn: Known()) -> Known():
-  match kn:
-    case Table{l, sh, h, q}:
-      Table{Crits.Crit.new(Info), None{}, h, q}
-
-# the number that is at most the count of the facts, that the table kn holds
-# with its contents
-def Known.low(kn: Known()) -> Nat:
-  match kn:
-    case Table{l, sh, h, q}:
-      q
+def Known.contents(+kn: Known()) -> Known():
+  Table{Crits.Crit.new(Info), None{}, Known.stock(kn), Known.low(kn)}
 
 # the table kn with one more as the number of its contents: for facts with
 # one more fact
-def Known.deeper(kn: Known()) -> Known():
-  match kn:
-    case Table{l, sh, h, q}:
-      Table{l, sh, h, 1n+q}
+def Known.deeper(+kn: Known()) -> Known():
+  Table{Known.lines(kn), Known.shelf(kn), Known.stock(kn), 1n+Known.low(kn)}
 
 # the table kn with the number g, the count of the facts, with its contents
-def Known.sync(kn: Known(), g: Nat) -> Known():
-  match kn:
-    case Table{l, sh, h, q}:
-      Table{l, sh, h, g}
+def Known.sync(+kn: Known(), g: Nat) -> Known():
+  Table{Known.lines(kn), Known.shelf(kn), Known.stock(kn), g}
 
-# the table a with the contents of the table b in the place of its own
-def Known.join(a: Known(), b: Known()) -> Known():
-  match a b:
-    case Table{l, sh, h, q} Table{l2, sh2, h2, q2}:
-      Table{l, sh, h2, q2}
+# the lines of the table a, with what the table b holds for a work and the
+# contents of b
+def Known.join(a: Known(), +b: Known()) -> Known():
+  Table{Known.lines(a), Known.shelf(b), Known.stock(b), Known.low(b)}
 
 # the table kn that also says e: the state, the rule or the ids of a line
 # with what it holds of the line; the contents, or what it holds for a work,
 # in the place of its own
-def Known.add(e: Kept, kn: Known()) -> Known():
-  match e kn:
-    case Kept{+c, st} Table{+l, sh, h, q}:
-      Table{Infos.with(l, Info.state.set(Infos.of(l, c), st)), sh, h, q}
-    case Ruled{+c, n, u} Table{+l, sh, h, q}:
-      Table{Infos.with(l, Info.mark.set(Infos.of(l, c), n, u)), sh, h, q}
-    case Made{+c, x} Table{+l, sh, h, q}:
-      Table{Infos.with(l, Info.ids.set(Infos.of(l, c), x)), sh, h, q}
-    case Open{fs, n, tx, mx} Table{l, sh, h, q}:
-      Table{l, Some{Open{fs, n, tx, mx}}, h, q}
-    case Stock{m, g} Table{l, sh, h, q}:
-      Table{l, sh, m, g}
-
-# Open facts
-# ----------
-
-# what the table kn holds for a work, if any
-def Known.shelf(kn: Known()) -> Maybe<&2, Kept>:
-  match kn:
-    case Table{l, sh, h, q}:
-      sh
+def Known.add(e: Kept, +kn: Known()) -> Known():
+  match e:
+    case Kept{+c, st}:
+      Table{
+        Infos.with(Known.lines(kn), Info.state.set(Known.info(kn, c), st)),
+        Known.shelf(kn),
+        Known.stock(kn),
+        Known.low(kn)
+      }
+    case Ruled{+c, n, u}:
+      Table{
+        Infos.with(Known.lines(kn), Info.mark.set(Known.info(kn, c), n, u)),
+        Known.shelf(kn),
+        Known.stock(kn),
+        Known.low(kn)
+      }
+    case Made{+c, x}:
+      Table{
+        Infos.with(Known.lines(kn), Info.ids.set(Known.info(kn, c), x)),
+        Known.shelf(kn),
+        Known.stock(kn),
+        Known.low(kn)
+      }
+    case Open{fs, n, tx, mx}:
+      Table{Known.lines(kn), Some{Open{fs, n, tx, mx}}, Known.stock(kn), Known.low(kn)}
+    case Stock{m, g}:
+      Table{Known.lines(kn), Known.shelf(kn), m, g}
 
 # the facts that a work may still act on, of the entry m, if it holds them
 def Shelf.facts(m: Maybe<&2, Kept>) -> Maybe<&2, List<&2, Types.Fact>>:
@@ -372,20 +383,36 @@ def Shelf.top(m: Maybe<&2, Kept>) -> Nat:
     case _:
       0n
 
+# the entry m with the facts fs, the number n, the newest writes tx and the
+# lines mx of merges in the place of what it holds for a work, if it does
+def Shelf.reopen(
+  m: Maybe<&2, Kept>,
+  fs: List<&2, Types.Fact>,
+  n: Nat,
+  tx: Crits.Crit<Types.Ask>,
+  mx: Crits.Crit<Ledgers.Line>
+) -> Maybe<&2, Kept>:
+  match m:
+    case Some{Open{old, m2, old2, old3}}:
+      Some{Open{fs, n, tx, mx}}
+    case other:
+      other
+
 # the table kn with the facts fs, the number n, the newest writes tx and the
 # lines mx of merges in the place of what it holds for a work, if it holds it
 def Known.reopen(
-  kn: Known(),
+  +kn: Known(),
   fs: List<&2, Types.Fact>,
   n: Nat,
   tx: Crits.Crit<Types.Ask>,
   mx: Crits.Crit<Ledgers.Line>
 ) -> Known():
-  match kn:
-    case Table{l, Some{Open{old, m, old2, old3}}, h, q}:
-      Table{l, Some{Open{fs, n, tx, mx}}, h, q}
-    case Table{l, sh, h, q}:
-      Table{l, sh, h, q}
+  Table{
+    Known.lines(kn),
+    Shelf.reopen(Known.shelf(kn), fs, n, tx, mx),
+    Known.stock(kn),
+    Known.low(kn)
+  }
 
 # the number h, mixed with the characters of t
 def Id.mix(t: String, h: U32) -> U32:
@@ -1027,10 +1054,8 @@ def Open.join(
       Open.with(fs, f, g)
 
 # the table kn without what it holds for a work
-def Known.shut(kn: Known()) -> Known():
-  match kn:
-    case Table{l, sh, h, q}:
-      Table{l, None{}, h, q}
+def Known.shut(+kn: Known()) -> Known():
+  Table{Known.lines(kn), None{}, Known.stock(kn), Known.low(kn)}
 
 # the table kn, whose entry for a work m holds the facts that a work could
 # act on before the fact f joined the facts, and the lines of the merges of
@@ -1275,9 +1300,7 @@ def Infos.voted(+l: Crits.Crit<Info>, c: Ledgers.Line) -> Crits.Crit<Info>:
 # the rules that the vote may change, without the contents, and without the
 # facts that a work may act on
 def Known.voted(kn: Known(), c: Ledgers.Line) -> Known():
-  match kn:
-    case Table{+l, sh, h, q}:
-      Table{Infos.voted(l, c), None{}, Crits.Crit.new(Held), 0n}
+  Table{Infos.voted(Known.lines(kn), c), None{}, Crits.Crit.new(Held), 0n}
 
 # the entries a and b are the same
 def Entry.same(a: Types.Entry, b: Types.Entry) -> Bool:

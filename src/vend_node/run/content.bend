@@ -705,10 +705,11 @@ def Infos.ok(+l: Crits.Crit<Knowns.Info>, s: Facts.Plain()) -> Bool:
 
 # the table kn is right for the facts s: each state and each content that it
 # holds is what s gives
-def Known.ok(kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
-  match kn:
-    case Knowns.Table{l, sh, h, q}:
-      Bool.and(Infos.ok(l, s), Kept.ok(s, Knowns.Stock{h, q}))
+def Known.ok(+kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
+  Bool.and(
+    Infos.ok(Knowns.Known.lines(kn), s),
+    Kept.ok(s, Knowns.Stock{Knowns.Known.stock(kn), Knowns.Known.low(kn)})
+  )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the lines of merges that the entry m holds, if it holds them, are those of

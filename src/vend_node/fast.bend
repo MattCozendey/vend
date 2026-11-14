@@ -593,7 +593,7 @@ def Table.asked_fit(
         == True{}: Bool
     },
     RFacts.Request.is_start(r),
-    et => {==},
+    et => Knowns.Fit.none(s),
     ef => h
   )
 
@@ -1049,7 +1049,9 @@ def Table.voted_fit(
 }:
   match st:
     case Types.Step.Broken{}:
-      h => hc => {==}
+      h => hc => Knowns.Fit.none(
+        RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.Broken{}, x})
+      )
     case Types.Step.At{+c, +k, +t}:
       +h => hc => Knowns.Known.moved_fit(
         Table.mid(
@@ -1378,7 +1380,7 @@ def Table.kept_fit(
     et => (
       %Plain.same_sound(old, new)(et): {RContents.Known.fit(kn, _) == True{}: Bool}
       ok),
-    ef => {==}
+    ef => Knowns.Fit.none(new)
   )
 
 # the table of a fast node whose state can be a node stays right after any
@@ -1401,7 +1403,7 @@ def Fast.does_ok(
         %Equal.sym(Types.Ask, RFasts.Asked.ask(kn, fs, i, q), RFacts.Facts.asked(fs, i, q), Asked.ask_fit(kn, fs, i, q)(ok)): {RFasts.Fast.ok(RFasts.Fast.asks.to(name, ws, ms, st, fs, ps, RFasts.Table.asked(kn, q), _, q, Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))))) == True{}: Bool}
         Fast.asks_fit(Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))), name, ws, ms, st, fs, ps, i, q, q, RFasts.Table.asked(kn, q), okr)(Table.asked_fit(kn, fs, q)(ok))(et => (
           %Equal.sym(Bool, RFacts.Request.is_start(q), True{}, et): {RContents.Known.fit(Shared.Bool.when(RKnown.Known(), _, u => RKnown.Known.none(), u => kn), RFacts.Facts.take(name, fs, Types.Fact.Ask{RFacts.Facts.asked(fs, i, q)})) == True{}: Bool}
-          {==})))
+          Knowns.Fit.none(RFacts.Facts.take(name, fs, Types.Fact.Ask{RFacts.Facts.asked(fs, i, q)})))))
     case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn} Nodes.Act.Sync{+from}:
       okr => ok => Table.kept_fit(
         kn,

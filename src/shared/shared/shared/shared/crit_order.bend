@@ -3979,3 +3979,163 @@ def Crit.every_new(
 ) -> {Crit.every(~V, ~G, ~p, Crits.Crit.new(V), g) == True{}: Bool}:
   {==}
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# Entries under the keys of their values
+# --------------------------------------
+# A map that binds each value under the key of that value (Binds.keyed)
+# gives, for a key, only a value of that key; a write of a value under its
+# own key keeps this.
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# entries under the keys of their values, with a value under its key, are
+# under the keys of their values
+def Binds.keyed_insert(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  es: List<&2, Crits.Bind<V>>,
+  +k: List<&2, U32>,
+  +v: V
+) -> {
+  Binds.keyed(~V, ~key, es) == True{}: Bool
+} -> {
+  Crits.Key.is_eq(k, key(v)) == True{}: Bool
+} -> {Binds.keyed(~V, ~key, Binds.insert(V, es, k, v)) == True{}: Bool}:
+  match es:
+    case Nil{}:
+      h => hk => Crits.Crit.and_true(Crits.Key.is_eq(k, key(v)), True{})(hk)({==})
+    case Con{Crits.Bind{+k1, +v1}, +r}:
+      +h => +hk => Binds.insert_cases(
+        V,
+        x => {Binds.keyed(~V, ~key, x) == True{}: Bool},
+        k1,
+        v1,
+        r,
+        k,
+        v,
+        ht => Crits.Crit.and_true(
+          Crits.Key.is_eq(k, key(v)),
+          Binds.keyed(~V, ~key, Crits.Bind{k1, v1} <> r)
+        )(hk)(h),
+        hn => he => Crits.Crit.and_true(
+          Crits.Key.is_eq(k1, key(v)),
+          Binds.keyed(~V, ~key, r)
+        )((
+            %Equal.sym(List<&2, U32>, k1, k, Crits.Key.is_eq_sound(k1, k)(he)): {Crits.Key.is_eq(_, key(v)) == True{}: Bool}
+            hk))(
+          Shared.Bool.and_true_right(Crits.Key.is_eq(k1, key(v1)), Binds.keyed(~V, ~key, r))(h)
+        ),
+        hn => he => Crits.Crit.and_true(
+          Crits.Key.is_eq(k1, key(v1)),
+          Binds.keyed(~V, ~key, Binds.insert(V, r, k, v))
+        )(
+          Shared.Bool.and_true_left(Crits.Key.is_eq(k1, key(v1)), Binds.keyed(~V, ~key, r))(h)
+        )(
+          Binds.keyed_insert(
+            ~V,
+            ~key,
+            r,
+            k,
+            v
+          )(Shared.Bool.and_true_right(Crits.Key.is_eq(k1, key(v1)), Binds.keyed(~V, ~key, r))(h))(hk)
+        )
+      )
+
+# the value that entries under the keys of their values give for a key is
+# of that key
+def Binds.keyed_get(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  es: List<&2, Crits.Bind<V>>,
+  +k: List<&2, U32>,
+  +v: V
+) -> {
+  Binds.keyed(~V, ~key, es) == True{}: Bool
+} -> {Binds.get(V, es, k) == Some{v}: Maybe<&2, V>} -> {Crits.Key.is_eq(k, key(v)) == True{}: Bool}:
+  match es:
+    case Nil{}:
+      h => e => Empty.absurd(
+        {Crits.Key.is_eq(k, key(v)) == True{}: Bool},
+        Shared.Maybe.none_ne_some(V, v, e)
+      )
+    case Con{Crits.Bind{+k2, +v2}, +r}:
+      +h => Bool.by(
+        c => {
+          Bool.pick(Maybe<&2, V>, c, Some{v2}, Binds.get(V, r, k)) == Some{v}: Maybe<&2, V>
+        } -> {Crits.Key.is_eq(k, key(v)) == True{}: Bool},
+        Crits.Key.is_eq(k2, k),
+        et => e => (
+          %Shared.Maybe.some_inj(V, v2, v, e): {Crits.Key.is_eq(k, key(_)) == True{}: Bool}
+          %Crits.Key.is_eq_sound(k2, k)(et): {Crits.Key.is_eq(_, key(v2)) == True{}: Bool}
+          Shared.Bool.and_true_left(Crits.Key.is_eq(k2, key(v2)), Binds.keyed(~V, ~key, r))(h)),
+        ef => e => Binds.keyed_get(
+          ~V,
+          ~key,
+          r,
+          k,
+          v
+        )(Shared.Bool.and_true_right(Crits.Key.is_eq(k2, key(v2)), Binds.keyed(~V, ~key, r))(h))(e)
+      )
+
+# a map under the keys of its values, with a value under its key, is under
+# the keys of its values
+def Crit.keyed_set(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  +m: Crits.Crit<V>,
+  +k: List<&2, U32>,
+  +v: V
+) -> {
+  Crits.Crit.wf(~V, m, 0n) == True{}: Bool
+} -> {
+  Binds.keyed(~V, ~key, Crits.Crit.entries(V, m)) == True{}: Bool
+} -> {
+  Crits.Key.is_eq(k, key(v)) == True{}: Bool
+} -> {Binds.keyed(~V, ~key, Crits.Crit.entries(V, Crits.Crit.set(~V, m, k, v))) == True{}: Bool}:
+  hw => h => hk => (
+    %Equal.sym(List<&2, Crits.Bind<V>>, Crits.Crit.entries(V, Crits.Crit.set(~V, m, k, v)), Binds.insert(V, Crits.Crit.entries(V, m), k, v), Crit.entries_set(~V, m, k, v)(hw)): {Binds.keyed(~V, ~key, _) == True{}: Bool}
+    Binds.keyed_insert(~V, ~key, Crits.Crit.entries(V, m), k, v)(h)(hk))
+
+# the value that a map under the keys of its values gives for a key is of
+# that key
+def Crit.keyed_get(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  +m: Crits.Crit<V>,
+  +k: List<&2, U32>,
+  +v: V
+) -> {
+  Crits.Crit.wf(~V, m, 0n) == True{}: Bool
+} -> {
+  Binds.keyed(~V, ~key, Crits.Crit.entries(V, m)) == True{}: Bool
+} -> {Crits.Crit.get(V, m, k) == Some{v}: Maybe<&2, V>} -> {Crits.Key.is_eq(k, key(v)) == True{}: Bool}:
+  hw => h => e => Binds.keyed_get(
+    ~V,
+    ~key,
+    Crits.Crit.entries(V, m),
+    k,
+    v
+  )(h)(
+    Equal.trans(
+      Maybe<&2, V>,
+      Binds.get(V, Crits.Crit.entries(V, m), k),
+      Crits.Crit.get(V, m, k),
+      Some{v},
+      Equal.trans(
+        Maybe<&2, V>,
+        Binds.get(V, Crits.Crit.entries(V, m), k),
+        Crits.Crit.lookup(V, m, k),
+        Crits.Crit.get(V, m, k),
+        Crit.get_entries(V, m, k),
+        Equal.sym(
+          Maybe<&2, V>,
+          Crits.Crit.get(V, m, k),
+          Crits.Crit.lookup(V, m, k),
+          Crits.Crit.get_lookup(~V, m, k)(hw)
+        )
+      ),
+      e
+    )
+  )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
