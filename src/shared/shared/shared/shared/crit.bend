@@ -47,9 +47,66 @@ def Key.bits(k: List<&2, U32>) -> List<&2, Bool>:
     case Con{U32{w}, r}:
       List.append(&2, Bool, Word.bits(32n, w), Key.bits(r))
 
+# a and b are the same key, when the words before them were the same (ok):
+# a walk that makes no closure
+def Key.is_eq.go(a: List<&2, U32>, b: List<&2, U32>, ok: Bool) -> Bool:
+  match a b ok:
+    case _ _ False{}:
+      False{}
+    case Nil{} Nil{} True{}:
+      True{}
+    case Con{x, ra} Con{y, rb} True{}:
+      Key.is_eq.go(ra, rb, U32.is_eq(x, y))
+    case _ _ True{}:
+      False{}
+
 # a and b are the same key
 def Key.is_eq(a: List<&2, U32>, b: List<&2, U32>) -> Bool:
-  Shared.List.is_eq(~U32, ~U32.is_eq, a, b)
+  Key.is_eq.go(a, b, True{})
+
+# Key.is_eq.go is the test of the lists, when the words before were the same
+def Key.is_eq_go(a: List<&2, U32>, b: List<&2, U32>, ok: Bool) -> {
+  Key.is_eq.go(a, b, ok) == List.all.if(u => Shared.List.is_eq(~U32, ~U32.is_eq, a, b), ok): Bool
+}:
+  match a:
+    case Nil{}:
+      match b:
+        case Nil{}:
+          match ok:
+            case False{}:
+              {==}
+            case True{}:
+              {==}
+        case Con{head, tail}:
+          match head:
+            case U32{data}:
+              match ok:
+                case False{}:
+                  {==}
+                case True{}:
+                  {==}
+    case Con{head, tail}:
+      match b:
+        case Nil{}:
+          match ok:
+            case False{}:
+              {==}
+            case True{}:
+              {==}
+        case Con{head1, tail1}:
+          match head1:
+            case U32{data}:
+              match ok:
+                case False{}:
+                  {==}
+                case True{}:
+                  Key.is_eq_go(tail, tail1, Cmp.is_eq(U32.cmp(head, U32{data})))
+
+# Key.is_eq is the test of the lists, word by word
+def Key.is_eq_list(a: List<&2, U32>, b: List<&2, U32>) -> {
+  Key.is_eq(a, b) == Shared.List.is_eq(~U32, ~U32.is_eq, a, b): Bool
+}:
+  Key.is_eq_go(a, b, True{})
 
 # the first position where the bits a and b differ, or one ends before the
 # other (none: they are equal)
@@ -2226,12 +2283,19 @@ def Key.side_bits(k, pos):
 # a read is the clear read, and two maps that read the same are equal.
 
 # Key.is_eq is True only for equal keys
-def Key.is_eq_sound(a: List<&2, U32>, b: List<&2, U32>) -> {Key.is_eq(a, b) == True{}: Bool} -> {a == b: List<&2, U32>}:
-  Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), a, b)
+def Key.is_eq_sound(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.is_eq(a, b) == True{}: Bool} -> {a == b: List<&2, U32>}:
+  h => Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), a, b)((
+      %Key.is_eq_list(a, b): {_ == True{}: Bool}
+      h))
 
 # Key.is_eq is True for a key and itself
-def Key.is_eq_refl(a: List<&2, U32>) -> {Key.is_eq(a, a) == True{}: Bool}:
+def Key.is_eq_refl(+a: List<&2, U32>) -> {Key.is_eq(a, a) == True{}: Bool}:
+  %Equal.sym(Bool, Key.is_eq(a, a), Shared.List.is_eq(~U32, ~U32.is_eq, a, a), Key.is_eq_list(a, a)): {_ == True{}: Bool}
   Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), a)
+
+# the laws of Key.is_eq
+def Key.laws() -> Shared.Eq.Laws(List<&2, U32>, Key.is_eq):
+  (x => Key.is_eq_refl(x), x => y => Key.is_eq_sound(x, y))
 
 # a choice that does not hold is nothing
 def Crit.when_none(-V: Data, b: Bool, -k: Unit -> Maybe<&2, V>) -> ({b == True{}: Bool} -> Empty) -> {

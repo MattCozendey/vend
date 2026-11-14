@@ -246,7 +246,12 @@ def Fact.agree(
   x: Types.Fact,
   y: Types.Fact
 ) -> {Coded.Fact.is_eq(x, y) == Crits.Key.is_eq(Coded.Fact.words(x), Coded.Fact.words(y)): Bool}:
-  {==}
+  Equal.sym(
+    Bool,
+    Crits.Key.is_eq(Coded.Fact.words(x), Coded.Fact.words(y)),
+    Coded.Fact.is_eq(x, y),
+    Crits.Key.is_eq_list(Coded.Fact.words(x), Coded.Fact.words(y))
+  )
 
 # what a set with a fact holds: the fact, and what it held
 def Facts.has_add(

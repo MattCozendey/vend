@@ -357,7 +357,9 @@ def Files.key_ne.at(
               ~(x => r => Codes.Code.text_read(x, r)),
               q,
               p
-            )(e)
+            )((
+              %Crits.Key.is_eq_list(Run.Files.key(q), Run.Files.key(p)): {_ == True{}: Bool}
+              e))
           )
         )(h)
       )

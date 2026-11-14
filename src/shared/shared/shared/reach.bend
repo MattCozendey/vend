@@ -2472,7 +2472,7 @@ def Reach.has_set.at(
           Bool,
           Crits.Key.is_eq(y, y),
           True{},
-          Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), y)
+          Crits.Key.is_eq_refl(y)
         ): {
           Maybe.is_some(
             &2,
@@ -2502,7 +2502,7 @@ def Reach.has_set.at(
           Shared.Eq.ne_flip(
             ~List<&2, U32>,
             ~Crits.Key.is_eq,
-            ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+            ~Crits.Key.laws(),
             y,
             a,
             he
@@ -2875,7 +2875,7 @@ def Reach.unique_within.at(
         Bool,
         Crits.Key.is_eq(x, x),
         True{},
-        Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), x)
+        Crits.Key.is_eq_refl(x)
       ): {
         Bool.and(
           List.any.if(u => List.contains(~List<&2, U32>, ~Crits.Key.is_eq, r, x), _),
@@ -3180,7 +3180,7 @@ def Reach.fill_go(
           Reach.or_within(
             ~List<&2, U32>,
             ~Crits.Key.is_eq,
-            ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+            ~Crits.Key.laws(),
             ks,
             ws,
             zs,
@@ -3212,7 +3212,7 @@ def Reach.fill_go(
             Reach.within_self(
               ~List<&2, U32>,
               ~Crits.Key.is_eq,
-              ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+              ~Crits.Key.laws(),
               ks
             )
           )
@@ -3225,7 +3225,7 @@ def Reach.fill_go(
             Reach.within_self(
               ~List<&2, U32>,
               ~Crits.Key.is_eq,
-              ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+              ~Crits.Key.laws(),
               ws
             )
           )
@@ -3233,7 +3233,7 @@ def Reach.fill_go(
         +yz = Reach.within_trans(
           ~List<&2, U32>,
           ~Crits.Key.is_eq,
-          ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+          ~Crits.Key.laws(),
           unique1,
           ws,
           zs
@@ -3241,7 +3241,7 @@ def Reach.fill_go(
         +b = Reach.within_trans(
           ~List<&2, U32>,
           ~Crits.Key.is_eq,
-          ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+          ~Crits.Key.laws(),
           zs,
           List.append(&2, List<&2, U32>, ks, ws),
           append1
@@ -3251,7 +3251,7 @@ def Reach.fill_go(
           ~V,
           ~Crits.Key.is_eq,
           ~succ,
-          ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+          ~Crits.Key.laws(),
           ks,
           unique1,
           g
@@ -3259,7 +3259,7 @@ def Reach.fill_go(
           Reach.within_trans(
             ~List<&2, U32>,
             ~Crits.Key.is_eq,
-            ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+            ~Crits.Key.laws(),
             Reach.next(~List<&2, U32>, ~V, ~succ, ks, g),
             List.append(&2, List<&2, U32>, ks, ws),
             append1
@@ -3337,7 +3337,7 @@ def Reach.fill_go(
               ~V,
               ~Crits.Key.is_eq,
               ~succ,
-              ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+              ~Crits.Key.laws(),
               unique1,
               zs,
               g
@@ -3346,7 +3346,7 @@ def Reach.fill_go(
             Reach.within_trans(
               ~List<&2, U32>,
               ~Crits.Key.is_eq,
-              ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+              ~Crits.Key.laws(),
               next2,
               Reach.next(~List<&2, U32>, ~V, ~succ, append1, g),
               List.append(&2, List<&2, U32>, append1, next1)
@@ -3356,7 +3356,7 @@ def Reach.fill_go(
                 ~V,
                 ~Crits.Key.is_eq,
                 ~succ,
-                ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+                ~Crits.Key.laws(),
                 zs,
                 append1,
                 g
@@ -3364,7 +3364,7 @@ def Reach.fill_go(
             )(j3)
           )(j3),
           (
-            %Equal.sym(Bool, List.contains(~List<&2, U32>, ~Crits.Key.is_eq, append1, m), Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m)), Reach.or_within(~List<&2, U32>, ~Crits.Key.is_eq, ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()), ks, unique1, zs, m)(yz)(b)): {Bool.or(_, go1) == Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m), go1)): Bool}
+            %Equal.sym(Bool, List.contains(~List<&2, U32>, ~Crits.Key.is_eq, append1, m), Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m)), Reach.or_within(~List<&2, U32>, ~Crits.Key.is_eq, ~Crits.Key.laws(), ks, unique1, zs, m)(yz)(b)): {Bool.or(_, go1) == Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m), go1)): Bool}
             Equal.sym(Bool, Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m), go1)), Bool.or(Bool.or(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m)), go1), Shared.Bool.or_assoc(List.contains(~List<&2, U32>, ~Crits.Key.is_eq, ks, m), List.contains(~List<&2, U32>, ~Crits.Key.is_eq, zs, m), go1)))
         )
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
@@ -3401,14 +3401,14 @@ def Reach.all_in(gt, succ, nodes, g, x, m):
     Reach.within_self(
       ~List<&2, U32>,
       ~Crits.Key.is_eq,
-      ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+      ~Crits.Key.laws(),
       level1
     )
   )(
     Reach.within_self(
       ~List<&2, U32>,
       ~Crits.Key.is_eq,
-      ~Shared.List.laws(~U32, ~U32.is_eq, ~Shared.U32.laws()),
+      ~Crits.Key.laws(),
       level1
     )
   )({==})

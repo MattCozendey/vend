@@ -449,8 +449,8 @@ def Any.rest_of(
 
 # hashes with the same key are the same
 def Parts.key_inj(
-  a: Hashes.Hash,
-  b: Hashes.Hash
+  +a: Hashes.Hash,
+  +b: Hashes.Hash
 ) -> {Crits.Key.is_eq(Run.Parts.key(a), Run.Parts.key(b)) == True{}: Bool} -> {a == b: Hashes.Hash}:
   e => Codes.Code.is_eq_sound(
     ~Hashes.Hash,
@@ -459,7 +459,9 @@ def Parts.key_inj(
     ~(h => r => Hashes.Hash.code_read(h, r)),
     a,
     b
-  )(e)
+  )((
+    %Crits.Key.is_eq_list(Run.Parts.key(a), Run.Parts.key(b)): {_ == True{}: Bool}
+    e))
 
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in a proof a second use sits in a rewrite motive or an erased argument, and the checker accepts it
 # a hash that equals another is not unequal to it
