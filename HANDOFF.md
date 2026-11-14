@@ -75,9 +75,11 @@ Measured, native build, one node, one owner:
 - The table is a record with a crit map by line, and every crit read and write passes whole
   words with one compare. 50 branches and two writers, 400 to 6400 writes: an ask 0.06 ms, a
   Work that casts 0.25 to 0.28 ms, a view, a status and a read under 0.035 ms.
-- Still growing: a cast appends to the oldest-first list of versions (0.23 ms at 160 writes, 0.7
-  to 0.8 at 5120); `Pins.merge` scans the versions of both lines; a merge of another shape walks
-  every path.
+- The versions of a line are kept newest-first with their count (`seen.bend`): a Work that
+  casts is flat, 0.17 ms at 160 writes and 0.19 ms at 5120 (was 0.23 and 0.8).
+- Still growing: `Pins.merge` scans the versions of both lines, and a merge hint reverses the
+  line it takes from (a merge with its Work 0.36 ms at 40 writes, 0.87 at 320); a merge of
+  another shape walks every path.
 - Sync folds each fact of the other node into the table: a held fact is one lookup, a new one
   joins as an ask or a ballot does. Two nodes, both owners, 50 writes: a write pair (2 asks, 8
   Syncs, Works) 33 ms (was 2.7 s); a Sync that adds nothing 3.3 ms (was 261). It is linear in
