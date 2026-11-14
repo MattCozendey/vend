@@ -34,7 +34,7 @@ type Fast is Data:
 # a fast node of the name name, that holds nothing yet: a work may act on no
 # fact
 def Fast.new(name: String) -> Fast:
-  Fast{Nodes.Raw.new(name), [Known.Open{[], 0n, Crits.Crit.new(Types.Ask)}]}
+  Fast{Nodes.Raw.new(name), [Known.Open{[], 0n, Crits.Crit.new(Types.Ask), Crits.Crit.new(Ledgers.Line)}]}
 
 # the state of the fast node f
 def Fast.raw(f: Fast) -> Nodes.Raw:
@@ -71,12 +71,12 @@ def Learn.merge(kn: Known.Known(), +s: Facts.Plain(), r: Spec.Request) -> Known.
 # the table kn with the states of the lines that a work reads for the
 # request r, where all is the facts of s
 def Learn.request(
-  kn: Known.Known(),
+  +kn: Known.Known(),
   +s: Facts.Plain(),
   all: List<&2, Types.Fact>,
   +r: Spec.Request
 ) -> Known.Known():
-  Learn.merge(Learn.line(kn, s, Works.Request.line(all, r)), s, r)
+  Learn.merge(Learn.line(kn, s, Works.Request.line(kn, all, r)), s, r)
 
 # the table kn with the states of the lines that a work reads for the facts
 # fs: the line of each ballot, and the lines of each request; all is the
@@ -126,8 +126,8 @@ def Learn.asked(+kn: Known.Known(), +s: Facts.Plain(), +r: Spec.Request) -> Know
 
 # the table kn after a ballot for the slot k of the line c, where s is the
 # facts with the ballot, w the facts that a work could act on, with the
-# ballot, if known, n the greatest number of an ask in s, if w is known, and
-# t the newest writes of s, if known
+# ballot, if known, n the greatest number of an ask in s, if w is known, t
+# the newest writes of s, and x the lines of the merges of s, if known
 def Table.moved(
   +kn: Known.Known(),
   +s: Facts.Plain(),
@@ -135,7 +135,8 @@ def Table.moved(
   +k: Nat,
   +w: Maybe<&2, List<&2, Types.Fact>>,
   n: Nat,
-  t: Maybe<&2, Crits.Crit<Types.Ask>>
+  t: Maybe<&2, Crits.Crit<Types.Ask>>,
+  x: Maybe<&2, Crits.Crit<Ledgers.Line>>
 ) -> Known.Known():
   Known.Known.moved(
     Known.Known.learn(Contents.Known.grow(kn, Known.Known.cast(kn, s, c, k, w), s, c), s, c),
@@ -145,7 +146,8 @@ def Table.moved(
       w
     ),
     n,
-    t
+    t,
+    x
   )
 
 # the table kn after the ballot f is cast at the step st, where s is the
@@ -172,7 +174,8 @@ def Table.voted(
         k,
         Known.Known.walk(kn, f),
         Nat.max(Facts.Seq.of(f), Known.Shelf.top(Known.Known.shelf(kn))),
-        Known.Shelf.tops(Known.Known.shelf(kn))
+        Known.Shelf.tops(Known.Known.shelf(kn)),
+        Known.Shelf.merges(Known.Known.shelf(kn))
       )
 
 # the table kn after the node takes in the request r: no state if r starts a

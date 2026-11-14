@@ -24,25 +24,13 @@ import ./rounds.bend as Rounds
 # Where a request goes
 # --------------------
 
-# the line that the merge of the id i merges into, as an ask among fs says
-def Merge.line(fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> Maybe<&2, Ledgers.Line>:
-  match fs:
-    case Nil{}:
-      None{}
-    case Con{Types.Fact.Vote{v, st, pk}, rest}:
-      Merge.line(rest, i)
-    case Con{Types.Fact.Ask{Types.Ask{j, k, Spec.Request.Merge{f, x}}}, rest}:
-      Shared.Bool.when(
-        Maybe<&2, Ledgers.Line>,
-        Ledgers.Id.is_eq(j, i),
-        u => Some{x},
-        u => Merge.line(rest, i)
-      )
-    case Con{Types.Fact.Ask{a}, rest}:
-      Merge.line(rest, i)
-
-# the line whose versions the request r is for
-def Request.line(fs: List<&2, Types.Fact>, r: Spec.Request) -> Maybe<&2, Ledgers.Line>:
+# the line whose versions the request r is for: the line of a merge is read
+# from the lines of merges that the table kn holds, else from the facts fs
+def Request.line(
+  kn: Known.Known(),
+  fs: List<&2, Types.Fact>,
+  r: Spec.Request
+) -> Maybe<&2, Ledgers.Line>:
   match r:
     case Spec.Request.Start{os}:
       None{}
@@ -51,7 +39,7 @@ def Request.line(fs: List<&2, Types.Fact>, r: Spec.Request) -> Maybe<&2, Ledgers
     case Spec.Request.Merge{f, x}:
       Some{x}
     case Spec.Request.Resolve{m, p, w}:
-      Merge.line(fs, m)
+      Known.Shelf.line(Known.Known.shelf(kn), u => fs, m)
     case Spec.Request.Mark{b, m, v}:
       Some{b}
     case Spec.Request.Move{b, t, v}:
@@ -326,7 +314,7 @@ def Work.offer(
   +name: String,
   +a: Types.Ask
 ) -> Maybe<&2, Plan>:
-  Work.offer.on(kn, s, name, a, Request.line(all, Lines.Ask.request(a)))
+  Work.offer.on(kn, s, name, a, Request.line(kn, all, Lines.Ask.request(a)))
 
 # the asks among fs that the node name may vote for, where all is the facts
 # of s
@@ -503,7 +491,7 @@ def Work.pass.of(
     case Types.Fact.Vote{v, Types.Step.Broken{}, x}:
       None{}
     case Types.Fact.Ask{Types.Ask{i, n, +r}}:
-      Work.pass.on(kn, s, name, i, Request.line(all, r))
+      Work.pass.on(kn, s, name, i, Request.line(kn, all, r))
 
 # the first pass that the node name may cast at the slot of a fact among fs,
 # where all is the facts of s

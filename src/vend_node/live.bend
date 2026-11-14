@@ -1193,6 +1193,7 @@ def Work.offer_alone(
   +b: List<&2, Types.Ref>
 ) -> {
   RWorks.Request.line(
+    RKnown.Known.none(),
     Facts.Facts.list(s),
     RLines.Ask.request(a)
   )
@@ -1234,7 +1235,7 @@ def Work.offer_alone(
     }: Maybe<&2, RWorks.Plan>
 }:
   hl => ho => hn => hch => (
-    %Equal.sym(Maybe<&2, Ledgers.Line>, RWorks.Request.line(Facts.Facts.list(s), RLines.Ask.request(a)), Some{c}, hl): {Works.Work.offer.on(s, name, a, _) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>}
+    %Equal.sym(Maybe<&2, Ledgers.Line>, RWorks.Request.line(RKnown.Known.none(), Facts.Facts.list(s), RLines.Ask.request(a)), Some{c}, hl): {Works.Work.offer.on(s, name, a, _) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>}
     %Equal.sym(Maybe<&2, RWorks.Open>, Works.Work.open(s, name, c), Some{RWorks.Open{vs, k, ns}}, ho): {Works.Work.offer.at(s, name, c, a, _) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>}
     %Equal.sym(Bool, Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, RLines.Ask.id(a)), False{}, hn): {Shared.Maybe.when(RWorks.Plan, Bool.not(_), u => RWorks.Plan.of(c, k, RWorks.Work.offer.of(u2 => Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, RRounds.Slot.chance(Rounds.Slot.ballots(s, c, k), ns, k, name)))) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>}
     %Equal.sym(Maybe<&2, RRounds.Chance>, RRounds.Slot.chance(Rounds.Slot.ballots(s, c, k), ns, k, name), Some{RRounds.Chance{t, r, b, RRounds.Force.Free{}}}, hch): {RWorks.Plan.of(c, k, RWorks.Work.offer.of(u2 => Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, _)) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>}
@@ -1477,6 +1478,7 @@ def Work.alone_does.fin(
   },
   hl: {
     RWorks.Request.line(
+      RKnown.Known.none(),
       Facts.Facts.list(s),
       RLines.Ask.request(a)
     )
@@ -1586,6 +1588,7 @@ def Work.alone_does(
   Lines.Rule.after(s, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
 } -> {
   RWorks.Request.line(
+    RKnown.Known.none(),
     Facts.Facts.list(s),
     RLines.Ask.request(a)
   )

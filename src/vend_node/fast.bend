@@ -88,10 +88,10 @@ def Learn.request_ok(
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {RContents.Known.ok(RFasts.Learn.request(kn, s, all, r), s) == True{}: Bool}:
   ok => Learn.merge_ok(
-    RFasts.Learn.line(kn, s, RWorks.Request.line(all, r)),
+    RFasts.Learn.line(kn, s, RWorks.Request.line(kn, all, r)),
     s,
     r
-  )(Learn.line_ok(kn, s, RWorks.Request.line(all, r))(ok))
+  )(Learn.line_ok(kn, s, RWorks.Request.line(kn, all, r))(ok))
 
 # a right table that learns the states of the lines of the facts fs is right
 def Learn.facts_ok(
@@ -190,10 +190,10 @@ def Learn.request_open(
   Equal.trans(
     Maybe<&2, RKnown.Kept>,
     RKnown.Known.shelf(kn),
-    RKnown.Known.shelf(RFasts.Learn.line(kn, s, RWorks.Request.line(all, r))),
+    RKnown.Known.shelf(RFasts.Learn.line(kn, s, RWorks.Request.line(kn, all, r))),
     RKnown.Known.shelf(RFasts.Learn.request(kn, s, all, r)),
-    Learn.line_open(kn, s, RWorks.Request.line(all, r)),
-    Learn.merge_open(RFasts.Learn.line(kn, s, RWorks.Request.line(all, r)), s, r)
+    Learn.line_open(kn, s, RWorks.Request.line(kn, all, r)),
+    Learn.merge_open(RFasts.Learn.line(kn, s, RWorks.Request.line(kn, all, r)), s, r)
   )
 
 # a table that fits, after it learns the states of the lines of a request,
@@ -1073,7 +1073,8 @@ def Table.voted_fit(
           RFacts.Seq.of(Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
           RKnown.Shelf.top(RKnown.Known.shelf(kn))
         ),
-        RKnown.Shelf.tops(RKnown.Known.shelf(kn))
+        RKnown.Shelf.tops(RKnown.Known.shelf(kn)),
+        RKnown.Shelf.merges(RKnown.Known.shelf(kn))
       )(
         Table.mid_ok(
           kn,
@@ -1094,7 +1095,9 @@ def Table.voted_fit(
         )
       )(
         Knowns.Voted.moved_ok(kn, name, s, c, k, t, x)(h)
-      )(Knowns.Voted.top(kn, name, s, c, k, t, x)(h))(Knowns.Voted.tops(kn, name, s, c, k, t, x)(h))
+      )(Knowns.Voted.top(kn, name, s, c, k, t, x)(h))(Knowns.Voted.tops(kn, name, s, c, k, t, x)(h))(
+        Knowns.Voted.merges(kn, name, s, c, k, t, x)(h)
+      )
 
 # the table kn after a work of the node name on the facts s casts the ballot
 # m, if any (as Works.Work.cast does: not when s holds a ballot of the node

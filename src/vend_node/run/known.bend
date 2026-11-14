@@ -54,7 +54,8 @@ type Held is Data:
 
 # what a node keeps: a line and its state, or a line and the era and the
 # rule of its next version, or a line and the ids of its versions, or the facts that a
-# work may still act on, or the contents of versions, each under the key of
+# work may still act on (with the greatest number of an ask, the newest
+# writes, and the line of each merge), or the contents of versions, each under the key of
 # its line and version (Held.key), with a number that is at most the count
 # of the facts of the node (low): a content read with a fuel of at most low
 # is what a read with the fuel of the facts gives
@@ -62,7 +63,12 @@ type Kept is Data:
   Kept{line: Ledgers.Line, state: Lines.State}
   Ruled{line: Ledgers.Line, era: Nat, rule: Lines.Rule}
   Made{line: Ledgers.Line, ids: Ids}
-  Open{facts: List<&2, Types.Fact>, peak: Nat, tops: Crits.Crit<Types.Ask>}
+  Open{
+    facts: List<&2, Types.Fact>,
+    peak: Nat,
+    tops: Crits.Crit<Types.Ask>,
+    merges: Crits.Crit<Ledgers.Line>
+  }
   Stock{held: Crits.Crit<Held>, low: Nat}
 
 # what a node keeps: the newest entry of a line first; the states before the
@@ -92,7 +98,7 @@ def Known.find(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.State>:
       Known.find(rest, c)
     case Con{Made{c2, x}, rest}:
       Known.find(rest, c)
-    case Con{Open{fs, n, tx}, rest}:
+    case Con{Open{fs, n, tx, mx}, rest}:
       Known.find(rest, c)
 
 # the rule of the next version of the line c that the table kn holds, if any
@@ -113,7 +119,7 @@ def Known.ruled(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.Rule>:
       )
     case Con{Made{c2, x}, rest}:
       Known.ruled(rest, c)
-    case Con{Open{fs, n, tx}, rest}:
+    case Con{Open{fs, n, tx, mx}, rest}:
       Known.ruled(rest, c)
 
 # the key of the content of version k of the line c: the version first, so
@@ -139,7 +145,7 @@ def Known.era(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Nat>:
       )
     case Con{Made{c2, x}, rest}:
       Known.era(rest, c)
-    case Con{Open{fs, n, tx}, rest}:
+    case Con{Open{fs, n, tx, mx}, rest}:
       Known.era(rest, c)
 
 # the content m, when it is of version k of the line c
@@ -178,7 +184,7 @@ def Known.held(kn: Known(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Held>:
       Known.held(rest, c, k)
     case Con{Made{c2, y}, rest}:
       Known.held(rest, c, k)
-    case Con{Open{fs, n, tx}, rest}:
+    case Con{Open{fs, n, tx, mx}, rest}:
       Known.held(rest, c, k)
     case Con{Stock{m, q}, rest}:
       Held.or(Stock.get(m, c, k), u => Known.held(rest, c, k))
@@ -227,8 +233,8 @@ def Known.hold(kn: Known(), e: Held) -> Known():
       Ruled{c, m, u} <> Known.hold(rest, e)
     case Con{Made{c, x}, rest}:
       Made{c, x} <> Known.hold(rest, e)
-    case Con{Open{fs, n, tx}, rest}:
-      Open{fs, n, tx} <> Known.hold(rest, e)
+    case Con{Open{fs, n, tx, mx}, rest}:
+      Open{fs, n, tx, mx} <> Known.hold(rest, e)
     case Con{Stock{+m, q}, rest}:
       Stock{Stock.put(m, e), q} <> rest
 
@@ -243,7 +249,7 @@ def Known.contents(kn: Known()) -> Known():
       Known.contents(rest)
     case Con{Made{c, x}, rest}:
       Known.contents(rest)
-    case Con{Open{fs, n, tx}, rest}:
+    case Con{Open{fs, n, tx, mx}, rest}:
       Known.contents(rest)
     case Con{Stock{m, q}, rest}:
       Stock{m, q} <> Known.contents(rest)
@@ -260,7 +266,7 @@ def Known.low(kn: Known()) -> Nat:
       Known.low(rest)
     case Con{Made{c, x}, rest}:
       Known.low(rest)
-    case Con{Open{fs, n, tx}, rest}:
+    case Con{Open{fs, n, tx, mx}, rest}:
       Known.low(rest)
     case Con{Stock{m, q}, rest}:
       q
@@ -277,8 +283,8 @@ def Known.deeper(kn: Known()) -> Known():
       Ruled{c, m, u} <> Known.deeper(rest)
     case Con{Made{c, x}, rest}:
       Made{c, x} <> Known.deeper(rest)
-    case Con{Open{fs, n, tx}, rest}:
-      Open{fs, n, tx} <> Known.deeper(rest)
+    case Con{Open{fs, n, tx, mx}, rest}:
+      Open{fs, n, tx, mx} <> Known.deeper(rest)
     case Con{Stock{m, q}, rest}:
       Stock{m, 1n+q} <> Known.deeper(rest)
 
@@ -294,8 +300,8 @@ def Known.sync(kn: Known(), g: Nat) -> Known():
       Ruled{c, m, u} <> Known.sync(rest, g)
     case Con{Made{c, x}, rest}:
       Made{c, x} <> Known.sync(rest, g)
-    case Con{Open{fs, n, tx}, rest}:
-      Open{fs, n, tx} <> Known.sync(rest, g)
+    case Con{Open{fs, n, tx, mx}, rest}:
+      Open{fs, n, tx, mx} <> Known.sync(rest, g)
     case Con{Stock{m, q}, rest}:
       Stock{m, g} <> rest
 
@@ -316,13 +322,13 @@ def Known.shelf(kn: Known()) -> Maybe<&2, Kept>:
       Known.shelf(rest)
     case Con{Made{c, x}, rest}:
       Known.shelf(rest)
-    case Con{Open{fs, n, tx}, rest}:
-      Some{Open{fs, n, tx}}
+    case Con{Open{fs, n, tx, mx}, rest}:
+      Some{Open{fs, n, tx, mx}}
 
 # the facts that a work may still act on, of the entry m, if it holds them
 def Shelf.facts(m: Maybe<&2, Kept>) -> Maybe<&2, List<&2, Types.Fact>>:
   match m:
-    case Some{Open{fs, n, tx}}:
+    case Some{Open{fs, n, tx, mx}}:
       Some{fs}
     case _:
       None{}
@@ -348,7 +354,7 @@ def Known.facts(kn: Known(), s: Facts.Plain()) -> List<&2, Types.Fact>:
 # read from the facts
 def Shelf.peak(m: Maybe<&2, Kept>, s: Facts.Plain()) -> Nat:
   match m:
-    case Some{Open{fs, n, tx}}:
+    case Some{Open{fs, n, tx, mx}}:
       n
     case _:
       Facts.Seq.peak(Facts.Facts.list(s))
@@ -360,32 +366,33 @@ def Known.peak(kn: Known(), s: Facts.Plain()) -> Nat:
 # the greatest number of an ask that the entry m holds; else 0
 def Shelf.top(m: Maybe<&2, Kept>) -> Nat:
   match m:
-    case Some{Open{fs, n, tx}}:
+    case Some{Open{fs, n, tx, mx}}:
       n
     case _:
       0n
 
-# the table kn with the facts fs, the number n and the newest writes tx in
-# the place of what it holds for a work, if it holds it
+# the table kn with the facts fs, the number n, the newest writes tx and the
+# lines mx of merges in the place of what it holds for a work, if it holds it
 def Known.reopen(
   kn: Known(),
   fs: List<&2, Types.Fact>,
   n: Nat,
-  tx: Crits.Crit<Types.Ask>
+  tx: Crits.Crit<Types.Ask>,
+  mx: Crits.Crit<Ledgers.Line>
 ) -> Known():
   match kn:
     case Nil{}:
       []
     case Con{Kept{c, st}, rest}:
-      Kept{c, st} <> Known.reopen(rest, fs, n, tx)
+      Kept{c, st} <> Known.reopen(rest, fs, n, tx, mx)
     case Con{Stock{m, q}, rest}:
       Stock{m, q} <> rest
     case Con{Ruled{c, m, u}, rest}:
-      Ruled{c, m, u} <> Known.reopen(rest, fs, n, tx)
+      Ruled{c, m, u} <> Known.reopen(rest, fs, n, tx, mx)
     case Con{Made{c, x}, rest}:
-      Made{c, x} <> Known.reopen(rest, fs, n, tx)
-    case Con{Open{old, m, old2}, rest}:
-      Open{fs, n, tx} <> rest
+      Made{c, x} <> Known.reopen(rest, fs, n, tx, mx)
+    case Con{Open{old, m, old2, old3}, rest}:
+      Open{fs, n, tx, mx} <> rest
 
 # the number h, mixed with the characters of t
 def Id.mix(t: String, h: U32) -> U32:
@@ -508,10 +515,123 @@ def Tops.get(tx: Crits.Crit<Types.Ask>, +g: Place) -> Maybe<&2, Types.Ask>:
 # the newest writes that the entry m holds, if it holds them
 def Shelf.tops(m: Maybe<&2, Kept>) -> Maybe<&2, Crits.Crit<Types.Ask>>:
   match m:
-    case Some{Open{fs, n, tx}}:
+    case Some{Open{fs, n, tx, mx}}:
       Some{tx}
     case _:
       None{}
+
+# Lines of merges
+# ---------------
+# A request that resolves a merge is for the line that the merge merges into:
+# the line of the first ask of a merge of its id, in the order of the facts.
+# The node keeps, with the facts that a work may act on, that line for each
+# id, in a map: the line of a merge is then one read of the map, not a walk
+# of the facts.
+
+# the line that the merge of the id i merges into, as an ask among fs says
+def Merge.line(fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> Maybe<&2, Ledgers.Line>:
+  match fs:
+    case Nil{}:
+      None{}
+    case Con{Types.Fact.Vote{v, st, pk}, rest}:
+      Merge.line(rest, i)
+    case Con{Types.Fact.Ask{Types.Ask{j, k, Spec.Request.Merge{f, x}}}, rest}:
+      Shared.Bool.when(
+        Maybe<&2, Ledgers.Line>,
+        Ledgers.Id.is_eq(j, i),
+        u => Some{x},
+        u => Merge.line(rest, i)
+      )
+    case Con{Types.Fact.Ask{a}, rest}:
+      Merge.line(rest, i)
+
+# the key of the id i in a map: its code, so two ids have two keys
+def Id.code(i: Ledgers.Id) -> List<&2, U32>:
+  Ledgers.Id.code(i, [])
+
+# of two lines of one id, the one that the map held
+def Line.first(old: Ledgers.Line, new: Ledgers.Line) -> Ledgers.Line:
+  old
+
+# the lines mx of merges with the line of the request r of the id i, if r is
+# a merge, unless mx holds a line for i
+def Mergers.put(
+  mx: Crits.Crit<Ledgers.Line>,
+  i: Ledgers.Id,
+  r: Spec.Request
+) -> Crits.Crit<Ledgers.Line>:
+  match r:
+    case Spec.Request.Merge{f, x}:
+      Crits.Crit.upsert(~Ledgers.Line, ~Line.first, mx, Id.code(i), x)
+    case _:
+      mx
+
+# the lines mx of merges with the fact f
+def Mergers.step(mx: Crits.Crit<Ledgers.Line>, f: Types.Fact) -> Crits.Crit<Ledgers.Line>:
+  match f:
+    case Types.Fact.Vote{v, st, x}:
+      mx
+    case Types.Fact.Ask{Types.Ask{i, n, r}}:
+      Mergers.put(mx, i, r)
+
+# the lines mx of merges with each of the facts fs, in their order
+def Mergers.go(
+  fs: List<&2, Types.Fact>,
+  mx: Crits.Crit<Ledgers.Line>
+) -> Crits.Crit<Ledgers.Line>:
+  match fs:
+    case Nil{}:
+      mx
+    case Con{f, rest}:
+      Mergers.go(rest, Mergers.step(mx, f))
+
+# the line of each merge among the facts fs, by its id: of two merges of one
+# id, the first
+def Mergers.of(fs: List<&2, Types.Fact>) -> Crits.Crit<Ledgers.Line>:
+  Mergers.go(fs, Crits.Crit.new(Ledgers.Line))
+
+# the line of the merge of the id i among the lines mx
+def Mergers.get(mx: Crits.Crit<Ledgers.Line>, i: Ledgers.Id) -> Maybe<&2, Ledgers.Line>:
+  Crits.Crit.get(Ledgers.Line, mx, Id.code(i))
+
+# the request r of the id i gives the lines mx no line for an id that they
+# hold one for
+def Mergers.free(mx: Crits.Crit<Ledgers.Line>, i: Ledgers.Id, r: Spec.Request) -> Bool:
+  match r:
+    case Spec.Request.Merge{f, x}:
+      Maybe.is_none(&2, Ledgers.Line, Mergers.get(mx, i))
+    case _:
+      True{}
+
+# the fact f gives the lines mx no line for an id that they hold one for:
+# then mx with f is the lines of the facts with f
+def Mergers.fresh(mx: Crits.Crit<Ledgers.Line>, f: Types.Fact) -> Bool:
+  match f:
+    case Types.Fact.Vote{v, st, x}:
+      True{}
+    case Types.Fact.Ask{Types.Ask{i, n, r}}:
+      Mergers.free(mx, i, r)
+
+# the lines of merges that the entry m holds, if it holds them
+def Shelf.merges(m: Maybe<&2, Kept>) -> Maybe<&2, Crits.Crit<Ledgers.Line>>:
+  match m:
+    case Some{Open{fs, n, tx, mx}}:
+      Some{mx}
+    case _:
+      None{}
+
+# the line of the merge of the id i: as the entry m holds it, else as an ask
+# among the facts that all gives says
+def Shelf.line(
+  m: Maybe<&2, Kept>,
+  all: Unit -> List<&2, Types.Fact>,
+  i: Ledgers.Id
+) -> Maybe<&2, Ledgers.Line>:
+  match m:
+    case Some{Open{fs, n, tx, mx}}:
+      Mergers.get(mx, i)
+    case _:
+      Merge.line(all(Unit{}), i)
 
 # Known ids
 # ---------
@@ -667,7 +787,7 @@ def Known.ids(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Ids>:
         u2 => Some{x},
         u2 => Known.ids(rest, c)
       )
-    case Con{Open{fs, n, tx}, rest}:
+    case Con{Open{fs, n, tx, mx}, rest}:
       Known.ids(rest, c)
 
 # the request of the id i made one of the versions vs: read from their ids
@@ -813,8 +933,9 @@ def Known.rule.next(
 # A work casts a ballot for an ask only while its request made no version of
 # its line, and at the slot of a ballot only while that slot is the next one
 # of its line. So a fact that waits no more never gives a ballot again: the
-# versions and the next slot of a line only grow. A merge and a request that
-# resolves one always wait: a work reads the line of a merge from its ask.
+# versions and the next slot of a line only grow. A request that resolves a
+# merge is for the line of the merge, read from the lines of merges: it
+# waits while the node holds no ask of the merge.
 
 # the facts of a node, and the table through which they are read
 type Scene is Data:
@@ -842,6 +963,15 @@ def Id.waits(m: Maybe<&2, Lines.State>, kn: Known(), +c: Ledgers.Line, i: Ledger
 def Line.waits(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, i: Ledgers.Id) -> Bool:
   Id.waits(Known.state(kn, s, c), kn, c, i)
 
+# the request of the id i, that resolves a merge of the line m, if the node
+# holds an ask of the merge, waits: it made no version of the line
+def Resolve.waits(m: Maybe<&2, Ledgers.Line>, +kn: Known(), +s: Facts.Plain(), i: Ledgers.Id) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{+c}:
+      Line.waits(kn, s, c, i)
+
 # the request r of the id i waits: it made no version of the line that it is
 # for; a start never waits
 def Request.waits(+kn: Known(), +s: Facts.Plain(), i: Ledgers.Id, r: Spec.Request) -> Bool:
@@ -850,10 +980,10 @@ def Request.waits(+kn: Known(), +s: Facts.Plain(), i: Ledgers.Id, r: Spec.Reques
       False{}
     case Spec.Request.Write{+b, p, w}:
       Line.waits(kn, s, b, i)
-    case Spec.Request.Merge{f, x}:
-      True{}
+    case Spec.Request.Merge{f, +x}:
+      Line.waits(kn, s, x, i)
     case Spec.Request.Resolve{m, p, w}:
-      True{}
+      Resolve.waits(Shelf.line(Known.shelf(kn), u => Facts.Facts.list(s), m), kn, s, i)
     case Spec.Request.Mark{+b, m, v}:
       Line.waits(kn, s, b, i)
     case Spec.Request.Move{+b, t, v}:
@@ -887,21 +1017,91 @@ def Open.put(fs: List<&2, Types.Fact>, +f: Types.Fact) -> List<&2, Types.Fact>:
 def Open.with(+fs: List<&2, Types.Fact>, +f: Types.Fact, g: Scene) -> List<&2, Types.Fact>:
   Shared.Bool.when(List<&2, Types.Fact>, Fact.waits(g, f), u => Open.put(fs, f), u => fs)
 
+# the request r is a merge
+def Request.merges(r: Spec.Request) -> Bool:
+  match r:
+    case Spec.Request.Merge{f, x}:
+      True{}
+    case _:
+      False{}
+
+# the fact f is the ask of a merge
+def Fact.merges(f: Types.Fact) -> Bool:
+  match f:
+    case Types.Fact.Vote{v, st, x}:
+      False{}
+    case Types.Fact.Ask{Types.Ask{i, n, r}}:
+      Request.merges(r)
+
+# the facts fs that a work may act on, with the fact f if a work may act on
+# it in the scene g: when f is the ask of a merge, a request among fs that
+# resolves it may wait no more, so each of fs is tested again
+def Open.join(merges: Bool, +fs: List<&2, Types.Fact>, +f: Types.Fact, +g: Scene) -> List<&2, Types.Fact>:
+  match merges:
+    case True{}:
+      Open.of(Open.with(fs, f, g), g)
+    case False{}:
+      Open.with(fs, f, g)
+
+# the table kn without what it holds for a work
+def Known.shut(kn: Known()) -> Known():
+  match kn:
+    case Nil{}:
+      []
+    case Con{Kept{c, st}, rest}:
+      Kept{c, st} <> Known.shut(rest)
+    case Con{Stock{m, q}, rest}:
+      Stock{m, q} <> Known.shut(rest)
+    case Con{Ruled{c, m, u}, rest}:
+      Ruled{c, m, u} <> Known.shut(rest)
+    case Con{Made{c, x}, rest}:
+      Made{c, x} <> Known.shut(rest)
+    case Con{Open{fs, n, tx, mx}, rest}:
+      Known.shut(rest)
+
+# the table kn, whose entry for a work m holds the facts that a work could
+# act on before the fact f joined the facts, and the lines of the merges of
+# the facts s with f: with the facts that a work may act on in s
+def Known.sift.of(m: Maybe<&2, Kept>, +kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
+  match m:
+    case Some{Open{fs, n, tx, mx}}:
+      Known.reopen(kn, Open.join(Fact.merges(f), fs, f, Scene{kn, s}), n, tx, mx)
+    case _:
+      kn
+
+# the table kn, that holds for a work the facts that it could act on before
+# the fact f joined the facts, and the lines of the merges of the facts s
+# with f: with the facts that a work may act on in s
+def Known.sift(+kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
+  Known.sift.of(Known.shelf(kn), kn, s, f)
+
 # the table kn, when the fact f joins the facts and leaves each line as it
-# is: what the entry m holds for a work, with f; s is the facts with f
+# is: what the entry m holds for a work, with f; s is the facts with f. When
+# f is a merge of an id that the table holds a line for, the table lets go of
+# what it holds for a work: the next work reads it again
 def Known.joined.of(m: Maybe<&2, Kept>, +kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
   match m:
-    case Some{Open{+fs, +n, +tx}}:
-      Known.reopen(
-        kn,
-        Open.with(fs, f, Scene{kn, s}),
-        Nat.max(Facts.Seq.of(f), n),
-        Shared.Bool.when(
-          Crits.Crit<Types.Ask>,
-          Nat.is_lt(n, Facts.Seq.of(f)),
-          u => Tops.join(tx, f),
-          u => Tops.of(Facts.Facts.list(s))
-        )
+    case Some{Open{+fs, +n, +tx, +mx}}:
+      Shared.Bool.when(
+        Known(),
+        Mergers.fresh(mx, f),
+        u => Known.sift(
+          Known.reopen(
+            kn,
+            fs,
+            Nat.max(Facts.Seq.of(f), n),
+            Shared.Bool.when(
+              Crits.Crit<Types.Ask>,
+              Nat.is_lt(n, Facts.Seq.of(f)),
+              u2 => Tops.join(tx, f),
+              u2 => Tops.of(Facts.Facts.list(s))
+            ),
+            Mergers.step(mx, f)
+          ),
+          s,
+          f
+        ),
+        u => Known.shut(kn)
       )
     case _:
       kn
@@ -911,10 +1111,27 @@ def Known.joined.of(m: Maybe<&2, Kept>, +kn: Known(), +s: Facts.Plain(), +f: Typ
 def Known.joined(+kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
   Known.joined.of(Known.shelf(kn), kn, s, f)
 
+# the table kn with the facts of s that a work may act on, the greatest
+# number of an ask among all, the facts of s, and the lines mx of their
+# merges: a work may act on a fact as read through kn and mx
+def Known.opened.by(
+  +kn: Known(),
+  +s: Facts.Plain(),
+  +all: List<&2, Types.Fact>,
+  +mx: Crits.Crit<Ledgers.Line>
+) -> Known():
+  Open{
+    Open.of(all, Scene{Open{[], 0n, Crits.Crit.new(Types.Ask), mx} <> kn, s}),
+    Facts.Seq.peak(all),
+    Tops.of(all),
+    mx
+  }
+    <> kn
+
 # the table kn with the facts of s that a work may act on, and the greatest
 # number of an ask among all, the facts of s
 def Known.opened.of(+kn: Known(), +s: Facts.Plain(), +all: List<&2, Types.Fact>) -> Known():
-  Open{Open.of(all, Scene{kn, s}), Facts.Seq.peak(all), Tops.of(all)} <> kn
+  Known.opened.by(kn, s, all, Mergers.of(all))
 
 # the table kn with the facts of s that a work may act on
 def Known.opened(+kn: Known(), +s: Facts.Plain()) -> Known():
@@ -949,19 +1166,20 @@ def Known.walk.if(
 
 # the table kn with the facts that a work may act on in the facts s, among
 # the facts m that it could act on before with the fact that joined them, if
-# known; n is the greatest number of an ask in s, and t the newest writes of
-# s, if known
+# known; n is the greatest number of an ask in s, t the newest writes of s,
+# and x the lines of the merges of s, if known
 def Known.moved(
   +kn: Known(),
   +s: Facts.Plain(),
   m: Maybe<&2, List<&2, Types.Fact>>,
-  n: Nat,
-  t: Maybe<&2, Crits.Crit<Types.Ask>>
+  +n: Nat,
+  t: Maybe<&2, Crits.Crit<Types.Ask>>,
+  x: Maybe<&2, Crits.Crit<Ledgers.Line>>
 ) -> Known():
-  match m t:
-    case Some{fs} Some{tx}:
-      Open{Open.of(fs, Scene{kn, s}), n, tx} <> kn
-    case _ _:
+  match m t x:
+    case Some{fs} Some{+tx} Some{+mx}:
+      Open{Open.of(fs, Scene{Open{[], n, tx, mx} <> kn, s}), n, tx, mx} <> kn
+    case _ _ _:
       kn
 
 # What a node learns
@@ -1081,7 +1299,7 @@ def Known.voted.put(c: Ledgers.Line, e: Kept, rest: Known()) -> Known():
       List.filter.put(Kept, Ruled{c2, m, u}, rest, Bool.not(Known.hit(c, c2)))
     case Made{+c2, +y}:
       List.filter.put(Kept, Made{c2, y}, rest, Bool.not(Known.hit(c, c2)))
-    case Open{fs, n, tx}:
+    case Open{fs, n, tx, mx}:
       rest
 
 # the table kn after a vote for a slot of the line c: without the states and
@@ -1207,6 +1425,29 @@ def Tops.same(a: Crits.Crit<Types.Ask>, b: Crits.Crit<Types.Ask>) -> Bool:
           Bool.and(
             Shared.Maybe.is_eq(~Types.Ask, ~Coded.Ask.is_eq, e1, e2),
             Bool.and(Tops.same(z1, z2), Tops.same(o1, o2))
+          )
+        )
+      )
+    case _ _:
+      False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for maps that differ, which then costs no more than equal maps, where both sides run
+# the lines of merges a and b are the same: key by key, in the same shape
+def Mergers.same(a: Crits.Crit<Ledgers.Line>, b: Crits.Crit<Ledgers.Line>) -> Bool:
+  match a b:
+    case Crits.Crit.Tip{} Crits.Crit.Tip{}:
+      True{}
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Leaf{k2, v2}:
+      Bool.and(Crits.Key.is_eq(k1, k2), Ledgers.Line.is_eq(v1, v2))
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      Bool.and(
+        Crits.Key.is_eq(r1, r2),
+        Bool.and(
+          Nat.is_eq(p1, p2),
+          Bool.and(
+            Shared.Maybe.is_eq(~Ledgers.Line, ~Ledgers.Line.is_eq, e1, e2),
+            Bool.and(Mergers.same(z1, z2), Mergers.same(o1, o2))
           )
         )
       )

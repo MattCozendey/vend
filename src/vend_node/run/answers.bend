@@ -855,7 +855,7 @@ def View.of(
 # else read from the facts
 def View.top(m: Maybe<&2, Known.Kept>, s: Facts.Plain(), +g: Known.Place) -> Maybe<&2, Types.Ask>:
   match m:
-    case Some{Known.Open{fs, n, tx}}:
+    case Some{Known.Open{fs, n, tx, mx}}:
       Known.Tops.get(tx, g)
     case _:
       Lists.List.top(~Types.Ask, ~Facts.Ask.seq, Writes.of(Facts.Facts.list(s), g))
