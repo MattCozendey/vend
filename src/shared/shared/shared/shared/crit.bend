@@ -774,6 +774,8 @@ def Word.bits_length(n: Nat, w: Word(n)) -> {List.length(&2, Bool, Word.bits(n, 
           }
           {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the bits after the first n are the bits without their first n
 def Bits.past_drop(n: Nat, bs: List<&2, Bool>) -> {
   Bits.past(n, bs) == List.drop(&2, Bool, bs, n): List<&2, Bool>
@@ -922,7 +924,7 @@ def Word.bits_shr(n: Nat, w: Word(n)) -> {
 
 # a word shifted down by one and then by n is shifted down by n and then by
 # one
-def U32.shrn_shr(+a: U32, n: Nat) -> {U32.shrn(U32.shr(a), n) == U32.shr(U32.shrn(a, n)): U32}:
+def U32.shrn_shr(a: U32, n: Nat) -> {U32.shrn(U32.shr(a), n) == U32.shr(U32.shrn(a, n)): U32}:
   match n:
     case 0n:
       {==}
@@ -991,7 +993,7 @@ def U32.low_shrn(n: Nat, +w: Word(32n)) -> {
 # the bits of a word and of the words after it, without their first n, are
 # the bits of the words after it without their first n-32, when n is at
 # least 32
-def Key.drop_word(+x: Word(32n), +r: List<&2, U32>, +n: Nat) -> {
+def Key.drop_word(+x: Word(32n), r: List<&2, U32>, n: Nat) -> {
   Nat.is_le(32n, n) == True{}: Bool
 } -> {
   List.drop(&2, Bool, Key.bits(U32{x} <> r), n) == List.drop(&2, Bool, Key.bits(r), Nat.sub(n, 32n)): List<&2, Bool>
@@ -1062,7 +1064,7 @@ def Cur.seek_bits(ws: List<&2, U32>, le: Bool, +n: Nat) -> {
   match ws le:
     case Nil{} le:
       e => {==}
-    case Con{U32{+x}, +r} False{}:
+    case Con{U32{x}, +r} False{}:
       e => Bits.past_drop(n, Key.bits(U32{x} <> r))
     case Con{U32{+x}, +r} True{}:
       e => (
@@ -1097,7 +1099,7 @@ def Cur.bit_bits(c: Cur) -> {Cur.bit(c) == Shared.List.head_or(Bool, Cur.bits(c)
       Cur.bit_go(r, Nat.is_lt(n, 32n), n)({==})
 
 # a cursor n bits on reads its bits after the first n
-def Cur.skip_bits(+n: Nat, c: Cur) -> {
+def Cur.skip_bits(n: Nat, c: Cur) -> {
   Cur.bits(Cur.skip(n, c)) == List.drop(&2, Bool, Cur.bits(c), n): List<&2, Bool>
 }:
   match c:
@@ -1105,6 +1107,8 @@ def Cur.skip_bits(+n: Nat, c: Cur) -> {
       %Equal.sym(List<&2, Bool>, Bits.past(at, Key.bits(r)), List.drop(&2, Bool, Key.bits(r), at), Bits.past_drop(at, Key.bits(r))): {Cur.bits(Cur.words(r, Nat.add(at, n))) == List.drop(&2, Bool, _, n): List<&2, Bool>}
       %Equal.sym(List<&2, Bool>, List.drop(&2, Bool, List.drop(&2, Bool, Key.bits(r), at), n), List.drop(&2, Bool, Key.bits(r), Nat.add(at, n)), Bits.drop_add(Key.bits(r), at, n)): {Cur.bits(Cur.words(r, Nat.add(at, n))) == _: List<&2, Bool>}
       Cur.words_bits(r, Nat.add(at, n))
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the read of a key from a cursor finds what the clear read of its bits finds
 def Crit.get_find(-V: Data, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32>) -> {

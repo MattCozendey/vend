@@ -66,10 +66,17 @@ Measured, native build, one node, one owner:
   list once they made a version (`mergers.bend`). Two branches, a merge and a resolve every 20
   writes, 40 to 320 writes: a merge with its Work 0.35 to 0.8 ms (was 6 to 9.6), its status
   0.15 to 0.2 ms (was 2.6 to 4), an idle Work under 0.05 ms (was 0.1 to 1.4).
-- Still growing: a cast appends to the oldest-first list of versions (0.2 ms at 160 writes, 0.7
-  at 5120); `Pins.merge` scans the versions of both lines; a merge of another shape walks every
-  path; the table is a list by line; a Sync that adds facts, a Start and a ballot on a store line
-  drop the table; crit reads and writes walk bits.
+- The table is a record with a crit map by line, and every crit read and write passes whole
+  words with one compare. 50 branches and two writers, 400 to 6400 writes: an ask 0.06 ms, a
+  Work that casts 0.25 to 0.28 ms, a view, a status and a read under 0.035 ms.
+- Still growing: a cast appends to the oldest-first list of versions (0.23 ms at 160 writes, 0.7
+  to 0.8 at 5120); `Pins.merge` scans the versions of both lines; a merge of another shape walks
+  every path.
+- Two nodes are slow: a Sync takes every fact of the other node again (`Facts.take_all`) and
+  drops the table. With 50 writes, a Sync that adds nothing takes 0.26 s. A Start and a ballot
+  on a store line drop the table too.
+- A node that works twice in a row casts a pass after its vote; in the two-node test the slot
+  then did not decide. In work.
 
 ## Lint
 

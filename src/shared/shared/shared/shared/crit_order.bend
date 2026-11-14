@@ -3986,8 +3986,8 @@ def Crit.every_new(
 # gives, for a key, only a value of that key; a write of a value under its
 # own key keeps this.
 
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # entries under the keys of their values, with a value under its key, are
 # under the keys of their values
 def Binds.keyed_insert(
@@ -4017,14 +4017,9 @@ def Binds.keyed_insert(
           Crits.Key.is_eq(k, key(v)),
           Binds.keyed(~V, ~key, Crits.Bind{k1, v1} <> r)
         )(hk)(h),
-        hn => he => Crits.Crit.and_true(
-          Crits.Key.is_eq(k1, key(v)),
-          Binds.keyed(~V, ~key, r)
-        )((
+        hn => he => Crits.Crit.and_true(Crits.Key.is_eq(k1, key(v)), Binds.keyed(~V, ~key, r))((
             %Equal.sym(List<&2, U32>, k1, k, Crits.Key.is_eq_sound(k1, k)(he)): {Crits.Key.is_eq(_, key(v)) == True{}: Bool}
-            hk))(
-          Shared.Bool.and_true_right(Crits.Key.is_eq(k1, key(v1)), Binds.keyed(~V, ~key, r))(h)
-        ),
+            hk))(Shared.Bool.and_true_right(Crits.Key.is_eq(k1, key(v1)), Binds.keyed(~V, ~key, r))(h)),
         hn => he => Crits.Crit.and_true(
           Crits.Key.is_eq(k1, key(v1)),
           Binds.keyed(~V, ~key, Binds.insert(V, r, k, v))
@@ -4037,7 +4032,9 @@ def Binds.keyed_insert(
             r,
             k,
             v
-          )(Shared.Bool.and_true_right(Crits.Key.is_eq(k1, key(v1)), Binds.keyed(~V, ~key, r))(h))(hk)
+          )(
+            Shared.Bool.and_true_right(Crits.Key.is_eq(k1, key(v1)), Binds.keyed(~V, ~key, r))(h)
+          )(hk)
         )
       )
 
@@ -4048,7 +4045,7 @@ def Binds.keyed_get(
   ~key: V -> List<&2, U32>,
   es: List<&2, Crits.Bind<V>>,
   +k: List<&2, U32>,
-  +v: V
+  v: V
 ) -> {
   Binds.keyed(~V, ~key, es) == True{}: Bool
 } -> {Binds.get(V, es, k) == Some{v}: Maybe<&2, V>} -> {Crits.Key.is_eq(k, key(v)) == True{}: Bool}:
@@ -4103,19 +4100,23 @@ def Crit.keyed_get(
   ~key: V -> List<&2, U32>,
   +m: Crits.Crit<V>,
   +k: List<&2, U32>,
-  +v: V
+  v: V
 ) -> {
   Crits.Crit.wf(~V, m, 0n) == True{}: Bool
 } -> {
   Binds.keyed(~V, ~key, Crits.Crit.entries(V, m)) == True{}: Bool
-} -> {Crits.Crit.get(V, m, k) == Some{v}: Maybe<&2, V>} -> {Crits.Key.is_eq(k, key(v)) == True{}: Bool}:
+} -> {
+  Crits.Crit.get(V, m, k) == Some{v}: Maybe<&2, V>
+} -> {Crits.Key.is_eq(k, key(v)) == True{}: Bool}:
   hw => h => e => Binds.keyed_get(
     ~V,
     ~key,
     Crits.Crit.entries(V, m),
     k,
     v
-  )(h)(
+  )(
+    h
+  )(
     Equal.trans(
       Maybe<&2, V>,
       Binds.get(V, Crits.Crit.entries(V, m), k),

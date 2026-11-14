@@ -35,8 +35,14 @@ import ./lines.bend as Lines
 # whose request made no version of its line yet, and the ballots for a slot
 # that is not decided yet, in the order of the facts. A work walks them, not
 # all the facts. With them it keeps the greatest number of an ask among all
-# the facts, so the next ask gets its number without a walk. Only the first
-# such entry, before the contents, is read.
+# the facts, so the next ask gets its number without a walk.
+
+# The table is a record (Table): what the node has read of each line, in a
+# map under the key of the line, so a read or a write of one line walks no
+# other line; what it holds for a work; and the contents. Each def that
+# makes a table reads the old one through its parts (Known.lines,
+# Known.shelf, Known.stock, Known.low), so what a part of the new table is
+# follows by computation.
 
 # a version of a line: its number and its entry
 type Found is Data:
@@ -336,6 +342,9 @@ def Known.add(e: Kept, +kn: Known()) -> Known():
       Table{Known.lines(kn), Some{Open{fs, n, tx, mx}}, Known.stock(kn), Known.low(kn)}
     case Stock{m, g}:
       Table{Known.lines(kn), Known.shelf(kn), m, g}
+
+# Open facts
+# ----------
 
 # the facts that a work may still act on, of the entry m, if it holds them
 def Shelf.facts(m: Maybe<&2, Kept>) -> Maybe<&2, List<&2, Types.Fact>>:
@@ -1178,10 +1187,7 @@ def Known.moved(
 ) -> Known():
   match m t x:
     case Some{fs} Some{+tx} Some{+mx}:
-      Known.add(
-        Open{Open.of(fs, Scene{Known.add(Open{[], n, tx, mx}, kn), s}), n, tx, mx},
-        kn
-      )
+      Known.add(Open{Open.of(fs, Scene{Known.add(Open{[], n, tx, mx}, kn), s}), n, tx, mx}, kn)
     case _ _ _:
       kn
 
