@@ -181,7 +181,7 @@ def Clashes.of(
       +a = Contents.Entry.based(c, Some{e})
       +t = Contents.Entry.taken(c, Some{e})
       Clashes.quick(
-        Contents.Merge.hint(Known.Known.find(kn, Spec.Point.line(t)), t, a),
+        Contents.Merge.hint.seen(Known.Known.seen(kn, Spec.Point.line(t)), t, a),
         Bool.and(Contents.Request.is_merge(Entry.request(e)), Contents.Merge.fits(kn, s, c, j, e)),
         Contents.Content.of(kn, s, Spec.Point.line(a), Spec.Point.n(a)),
         Contents.Content.of(kn, s, c, j),
@@ -631,6 +631,57 @@ def Reply.status(
     case _ _:
       None{}
 
+# the status of the request r of the id i, version k among the versions rev,
+# the newest first: the versions are read only for a merge and a mark
+def Status.by.seen(
+  rev: List<&2, Types.Entry>,
+  k: Nat,
+  +i: Ledgers.Id,
+  r: Spec.Request,
+  cs: Maybe<&2, List<&2, String>>
+) -> Spec.Status:
+  match r:
+    case Spec.Request.Merge{f, x}:
+      Status.merge(List.reverse(&2, Types.Entry, rev), i, cs)
+    case Spec.Request.Mark{b, m, v}:
+      Status.mark(List.reverse(&2, Types.Entry, rev), m, k)
+    case _:
+      Spec.Status.Written{}
+
+# the reply of the status of the found entry m of the line c, with the
+# versions rev of the line, the newest first
+def Reply.status.seen(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  rev: List<&2, Types.Entry>,
+  m: Maybe<&2, Known.Found>
+) -> Maybe<&2, Spec.Reply>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Known.Found{+k, +e}}:
+      Some{
+        Spec.Reply.Status{
+          Status.by.seen(rev, k, Lines.Entry.id(e), Entry.request(e), Clashes.of(kn, s, c, k, e))
+        }
+      }
+
+# the reply of the status of the found entry m of the line c: read from the
+# state x that the table kn keeps for c, if any
+def Reply.status.by(
+  x: Maybe<&2, Known.Seen>,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  m: Maybe<&2, Known.Found>
+) -> Maybe<&2, Spec.Reply>:
+  match x:
+    case None{}:
+      Reply.status(kn, s, c, Known.Known.versions(kn, s, c), m)
+    case Some{Known.Seen{rev, n, j}}:
+      Reply.status.seen(kn, s, c, rev, m)
+
 # the version that the mark r names
 def Request.marked(r: Spec.Request) -> Maybe<&2, Nat>:
   match r:
@@ -681,7 +732,7 @@ def Reply.count.by(
 def Answer.of(+kn: Known.Known(), +s: Facts.Plain(), q: Spec.Question) -> Maybe<&2, Spec.Reply>:
   match q:
     case Spec.Question.Status{+c, i}:
-      Reply.status(kn, s, c, Known.Known.versions(kn, s, c), Line.find(kn, s, c, i))
+      Reply.status.by(Known.Known.seen(kn, c), kn, s, c, Line.find(kn, s, c, i))
     case Spec.Question.Request{c, i}:
       Reply.ask(Line.find(kn, s, c, i))
     case Spec.Question.Version{c, k}:

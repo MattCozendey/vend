@@ -320,6 +320,35 @@ def Merge.hint(
         u => Writes.of(Nat.sub(tn, an), List.drop(&2, Types.Entry, vs, 1n+an))
       )
 
+# Merge.hint of the state x that a node keeps, of the points of the lines
+# tl and al and the numbers tn and an: no writes when the numbers are the
+# same (same), and then the versions are not read
+def Merge.hint.if(
+  same: Bool,
+  x: Knowns.Seen,
+  tl: Ledgers.Line,
+  tn: Nat,
+  al: Ledgers.Line,
+  an: Nat
+) -> Maybe<&2, List<&2, Write>>:
+  match same:
+    case True{}:
+      Shared.Maybe.when(List<&2, Write>, Ledgers.Line.is_eq(al, tl), u => Some{[]})
+    case False{}:
+      Merge.hint(Some{Knowns.Seen.state(x)}, Spec.Point{tl, tn}, Spec.Point{al, an})
+
+# Merge.hint, of the state m that a node keeps
+def Merge.hint.seen(
+  m: Maybe<&2, Knowns.Seen>,
+  t: Spec.Point,
+  a: Spec.Point
+) -> Maybe<&2, List<&2, Write>>:
+  match m t a:
+    case None{} t a:
+      None{}
+    case Some{x} Spec.Point{tl, +tn} Spec.Point{al, +an}:
+      Merge.hint.if(Nat.is_eq(tn, an), x, tl, tn, al, an)
+
 # the paths of the writes ws
 def Writes.paths(ws: List<&2, Write>) -> List<&2, String>:
   match ws:
@@ -565,7 +594,7 @@ def Content.at(
       +t = Entry.taken(c, e)
       +a = Entry.based(c, e)
       Content.quick(
-        Merge.hint(Knowns.Known.find(kn, Spec.Point.line(t)), t, a),
+        Merge.hint.seen(Knowns.Known.seen(kn, Spec.Point.line(t)), t, a),
         e,
         Entry.fits(kn, s, c, j, e),
         Content.or(Knowns.Known.files(kn, c, j, f), u => Content.at(f, kn, s, c, j)),

@@ -15,6 +15,7 @@ import ./run/known.bend as RKnown
 import ./run/lines.bend as RLines
 import ./run/parts.bend as RParts
 import ./run/work.bend as RWorks
+import ./seen.bend as Seens
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
 import ./types.bend as Types
@@ -929,7 +930,7 @@ def Seat.cast_fit(
         ),
         RFacts.Facts.cast(s, name, Types.Step.At{c, k, t}),
         (
-          %Equal.sym(Maybe<&2, RLines.State>, RKnown.Known.state(kn, s, c), RLines.Line.state(s, c), Knowns.Known.state_ok(kn, s, c)(Knowns.Fit.ok(kn, s)(h))): {Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, Shared.Bool.when(List<&2, Types.Fact>, RKnown.Slot.waits(_, k), u => RKnown.Known.facts(kn, s), u => RFacts.Facts.list(s)), RFacts.Seat{name, Types.Step.At{c, k, t}}) == Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, RFacts.Facts.list(s), RFacts.Seat{name, Types.Step.At{c, k, t}}): Bool}
+          %Equal.sym(Bool, RKnown.Vote.waits(kn, s, c, k), RKnown.Slot.waits(RLines.Line.state(s, c), k), Knowns.Vote.waits_ok(kn, s, c, k)(Knowns.Fit.ok(kn, s)(h))): {Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, Shared.Bool.when(List<&2, Types.Fact>, _, u => RKnown.Known.facts(kn, s), u => RFacts.Facts.list(s)), RFacts.Seat{name, Types.Step.At{c, k, t}}) == Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, RFacts.Facts.list(s), RFacts.Seat{name, Types.Step.At{c, k, t}}): Bool}
           Lists.Bool.by(b => {RKnown.Slot.waits(RLines.Line.state(s, c), k) == b: Bool} -> {Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, Shared.Bool.when(List<&2, Types.Fact>, b, u => RKnown.Known.facts(kn, s), u => RFacts.Facts.list(s)), RFacts.Seat{name, Types.Step.At{c, k, t}}) == Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, RFacts.Facts.list(s), RFacts.Seat{name, Types.Step.At{c, k, t}}): Bool}, RKnown.Slot.waits(RLines.Line.state(s, c), k), et => ew => Lists.Maybe.by(List<&2, Types.Fact>, m => {Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, RKnown.Open.or(m, s), RFacts.Seat{name, Types.Step.At{c, k, t}}) == Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, RFacts.Facts.list(s), RFacts.Seat{name, Types.Step.At{c, k, t}}): Bool}, RKnown.Known.open(kn), en => {==}, +fs => es => (
               %Equal.sym(List<&2, Types.Fact>, fs, RKnown.Open.of(RFacts.Facts.list(s), RKnown.Scene{RKnown.Known.none(), s}), Knowns.Known.open_fit(kn, s, fs)(h)(es)): {Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, _, RFacts.Seat{name, Types.Step.At{c, k, t}}) == Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, RFacts.Facts.list(s), RFacts.Seat{name, Types.Step.At{c, k, t}}): Bool}
               Sits.open(s, name, c, k, t, RFacts.Facts.list(s))(ew))), ef => ew => {==})({==})),
@@ -1052,7 +1053,9 @@ def Table.voted_fit(
         RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.Broken{}, x})
       )
     case Types.Step.At{+c, +k, +t}:
-      +h => hc => Knowns.Known.moved_fit(
+      +h => hc =>
+        %Equal.sym(Bool, RKnown.Known.sound(kn, c, k), RKnown.Known.safe(c, RKnown.Known.find(kn, c), RKnown.Known.find(kn, RKnown.Known.root(c)), k), Seens.Known.sound_eq(kn, c, k)): {RContents.Known.fit(RKnown.Known.moved(Table.mid(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c, k, RKnown.Known.walk(kn, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Known.walk.if(_, RKnown.Known.walk(kn, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), Nat.max(RFacts.Seq.of(Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Shelf.top(RKnown.Known.shelf(kn))), RKnown.Shelf.tops(RKnown.Known.shelf(kn)), RKnown.Shelf.merges(RKnown.Known.shelf(kn))), RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})) == True{}: Bool}
+        Knowns.Known.moved_fit(
         Table.mid(
           kn,
           RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),

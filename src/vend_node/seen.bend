@@ -4,6 +4,7 @@ import ../shared/shared/shared/shared/crit.bend as Crits
 import ../shared/shared/shared/shared/crit_order.bend as Orders
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
+import ./run/answers.bend as RAnswers
 import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
 import ./run/known.bend as RKnown
@@ -1108,7 +1109,11 @@ def Pace.step_of_counted(
 ) -> {
   RContents.Seen.counted(Some{Pace.seen(q)}) == True{}: Bool
 } -> {Pace.counted(RKnown.Pace.step.of(rr, c, q, p)) == True{}: Bool}:
-  ?TODO
+  match q p:
+    case RKnown.Pace{RKnown.Seen{rev, n, k}, m, u, x} None{}:
+      hc => {==}
+    case RKnown.Pace{RKnown.Seen{rev, n, k}, m, u, +x} Some{+pk}:
+      hc => Pace.put_counted(RKnown.Ids.has(x, RLines.Pick.id(pk)), rr, c, rev, n, k, m, u, x, pk)(hc)
 
 # a step of a run, read from facts, keeps the count of the versions right
 def Pace.step_counted(
@@ -1143,7 +1148,13 @@ def Pace.go_counted(
 } -> {
   RContents.Seen.counted(Some{Pace.seen(RKnown.Pace.go(fuel, fs, rr, c, q, m))}) == True{}: Bool
 }:
-  ?TODO
+  match fuel m:
+    case 0n m:
+      hq => hm => hq
+    case 1n+f None{}:
+      hq => hm => hq
+    case 1n+f Some{+q2}:
+      hq => +hm => Pace.go_counted(f, fs, rr, c, q2, RKnown.Pace.step(fs, rr, c, q2))(hm)(Pace.step_counted(fs, rr, c, q2)(hm))
 
 # a run from a state with the right count leaves the right count
 def Pace.from_counted(
@@ -1156,7 +1167,14 @@ def Pace.from_counted(
 } -> {
   RContents.Seen.counted(Some{Pace.seen(RKnown.Pace.from(fs, rr, c, q))}) == True{}: Bool
 }:
-  ?TODO
+  +hq => Pace.go_counted(
+    1n+RLines.Line.bound(fs, c),
+    fs,
+    rr,
+    c,
+    q,
+    RKnown.Pace.step(fs, rr, c, q)
+  )(hq)(Pace.step_counted(fs, rr, c, q)(hq))
 
 # The table after a ballot
 # ------------------------
@@ -1195,4 +1213,203 @@ def Quick.all(
   )
     == RKnown.Known.cast.as(RKnown.Known.quick(kn, Ledgers.Line{h, Some{b}}, k, Some{fs}), kn, s, Ledgers.Line{h, Some{b}}, k, Some{fs}): RKnown.Known()
 }:
-  ?TODO
+  +e1 => +e2 => +e3 =>
+    %e1: {RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.deeper(RKnown.Known.contents(kn))), Ledgers.Line{h, Some{b}}, RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})) == RKnown.Known.cast.as(RKnown.Known.quick.of(Some{fs}, Ledgers.Line{h, Some{b}}, k, RKnown.Info.state(_), RKnown.Known.find(kn, Ledgers.Line{h, None{}}), RKnown.Mark.era(RKnown.Info.mark(_)), RKnown.Mark.rule(RKnown.Info.mark(_)), RKnown.Info.ids(_)), kn, s, Ledgers.Line{h, Some{b}}, k, Some{fs}): RKnown.Known()}
+    %e2: {RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.deeper(RKnown.Known.contents(kn))), Ledgers.Line{h, Some{b}}, RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})) == RKnown.Known.cast.as(RKnown.Known.quick.of(Some{fs}, Ledgers.Line{h, Some{b}}, k, Some{RLines.State{List.reverse(&2, Types.Entry, rev), slot}}, RKnown.Seen.state.of(_), Some{era}, Some{rule}, Some{ids}), kn, s, Ledgers.Line{h, Some{b}}, k, Some{fs}): RKnown.Known()}
+    %e3: {RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.deeper(RKnown.Known.contents(kn))), Ledgers.Line{h, Some{b}}, RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})) == RKnown.Known.cast.as(Shared.Maybe.when(RKnown.Run, _, z => Some{RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})}), kn, s, Ledgers.Line{h, Some{b}}, k, Some{fs}): RKnown.Known()}
+    %e1: {RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.deeper(RKnown.Known.contents(kn))), Ledgers.Line{h, Some{b}}, RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})) == RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.spared(RKnown.Known.safe(Ledgers.Line{h, Some{b}}, RKnown.Info.state(_), RKnown.Known.find(kn, Ledgers.Line{h, None{}}), k), kn)), Ledgers.Line{h, Some{b}}, RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})): RKnown.Known()}
+    %e2: {RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.deeper(RKnown.Known.contents(kn))), Ledgers.Line{h, Some{b}}, RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})) == RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.spared(RKnown.Known.safe(Ledgers.Line{h, Some{b}}, Some{RLines.State{List.reverse(&2, Types.Entry, rev), slot}}, RKnown.Seen.state.of(_), k), kn)), Ledgers.Line{h, Some{b}}, RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})): RKnown.Known()}
+    %e3: {RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.deeper(RKnown.Known.contents(kn))), Ledgers.Line{h, Some{b}}, RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})) == RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.spared(_, kn)), Ledgers.Line{h, Some{b}}, RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})): RKnown.Known()}
+    {==}
+
+# Known.cast.by, of what the table holds of a line and of its store, with
+# the right count, is Known.cast.as of the run that Known.quick gives
+def Known.cast_by(
+  +w: Maybe<&2, List<&2, Types.Fact>>,
+  +c: Ledgers.Line,
+  j: RKnown.Info,
+  ms: Maybe<&2, RKnown.Seen>,
+  +k: Nat,
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain()
+) -> {
+  j == RKnown.Known.info(kn, c): RKnown.Info
+} -> {
+  ms == RKnown.Known.seen(kn, RKnown.Known.root(c)): Maybe<&2, RKnown.Seen>
+} -> {
+  Crits.Crit.wf(~RKnown.Info, RKnown.Known.lines(kn), 0n) == True{}: Bool
+} -> {
+  RContents.Seen.counted(RKnown.Info.seen(j)) == True{}: Bool
+} -> {
+  RKnown.Known.cast.by(w, c, j, ms, k, kn, s)
+    == RKnown.Known.cast.as(RKnown.Known.quick(kn, c, k, w), kn, s, c, k, w): RKnown.Known()
+}:
+  match w c j ms:
+    case None{} c j ms:
+      e1 => e2 => hw => hc => {==}
+    case Some{fs} Ledgers.Line{h, None{}} j ms:
+      e1 => e2 => hw => hc => {==}
+    case Some{fs} Ledgers.Line{h, Some{b}} RKnown.Info{c2, None{}, r, x} ms:
+      e1 => e2 => hw => hc => {==}
+    case Some{fs} Ledgers.Line{h, Some{b}} RKnown.Info{c2, Some{RKnown.Seen{rev, n, slot}}, None{}, x} ms:
+      e1 => e2 => hw => hc => {==}
+    case Some{fs} Ledgers.Line{h, Some{b}} RKnown.Info{c2, Some{RKnown.Seen{rev, n, slot}}, Some{RKnown.Mark{era, rule}}, None{}} ms:
+      e1 => e2 => hw => hc => {==}
+    case Some{fs} Ledgers.Line{h, Some{b}} RKnown.Info{c2, Some{RKnown.Seen{rev, n, slot}}, Some{RKnown.Mark{era, rule}}, Some{ids}} None{}:
+      e1 => e2 => hw => hc => {==}
+    case Some{+fs} Ledgers.Line{+h, Some{+b}} RKnown.Info{+c2, Some{RKnown.Seen{+rev, +n, +slot}}, Some{RKnown.Mark{+era, +rule}}, Some{+ids}} Some{RKnown.Seen{+rr, +rn, +rk}}:
+      e1 => e2 => hw => hc => Lists.Bool.by(
+        bn => {
+          RKnown.Known.cast.if(bn, fs, Ledgers.Line{h, Some{b}}, RKnown.Seen{rev, n, slot}, RKnown.Seen{rr, rn, rk}, era, rule, ids, k, kn, s)
+            == RKnown.Known.cast.as(RKnown.Known.quick(kn, Ledgers.Line{h, Some{b}}, k, Some{fs}), kn, s, Ledgers.Line{h, Some{b}}, k, Some{fs}): RKnown.Known()
+        },
+        Nat.is_eq(slot, k),
+        et => Equal.trans(
+          RKnown.Known(),
+          RKnown.Known.paced(kn, Ledgers.Line{h, Some{b}}, RKnown.Pace.from(fs, rr, Ledgers.Line{h, Some{b}}, RKnown.Pace{RKnown.Seen{rev, n, slot}, era, Some{rule}, ids})),
+          RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.deeper(RKnown.Known.contents(kn))), Ledgers.Line{h, Some{b}}, RKnown.Run.from(fs, List.reverse(&2, Types.Entry, rr), Ledgers.Line{h, Some{b}}, RKnown.Run{RLines.State{List.reverse(&2, Types.Entry, rev), slot}, era, Some{rule}, ids})),
+          RKnown.Known.cast.as(RKnown.Known.quick(kn, Ledgers.Line{h, Some{b}}, k, Some{fs}), kn, s, Ledgers.Line{h, Some{b}}, k, Some{fs}),
+          (
+            %Pace.from_eq(fs, rr, Ledgers.Line{h, Some{b}}, RKnown.Pace{RKnown.Seen{rev, n, slot}, era, Some{rule}, ids}): {RKnown.Known.paced(kn, Ledgers.Line{h, Some{b}}, RKnown.Pace.from(fs, rr, Ledgers.Line{h, Some{b}}, RKnown.Pace{RKnown.Seen{rev, n, slot}, era, Some{rule}, ids})) == RKnown.Known.ran(RKnown.Known.join(RKnown.Known.voted(kn, Ledgers.Line{h, Some{b}}), RKnown.Known.deeper(RKnown.Known.contents(kn))), Ledgers.Line{h, Some{b}}, _): RKnown.Known()}
+            Known.paced_eq(kn, h, b, RKnown.Pace.from(fs, rr, Ledgers.Line{h, Some{b}}, RKnown.Pace{RKnown.Seen{rev, n, slot}, era, Some{rule}, ids}))(hw)(Pace.from_counted(fs, rr, Ledgers.Line{h, Some{b}}, RKnown.Pace{RKnown.Seen{rev, n, slot}, era, Some{rule}, ids})(hc))),
+          Quick.all(kn, s, h, b, k, fs, c2, rev, n, slot, era, rule, ids, rr, rn, rk)(e1)(e2)(Equal.sym(Bool, Nat.is_eq(slot, k), True{}, et))
+        ),
+        ef => {==}
+      )
+
+# the table after a ballot, as read from what a well formed table holds
+# with the right count, is the table that Known.cast.as gives of the run
+# that Known.quick gives
+def Known.cast_eq(
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +w: Maybe<&2, List<&2, Types.Fact>>
+) -> {
+  Crits.Crit.wf(~RKnown.Info, RKnown.Known.lines(kn), 0n) == True{}: Bool
+} -> {
+  RContents.Seen.counted(RKnown.Known.seen(kn, c)) == True{}: Bool
+} -> {
+  RKnown.Known.cast(kn, s, c, k, w)
+    == RKnown.Known.cast.as(RKnown.Known.quick(kn, c, k, w), kn, s, c, k, w): RKnown.Known()
+}:
+  hw => hc => Known.cast_by(w, c, RKnown.Known.info(kn, c), RKnown.Known.seen(kn, RKnown.Known.root(c)), k, kn, s)({==})({==})(hw)(hc)
+
+# What an answer reads of what the node keeps
+# -------------------------------------------
+
+# the status that Status.by.seen gives is the status that Status.by gives
+# for the versions, the oldest first
+def Status.by_seen(
+  +rev: List<&2, Types.Entry>,
+  +k: Nat,
+  +i: Ledgers.Id,
+  r: Spec.Request,
+  +cs: Maybe<&2, List<&2, String>>
+) -> {
+  RAnswers.Status.by.seen(rev, k, i, r, cs)
+    == RAnswers.Status.by(List.reverse(&2, Types.Entry, rev), k, i, r, cs): Spec.Status
+}:
+  match r:
+    case Spec.Request.Start{owners}:
+      {==}
+    case Spec.Request.Write{branch, path, words}:
+      {==}
+    case Spec.Request.Merge{from, into}:
+      {==}
+    case Spec.Request.Resolve{merge, path1, words1}:
+      {==}
+    case Spec.Request.Mark{branch1, name, version}:
+      {==}
+    case Spec.Request.Move{branch2, to, version1}:
+      {==}
+    case Spec.Request.Group{store, name1, members}:
+      {==}
+    case Spec.Request.Own{line, group}:
+      {==}
+
+# the reply that Reply.status.seen gives is the reply that Reply.status
+# gives for the versions, the oldest first
+def Reply.status_seen(
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +rev: List<&2, Types.Entry>,
+  m: Maybe<&2, RKnown.Found>
+) -> {
+  RAnswers.Reply.status.seen(kn, s, c, rev, m)
+    == RAnswers.Reply.status(kn, s, c, Some{List.reverse(&2, Types.Entry, rev)}, m): Maybe<&2, Spec.Reply>
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{value}:
+      match value:
+        case RKnown.Found{n, entry}:
+          +n = n
+          +entry = entry
+          %Status.by_seen(rev, n, RLines.Ask.id(RLines.Entry.ask(entry)), RLines.Ask.request(RLines.Entry.ask(entry)), RAnswers.Clashes.of(kn, s, c, n, entry)) :
+            {Some{Spec.Reply.Status{RAnswers.Status.by.seen(rev, n, RLines.Ask.id(RLines.Entry.ask(entry)), RLines.Ask.request(RLines.Entry.ask(entry)), RAnswers.Clashes.of(kn, s, c, n, entry))}} == Some{Spec.Reply.Status{_}} : Maybe<&2, Spec.Reply>}
+          {==}
+
+# Reply.status.by, of what the table keeps of the line, is Reply.status of
+# the versions of the line
+def Reply.status_by(
+  x: Maybe<&2, RKnown.Seen>,
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +m: Maybe<&2, RKnown.Found>
+) -> {
+  x == RKnown.Known.seen(kn, c): Maybe<&2, RKnown.Seen>
+} -> {
+  RAnswers.Reply.status.by(x, kn, s, c, m)
+    == RAnswers.Reply.status(kn, s, c, RKnown.Known.versions(kn, s, c), m): Maybe<&2, Spec.Reply>
+}:
+  match x:
+    case None{}:
+      e => {==}
+    case Some{RKnown.Seen{+rev, n, j}}:
+      e =>
+        %e: {RAnswers.Reply.status.seen(kn, s, c, rev, m) == RAnswers.Reply.status(kn, s, c, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, RKnown.Known.state.of(RKnown.Seen.state.of(_), kn, s, c)), m): Maybe<&2, Spec.Reply>}
+        Reply.status_seen(kn, s, c, rev, m)
+
+# a number less itself is zero
+def Nat.sub_self(a: Nat) -> {Nat.sub(a, a) == 0n: Nat}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+ap:
+      Nat.sub_self(ap)
+
+# Merge.hint.seen is Merge.hint of the state that a node keeps
+def Merge.hint_seen(m: Maybe<&2, RKnown.Seen>, t: Spec.Point, a: Spec.Point) -> {
+  RContents.Merge.hint.seen(m, t, a)
+    == RContents.Merge.hint(RKnown.Seen.state.of(m), t, a): Maybe<&2, List<&2, RContents.Write>>
+}:
+  match m t a:
+    case None{} t a:
+      {==}
+    case Some{RKnown.Seen{+rev, n, k}} Spec.Point{+tl, +tn} Spec.Point{+al, +an}:
+      Lists.Bool.by(
+        b => {
+          RContents.Merge.hint.if(b, RKnown.Seen{rev, n, k}, tl, tn, al, an)
+            == RContents.Merge.hint(Some{RLines.State{List.reverse(&2, Types.Entry, rev), k}}, Spec.Point{tl, tn}, Spec.Point{al, an}): Maybe<&2, List<&2, RContents.Write>>
+        },
+        Nat.is_eq(tn, an),
+        et => (
+          %Equal.sym(Nat, tn, an, Shared.Nat.is_eq_sound(tn, an)(et)): {Shared.Maybe.when(List<&2, RContents.Write>, Ledgers.Line.is_eq(al, tl), u => Some{[]}) == Shared.Maybe.when(List<&2, RContents.Write>, List.all.if(u => Nat.is_le(an, _), Ledgers.Line.is_eq(al, tl)), u => RContents.Writes.of(Nat.sub(_, an), List.drop(&2, Types.Entry, List.reverse(&2, Types.Entry, rev), 1n+an))): Maybe<&2, List<&2, RContents.Write>>}
+          %Equal.sym(Nat, Nat.sub(an, an), 0n, Nat.sub_self(an)): {Shared.Maybe.when(List<&2, RContents.Write>, Ledgers.Line.is_eq(al, tl), u => Some{[]}) == Shared.Maybe.when(List<&2, RContents.Write>, List.all.if(u => Nat.is_le(an, an), Ledgers.Line.is_eq(al, tl)), u => RContents.Writes.of(_, List.drop(&2, Types.Entry, List.reverse(&2, Types.Entry, rev), 1n+an))): Maybe<&2, List<&2, RContents.Write>>}
+          %Equal.sym(Bool, Nat.is_le(an, an), True{}, Shared.Nat.le_refl(an)): {Shared.Maybe.when(List<&2, RContents.Write>, Ledgers.Line.is_eq(al, tl), u => Some{[]}) == Shared.Maybe.when(List<&2, RContents.Write>, List.all.if(u => _, Ledgers.Line.is_eq(al, tl)), u => Some{[]}): Maybe<&2, List<&2, RContents.Write>>}
+          Lists.Bool.by(
+            b2 => {
+              Shared.Maybe.when(List<&2, RContents.Write>, b2, u => Some{[]})
+                == Shared.Maybe.when(List<&2, RContents.Write>, List.all.if(u => True{}, b2), u => Some{[]}): Maybe<&2, List<&2, RContents.Write>>
+            },
+            Ledgers.Line.is_eq(al, tl),
+            et2 => {==},
+            ef2 => {==}
+          )),
+        ef => {==}
+      )
