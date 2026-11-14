@@ -278,9 +278,7 @@ def Work.offer.at(
     case Some{Open{+vs, +k, +ns}}:
       Shared.Maybe.when(
         Plan,
-        Bool.not(
-          Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, Lines.Ask.id(a))
-        ),
+        Bool.not(Known.Known.made(kn, c, vs, Lines.Ask.id(a))),
         u => Plan.of(
           c,
           k,
@@ -406,8 +404,9 @@ def Work.follow(+kn: Known.Known(), +s: Facts.Plain(), +name: String, fs: List<&
 
 # the pass of the node name at the next slot m of the line c: when it is the
 # slot k, if any, and the request of the id i, if any, made no version of
-# the line yet
+# the line yet, as read through the table kn
 def Work.pass.at(
+  kn: Known.Known(),
   +s: Facts.Plain(),
   +name: String,
   +c: Ledgers.Line,
@@ -427,7 +426,7 @@ def Work.pass.at(
     case None{} Some{id} Some{Open{vs, +k2, ns}}:
       Shared.Maybe.when(
         Plan,
-        Bool.not(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, id)),
+        Bool.not(Known.Known.made(kn, c, vs, id)),
         u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(s, c, k2), name))
       )
     case None{} None{} _:
@@ -445,7 +444,7 @@ def Work.pass.on(
     case None{}:
       None{}
     case Some{+c}:
-      Work.pass.at(s, name, c, None{}, Some{i}, Work.open(kn, s, name, c))
+      Work.pass.at(kn, s, name, c, None{}, Some{i}, Work.open(kn, s, name, c))
 
 # the pass of the node name at the slot that the fact f is about: the slot
 # of a ballot, or the next slot of the line of a request that waits; all is
@@ -458,7 +457,7 @@ def Work.pass.of(
 ) -> Maybe<&2, Plan>:
   match f:
     case Types.Fact.Vote{v, Types.Step.At{+c, k, t}, x}:
-      Work.pass.at(s, name, c, Some{k}, None{}, Work.open(kn, s, name, c))
+      Work.pass.at(kn, s, name, c, Some{k}, None{}, Work.open(kn, s, name, c))
     case Types.Fact.Vote{v, Types.Step.Broken{}, x}:
       None{}
     case Types.Fact.Ask{Types.Ask{i, n, +r}}:

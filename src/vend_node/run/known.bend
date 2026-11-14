@@ -1,5 +1,6 @@
 import Base
 import ../../shared/shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../codes.bend as Coded
@@ -23,13 +24,18 @@ import ../types.bend as Types
 # files of a version, with the fuel that reads them from the facts (depth).
 # A read of a content with at least that fuel takes the files from the table.
 
+# The node also keeps, for a line, the ids of the requests that made its
+# versions, as a set (Made): whether a request made a version of the line is
+# then one read of the set, not a read of each version.
+
 # what a node keeps: a line and its state, or a version of a line and its
 # content, which a read with the fuel depth gives, or a line and the rule of
-# its next version
+# its next version, or a line and the ids of its versions
 type Kept is Data:
   Kept{line: Ledgers.Line, state: Lines.State}
   Held{line: Ledgers.Line, version: Nat, depth: Nat, files: Files.Files()}
   Ruled{line: Ledgers.Line, rule: Lines.Rule}
+  Made{line: Ledgers.Line, ids: Crits.Crit<Unit>}
 
 # what a node keeps: the newest entry of a line first; the states before the
 # contents
@@ -56,6 +62,8 @@ def Known.find(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.State>:
       Known.find(rest, c)
     case Con{Ruled{c2, u}, rest}:
       Known.find(rest, c)
+    case Con{Made{c2, x}, rest}:
+      Known.find(rest, c)
 
 # the rule of the next version of the line c that the table kn holds, if any
 def Known.ruled(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.Rule>:
@@ -73,6 +81,8 @@ def Known.ruled(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.Rule>:
         u2 => Some{u},
         u2 => Known.ruled(rest, c)
       )
+    case Con{Made{c2, x}, rest}:
+      Known.ruled(rest, c)
 
 # the content of version k of the line c that the table kn holds, with the
 # fuel that reads it
@@ -85,11 +95,13 @@ def Known.held(kn: Known(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Kept>:
     case Con{Held{+c2, +k2, +d, +x}, rest}:
       Shared.Bool.when(
         Maybe<&2, Kept>,
-        Bool.and(Nat.is_eq(k2, k), Ledgers.Line.is_eq(c2, c)),
+        List.all.if(u2 => Ledgers.Line.is_eq(c2, c), Nat.is_eq(k2, k)),
         u => Some{Held{c2, k2, d, x}},
         u => Known.held(rest, c, k)
       )
     case Con{Ruled{c2, u}, rest}:
+      Known.held(rest, c, k)
+    case Con{Made{c2, y}, rest}:
       Known.held(rest, c, k)
 
 # the files of the entry m, if it is a content that a read with the fuel f
@@ -129,6 +141,8 @@ def Known.hold(kn: Known(), e: Kept) -> Known():
       Kept{c, st} <> Known.hold(rest, e)
     case Con{Ruled{c, u}, rest}:
       Ruled{c, u} <> Known.hold(rest, e)
+    case Con{Made{c, x}, rest}:
+      Made{c, x} <> Known.hold(rest, e)
     case Con{Held{c, k, d, x}, rest}:
       e <> Held{c, k, d, x} <> rest
 
@@ -143,6 +157,75 @@ def Known.contents(kn: Known()) -> Known():
       Held{c, k, d, x} <> Known.contents(rest)
     case Con{Ruled{c, u}, rest}:
       Known.contents(rest)
+    case Con{Made{c, x}, rest}:
+      Known.contents(rest)
+
+# Known ids
+# ---------
+
+# the ids of the requests that made the versions of a line: a set of their
+# keys
+def Ids() -> Data:
+  Crits.Crit<Unit>
+
+# the key of the id i
+def Id.key(i: Ledgers.Id) -> List<&2, U32>:
+  Ledgers.Id.code(i, [])
+
+# the set acc with the id of each of the versions vs
+def Ids.go(vs: List<&2, Types.Entry>, acc: Ids()) -> Ids():
+  match vs:
+    case Nil{}:
+      acc
+    case Con{e, rest}:
+      Ids.go(rest, Crits.Crit.set(~Unit, acc, Id.key(Lines.Entry.id(e)), Unit{}))
+
+# the ids of the versions vs
+def Ids.of(vs: List<&2, Types.Entry>) -> Ids():
+  Ids.go(vs, Crits.Crit.new(Unit))
+
+# ys without as many of its first items as xs has
+def Entries.past(xs: List<&2, Types.Entry>, ys: List<&2, Types.Entry>) -> List<&2, Types.Entry>:
+  match xs ys:
+    case Nil{} ys:
+      ys
+    case Con{x, xr} Nil{}:
+      []
+    case Con{x, xr} Con{y, yr}:
+      Entries.past(xr, yr)
+
+# the ids that the table kn holds for the line c, if any
+def Known.ids(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Ids()>:
+  match kn:
+    case Nil{}:
+      None{}
+    case Con{Kept{c2, st}, rest}:
+      Known.ids(rest, c)
+    case Con{Held{c2, k, d, x}, rest}:
+      Known.ids(rest, c)
+    case Con{Ruled{c2, u}, rest}:
+      Known.ids(rest, c)
+    case Con{Made{c2, x}, rest}:
+      Shared.Bool.when(
+        Maybe<&2, Ids()>,
+        Ledgers.Line.is_eq(c2, c),
+        u2 => Some{x},
+        u2 => Known.ids(rest, c)
+      )
+
+# the request of the id i made one of the versions vs: read from their ids
+# m, if known
+def Made.in(m: Maybe<&2, Ids()>, vs: List<&2, Types.Entry>, i: Ledgers.Id) -> Bool:
+  match m:
+    case None{}:
+      Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, i)
+    case Some{x}:
+      Crits.Crit.has(Unit, x, Id.key(i))
+
+# the request of the id i made one of the versions vs of the line c, read
+# through the table kn
+def Known.made(kn: Known(), +c: Ledgers.Line, vs: List<&2, Types.Entry>, i: Ledgers.Id) -> Bool:
+  Made.in(Known.ids(kn, c), vs, i)
 
 # the store of the line c
 def Known.root(c: Ledgers.Line) -> Ledgers.Line:
@@ -319,10 +402,36 @@ def Known.rule.learn.if(old: Bool, +kn: Known(), +s: Facts.Plain(), +c: Ledgers.
 def Known.rule.learn(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
   Known.rule.learn.if(Maybe.is_some(&2, Lines.Rule, Known.ruled(kn, c)), kn, s, c)
 
+# the table kn with the ids of the versions of the state m, if any, of the
+# line c
+def Known.ids.put(kn: Known(), c: Ledgers.Line, m: Maybe<&2, Lines.State>) -> Known():
+  match m:
+    case None{}:
+      kn
+    case Some{Lines.State{vs, k}}:
+      Made{c, Ids.of(vs)} <> kn
+
+# the table kn with the ids of the versions of the state that kn holds for
+# the line c, unless the table holds them (old)
+def Known.ids.learn.if(old: Bool, +kn: Known(), +c: Ledgers.Line) -> Known():
+  match old:
+    case True{}:
+      kn
+    case False{}:
+      Known.ids.put(kn, c, Known.find(kn, c))
+
+# the table kn with the ids of the versions of the state that kn holds for
+# the line c
+def Known.ids.learn(+kn: Known(), +c: Ledgers.Line) -> Known():
+  Known.ids.learn.if(Maybe.is_some(&2, Ids(), Known.ids(kn, c)), kn, c)
+
 # the table kn with the states of the line c and of its store in the facts s,
-# and with the rule of the next version of c
+# with the rule of the next version of c, and with the ids of its versions
 def Known.learn(kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
-  Known.rule.learn(Known.learn.one(Known.learn.one(kn, s, Known.root(c)), s, c), s, c)
+  Known.ids.learn(
+    Known.rule.learn(Known.learn.one(Known.learn.one(kn, s, Known.root(c)), s, c), s, c),
+    c
+  )
 
 # What a vote forgets
 # -------------------
@@ -343,6 +452,8 @@ def Known.voted.put(c: Ledgers.Line, e: Kept, rest: Known()) -> Known():
       rest
     case Ruled{+c2, +u}:
       List.filter.put(Kept, Ruled{c2, u}, rest, Bool.not(Known.hit(c, c2)))
+    case Made{+c2, +y}:
+      List.filter.put(Kept, Made{c2, y}, rest, Bool.not(Known.hit(c, c2)))
 
 # the table kn after a vote for a slot of the line c: without the states and
 # the rules that the vote may change, and without the contents
@@ -402,6 +513,39 @@ def State.fits(m: Maybe<&2, Lines.State>, st: Lines.State) -> Bool:
       False{}
     case Some{x}:
       State.same(x, st)
+
+# a and b are the same
+def Unit.same(a: Unit, b: Unit) -> Bool:
+  True{}
+
+# the sets a and b are the same: key by key, in the same shape
+def Ids.same(a: Ids(), b: Ids()) -> Bool:
+  match a b:
+    case Crits.Crit.Tip{} Crits.Crit.Tip{}:
+      True{}
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Leaf{k2, v2}:
+      Bool.and(Crits.Key.is_eq(k1, k2), Unit.same(v1, v2))
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      Bool.and(
+        Crits.Key.is_eq(r1, r2),
+        Bool.and(
+          Nat.is_eq(p1, p2),
+          Bool.and(
+            Shared.Maybe.is_eq(~Unit, ~Unit.same, e1, e2),
+            Bool.and(Ids.same(z1, z2), Ids.same(o1, o2))
+          )
+        )
+      )
+    case _ _:
+      False{}
+
+# m is a state whose versions have the ids x
+def Made.fits(m: Maybe<&2, Lines.State>, x: Ids()) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{Lines.State{vs, k}}:
+      Ids.same(x, Ids.of(vs))
 
 # What a vote continues
 # ---------------------
@@ -487,18 +631,46 @@ def Known.spared(safe: Bool, kn: Known()) -> Known():
     case False{}:
       []
 
+# the ids of the versions of the state new of a line, from the ids of the
+# versions of the state old that it continues, if the three are known: with
+# the ids of the versions that old has not
+def Made.next(
+  new: Maybe<&2, Lines.State>,
+  old: Maybe<&2, Lines.State>,
+  ids: Maybe<&2, Ids()>
+) -> Maybe<&2, Ids()>:
+  match new old ids:
+    case Some{Lines.State{vs2, k2}} Some{Lines.State{vs, k}} Some{x}:
+      Some{Ids.go(Entries.past(vs, vs2), x)}
+    case _ _ _:
+      None{}
+
+# the table kn with the ids m, if any, of the versions of the line c
+def Known.made.put(kn: Known(), c: Ledgers.Line, m: Maybe<&2, Ids()>) -> Known():
+  match m:
+    case None{}:
+      kn
+    case Some{x}:
+      Made{c, x} <> kn
+
+# the table rest with the state m, if any, of the line c after a ballot, and
+# with the ids of its versions, continued from those that the table kn held
+def Known.cast.to(+kn: Known(), +c: Ledgers.Line, rest: Known(), +m: Maybe<&2, Lines.State>) -> Known():
+  Known.made.put(Known.put(rest, c, m), c, Made.next(m, Known.find(kn, c), Known.ids(kn, c)))
+
 # the table kn after a ballot for the slot k of the line c, where s is the
 # facts with the ballot: without the states that the ballot may change, with
-# the state of c continued from the state that kn holds for it, and with the
-# contents that the ballot leaves as they are
+# the state of c continued from the state that kn holds for it, with the ids
+# of its versions, and with the contents that the ballot leaves as they are
 def Known.cast(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Known():
-  Known.put(
+  Known.cast.to(
+    kn,
+    c,
     List.append(
       &2,
       Kept,
       Known.voted(kn, c),
       Known.spared(Known.safe(c, Known.find(kn, c), Known.find(kn, Known.root(c)), k), kn)
     ),
-    c,
     Known.next.of(s, c, k, Known.find(kn, c), Known.over(c, Known.find(kn, Known.root(c))))
   )

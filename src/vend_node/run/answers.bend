@@ -660,9 +660,13 @@ def Request.words(r: Spec.Request) -> Maybe<&2, List<&2, U32>>:
     case _:
       None{}
 
+# the ask b is the ask a: the asks are read only when they are of one id
+def Ask.is(+a: Types.Ask, +b: Types.Ask) -> Bool:
+  List.all.if(u => Coded.Ask.is_eq(b, a), Ledgers.Id.is_eq(Lines.Ask.id(b), Lines.Ask.id(a)))
+
 # the entry e was made by the ask a
 def Entry.made_by(a: Types.Ask, e: Types.Entry) -> Bool:
-  Coded.Ask.is_eq(Lines.Entry.ask(e), a)
+  Ask.is(a, Lines.Entry.ask(e))
 
 # the words at the path p of the newest of the versions m of the branch b
 def View.newest(

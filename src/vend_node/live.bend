@@ -666,9 +666,9 @@ def View.fresh.at(
             e
           )(hv)(hg)
         )
-      )(he)
+      )(Shared.List.all.if_rest(Ledgers.Id.is_eq(RLines.Ask.id(RLines.Entry.ask(e)), RLines.Ask.id(a)), u => Coded.Ask.is_eq(RLines.Entry.ask(e), a))(he))
     case 1n+(+j):
-      hlt => hv => hg => he => Ask.fresh.vote(name, s, a, c, e)(hlt)(he)(
+      hlt => hv => hg => he => Ask.fresh.vote(name, s, a, c, e)(hlt)(Shared.List.all.if_rest(Ledgers.Id.is_eq(RLines.Ask.id(RLines.Entry.ask(e)), RLines.Ask.id(a)), u => Coded.Ask.is_eq(RLines.Entry.ask(e), a))(he))(
         Versions.Line.versions_voted(
           Facts.Facts.take(name, s, Types.Fact.Ask{a}),
           c,
