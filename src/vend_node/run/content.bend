@@ -1,5 +1,6 @@
 import Base
 import ../../shared/shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/shared/crit_order.bend as Orders
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../codes.bend as Coded
@@ -660,15 +661,54 @@ def Kept.ok(+s: Facts.Plain(), e: Knowns.Kept) -> Bool:
       True{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# the state m of the line c, if any, is the state that the facts s give
+def State.ok(+s: Facts.Plain(), c: Ledgers.Line, m: Maybe<&2, Lines.State>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{st}:
+      Kept.ok(s, Knowns.Kept{c, st})
+
+# the era and the rule m of the next version of the line c, if any, are
+# those that the facts s give
+def Mark.ok(+s: Facts.Plain(), c: Ledgers.Line, m: Maybe<&2, Knowns.Mark>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Knowns.Mark{n, u}}:
+      Kept.ok(s, Knowns.Ruled{c, n, u})
+
+# the ids m of the versions of the line c, if any, are those that the facts
+# s give
+def Made.ok(+s: Facts.Plain(), c: Ledgers.Line, m: Maybe<&2, Knowns.Ids>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{x}:
+      Kept.ok(s, Knowns.Made{c, x})
+
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a table that is wrong, which then costs no more than a right table, where both sides run
+# what i holds of its line is what the facts s give
+def Info.ok(s: Facts.Plain(), i: Knowns.Info) -> Bool:
+  match i:
+    case Knowns.Info{+c, m, r, x}:
+      +s = s
+      Bool.and(State.ok(s, c, m), Bool.and(Mark.ok(s, c, r), Made.ok(s, c, x)))
+
+# the lines l are right for the facts s: what each holds of its line is what
+# s gives, and each sits under the key of its line
+def Infos.ok(+l: Crits.Crit<Knowns.Info>, s: Facts.Plain()) -> Bool:
+  Bool.and(
+    Orders.Crit.every(~Knowns.Info, ~Facts.Plain(), ~Info.ok, l, s),
+    Orders.Binds.keyed(~Knowns.Info, ~Knowns.Info.key, Crits.Crit.entries(Knowns.Info, l))
+  )
+
 # the table kn is right for the facts s: each state and each content that it
 # holds is what s gives
 def Known.ok(kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
   match kn:
-    case Nil{}:
-      True{}
-    case Con{e, rest}:
-      Bool.and(Kept.ok(s, e), Known.ok(rest, s))
+    case Knowns.Table{l, sh, h, q}:
+      Bool.and(Infos.ok(l, s), Kept.ok(s, Knowns.Stock{h, q}))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the lines of merges that the entry m holds, if it holds them, are those of

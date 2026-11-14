@@ -36,7 +36,10 @@ type Fast is Data:
 def Fast.new(name: String) -> Fast:
   Fast{
     Nodes.Raw.new(name),
-    [Known.Open{[], 0n, Crits.Crit.new(Types.Ask), Crits.Crit.new(Ledgers.Line)}]
+    Known.Known.add(
+      Known.Open{[], 0n, Crits.Crit.new(Types.Ask), Crits.Crit.new(Ledgers.Line)},
+      Known.Known.none()
+    )
   }
 
 # the state of the fast node f
