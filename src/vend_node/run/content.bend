@@ -82,7 +82,7 @@ def Way.hop(
 ) -> Bool:
   Way.hop.of(c, k, w, Knowns.Known.at(kn, s, c, k))
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a way that does not hold, which then costs no more than a way that holds, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured (callgrind, main10 x40, merge both ways and Work): Merge.fits 7k and Way.ok 8k of 4033k instructions per call; every way holds there, so both sides run in either form
 # ws is a way from version k of the line c back to the point a
 def Way.ok(
   +kn: Knowns.Known(),
@@ -676,7 +676,7 @@ def Content.read(
 # A table that is right
 # ---------------------
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- these are said only in laws (Known.ok), and never run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; these are said only in laws (Known.ok)
 # the files x and y hold the same at each of the paths qs that is none of
 # the paths ps
 def Near.files.go(
@@ -735,7 +735,7 @@ def Held.ok(s: Facts.Plain(), e: Knowns.Held) -> Bool:
       )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for an entry that is wrong, which then costs no more than a right entry, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; it is said only in laws (Known.ok)
 # the entry e is right: its state is the state that the facts s give its
 # line, or each of its contents is right, or its rule and its era are those
 # of the next version of its line in the facts s, or its ids are those of the
@@ -790,7 +790,7 @@ def Made.ok(+s: Facts.Plain(), c: Ledgers.Line, m: Maybe<&2, Knowns.Ids>) -> Boo
     case Some{x}:
       Kept.ok(s, Knowns.Made{c, x})
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a table that is wrong, which then costs no more than a right table, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; these are said only in laws (Known.ok)
 # the count that m keeps, if any, is the count of its versions
 def Seen.counted(m: Maybe<&2, Knowns.Seen>) -> Bool:
   match m:
@@ -836,7 +836,7 @@ def Shelf.led(m: Maybe<&2, Knowns.Kept>, s: Facts.Plain()) -> Bool:
     case _:
       True{}
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a table that is wrong, which then costs no more than a right table, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; these are said only in laws (Known.fit)
 # what the entry m holds for a work, if it does, is right: the facts that a
 # work may still act on in the facts s, the greatest number of an ask in s,
 # the newest writes of s, and the lines of the merges of s

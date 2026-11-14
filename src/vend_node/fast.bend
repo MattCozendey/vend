@@ -1092,7 +1092,8 @@ def Table.move_fit(
             RKnown.Shelf.top(RKnown.Known.shelf(kn))
           ),
           RKnown.Shelf.tops(RKnown.Known.shelf(kn)),
-          RKnown.Shelf.merges(RKnown.Known.shelf(kn))
+          RKnown.Shelf.merges(RKnown.Known.shelf(kn)),
+          RKnown.Shelf.roots(RKnown.Known.shelf(kn))
         ),
         RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})
       )
@@ -1128,7 +1129,8 @@ def Table.move_fit(
             RKnown.Shelf.top(RKnown.Known.shelf(kn))
           ),
           RKnown.Shelf.tops(RKnown.Known.shelf(kn)),
-          RKnown.Shelf.merges(RKnown.Known.shelf(kn))
+          RKnown.Shelf.merges(RKnown.Known.shelf(kn)),
+          RKnown.Shelf.roots(RKnown.Known.shelf(kn))
         ),
         RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})
       )
@@ -1157,7 +1159,8 @@ def Table.move_fit(
         RKnown.Shelf.top(RKnown.Known.shelf(kn))
       ),
       RKnown.Shelf.tops(RKnown.Known.shelf(kn)),
-      RKnown.Shelf.merges(RKnown.Known.shelf(kn))
+      RKnown.Shelf.merges(RKnown.Known.shelf(kn)),
+      RKnown.Shelf.roots(RKnown.Known.shelf(kn))
     )(
       Table.mid_ok(
         kn,
@@ -1182,7 +1185,9 @@ def Table.move_fit(
       Knowns.Voted.top(kn, name, s, c, k, t, x)(h)
     )(
       Knowns.Voted.tops(kn, name, s, c, k, t, x)(h)
-    )(Knowns.Voted.merges(kn, name, s, c, k, t, x)(h))
+    )(
+      Knowns.Voted.merges(kn, name, s, c, k, t, x)(h)
+    )(Knowns.Voted.roots(kn, name, s, c, k, t, x)(h))
 
 # the table that a ballot for the slot k of the line c leaves of a table
 # that fits, once it is known whether the ballot only continues the versions
@@ -1255,7 +1260,8 @@ def Table.voted.at_fit(
             RKnown.Shelf.top(RKnown.Known.shelf(kn))
           ),
           RKnown.Shelf.tops(RKnown.Known.shelf(kn)),
-          RKnown.Shelf.merges(RKnown.Known.shelf(kn))
+          RKnown.Shelf.merges(RKnown.Known.shelf(kn)),
+          RKnown.Shelf.roots(RKnown.Known.shelf(kn))
         )(
           Knowns.Late.ok(
             kn,
@@ -1314,7 +1320,9 @@ def Table.voted.at_fit(
           )(Knowns.Fit.open(kn, Facts.Facts.crit(s))(h))
         )(
           Knowns.Voted.tops(kn, name, s, c, k, t, x)(h)
-        )(Knowns.Voted.merges(kn, name, s, c, k, t, x)(h)),
+        )(
+          Knowns.Voted.merges(kn, name, s, c, k, t, x)(h)
+        )(Knowns.Voted.roots(kn, name, s, c, k, t, x)(h)),
         ef => Table.move_fit(False{}, kn, name, s, c, k, t, x)(hs)(h)(hc)
       )
 
@@ -1349,7 +1357,16 @@ def Table.voted_fit(
         RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.Broken{}, x})
       )
     case Types.Step.At{+c, +k, +t}:
-      h => hc => Table.voted.at_fit(RKnown.Known.sound(kn, c, k), kn, name, s, c, k, t, x)({==})(h)(hc)
+      h => hc => Table.voted.at_fit(
+        RKnown.Known.sound(kn, c, k),
+        kn,
+        name,
+        s,
+        c,
+        k,
+        t,
+        x
+      )({==})(h)(hc)
 
 # the table kn after a work of the node name on the facts s casts the ballot
 # m, if any (as Works.Work.cast does: not when s holds a ballot of the node
@@ -1743,85 +1760,9 @@ def Sync.ask_is(
 ):
   match a:
     case Types.Ask{+i, +n, +r}:
-      +h => Lists.Bool.by(
-        z => Sync.Is(
-          RFasts.Sync.ask.of(name, Facts.Facts.crit(s), kn, Types.Ask{i, n, r}, z),
-          Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})
-        ),
-        RLines.Request.fresh(Facts.Facts.crit(s), i, r),
-        +et => (
-          RFasts.Table.asks(
-            kn,
-            RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}),
-            RFasts.Table.read(kn),
-            r,
-            Some{Types.Fact.Ask{Types.Ask{i, n, r}}}
-          ),
-          (
-            Equal.cong(
-              RFacts.Plain(),
-              RFasts.Taken,
-              z => RFasts.Taken{
-                z,
-                RFasts.Table.asks(
-                  kn,
-                  RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}),
-                  RFasts.Table.read(kn),
-                  r,
-                  Some{Types.Fact.Ask{Types.Ask{i, n, r}}}
-                )
-              },
-              RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}),
-              Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})),
-              Equal.sym(
-                RFacts.Plain(),
-                Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})),
-                RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}),
-                Knowns.Take.ask(name, s, i, n, r)(et)
-              )
-            ),
-            Lists.Equal.to(
-              RFacts.Plain(),
-              z => {
-                RContents.Known.fit(
-                  RFasts.Table.asks(
-                    kn,
-                    RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}),
-                    RFasts.Table.read(kn),
-                    r,
-                    Some{Types.Fact.Ask{Types.Ask{i, n, r}}}
-                  ),
-                  z
-                )
-                  == True{}: Bool
-              },
-              RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}),
-              Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})),
-              Equal.sym(
-                RFacts.Plain(),
-                Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})),
-                RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}),
-                Knowns.Take.ask(name, s, i, n, r)(et)
-              ),
-              Fast.asked_join(
-                RFasts.Table.read(kn),
-                name,
-                [],
-                [],
-                False{},
-                RParts.Parts.new(),
-                s,
-                i,
-                n,
-                r,
-                r,
-                kn
-              )(et)(h)
-            )
-          )
-        ),
-        ef => Sync.none_is(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})
-      )
+      +h => (
+        %Equal.sym(Bool, RKnown.Known.fresh_ask(kn, Facts.Facts.crit(s), i, r), RLines.Request.fresh(Facts.Facts.crit(s), i, r), Knowns.Known.fresh_fit(kn, Facts.Facts.crit(s), i, r)(h)): Sync.Is(RFasts.Sync.ask.of(name, Facts.Facts.crit(s), kn, Types.Ask{i, n, r}, _), Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}}))
+        Lists.Bool.by(z => Sync.Is(RFasts.Sync.ask.of(name, Facts.Facts.crit(s), kn, Types.Ask{i, n, r}, z), Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})), RLines.Request.fresh(Facts.Facts.crit(s), i, r), +et => (RFasts.Table.asks(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}), RFasts.Table.read(kn), r, Some{Types.Fact.Ask{Types.Ask{i, n, r}}}), (Equal.cong(RFacts.Plain(), RFasts.Taken, z => RFasts.Taken{z, RFasts.Table.asks(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}), RFasts.Table.read(kn), r, Some{Types.Fact.Ask{Types.Ask{i, n, r}}})}, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}), Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})), Equal.sym(RFacts.Plain(), Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})), RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}), Knowns.Take.ask(name, s, i, n, r)(et))), Lists.Equal.to(RFacts.Plain(), z => {RContents.Known.fit(RFasts.Table.asks(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}), RFasts.Table.read(kn), r, Some{Types.Fact.Ask{Types.Ask{i, n, r}}}), z) == True{}: Bool}, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}), Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})), Equal.sym(RFacts.Plain(), Facts.Facts.crit(Facts.Facts.take(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})), RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Ask{Types.Ask{i, n, r}}), Knowns.Take.ask(name, s, i, n, r)(et)), Fast.asked_join(RFasts.Table.read(kn), name, [], [], False{}, RParts.Parts.new(), s, i, n, r, r, kn)(et)(h)))), ef => Sync.none_is(name, s, Types.Fact.Ask{Types.Ask{i, n, r}})))
 
 # a node that takes in a fact that it may not hold has the facts that
 # Facts.take gives, with a table that fits them
@@ -2088,7 +2029,8 @@ def Fast.does_ok(
       okr => ok => ok
     case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn} Nodes.Act.Ask{+i, +q}:
       +okr => +ok => (
-        %Equal.sym(Types.Ask, RFasts.Asked.ask(kn, fs, i, q), RFacts.Facts.asked(fs, i, q), Asked.ask_fit(kn, fs, i, q)(ok)): {RFasts.Fast.ok(RFasts.Fast.asks.to(name, ws, ms, st, fs, ps, kn, _, q, Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))), RLines.Request.fresh(fs, i, q))) == True{}: Bool}
+        %Equal.sym(Types.Ask, RFasts.Asked.ask(kn, fs, i, q), RFacts.Facts.asked(fs, i, q), Asked.ask_fit(kn, fs, i, q)(ok)): {RFasts.Fast.ok(RFasts.Fast.asks.to(name, ws, ms, st, fs, ps, kn, _, q, Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))), RKnown.Known.fresh_ask(kn, fs, i, q))) == True{}: Bool}
+        %Equal.sym(Bool, RKnown.Known.fresh_ask(kn, fs, i, q), RLines.Request.fresh(fs, i, q), Knowns.Known.fresh_fit(kn, fs, i, q)(ok)): {RFasts.Fast.ok(RFasts.Fast.asks.to(name, ws, ms, st, fs, ps, kn, RFacts.Facts.asked(fs, i, q), q, Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))), _)) == True{}: Bool}
         Fast.asks_fit(Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))), name, ws, ms, st, fs, ps, i, q, q, kn, okr)(ok))
     case RFasts.Fast{
       Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
@@ -2167,8 +2109,9 @@ def Fast.does_raw(
     case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn} Nodes.Act.Leave{w}:
       okr => ok => {==}
     case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn} Nodes.Act.Ask{+i, +q}:
-      okr => ok => (
-        %Equal.sym(Types.Ask, RFasts.Asked.ask(kn, fs, i, q), RFacts.Facts.asked(fs, i, q), Asked.ask_fit(kn, fs, i, q)(ok)): {RFasts.Fast.raw(RFasts.Fast.asks.to(name, ws, ms, st, fs, ps, kn, _, q, Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))), RLines.Request.fresh(fs, i, q))) == Nodes.Raw.asks(name, ws, ms, st, fs, ps, i, q, Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))): Nodes.Raw}
+      okr => +ok => (
+        %Equal.sym(Types.Ask, RFasts.Asked.ask(kn, fs, i, q), RFacts.Facts.asked(fs, i, q), Asked.ask_fit(kn, fs, i, q)(ok)): {RFasts.Fast.raw(RFasts.Fast.asks.to(name, ws, ms, st, fs, ps, kn, _, q, Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))), RKnown.Known.fresh_ask(kn, fs, i, q))) == Nodes.Raw.asks(name, ws, ms, st, fs, ps, i, q, Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))): Nodes.Raw}
+        %Equal.sym(Bool, RKnown.Known.fresh_ask(kn, fs, i, q), RLines.Request.fresh(fs, i, q), Knowns.Known.fresh_fit(kn, fs, i, q)(ok)): {RFasts.Fast.raw(RFasts.Fast.asks.to(name, ws, ms, st, fs, ps, kn, RFacts.Facts.asked(fs, i, q), q, Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))), _)) == Nodes.Raw.asks(name, ws, ms, st, fs, ps, i, q, Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))): Nodes.Raw}
         Fast.asks_to_raw(Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))), name, ws, ms, st, fs, ps, i, q, q, kn))
     case RFasts.Fast{
       Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},

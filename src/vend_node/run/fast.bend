@@ -36,7 +36,13 @@ def Fast.new(name: String) -> Fast:
   Fast{
     Nodes.Raw.new(name),
     Known.Known.add(
-      Known.Open{[], 0n, Crits.Crit.new(Types.Ask), Crits.Crit.new(Ledgers.Line), Crits.Crit.new(Unit)},
+      Known.Open{
+        [],
+        0n,
+        Crits.Crit.new(Types.Ask),
+        Crits.Crit.new(Ledgers.Line),
+        Crits.Crit.new(Unit)
+      },
       Known.Known.none()
     )
   }

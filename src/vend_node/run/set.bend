@@ -15,7 +15,7 @@ def ValSet.ok.end(~A: Data, ~key: A -> List<&2, U32>, r: List<&2, U32>, e: Maybe
     case Some{v}:
       Crits.Key.is_eq(r, key(v))
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a map that is no set, which then costs no more than a set, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; it is said only in laws (Facts.Facts)
 # each value of the map m sits under its own key
 def ValSet.ok(~A: Data, ~key: A -> List<&2, U32>, m: Crits.Crit<A>) -> Bool:
   match m:

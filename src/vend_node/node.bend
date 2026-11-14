@@ -40,7 +40,7 @@ type Raw is Data:
     parts: Parts.Parts
   }
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a state that is no node, which then costs no more than a node, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; these are said only in laws (Raw.ok)
 # the map fs is a set of facts (it is well formed, and each fact sits under
 # its own key), and the map of the parts ps is well formed. The code that runs
 # keeps this and builds no proof of it; impl.bend proves that each deed keeps
@@ -207,7 +207,7 @@ def Raw.works(
     case False{}:
       Raw{name, ws, ms, False{}, Works.Work.does(Known.Known.none(), fs, name), ps}
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the right side is one walk of the mounts, once for a Stop deed
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured (callgrind, main9 n=160 and main16 n=5): Raw.does under 0.1k instructions per call; the eager side runs only for a Stop deed: one walk of the mounts
 # the state r after the deed a
 def Raw.does(r: Raw, a: Act) -> Raw:
   match r a:

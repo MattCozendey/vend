@@ -97,15 +97,23 @@ Measured, native build, one node, one owner:
   + Own: 4.6 ms at 5 writes, 92 ms at 200 (was 13 and 1450); 84 of those 92 ms are its 12 Syncs,
   linear in the facts of the other node. A Start keeps the table when no ask starts its store
   (under 0.2 ms; was 15.6 ms at 50 writes); a ballot that leaves its line as it was (a late vote)
-  keeps it too. Still linear: the check that no ask starts the store, and the re-read of a line
-  after a late vote. In work.
+  keeps it too. The stores that the facts start are kept in an index (`roots.bend`): a Start
+  with its Work is flat (210k instructions at 5 and at 50 writes). A late vote checks its own
+  slot only; it still reads the ballots of that slot from all facts (0.6M instructions at 5
+  writes, 2.5M at 50, beside a Sync of 13M).
 
 ## Lint
 
 `bun run lint` cannot pass. bend-lint checks with its own Bend 2.0.39, where
 `src/shared/shared/shared/shared/shared.bend` fails (no `String.eq.go` in its Base), so the rules
-that need facts skip each file that imports it. It also fails on files that this work did not touch
-(`crit.bend`, `ledger.bend`).
+that need facts skip each file that imports it (40 of the 52 files this branch changed). It also
+fails on files that this work did not touch (`crit.bend`, `ledger.bend`).
+
+On the files this branch changed: 0 errors, 64 warnings (61 in the old shared files, 3 format
+warnings that the formatter cannot place). The 31 `expect` directives left in code that runs each
+state a measurement: 25 cover code that no driver build contains, 6 give the share of the call
+that the code costs (at most 2%). The 70 in `crit_order.bend` cover proofs or Bools that only laws
+use.
 
 ## Design
 

@@ -104,12 +104,7 @@ type Seen is Data:
 # what a node keeps of a line: its state, the era and the rule of its next
 # version, and the ids of its versions, each if the node has read it
 type Info is Data:
-  Info{
-    line: Ledgers.Line,
-    seen: Maybe<&2, Seen>,
-    mark: Maybe<&2, Mark>,
-    ids: Maybe<&2, Ids>
-  }
+  Info{line: Ledgers.Line, seen: Maybe<&2, Seen>, mark: Maybe<&2, Mark>, ids: Maybe<&2, Ids>}
 
 # what a node keeps: what it has read of each line, under the key of the
 # line (Line.key); what it holds for a work, if any; and the contents of
@@ -768,7 +763,12 @@ def Root.keep(old: Unit, new: Unit) -> Unit:
 
 # the roots rx with the root of the store that the request r of the id i
 # starts, when it starts one (start)
-def Roots.put.if(start: Bool, +rx: Crits.Crit<Unit>, +i: Ledgers.Id, +r: Spec.Request) -> Crits.Crit<Unit>:
+def Roots.put.if(
+  start: Bool,
+  +rx: Crits.Crit<Unit>,
+  +i: Ledgers.Id,
+  +r: Spec.Request
+) -> Crits.Crit<Unit>:
   match start:
     case True{}:
       Crits.Crit.upsert(~Unit, ~Root.keep, rx, Root.key(Facts.Start.root(i, r)), Unit{})
@@ -1238,7 +1238,13 @@ def Id.waits(m: Maybe<&2, Lines.State>, kn: Known(), +c: Ledgers.Line, i: Ledger
 
 # the request of the id i waits on the line c in the facts s: read from the
 # ids of the versions of c, when the table kn holds them with its state (j)
-def Line.waits.by(j: Info, +kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, i: Ledgers.Id) -> Bool:
+def Line.waits.by(
+  j: Info,
+  +kn: Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  i: Ledgers.Id
+) -> Bool:
   match j:
     case Info{c2, Some{y}, r, Some{x}}:
       Bool.not(Ids.has(x, i))
@@ -1251,7 +1257,13 @@ def Line.waits(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, i: Ledgers.Id)
 
 # a ballot for the slot k of the line c waits in the facts s: read from the
 # state m that the table kn keeps for c, if any
-def Vote.waits.by(m: Maybe<&2, Seen>, +kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, k: Nat) -> Bool:
+def Vote.waits.by(
+  m: Maybe<&2, Seen>,
+  +kn: Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  k: Nat
+) -> Bool:
   match m:
     case None{}:
       Slot.waits(Known.state(kn, s, c), k)
@@ -1606,7 +1618,13 @@ def Known.learn.all(kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known()
 
 # the table kn as Known.learn.all leaves it, where j is what kn holds of the
 # line c and m the state that it holds of its store: kn, when it holds all
-def Known.learn.by(j: Info, m: Maybe<&2, Seen>, kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
+def Known.learn.by(
+  j: Info,
+  m: Maybe<&2, Seen>,
+  kn: Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line
+) -> Known():
   match j m:
     case Info{c2, Some{y}, Some{r}, Some{x}} Some{z}:
       kn
@@ -1688,7 +1706,7 @@ def Entry.same(a: Types.Entry, b: Types.Entry) -> Bool:
     case Types.Entry{p1, k1} Types.Entry{p2, k2}:
       Bool.and(Coded.Pick.is_eq(p1, p2), Nat.is_eq(k1, k2))
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for versions that differ, which then costs no more than equal versions, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; it is said only in laws (Known.ok)
 # the versions xs and ys are the same
 def Entries.same(xs: List<&2, Types.Entry>, ys: List<&2, Types.Entry>) -> Bool:
   match xs ys:
@@ -1706,7 +1724,7 @@ def State.same(a: Lines.State, b: Lines.State) -> Bool:
     case Lines.State{v1, k1} Lines.State{v2, k2}:
       Bool.and(Entries.same(v1, v2), Nat.is_eq(k1, k2))
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for rules that differ, which then costs no more than equal rules, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; it is said only in laws (Known.ok)
 # the rules a and b are the same
 def Rule.same(a: Lines.Rule, b: Lines.Rule) -> Bool:
   match a b:
@@ -1741,7 +1759,7 @@ def State.fits(m: Maybe<&2, Lines.State>, st: Lines.State) -> Bool:
     case Some{x}:
       State.same(x, st)
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for versions that differ, which then costs no more than equal versions, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; it is said only in laws (Known.ok)
 # the versions a and b, each with its number, are the same
 def Found.same(a: Found, b: Found) -> Bool:
   match a b:
@@ -1753,7 +1771,7 @@ def Found.same(a: Found, b: Found) -> Bool:
 def Bucket.same(a: List<&2, Found>, b: List<&2, Found>) -> Bool:
   Shared.List.is_eq(~Found, ~Found.same, a, b)
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for sets that differ, which then costs no more than equal sets, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; it is said only in laws (Known.ok)
 # the sets a and b are the same: key by key, in the same shape
 def Map.same(a: Crits.Crit<List<&2, Found>>, b: Crits.Crit<List<&2, Found>>) -> Bool:
   match a b:
@@ -1776,7 +1794,7 @@ def Map.same(a: Crits.Crit<List<&2, Found>>, b: Crits.Crit<List<&2, Found>>) -> 
       False{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for maps that differ, which then costs no more than equal maps, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; it is said only in laws (Known.fit)
 # the newest writes a and b are the same: key by key, in the same shape
 def Tops.same(a: Crits.Crit<Types.Ask>, b: Crits.Crit<Types.Ask>) -> Bool:
   match a b:
@@ -1799,7 +1817,7 @@ def Tops.same(a: Crits.Crit<Types.Ask>, b: Crits.Crit<Types.Ask>) -> Bool:
       False{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for maps that differ, which then costs no more than equal maps, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; it is said only in laws (Known.fit)
 # the lines of merges a and b are the same: key by key, in the same shape
 def Mergers.same(a: Crits.Crit<Ledgers.Line>, b: Crits.Crit<Ledgers.Line>) -> Bool:
   match a b:
@@ -1828,7 +1846,7 @@ def Took.same(a: Took, b: Took) -> Bool:
     case Took{j1, v1} Took{j2, v2}:
       Bool.and(Nat.is_eq(j1, j2), Nat.is_eq(v1, v2))
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for maps that differ, which then costs no more than equal maps, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; it is said only in laws (Known.ok)
 # the newest takes a and b are the same: key by key, in the same shape
 def Takes.same(a: Crits.Crit<Took>, b: Crits.Crit<Took>) -> Bool:
   match a b:
@@ -1851,7 +1869,7 @@ def Takes.same(a: Crits.Crit<Took>, b: Crits.Crit<Took>) -> Bool:
       False{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for ids that differ, which then cost no more than equal ids, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; it is said only in laws (Known.ok)
 # the versions a and b, by id, are the same
 def Ids.same(a: Ids, b: Ids) -> Bool:
   match a b:
@@ -2083,7 +2101,13 @@ def Known.late.of(
 # the facts s, with a ballot for the slot k of the line c that the facts s0
 # do not hold, give c the state that the table kn holds of it: a ballot that
 # leaves the state of its line as it was leaves each line as it was
-def Known.late(+kn: Known(), +s0: Facts.Plain(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Bool:
+def Known.late(
+  +kn: Known(),
+  +s0: Facts.Plain(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat
+) -> Bool:
   Known.late.of(Known.seen(kn, c), s0, s, c, k, Known.find(kn, Known.root(c)))
 
 # the contents of the table kn, when a ballot leaves them as they are (safe),
@@ -2553,7 +2577,12 @@ def Known.cast.by(
     } Ledgers.Line{
       +h,
       Some{+b}
-    } Info{c2, Some{Seen{+rev, +n, +slot}}, Some{Mark{+era, +rule}}, Some{+ids}} Some{Seen{+rr, +rn, +rk}}:
+    } Info{
+      c2,
+      Some{Seen{+rev, +n, +slot}},
+      Some{Mark{+era, +rule}},
+      Some{+ids}
+    } Some{Seen{+rr, +rn, +rk}}:
       Known.cast.if(
         Nat.is_eq(slot, k),
         fs,

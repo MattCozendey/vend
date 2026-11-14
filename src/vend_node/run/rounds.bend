@@ -311,7 +311,7 @@ def Force.join(a: Force, b: Force) -> Force:
     case Force.Bound{+r, p} Force.Bound{+r2, p2}:
       Bool.pick(Force, Nat.is_lt(r, r2), Force.Bound{r2, p2}, Force.Bound{r, p})
 
-# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- ms holds one lead for each round of one slot, and a slot takes a new round only when a lead fails: the list stays short
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- measured (callgrind, main9 n=160, Work that casts): Votes.force 20k of 973k instructions per call; ms holds one lead for each round of one slot
 # what the votes vs leave a lead, with the leads ms of the rounds before it
 def Votes.force(+ms: List<&2, Mind>, vs: List<&2, Voted>) -> Force:
   match vs:

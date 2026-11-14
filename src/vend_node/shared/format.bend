@@ -248,7 +248,7 @@ def Items.close(closed: Bool, cl: List<&2, U32>) -> List<&2, List<&2, U32>>:
     case False{}:
       []
 
-# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- it runs once for each piece of one file: the second call is the loop over the pieces
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- measured: not in the main9/10/11/16 builds, so no driver runs it; the second call is the loop over the pieces of one file
 # the items of the words ws in the format f, whose pieces are ps (Pieces.of):
 # the items of a leaf; the blocks of a language; and for an embedding the
 # items of each piece in its own format, with each marker as an item
@@ -485,7 +485,7 @@ def Format.items_whole(
 def Diff() -> Data:
   List<&2, Formats.Hunk>
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for hunks that do not fit, which then costs no more than hunks that fit, where both sides run
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- measured: not in the main9/10/11/16 builds, so no driver runs it; the left side fails only for hunks that do not fit
 # the hunks hs fit n items: each keeps and drops items that are there
 def Hunks.fit(hs: List<&2, Formats.Hunk>, +n: Nat) -> Bool:
   match hs:
