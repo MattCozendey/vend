@@ -344,7 +344,7 @@ def one(mode: Nat, +b: Ledgers.Line, +kn: Known.Known(), +fs: Facts.Plain(), +m:
     case 15n:
       List.length(&2, Rounds.Ballot, Works.Work.ballots(kn, fs, b, 5n))
     case 16n:
-      klen(Known.Known.voted(kn, b))
+      klen(Known.Known.voted(kn, b, True{}))
     case 17n:
       klen(Known.Known.contents(kn))
     case 18n:
@@ -392,7 +392,7 @@ def one(mode: Nat, +b: Ledgers.Line, +kn: Known.Known(), +fs: Facts.Plain(), +m:
     case 39n:
       rlen(Known.Known.rule.next(kn, fs, b, Known.Known.find(kn, b)))
     case 40n:
-      klen(Known.Known.voted(kn, b))
+      klen(Known.Known.voted(kn, b, True{}))
     case 41n:
       plen2(Rounds.Slot.decided(Rounds.Slot.ballots(wfs(kn, m), b, slotof(m)), ["a"], slotof(m)))
     case 42n:
@@ -454,7 +454,7 @@ def one(mode: Nat, +b: Ledgers.Line, +kn: Known.Known(), +fs: Facts.Plain(), +m:
     case 74n:
       List.length(&2, Types.Fact, Known.Open.of(Known.Known.facts(kn, fs), Known.Scene{kn, fs}))
     case 53n+q:
-      klen(Known.Known.join(Known.Known.voted(kn, b), Known.Known.spared(True{}, kn)))
+      klen(Known.Known.join(Known.Known.voted(kn, b, True{}), Known.Known.spared(True{}, kn)))
 
 
 def prof(n: Nat, +mode: Nat, +b: Ledgers.Line, +kn: Known.Known(), +fs: Facts.Plain(), +m: Maybe<&2, Works.Plan>, acc: Nat) -> Nat:

@@ -81,16 +81,21 @@ Measured, native build, one node, one owner:
 - One branch, per call, 160 to 5120 writes: an ask 26 to 30 us, a Work that casts 84 to 90 us,
   a view 6 us, a status 12 us. Two branches with merges, 40 to 320 writes: a merge with its Work
   0.16 to 0.31 ms, its status 50 to 90 us.
-- Still growing: a merge whose line never took the other walks every version; a merge hint
-  reverses the line it takes from; a merge of another shape walks every path.
+- Each line keeps the newest version that took each other line: a merge one way with its Work
+  takes 0.14 ms at 40 writes and 0.16 at 320 (flat).
+- Still growing: a merge in both directions has no hint and folds every path of the three sides
+  (1.5 ms at 40 writes, 2.4 at 320); the status of an old merge walks the versions for its
+  resolve.
 - Sync folds each fact of the other node into the table: a held fact is one lookup, a new one
   joins as an ask or a ballot does. Two nodes, both owners, 50 writes: a write pair (2 asks, 8
   Syncs, Works) 33 ms (was 2.7 s); a Sync that adds nothing 3.3 ms (was 261). It is linear in
   the facts of the other node (136 ms at 800 writes): the IO code should send only what the
   other side lacks. A hash per subtree in the core cannot be proven equal to the plain Sync
   (it needs "no two inputs with one hash").
-- A Start and a ballot on a store line drop the table: Group + Own takes 0.13 s at 50 writes
-  and 1.45 s at 200 (two nodes). In work.
+- A ballot on a store line keeps the table (every line's state only extends). Two nodes, Group
+  + Own: 4.6 ms at 5 writes, 92 ms at 200 (was 13 and 1450); 84 of those 92 ms are its 12 Syncs,
+  linear in the facts of the other node. A Start and a late vote for a decided slot still drop
+  the table. In work.
 
 ## Lint
 

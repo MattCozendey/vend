@@ -5,7 +5,6 @@ import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../shared/lists.bend as Lists
 import ../spec.bend as Spec
 import ../types.bend as Types
-import ./content.bend as Contents
 import ./facts.bend as Facts
 import ./known.bend as Known
 import ./lines.bend as Lines
@@ -55,23 +54,18 @@ def Request.line(
 # Pins
 # ----
 
-# a version that takes a version of another line: its number, and the number
-# of the version that it takes
-type Took is Data:
-  Took{at: Nat, version: Nat}
-
 # found, or the version k when it takes a version of the line c (m)
 def Takes.pick(
   c: Ledgers.Line,
   k: Nat,
   m: Maybe<&2, Spec.Point>,
-  found: Maybe<&2, Took>
-) -> Maybe<&2, Took>:
+  found: Maybe<&2, Known.Took>
+) -> Maybe<&2, Known.Took>:
   match m:
     case None{}:
       found
     case Some{Spec.Point{t, v}}:
-      Bool.pick(Maybe<&2, Took>, Ledgers.Line.is_eq(t, c), Some{Took{k, v}}, found)
+      Bool.pick(Maybe<&2, Known.Took>, Ledgers.Line.is_eq(t, c), Some{Known.Took{k, v}}, found)
 
 # the newest version among vs, from the version k on, that takes a version of
 # the line c: its number, and the version that it takes
@@ -79,28 +73,13 @@ def Takes.last(
   vs: List<&2, Types.Entry>,
   +c: Ledgers.Line,
   +k: Nat,
-  found: Maybe<&2, Took>
-) -> Maybe<&2, Took>:
+  found: Maybe<&2, Known.Took>
+) -> Maybe<&2, Known.Took>:
   match vs:
     case Nil{}:
       found
     case Con{e, rest}:
-      Takes.last(rest, c, 1n+k, Takes.pick(c, k, Contents.Entry.takes(e), found))
-
-# the newest version among the versions rev, the newest first, of which
-# there are n, that takes a version of the line c, as Takes.last gives it for
-# the versions the oldest first: a walk from the newest that stops at the
-# first such version; prev is what the versions before rev gave
-def Takes.seek(rev: List<&2, Types.Entry>, +c: Ledgers.Line, n: Nat, prev: Maybe<&2, Took>) -> Maybe<&2, Took>:
-  match rev n prev:
-    case rs n Some{t}:
-      Some{t}
-    case Nil{} n None{}:
-      None{}
-    case Con{e, rest} 0n None{}:
-      None{}
-    case Con{e, rest} 1n++j None{}:
-      Takes.seek(rest, c, j, Takes.pick(c, j, Contents.Entry.takes(e), None{}))
+      Takes.last(rest, c, 1n+k, Takes.pick(c, k, Known.Entry.takes(e), found))
 
 # the pins of a merge of the line f into the line c: the newest version of f,
 # and as base the newest version of c that f took, else the newest version of
@@ -110,11 +89,11 @@ def Pins.merge.of(
   +c: Ledgers.Line,
   +f: Ledgers.Line,
   from: Nat,
-  theirs: Maybe<&2, Took>,
-  ours: Maybe<&2, Took>
+  theirs: Maybe<&2, Known.Took>,
+  ours: Maybe<&2, Known.Took>
 ) -> Types.Pins:
   match theirs ours:
-    case Some{Took{+j, +v}} _:
+    case Some{Known.Took{+j, +v}} _:
       Types.Pins{
         m,
         from,
@@ -122,7 +101,7 @@ def Pins.merge.of(
         [Spec.Point{c, v}],
         [Spec.Point{f, j}, Spec.Point{c, v}]
       }
-    case None{} Some{Took{+j, +v}}:
+    case None{} Some{Known.Took{+j, +v}}:
       Types.Pins{
         m,
         from,
@@ -319,45 +298,47 @@ def Work.offer.at(
       )
 
 # the pins of a merge of the line f into the line c, whose versions are rev,
-# the newest first, where m is what the table kn holds of f: read from the
-# newest versions of both lines, when it holds the versions of f
+# the newest first, with the ids xc, where m is the ids of f that the table
+# kn holds, if any: read from the newest takes of both lines, when it holds
+# them
 def Pins.merge.seen(
   m: Nat,
   +c: Ledgers.Line,
   +f: Ledgers.Line,
-  +rev: List<&2, Types.Entry>,
+  rev: List<&2, Types.Entry>,
+  xc: Known.Ids,
   +kn: Known.Known(),
   +s: Facts.Plain(),
-  sf: Maybe<&2, Known.Seen>
+  mf: Maybe<&2, Known.Ids>
 ) -> Types.Pins:
-  match sf:
+  match mf:
     case None{}:
       Pins.merge(m, c, f, List.reverse(&2, Types.Entry, rev), Known.Known.versions(kn, s, f))
-    case Some{Known.Seen{+rf, nf, kf}}:
-      +lf = List.length(&2, Types.Entry, rf)
+    case Some{+xf}:
       Pins.merge.of(
         m,
         c,
         f,
-        Nat.sub(lf, 1n),
-        Takes.seek(rf, c, lf, None{}),
-        Takes.seek(rev, f, List.length(&2, Types.Entry, rev), None{})
+        Nat.sub(Known.Ids.count(xf), 1n),
+        Known.Ids.took(xf, c),
+        Known.Ids.took(xc, f)
       )
 
 # the pins that the node gives the request r for the line c, of the versions
-# rev, the newest first, at the era m: the versions are read only for a
-# merge
+# rev, the newest first, and the ids xc, at the era m: the versions are read
+# only for a merge
 def Pins.seen(
   +kn: Known.Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   rev: List<&2, Types.Entry>,
+  xc: Known.Ids,
   m: Nat,
   r: Spec.Request
 ) -> Types.Pins:
   match r:
     case Spec.Request.Merge{+f, x}:
-      Pins.merge.seen(m, c, f, rev, kn, s, Known.Known.seen(kn, f))
+      Pins.merge.seen(m, c, f, rev, xc, kn, s, Known.Known.ids(kn, f))
     case _:
       Lines.Pins.plain(m)
 
@@ -375,6 +356,7 @@ def Work.offer.if(
   +c: Ledgers.Line,
   +a: Types.Ask,
   rev: List<&2, Types.Entry>,
+  xc: Known.Ids,
   +k: Nat,
   +ns: List<&2, String>
 ) -> Maybe<&2, Plan>:
@@ -384,7 +366,10 @@ def Work.offer.if(
         c,
         k,
         Work.offer.of(
-          u2 => Types.Pick{a, Pins.seen(kn, s, c, rev, Era.now(kn, s, c), Lines.Ask.request(a))},
+          u2 => Types.Pick{
+            a,
+            Pins.seen(kn, s, c, rev, xc, Era.now(kn, s, c), Lines.Ask.request(a))
+          },
           Rounds.Slot.chance(Work.ballots(kn, s, c, k), ns, k, name)
         )
       )
@@ -406,7 +391,7 @@ def Work.offer.by(
       c2,
       Some{Known.Seen{rev, n, k}},
       Some{Known.Mark{era, Lines.Rule{g, +ns}}},
-      Some{x}
+      Some{+x}
     }:
       Work.offer.if(
         List.contains(~String, ~String.eq, ns, name),
@@ -417,6 +402,7 @@ def Work.offer.by(
         c,
         a,
         rev,
+        x,
         k,
         ns
       )

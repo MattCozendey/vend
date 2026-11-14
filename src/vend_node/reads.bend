@@ -908,8 +908,8 @@ def Content.of_step(
     Contents.Content.of(s, c, k),
     Contents.Content.of(
       s,
-      Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
-      Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e)))
+      Spec.Point.line(RContents.Point.or(c, RKnown.Entry.takes(e))),
+      Spec.Point.n(RContents.Point.or(c, RKnown.Entry.takes(e)))
     ),
     Contents.Content.of(
       s,
@@ -979,8 +979,8 @@ def Write.prev(
           Contents.Content.of(s, c, k),
           Contents.Content.of(
             s,
-            Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
-            Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e)))
+            Spec.Point.line(RContents.Point.or(c, RKnown.Entry.takes(e))),
+            Spec.Point.n(RContents.Point.or(c, RKnown.Entry.takes(e)))
           ),
           Contents.Content.of(
             s,
@@ -1314,12 +1314,12 @@ def Entry.takes_move(
   -v: Nat
 ) -> {
   RAnswers.Entry.request(e) == Spec.Request.Move{b, t, v}: Spec.Request
-} -> {RContents.Entry.takes(e) == Some{Spec.Point{t, v}}: Maybe<&2, Spec.Point>}:
+} -> {RKnown.Entry.takes(e) == Some{Spec.Point{t, v}}: Maybe<&2, Spec.Point>}:
   match e:
     case Types.Entry{Types.Pick{Types.Ask{i, n, r}, Types.Pins{era, from, base, ours, theirs}}, k}:
       h => Eq.back(
         Spec.Request,
-        y => {RContents.Request.takes(y, from) == Some{Spec.Point{t, v}}: Maybe<&2, Spec.Point>},
+        y => {RKnown.Request.takes(y, from) == Some{Spec.Point{t, v}}: Maybe<&2, Spec.Point>},
         r,
         Spec.Request.Move{b, t, v},
         h,
@@ -1386,7 +1386,7 @@ def Move.content(
       )
         == Some{x}: Maybe<&2, Files.Files()>
     },
-    RContents.Entry.takes(e),
+    RKnown.Entry.takes(e),
     Some{Spec.Point{t, v}},
     Entry.takes_move(e, b, t, v)(hr),
     Eq.to(
@@ -1398,7 +1398,7 @@ def Move.content(
           k,
           e,
           r,
-          RContents.Entry.takes(e),
+          RKnown.Entry.takes(e),
           RContents.Entry.base(e)
         )
           == Some{x}: Maybe<&2, Files.Files()>
@@ -1744,7 +1744,7 @@ def Merge.fits_stays(
     RContents.Entry.base(e),
     RContents.Entry.ours(e),
     RContents.Entry.theirs(e),
-    RContents.Point.or(c, RContents.Entry.takes(e))
+    RContents.Point.or(c, RKnown.Entry.takes(e))
   )
 
 # the content of version 0, the entry m if the node holds it, stays
@@ -2108,9 +2108,9 @@ def Parents.takes(
     Spec.Question.Parents{c, 1n+k}
   )
     == Some{Spec.Reply.Points{[Spec.Point{c, k}, Spec.Point{f, v}]}}: Maybe<&2, Spec.Reply>
-} -> {RContents.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>}:
+} -> {RKnown.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>}:
   ha => hp => Entry.takes_second(
-    RContents.Entry.takes(e),
+    RKnown.Entry.takes(e),
     Spec.Point{c, k},
     Spec.Point{c, k},
     Spec.Point{f, v}
@@ -3148,8 +3148,8 @@ def Merge.fin(
   +h_t: {
     Contents.Content.of(
       s,
-      Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
-      Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e)))
+      Spec.Point.line(RContents.Point.or(c, RKnown.Entry.takes(e))),
+      Spec.Point.n(RContents.Point.or(c, RKnown.Entry.takes(e)))
     )
       == Some{theirs}: Maybe<&2, Files.Files()>
   },
@@ -3198,8 +3198,8 @@ def Merge.fin(
               Contents.Content.of(s, c, k),
               Contents.Content.of(
                 s,
-                Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
-                Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e)))
+                Spec.Point.line(RContents.Point.or(c, RKnown.Entry.takes(e))),
+                Spec.Point.n(RContents.Point.or(c, RKnown.Entry.takes(e)))
               ),
               Contents.Content.of(
                 s,
@@ -3228,8 +3228,8 @@ def Merge.fin(
               Contents.Content.of_wf(s, c, k, ours)(h_o),
               Contents.Content.of_wf(
                 s,
-                Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
-                Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e))),
+                Spec.Point.line(RContents.Point.or(c, RKnown.Entry.takes(e))),
+                Spec.Point.n(RContents.Point.or(c, RKnown.Entry.takes(e))),
                 theirs
               )(h_t),
               Equal.trans(
@@ -3261,8 +3261,8 @@ def Merge.fin(
         Contents.Content.of(s, c, k),
         Contents.Content.of(
           s,
-          Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
-          Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e)))
+          Spec.Point.line(RContents.Point.or(c, RKnown.Entry.takes(e))),
+          Spec.Point.n(RContents.Point.or(c, RKnown.Entry.takes(e)))
         ),
         f,
         x2,
@@ -3285,8 +3285,8 @@ def Merge.fin(
         Contents.Content.of_wf(s, c, k, ours)(h_o),
         Contents.Content.of_wf(
           s,
-          Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
-          Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e))),
+          Spec.Point.line(RContents.Point.or(c, RKnown.Entry.takes(e))),
+          Spec.Point.n(RContents.Point.or(c, RKnown.Entry.takes(e))),
           theirs
         )(h_t),
         Equal.trans(
@@ -3320,7 +3320,7 @@ def Merge.mid(
   +hf: {Answers.Line.find(s, c, i) == Some{RKnown.Found{1n+k, e}}: Maybe<&2, RKnown.Found>},
   +hr: {RAnswers.Entry.request(e) == Spec.Request.Merge{f, x2}: Spec.Request},
   +hfit: {Contents.Merge.fits(s, c, k, e) == True{}: Bool},
-  +htk: {RContents.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>},
+  +htk: {RKnown.Entry.takes(e) == Some{Spec.Point{f, v}}: Maybe<&2, Spec.Point>},
   +hbs: {RContents.Entry.base(e) == Some{a}: Maybe<&2, Spec.Point>},
   rb: {
     Contents.Content.read(
@@ -3415,7 +3415,7 @@ def Merge.mid(
                     )
                       == Some{T}: Maybe<&2, Files.Files()>
                   },
-                  RContents.Entry.takes(e),
+                  RKnown.Entry.takes(e),
                   Some{Spec.Point{f, v}},
                   htk,
                   h_t
@@ -3775,7 +3775,7 @@ def Down.head(
         u => List.contains(
           ~Spec.Point,
           ~Spec.Point.is_eq,
-          Shared.Maybe.cons(Spec.Point, RContents.Entry.takes(e), []),
+          Shared.Maybe.cons(Spec.Point, RKnown.Entry.takes(e), []),
           Spec.Point{c, j}
         ),
         d
@@ -3895,7 +3895,7 @@ def Request.opens_takes(
   from: Nat
 ) -> {
   RLines.Request.opens(r) == True{}: Bool
-} -> {RContents.Request.takes(r, from) == None{}: Maybe<&2, Spec.Point>}:
+} -> {RKnown.Request.takes(r, from) == None{}: Maybe<&2, Spec.Point>}:
   match r:
     case Spec.Request.Start{os}:
       h => {==}
@@ -3925,7 +3925,7 @@ def Entry.opens_takes(
   e: Types.Entry
 ) -> {
   RLines.Request.opens(RAnswers.Entry.request(e)) == True{}: Bool
-} -> {RContents.Entry.takes(e) == None{}: Maybe<&2, Spec.Point>}:
+} -> {RKnown.Entry.takes(e) == None{}: Maybe<&2, Spec.Point>}:
   match e:
     case Types.Entry{Types.Pick{Types.Ask{i, n, r}, Types.Pins{era, from, base, ours, theirs}}, k}:
       Request.opens_takes(r, from)
@@ -3937,7 +3937,7 @@ def Take.in(
   -e: Types.Entry,
   +w: Spec.Point
 ) -> {
-  RContents.Entry.takes(e) == Some{w}: Maybe<&2, Spec.Point>
+  RKnown.Entry.takes(e) == Some{w}: Maybe<&2, Spec.Point>
 } -> {
   List.contains(
     ~Spec.Point,
@@ -3958,7 +3958,7 @@ def Take.in(
       )
         == True{}: Bool
     },
-    RContents.Entry.takes(e),
+    RKnown.Entry.takes(e),
     Some{w},
     ht,
     Shared.List.contains_cons(
@@ -3990,7 +3990,7 @@ def Take.before(
   +w: Spec.Point
 ) -> {
   Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>
-} -> {RContents.Entry.takes(e) == Some{w}: Maybe<&2, Spec.Point>} -> Mirror.Before(s, w, c, k):
+} -> {RKnown.Entry.takes(e) == Some{w}: Maybe<&2, Spec.Point>} -> Mirror.Before(s, w, c, k):
   match k:
     case 0n:
       ha => ht => Empty.absurd(
@@ -4001,9 +4001,9 @@ def Take.before(
           Equal.trans(
             Maybe<&2, Spec.Point>,
             Some{w},
-            RContents.Entry.takes(e),
+            RKnown.Entry.takes(e),
             None{},
-            Equal.sym(Maybe<&2, Spec.Point>, RContents.Entry.takes(e), Some{w}, ht),
+            Equal.sym(Maybe<&2, Spec.Point>, RKnown.Entry.takes(e), Some{w}, ht),
             Entry.opens_takes(e)(Zero.opens(s, c, e)(ha))
           )
         )
@@ -4056,7 +4056,7 @@ def Hop.before.of(
     d => {
       Bool.or(
         d,
-        Shared.Maybe.is_eq(~Spec.Point, ~Spec.Point.is_eq, RContents.Entry.takes(e), Some{w})
+        Shared.Maybe.is_eq(~Spec.Point, ~Spec.Point.is_eq, RKnown.Entry.takes(e), Some{w})
       )
         == True{}: Bool
     } -> Mirror.Before(s, w, c, k),
@@ -4075,7 +4075,7 @@ def Hop.before.of(
         ~Spec.Point,
         ~Spec.Point.is_eq,
         x => y => Point.is_eq_sound(x, y),
-        RContents.Entry.takes(e),
+        RKnown.Entry.takes(e),
         Some{w}
       )(h)
     )
@@ -4252,7 +4252,7 @@ def Core.base_shared(
             )
               == True{}: Bool
           },
-          RContents.Entry.takes(e),
+          RKnown.Entry.takes(e),
           Some{Spec.Point{f, v}},
           Parents.takes(s, c, k, e, f, v)(ha)(hp),
           Eq.to(
@@ -4265,7 +4265,7 @@ def Core.base_shared(
                 m2,
                 RContents.Entry.ours(e),
                 RContents.Entry.theirs(e),
-                RContents.Point.or(c, RContents.Entry.takes(e))
+                RContents.Point.or(c, RKnown.Entry.takes(e))
               )
                 == True{}: Bool
             },

@@ -48,11 +48,17 @@ import ./lines.bend as Lines
 type Found is Data:
   Found{n: Nat, entry: Types.Entry}
 
+# a version that takes a version of another line: its number, and the number
+# of the version that it takes
+type Took is Data:
+  Took{at: Nat, version: Nat}
+
 # the versions of a line by the id of the request that made each: a map from
-# a short key (Id.key) to the versions of that key, the newest first; and
-# the count of the versions
+# a short key (Id.key) to the versions of that key, the newest first; the
+# count of the versions; and, under the key of each line (Line.key) that a
+# version takes a version of, the newest such version
 type Ids is Data:
-  Ids{map: Crits.Crit<List<&2, Found>>, count: Nat}
+  Ids{map: Crits.Crit<List<&2, Found>>, count: Nat, takes: Crits.Crit<Took>}
 
 # the content of a version of a line, which a read with the fuel depth gives
 type Held is Data:
@@ -725,7 +731,7 @@ def Ids.has.of(m: Maybe<&2, List<&2, Found>>, i: Ledgers.Id) -> Bool:
 # the request of the id i made one of the versions of x
 def Ids.has(x: Ids, +i: Ledgers.Id) -> Bool:
   match x:
-    case Ids{m, n}:
+    case Ids{m, n, tk}:
       Ids.has.of(Crits.Crit.get(List<&2, Found>, m, Id.key(i)), i)
 
 # the version m, or else the version f when the request of the id i made it
@@ -755,7 +761,7 @@ def Ids.find.of(m: Maybe<&2, List<&2, Found>>, i: Ledgers.Id) -> Maybe<&2, Found
 # the oldest version of x that the request of the id i made
 def Ids.find(x: Ids, +i: Ledgers.Id) -> Maybe<&2, Found>:
   match x:
-    case Ids{m, n}:
+    case Ids{m, n, tk}:
       Ids.find.of(Crits.Crit.get(List<&2, Found>, m, Id.key(i)), i)
 
 # the ask b is the ask a: the asks are read only when they are of one id
@@ -785,26 +791,60 @@ def Ids.made.of(m: Maybe<&2, List<&2, Found>>, a: Types.Ask) -> Bool:
 # one of the versions of x was made by the ask a
 def Ids.made(x: Ids, +a: Types.Ask) -> Bool:
   match x:
-    case Ids{m, n}:
+    case Ids{m, n, tk}:
       Ids.made.of(Crits.Crit.get(List<&2, Found>, m, Id.key(Lines.Ask.id(a))), a)
 
 # the count of the versions of x
 def Ids.count(x: Ids) -> Nat:
   match x:
-    case Ids{m, n}:
+    case Ids{m, n, tk}:
       n
+
+# the newest version of x that takes a version of the line c, and the
+# version that it takes
+def Ids.took(x: Ids, +c: Ledgers.Line) -> Maybe<&2, Took>:
+  match x:
+    case Ids{m, n, tk}:
+      Crits.Crit.get(Took, tk, Line.key(c))
 
 # the versions of no line
 def Ids.new() -> Ids:
-  Ids{Crits.Crit.new(List<&2, Found>), 0n}
+  Ids{Crits.Crit.new(List<&2, Found>), 0n, Crits.Crit.new(Took)}
+
+# the version that the request r takes from another line, with the pinned
+# version from: where a move points, or what a merge merges
+def Request.takes(r: Spec.Request, from: Nat) -> Maybe<&2, Spec.Point>:
+  match r:
+    case Spec.Request.Move{b, t, v}:
+      Some{Spec.Point{t, v}}
+    case Spec.Request.Merge{f, x}:
+      Some{Spec.Point{f, from}}
+    case _:
+      None{}
+
+# the version that the entry e takes from another line
+def Entry.takes(e: Types.Entry) -> Maybe<&2, Spec.Point>:
+  match e:
+    case Types.Entry{Types.Pick{Types.Ask{i, n, r}, Types.Pins{era, from, base, ours, theirs}}, k}:
+      Request.takes(r, from)
+
+# the newest takes tk, with the version n, which takes the version m of
+# another line, if any
+def Took.put(+tk: Crits.Crit<Took>, n: Nat, m: Maybe<&2, Spec.Point>) -> Crits.Crit<Took>:
+  match m:
+    case None{}:
+      tk
+    case Some{Spec.Point{t, v}}:
+      Crits.Crit.set(~Took, tk, Line.key(t), Took{n, v})
 
 # the versions acc with the entry e as the next version
 def Ids.put(acc: Ids, +e: Types.Entry) -> Ids:
   match acc:
-    case Ids{+m, +n}:
+    case Ids{+m, +n, tk}:
       Ids{
         Crits.Crit.upsert(~List<&2, Found>, ~Ids.join, m, Id.key(Lines.Entry.id(e)), [Found{n, e}]),
-        1n+n
+        1n+n,
+        Took.put(tk, n, Entry.takes(e))
       }
 
 # the versions acc with each of the entries vs as the next version
@@ -1406,20 +1446,59 @@ def Known.hit(c: Ledgers.Line, +c2: Ledgers.Line) -> Bool:
   +c = c
   Bool.or(Ledgers.Line.is_eq(c2, c), Ledgers.Line.is_eq(Known.root(c2), c))
 
+# a vote for the next slot of a store keeps what a node holds of a line (i),
+# whether the vote hits the line or not (hit): a line that it does not hit
+# stays, and so does a branch of the store whose next rule is known, since
+# the store only grows and keeps each rule that it gave
+def Info.stays(hit: Bool, i: Info) -> Bool:
+  match hit i:
+    case False{} i:
+      True{}
+    case True{} Info{Ledgers.Line{h, Some{b}}, Some{x}, Some{u}, y}:
+      True{}
+    case True{} i:
+      False{}
+
+# the lines l, with i when a vote keeps it (keep)
+def Infos.put.if(keep: Bool, +l: Crits.Crit<Info>, +i: Info) -> Crits.Crit<Info>:
+  match keep:
+    case True{}:
+      Infos.with(l, i)
+    case False{}:
+      l
+
+# the lines acc, with what a vote for the next slot of the store c keeps of
+# each of the lines es
+def Infos.kept.go(
+  es: List<&2, Crits.Bind<Info>>,
+  +c: Ledgers.Line,
+  +acc: Crits.Crit<Info>
+) -> Crits.Crit<Info>:
+  match es:
+    case Nil{}:
+      acc
+    case Con{Crits.Bind{k, +i}, rest}:
+      Infos.kept.go(rest, c, Infos.put.if(Info.stays(Known.hit(c, Info.line(i)), i), acc, i))
+
 # the lines l without what a vote for a slot of the line c may change: what
-# they hold of c, when c is a branch; all of them, when c is a store
-def Infos.voted(+l: Crits.Crit<Info>, c: Ledgers.Line) -> Crits.Crit<Info>:
-  match c:
-    case Ledgers.Line{h, None{}}:
+# they hold of c, when c is a branch; when c is a store, what the vote may
+# change when it is for the next slot of the known state of c (next), else
+# all of them
+def Infos.voted(+l: Crits.Crit<Info>, +c: Ledgers.Line, next: Bool) -> Crits.Crit<Info>:
+  match c next:
+    case Ledgers.Line{+h, None{}} True{}:
+      Infos.kept.go(Crits.Crit.entries(Info, l), Ledgers.Line{h, None{}}, Crits.Crit.new(Info))
+    case Ledgers.Line{h, None{}} False{}:
       Crits.Crit.new(Info)
-    case Ledgers.Line{h, Some{b}}:
+    case Ledgers.Line{h, Some{b}} next:
       Infos.with(l, Info.blank(Ledgers.Line{h, Some{b}}))
 
-# the table kn after a vote for a slot of the line c: without the states and
-# the rules that the vote may change, without the contents, and without the
+# the table kn after a vote for a slot of the line c, which is for the next
+# slot of the known state of c, or not (next): without the states and the
+# rules that the vote may change, without the contents, and without the
 # facts that a work may act on
-def Known.voted(kn: Known(), c: Ledgers.Line) -> Known():
-  Table{Infos.voted(Known.lines(kn), c), None{}, Crits.Crit.new(Held), 0n}
+def Known.voted(kn: Known(), c: Ledgers.Line, next: Bool) -> Known():
+  Table{Infos.voted(Known.lines(kn), c, next), None{}, Crits.Crit.new(Held), 0n}
 
 # the entries a and b are the same
 def Entry.same(a: Types.Entry, b: Types.Entry) -> Bool:
@@ -1561,11 +1640,42 @@ def Mergers.same(a: Crits.Crit<Ledgers.Line>, b: Crits.Crit<Ledgers.Line>) -> Bo
       False{}
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# the versions a and b that take a version of another line are the same
+def Took.same(a: Took, b: Took) -> Bool:
+  match a b:
+    case Took{j1, v1} Took{j2, v2}:
+      Bool.and(Nat.is_eq(j1, j2), Nat.is_eq(v1, v2))
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for maps that differ, which then costs no more than equal maps, where both sides run
+# the newest takes a and b are the same: key by key, in the same shape
+def Takes.same(a: Crits.Crit<Took>, b: Crits.Crit<Took>) -> Bool:
+  match a b:
+    case Crits.Crit.Tip{} Crits.Crit.Tip{}:
+      True{}
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Leaf{k2, v2}:
+      Bool.and(Crits.Key.is_eq(k1, k2), Took.same(v1, v2))
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      Bool.and(
+        Crits.Key.is_eq(r1, r2),
+        Bool.and(
+          Nat.is_eq(p1, p2),
+          Bool.and(
+            Shared.Maybe.is_eq(~Took, ~Took.same, e1, e2),
+            Bool.and(Takes.same(z1, z2), Takes.same(o1, o2))
+          )
+        )
+      )
+    case _ _:
+      False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for ids that differ, which then cost no more than equal ids, where both sides run
 # the versions a and b, by id, are the same
 def Ids.same(a: Ids, b: Ids) -> Bool:
   match a b:
-    case Ids{m1, n1} Ids{m2, n2}:
-      Bool.and(Map.same(m1, m2), Nat.is_eq(n1, n2))
+    case Ids{m1, n1, t1} Ids{m2, n2, t2}:
+      Bool.and(Map.same(m1, m2), Bool.and(Nat.is_eq(n1, n2), Takes.same(t1, t2)))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # m is a state whose versions have the ids x
 def Made.fits(m: Maybe<&2, Lines.State>, x: Ids) -> Bool:
@@ -1668,9 +1778,9 @@ def Known.next.of(
     case _ _:
       None{}
 
-# a ballot for the slot k of the line c continues the versions of c and
-# changes no other line: c is a branch, k is the next slot of its state m,
-# and the state ms of its store is known
+# a ballot for the slot k of the line c only continues the versions of each
+# line: k is the next slot of the state m of c, and, when c is a branch, the
+# state ms of its store is known
 def Known.safe(
   c: Ledgers.Line,
   m: Maybe<&2, Lines.State>,
@@ -1678,6 +1788,8 @@ def Known.safe(
   k: Nat
 ) -> Bool:
   match c m ms:
+    case Ledgers.Line{h, None{}} Some{st} ms:
+      Nat.is_eq(Lines.State.slot(st), k)
     case Ledgers.Line{h, Some{b}} Some{st} Some{y}:
       Nat.is_eq(Lines.State.slot(st), k)
     case _ _ _:
@@ -1686,6 +1798,8 @@ def Known.safe(
 # Known.safe, of the states m and ms as a node keeps them
 def Seen.safe(c: Ledgers.Line, m: Maybe<&2, Seen>, ms: Maybe<&2, Seen>, k: Nat) -> Bool:
   match c m ms:
+    case Ledgers.Line{h, None{}} Some{Seen{rev, n, j}} ms:
+      Nat.is_eq(j, k)
     case Ledgers.Line{h, Some{b}} Some{Seen{rev, n, j}} Some{y}:
       Nat.is_eq(j, k)
     case _ _ _:
@@ -1753,7 +1867,7 @@ def Known.cast.plain(
     kn,
     c,
     Known.join(
-      Known.voted(kn, c),
+      Known.voted(kn, c, Known.safe(c, Known.find(kn, c), Known.find(kn, Known.root(c)), k)),
       Known.spared(Known.safe(c, Known.find(kn, c), Known.find(kn, Known.root(c)), k), kn)
     ),
     Known.next.of(w, s, c, k, Known.find(kn, c), Known.over(c, Known.find(kn, Known.root(c))))
@@ -1958,7 +2072,7 @@ def Known.cast.as(
     case Some{run}:
       Known.ran(
         Known.join(
-          Known.voted(kn, c),
+          Known.voted(kn, c, Known.safe(c, Known.find(kn, c), Known.find(kn, Known.root(c)), k)),
           Known.spared(Known.safe(c, Known.find(kn, c), Known.find(kn, Known.root(c)), k), kn)
         ),
         c,

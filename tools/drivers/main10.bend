@@ -87,11 +87,54 @@ def writes(n: Nat, r: Fasts.Fast) -> Fasts.Fast:
       +p = p
       writes(p, merged(write(write(r, branch(), "x", p), dev(), "d", p), p, Nat.is_eq(Nat.mod(p, 10n), 0n)))
 
+# after every 20 writes: a merge, by turns of dev into main and of main into
+# dev, and a resolve of it
+def merged2(r: Fasts.Fast, +p: Nat, every: Bool) -> Fasts.Fast:
+  match every:
+    case False{}:
+      r
+    case True{}:
+      +m = String.append("m", Nat.show(p))
+      step(step(r, m, Bool.pick(Spec.Request, Nat.is_eq(Nat.mod(p, 20n), 0n), Spec.Request.Merge{dev(), branch()}, Spec.Request.Merge{branch(), dev()})), String.append("r", Nat.show(p)), Spec.Request.Resolve{id(m), "fx1", Some{[1, 2]}})
+
+# n writes, by turns on the two branches, with merges in both directions
+def writes2(n: Nat, r: Fasts.Fast) -> Fasts.Fast:
+  match n:
+    case 0n:
+      r
+    case 1n+p:
+      +p = p
+      writes2(p, merged2(write(write(r, branch(), "x", p), dev(), "d", p), p, Nat.is_eq(Nat.mod(p, 10n), 0n)))
+
+# the size arg asks for merges in both directions when it starts with x
+def twoway(t: String) -> Bool:
+  match t:
+    case SNil{}:
+      False{}
+    case SCon{c, rest}:
+      Char.is_eq(c, 'x')
+
+# the size arg without a leading x
+def digits(t: String) -> String:
+  match t:
+    case SNil{}:
+      SNil{}
+    case SCon{+c, +rest}:
+      Bool.pick(String, Char.is_eq(c, 'x'), rest, SCon{c, rest})
+
 def nat(t: String) -> Nat:
   Maybe.default(&2, Nat, Nat.read(t), 0n)
 
 def build(+n: Nat) -> Fasts.Fast:
   writes(n, both())
+
+# the node after n writes, with merges in both directions (two)
+def build.of(two: Bool, +n: Nat) -> Fasts.Fast:
+  match two:
+    case False{}:
+      build(n)
+    case True{}:
+      writes2(n, both())
 
 def pending(r: Fasts.Fast) -> Fasts.Fast:
   Fasts.Fast.does(r, Nodes.Act.Ask{id("last"), Spec.Request.Write{branch(), "zz", Some{[104, 105, 106]}}})
@@ -178,10 +221,10 @@ def start3(+r: Fasts.Fast, +k: Nat, rest: List<&2, String>, t0: Nat) -> IO(Unit)
 
 def start2(xs: List<&2, String>) -> IO(Unit):
   match xs:
-    case Con{a, Con{b, Con{c, rest}}}:
+    case Con{a, Con{+b, Con{c, rest}}}:
       do IO<Unit>:
         t0 : Nat <- IO.now()
-        start3(build(nat(b)), nat(c), rest, t0)
+        start3(build.of(twoway(b), nat(digits(b))), nat(c), rest, t0)
     case _:
       IO.print("usage: n reps modes...")
 

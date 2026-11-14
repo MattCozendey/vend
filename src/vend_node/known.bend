@@ -1,6 +1,5 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
-import ../shared/shared/shared/shared/code.bend as Codes
 import ../shared/shared/shared/shared/crit.bend as Crits
 import ../shared/shared/shared/shared/crit_order.bend as Orders
 import ../shared/shared/shared/shared/hash.bend as Hashes
@@ -552,14 +551,159 @@ def Map.same_sound(
         {==})
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# Took.same is True for a take and itself
+def Took.same_refl(a: RKnown.Took) -> {RKnown.Took.same(a, a) == True{}: Bool}:
+  match a:
+    case RKnown.Took{at, version}:
+      %Equal.sym(Bool, Nat.is_eq(at, at), True{}, Shared.Nat.is_eq_refl(at)):
+        {Bool.and(_, Cmp.is_eq(Nat.cmp(version, version))) == True{}: Bool}
+      %Equal.sym(Cmp, Nat.cmp(version, version), EQ{}, Crits.Crit.cmp_refl(version)):
+        {Cmp.is_eq(_) == True{}: Bool}
+      {==}
+
+# Took.same is True only for equal takes
+def Took.same_sound(
+  a: RKnown.Took,
+  b: RKnown.Took
+) -> {RKnown.Took.same(a, b) == True{}: Bool} -> {a == b: RKnown.Took}:
+  match a b:
+    case RKnown.Took{+j1, +v1} RKnown.Took{+j2, +v2}:
+      +h => (
+        %Shared.Nat.is_eq_sound(j1, j2)(Shared.Bool.and_true_left(Nat.is_eq(j1, j2), Nat.is_eq(v1, v2))(h)): {RKnown.Took{j1, v1} == RKnown.Took{_, v2}: RKnown.Took}
+        %Shared.Nat.is_eq_sound(v1, v2)(Shared.Bool.and_true_right(Nat.is_eq(j1, j2), Nat.is_eq(v1, v2))(h)): {RKnown.Took{j1, v1} == RKnown.Took{j1, _}: RKnown.Took}
+        {==})
+
+# a take, if any, is the same as itself
+def Took.tip_refl(
+  e: Maybe<&2, RKnown.Took>
+) -> {Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e, e) == True{}: Bool}:
+  match e:
+    case None{}:
+      {==}
+    case Some{value}:
+      match value:
+        case RKnown.Took{at, version}:
+          %Equal.sym(Bool, Nat.is_eq(at, at), True{}, Shared.Nat.is_eq_refl(at)):
+            {Bool.and(_, Cmp.is_eq(Nat.cmp(version, version))) == True{}: Bool}
+          %Equal.sym(Cmp, Nat.cmp(version, version), EQ{}, Crits.Crit.cmp_refl(version)):
+            {Cmp.is_eq(_) == True{}: Bool}
+          {==}
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+# Takes.same is True for newest takes and themselves
+def Takes.same_refl(a: Crits.Crit<RKnown.Took>) -> {RKnown.Takes.same(a, a) == True{}: Bool}:
+  match a:
+    case Crits.Crit.Tip{}:
+      {==}
+    case Crits.Crit.Leaf{+k, +v}:
+      Shared.Bool.and_both(
+        Crits.Key.is_eq(k, k),
+        RKnown.Took.same(v, v)
+      )(Crits.Key.is_eq_refl(k))(Took.same_refl(v))
+    case Crits.Crit.Fork{+r, +p, +e, +z, +o}:
+      Shared.Bool.and_both(
+        Crits.Key.is_eq(r, r),
+        Bool.and(
+          Nat.is_eq(p, p),
+          Bool.and(
+            Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e, e),
+            Bool.and(RKnown.Takes.same(z, z), RKnown.Takes.same(o, o))
+          )
+        )
+      )(
+        Crits.Key.is_eq_refl(r)
+      )(
+        Shared.Bool.and_both(
+          Nat.is_eq(p, p),
+          Bool.and(
+            Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e, e),
+            Bool.and(RKnown.Takes.same(z, z), RKnown.Takes.same(o, o))
+          )
+        )(
+          Shared.Nat.is_eq_refl(p)
+        )(
+          Shared.Bool.and_both(
+            Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e, e),
+            Bool.and(RKnown.Takes.same(z, z), RKnown.Takes.same(o, o))
+          )(
+            Took.tip_refl(e)
+          )(
+            Shared.Bool.and_both(
+              RKnown.Takes.same(z, z),
+              RKnown.Takes.same(o, o)
+            )(Takes.same_refl(z))(Takes.same_refl(o))
+          )
+        )
+      )
+
+# Takes.same is True only for equal newest takes
+def Takes.same_sound(
+  a: Crits.Crit<RKnown.Took>,
+  b: Crits.Crit<RKnown.Took>
+) -> {RKnown.Takes.same(a, b) == True{}: Bool} -> {a == b: Crits.Crit<RKnown.Took>}:
+  match a b:
+    case Crits.Crit.Tip{} Crits.Crit.Tip{}:
+      h => {==}
+    case Crits.Crit.Tip{} Crits.Crit.Leaf{k2, v2}:
+      h => Empty.absurd(
+        {Crits.Crit.Tip{} == Crits.Crit.Leaf{k2, v2}: Crits.Crit<RKnown.Took>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Tip{} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      h => Empty.absurd(
+        {Crits.Crit.Tip{} == Crits.Crit.Fork{r2, p2, e2, z2, o2}: Crits.Crit<RKnown.Took>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Tip{}:
+      h => Empty.absurd(
+        {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Tip{}: Crits.Crit<RKnown.Took>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      h => Empty.absurd(
+        {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Fork{r2, p2, e2, z2, o2}: Crits.Crit<RKnown.Took>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Tip{}:
+      h => Empty.absurd(
+        {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Tip{}: Crits.Crit<RKnown.Took>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Leaf{k2, v2}:
+      h => Empty.absurd(
+        {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Leaf{k2, v2}: Crits.Crit<RKnown.Took>},
+        Shared.Bool.false_ne_true(h)
+      )
+    case Crits.Crit.Leaf{+k1, +v1} Crits.Crit.Leaf{+k2, +v2}:
+      +h => (
+        %Crits.Key.is_eq_sound(k1, k2)(Shared.Bool.and_true_left(Crits.Key.is_eq(k1, k2), RKnown.Took.same(v1, v2))(h)): {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Leaf{_, v2}: Crits.Crit<RKnown.Took>}
+        %Took.same_sound(v1, v2)(Shared.Bool.and_true_right(Crits.Key.is_eq(k1, k2), RKnown.Took.same(v1, v2))(h)): {Crits.Crit.Leaf{k1, v1} == Crits.Crit.Leaf{k1, _}: Crits.Crit<RKnown.Took>}
+        {==})
+    case Crits.Crit.Fork{+r1, +p1, +e1, +z1, +o1} Crits.Crit.Fork{+r2, +p2, +e2, +z2, +o2}:
+      +h => (
+        %Crits.Key.is_eq_sound(r1, r2)(Shared.Bool.and_true_left(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2)))))(h)): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{_, p2, e2, z2, o2}: Crits.Crit<RKnown.Took>}
+        %Shared.Nat.is_eq_sound(p1, p2)(Shared.Bool.and_true_left(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2)))))(h))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, _, e2, z2, o2}: Crits.Crit<RKnown.Took>}
+        %Shared.Maybe.is_eq_sound(~RKnown.Took, ~RKnown.Took.same, x => y => Took.same_sound(x, y), e1, e2)(Shared.Bool.and_true_left(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2)))(Shared.Bool.and_true_right(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2)))))(h)))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, _, z2, o2}: Crits.Crit<RKnown.Took>}
+        %Takes.same_sound(z1, z2)(Shared.Bool.and_true_left(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2))(Shared.Bool.and_true_right(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2)))(Shared.Bool.and_true_right(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2)))))(h))))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, e1, _, o2}: Crits.Crit<RKnown.Took>}
+        %Takes.same_sound(o1, o2)(Shared.Bool.and_true_right(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2))(Shared.Bool.and_true_right(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2)))(Shared.Bool.and_true_right(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2))))(Shared.Bool.and_true_right(Crits.Key.is_eq(r1, r2), Bool.and(Nat.is_eq(p1, p2), Bool.and(Shared.Maybe.is_eq(~RKnown.Took, ~RKnown.Took.same, e1, e2), Bool.and(RKnown.Takes.same(z1, z2), RKnown.Takes.same(o1, o2)))))(h))))): {Crits.Crit.Fork{r1, p1, e1, z1, o1} == Crits.Crit.Fork{r1, p1, e1, z1, _}: Crits.Crit<RKnown.Took>}
+        {==})
+
 # Ids.same is True for versions by id and themselves
 def Ids.same_refl(a: RKnown.Ids) -> {RKnown.Ids.same(a, a) == True{}: Bool}:
   match a:
-    case RKnown.Ids{+m, +n}:
+    case RKnown.Ids{+m, +n, +tk}:
       Shared.Bool.and_both(
         RKnown.Map.same(m, m),
-        Nat.is_eq(n, n)
-      )(Map.same_refl(m))(Shared.Nat.is_eq_refl(n))
+        Bool.and(Nat.is_eq(n, n), RKnown.Takes.same(tk, tk))
+      )(
+        Map.same_refl(m)
+      )(
+        Shared.Bool.and_both(
+          Nat.is_eq(n, n),
+          RKnown.Takes.same(tk, tk)
+        )(Shared.Nat.is_eq_refl(n))(Takes.same_refl(tk))
+      )
 
 # Ids.same is True only for equal versions by id
 def Ids.same_sound(
@@ -567,11 +711,14 @@ def Ids.same_sound(
   b: RKnown.Ids
 ) -> {RKnown.Ids.same(a, b) == True{}: Bool} -> {a == b: RKnown.Ids}:
   match a b:
-    case RKnown.Ids{+m1, +n1} RKnown.Ids{+m2, +n2}:
+    case RKnown.Ids{+m1, +n1, +t1} RKnown.Ids{+m2, +n2, +t2}:
       +h => (
-        %Map.same_sound(m1, m2)(Shared.Bool.and_true_left(RKnown.Map.same(m1, m2), Nat.is_eq(n1, n2))(h)): {RKnown.Ids{m1, n1} == RKnown.Ids{_, n2}: RKnown.Ids}
-        %Shared.Nat.is_eq_sound(n1, n2)(Shared.Bool.and_true_right(RKnown.Map.same(m1, m2), Nat.is_eq(n1, n2))(h)): {RKnown.Ids{m1, n1} == RKnown.Ids{m1, _}: RKnown.Ids}
+        %Map.same_sound(m1, m2)(Shared.Bool.and_true_left(RKnown.Map.same(m1, m2), Bool.and(Nat.is_eq(n1, n2), RKnown.Takes.same(t1, t2)))(h)): {RKnown.Ids{m1, n1, t1} == RKnown.Ids{_, n2, t2}: RKnown.Ids}
+        %Shared.Nat.is_eq_sound(n1, n2)(Shared.Bool.and_true_left(Nat.is_eq(n1, n2), RKnown.Takes.same(t1, t2))(Shared.Bool.and_true_right(RKnown.Map.same(m1, m2), Bool.and(Nat.is_eq(n1, n2), RKnown.Takes.same(t1, t2)))(h))): {RKnown.Ids{m1, n1, t1} == RKnown.Ids{m1, _, t2}: RKnown.Ids}
+        %Takes.same_sound(t1, t2)(Shared.Bool.and_true_right(Nat.is_eq(n1, n2), RKnown.Takes.same(t1, t2))(Shared.Bool.and_true_right(RKnown.Map.same(m1, m2), Bool.and(Nat.is_eq(n1, n2), RKnown.Takes.same(t1, t2)))(h))): {RKnown.Ids{m1, n1, t1} == RKnown.Ids{m1, n1, _}: RKnown.Ids}
         {==})
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # the ids that fit a state are the ids of its versions
 def Made.fits_sound(
@@ -624,7 +771,7 @@ def Key.ne_id(
 # the map of the versions x by id
 def Ids.map(x: RKnown.Ids) -> Crits.Crit<List<&2, RKnown.Found>>:
   match x:
-    case RKnown.Ids{m, n}:
+    case RKnown.Ids{m, n, tk}:
       m
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
@@ -832,16 +979,17 @@ def Bucket.has_put(
 def Ids.put_has(
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat,
+  +tk: Crits.Crit<RKnown.Took>,
   +e: Types.Entry,
   +i: Ledgers.Id
 ) -> {
   Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
 } -> {
   RKnown.Ids.has(
-    RKnown.Ids.put(RKnown.Ids{m, n}, e),
+    RKnown.Ids.put(RKnown.Ids{m, n, tk}, e),
     i
   )
-    == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool
+    == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n, tk}, i)): Bool
 }:
   w =>
     %Equal.sym(
@@ -876,7 +1024,7 @@ def Ids.put_has(
         _,
         i
       )
-        == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool
+        == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n, tk}, i)): Bool
     }
     Lists.Bool.by(
       h => {
@@ -896,14 +1044,14 @@ def Ids.put_has(
           ),
           i
         )
-          == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool
+          == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n, tk}, i)): Bool
       },
       Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e))),
       et => (
-        %Crits.Key.is_eq_sound(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e)))(et): {RKnown.Ids.has.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, _), [RKnown.Found{n, e}])}, i) == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}
+        %Crits.Key.is_eq_sound(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e)))(et): {RKnown.Ids.has.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, _), [RKnown.Found{n, e}])}, i) == Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n, tk}, i)): Bool}
         Bucket.has_put(Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i)), n, e, i)),
       ef => (
-        %Equal.sym(Bool, RLines.Entry.is_of(i, e), False{}, Key.ne_id(RLines.Entry.id(e), i)(ef)): {RKnown.Ids.has(RKnown.Ids{m, n}, i) == Bool.or(_, RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}
+        %Equal.sym(Bool, RLines.Entry.is_of(i, e), False{}, Key.ne_id(RLines.Entry.id(e), i)(ef)): {RKnown.Ids.has(RKnown.Ids{m, n, tk}, i) == Bool.or(_, RKnown.Ids.has(RKnown.Ids{m, n, tk}, i)): Bool}
         {==})
     )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
@@ -912,13 +1060,14 @@ def Ids.put_has(
 def Ids.go_wf(
   vs: List<&2, Types.Entry>,
   +m: Crits.Crit<List<&2, RKnown.Found>>,
-  +n: Nat
+  +n: Nat,
+  +tk: Crits.Crit<RKnown.Took>
 ) -> {
   Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
 } -> {
   Crits.Crit.wf(
     ~List<&2, RKnown.Found>,
-    Ids.map(RKnown.Ids.go(vs, RKnown.Ids{m, n})),
+    Ids.map(RKnown.Ids.go(vs, RKnown.Ids{m, n, tk})),
     0n
   )
     == True{}: Bool
@@ -936,7 +1085,8 @@ def Ids.go_wf(
           RKnown.Id.key(RLines.Entry.id(e)),
           [RKnown.Found{n, e}]
         ),
-        1n+n
+        1n+n,
+        RKnown.Took.put(tk, n, RKnown.Entry.takes(e))
       )(
         Crits.Crit.upsert_wf(
           ~List<&2, RKnown.Found>,
@@ -954,17 +1104,18 @@ def Ids.go_has(
   vs: List<&2, Types.Entry>,
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat,
+  +tk: Crits.Crit<RKnown.Took>,
   +i: Ledgers.Id
 ) -> {
   Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
 } -> {
   RKnown.Ids.has(
-    RKnown.Ids.go(vs, RKnown.Ids{m, n}),
+    RKnown.Ids.go(vs, RKnown.Ids{m, n, tk}),
     i
   )
     == Bool.or(
       Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i),
-      RKnown.Ids.has(RKnown.Ids{m, n}, i)
+      RKnown.Ids.has(RKnown.Ids{m, n, tk}, i)
     ): Bool
 }:
   match vs:
@@ -973,14 +1124,14 @@ def Ids.go_has(
     case Con{+e, +rest}:
       +w => Equal.trans(
         Bool,
-        RKnown.Ids.has(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n}, e)), i),
+        RKnown.Ids.has(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n, tk}, e)), i),
         Bool.or(
           Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i),
-          RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n}, e), i)
+          RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n, tk}, e), i)
         ),
         Bool.or(
           Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, e <> rest, i),
-          RKnown.Ids.has(RKnown.Ids{m, n}, i)
+          RKnown.Ids.has(RKnown.Ids{m, n, tk}, i)
         ),
         Ids.go_has(
           rest,
@@ -992,6 +1143,7 @@ def Ids.go_has(
             [RKnown.Found{n, e}]
           ),
           1n+n,
+          RKnown.Took.put(tk, n, RKnown.Entry.takes(e)),
           i
         )(
           Crits.Crit.upsert_wf(
@@ -1003,8 +1155,8 @@ def Ids.go_has(
           )(w)
         ),
         (
-          %Equal.sym(Bool, RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n}, e), i), Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n}, i)), Ids.put_has(m, n, e, i)(w)): {Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), _) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), RLines.Entry.is_of(i, e)), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}
-          Lists.Bool.by(b => {Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), Bool.or(b, RKnown.Ids.has(RKnown.Ids{m, n}, i))) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), b), RKnown.Ids.has(RKnown.Ids{m, n}, i)): Bool}, RLines.Entry.is_of(i, e), et => Shared.Bool.or_true_right(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i)), ef => {==}))
+          %Equal.sym(Bool, RKnown.Ids.has(RKnown.Ids.put(RKnown.Ids{m, n, tk}, e), i), Bool.or(RLines.Entry.is_of(i, e), RKnown.Ids.has(RKnown.Ids{m, n, tk}, i)), Ids.put_has(m, n, tk, e, i)(w)): {Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), _) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), RLines.Entry.is_of(i, e)), RKnown.Ids.has(RKnown.Ids{m, n, tk}, i)): Bool}
+          Lists.Bool.by(b => {Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), Bool.or(b, RKnown.Ids.has(RKnown.Ids{m, n, tk}, i))) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i), b), RKnown.Ids.has(RKnown.Ids{m, n, tk}, i)): Bool}, RLines.Entry.is_of(i, e), et => Shared.Bool.or_true_right(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, rest, i)), ef => {==}))
       )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
@@ -1025,7 +1177,13 @@ def Ids.of_has(
     RKnown.Ids.has(RKnown.Ids.of(vs), i),
     Bool.or(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i), False{}),
     Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i),
-    Ids.go_has(vs, Crits.Crit.new(List<&2, RKnown.Found>), 0n, i)({==}),
+    Ids.go_has(
+      vs,
+      Crits.Crit.new(List<&2, RKnown.Found>),
+      0n,
+      Crits.Crit.new(RKnown.Took),
+      i
+    )({==}),
     Equal.sym(
       Bool,
       Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, i),
@@ -1106,17 +1264,18 @@ def Bucket.find_put(
 def Ids.put_find(
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat,
+  +tk: Crits.Crit<RKnown.Took>,
   +e: Types.Entry,
   +i: Ledgers.Id
 ) -> {
   Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
 } -> {
   RKnown.Ids.find(
-    RKnown.Ids.put(RKnown.Ids{m, n}, e),
+    RKnown.Ids.put(RKnown.Ids{m, n, tk}, e),
     i
   )
     == RKnown.Found.or(
-      RKnown.Ids.find(RKnown.Ids{m, n}, i),
+      RKnown.Ids.find(RKnown.Ids{m, n, tk}, i),
       RKnown.Found{n, e},
       i
     ): Maybe<&2, RKnown.Found>
@@ -1155,7 +1314,7 @@ def Ids.put_find(
         i
       )
         == RKnown.Found.or(
-          RKnown.Ids.find(RKnown.Ids{m, n}, i),
+          RKnown.Ids.find(RKnown.Ids{m, n, tk}, i),
           RKnown.Found{n, e},
           i
         ): Maybe<&2, RKnown.Found>
@@ -1179,21 +1338,21 @@ def Ids.put_find(
           i
         )
           == RKnown.Found.or(
-            RKnown.Ids.find(RKnown.Ids{m, n}, i),
+            RKnown.Ids.find(RKnown.Ids{m, n, tk}, i),
             RKnown.Found{n, e},
             i
           ): Maybe<&2, RKnown.Found>
       },
       Crits.Key.is_eq(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e))),
       et => (
-        %Crits.Key.is_eq_sound(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e)))(et): {RKnown.Ids.find.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, _), [RKnown.Found{n, e}])}, i) == RKnown.Found.or(RKnown.Ids.find(RKnown.Ids{m, n}, i), RKnown.Found{n, e}, i): Maybe<&2, RKnown.Found>}
+        %Crits.Key.is_eq_sound(RKnown.Id.key(i), RKnown.Id.key(RLines.Entry.id(e)))(et): {RKnown.Ids.find.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, _), [RKnown.Found{n, e}])}, i) == RKnown.Found.or(RKnown.Ids.find(RKnown.Ids{m, n, tk}, i), RKnown.Found{n, e}, i): Maybe<&2, RKnown.Found>}
         Bucket.find_put(Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(i)), n, e, i)),
       ef => Equal.sym(
         Maybe<&2, RKnown.Found>,
-        RKnown.Found.or(RKnown.Ids.find(RKnown.Ids{m, n}, i), RKnown.Found{n, e}, i),
-        RKnown.Ids.find(RKnown.Ids{m, n}, i),
+        RKnown.Found.or(RKnown.Ids.find(RKnown.Ids{m, n, tk}, i), RKnown.Found{n, e}, i),
+        RKnown.Ids.find(RKnown.Ids{m, n, tk}, i),
         Found.or_miss(
-          RKnown.Ids.find(RKnown.Ids{m, n}, i),
+          RKnown.Ids.find(RKnown.Ids{m, n, tk}, i),
           n,
           e,
           i
@@ -1223,23 +1382,24 @@ def Ids.go_find(
   vs: List<&2, Types.Entry>,
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat,
+  +tk: Crits.Crit<RKnown.Took>,
   +i: Ledgers.Id
 ) -> {
   Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
 } -> {
   RKnown.Ids.find(
-    RKnown.Ids.go(vs, RKnown.Ids{m, n}),
+    RKnown.Ids.go(vs, RKnown.Ids{m, n, tk}),
     i
   )
-    == Found.over(vs, RKnown.Ids.find(RKnown.Ids{m, n}, i), n, i): Maybe<&2, RKnown.Found>
+    == Found.over(vs, RKnown.Ids.find(RKnown.Ids{m, n, tk}, i), n, i): Maybe<&2, RKnown.Found>
 }:
   match vs:
     case Nil{}:
       w => {==}
     case Con{+e, +rest}:
       +w => (
-        %Ids.put_find(m, n, e, i)(w): {RKnown.Ids.find(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n}, e)), i) == Found.over(rest, _, 1n+n, i): Maybe<&2, RKnown.Found>}
-        Ids.go_find(rest, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}]), 1n+n, i)(Crits.Crit.upsert_wf(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}])(w)))
+        %Ids.put_find(m, n, tk, e, i)(w): {RKnown.Ids.find(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n, tk}, e)), i) == Found.over(rest, _, 1n+n, i): Maybe<&2, RKnown.Found>}
+        Ids.go_find(rest, Crits.Crit.upsert(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}]), 1n+n, RKnown.Took.put(tk, n, RKnown.Entry.takes(e)), i)(Crits.Crit.upsert_wf(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, RKnown.Id.key(RLines.Entry.id(e)), [RKnown.Found{n, e}])(w)))
 
 # bend-lint: expect-begin bend-lint-rules/performance/dead_accumulator@information -- a proof does not run
 # a version that was found stays the oldest
@@ -1419,7 +1579,13 @@ def Ids.of_find(
     RKnown.Ids.find(RKnown.Ids.of(vs), i),
     Found.over(vs, None{}, 0n, i),
     RAnswers.Versions.find(vs, i),
-    Ids.go_find(vs, Crits.Crit.new(List<&2, RKnown.Found>), 0n, i)({==}),
+    Ids.go_find(
+      vs,
+      Crits.Crit.new(List<&2, RKnown.Found>),
+      0n,
+      Crits.Crit.new(RKnown.Took),
+      i
+    )({==}),
     Equal.trans(
       Maybe<&2, RKnown.Found>,
       Found.over(vs, None{}, 0n, i),
@@ -1472,16 +1638,17 @@ def Bucket.made_put(
 def Ids.put_made(
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat,
+  +tk: Crits.Crit<RKnown.Took>,
   +e: Types.Entry,
   +a: Types.Ask
 ) -> {
   Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
 } -> {
   RKnown.Ids.made(
-    RKnown.Ids.put(RKnown.Ids{m, n}, e),
+    RKnown.Ids.put(RKnown.Ids{m, n, tk}, e),
     a
   )
-    == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool
+    == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n, tk}, a)): Bool
 }:
   w =>
     %Equal.sym(
@@ -1521,7 +1688,7 @@ def Ids.put_made(
         _,
         a
       )
-        == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool
+        == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n, tk}, a)): Bool
     }
     Lists.Bool.by(
       h => {
@@ -1541,14 +1708,14 @@ def Ids.put_made(
           ),
           a
         )
-          == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool
+          == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n, tk}, a)): Bool
       },
       Crits.Key.is_eq(RKnown.Id.key(RLines.Ask.id(a)), RKnown.Id.key(RLines.Entry.id(e))),
       et => (
-        %Crits.Key.is_eq_sound(RKnown.Id.key(RLines.Ask.id(a)), RKnown.Id.key(RLines.Entry.id(e)))(et): {RKnown.Ids.made.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, _), [RKnown.Found{n, e}])}, a) == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool}
+        %Crits.Key.is_eq_sound(RKnown.Id.key(RLines.Ask.id(a)), RKnown.Id.key(RLines.Entry.id(e)))(et): {RKnown.Ids.made.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, Crits.Crit.get(List<&2, RKnown.Found>, m, _), [RKnown.Found{n, e}])}, a) == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n, tk}, a)): Bool}
         Bucket.made_put(Crits.Crit.get(List<&2, RKnown.Found>, m, RKnown.Id.key(RLines.Ask.id(a))), n, e, a)),
       ef => (
-        %Equal.sym(Bool, Ledgers.Id.is_eq(RLines.Entry.id(e), RLines.Ask.id(a)), False{}, Key.ne_id(RLines.Entry.id(e), RLines.Ask.id(a))(ef)): {RKnown.Ids.made(RKnown.Ids{m, n}, a) == Bool.or(List.all.if(u => Coded.Ask.is_eq(RLines.Entry.ask(e), a), _), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool}
+        %Equal.sym(Bool, Ledgers.Id.is_eq(RLines.Entry.id(e), RLines.Ask.id(a)), False{}, Key.ne_id(RLines.Entry.id(e), RLines.Ask.id(a))(ef)): {RKnown.Ids.made(RKnown.Ids{m, n, tk}, a) == Bool.or(List.all.if(u => Coded.Ask.is_eq(RLines.Entry.ask(e), a), _), RKnown.Ids.made(RKnown.Ids{m, n, tk}, a)): Bool}
         {==})
     )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
@@ -1560,17 +1727,18 @@ def Ids.go_made(
   vs: List<&2, Types.Entry>,
   +m: Crits.Crit<List<&2, RKnown.Found>>,
   +n: Nat,
+  +tk: Crits.Crit<RKnown.Took>,
   +a: Types.Ask
 ) -> {
   Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool
 } -> {
   RKnown.Ids.made(
-    RKnown.Ids.go(vs, RKnown.Ids{m, n}),
+    RKnown.Ids.go(vs, RKnown.Ids{m, n, tk}),
     a
   )
     == Bool.or(
       Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a),
-      RKnown.Ids.made(RKnown.Ids{m, n}, a)
+      RKnown.Ids.made(RKnown.Ids{m, n, tk}, a)
     ): Bool
 }:
   match vs:
@@ -1579,14 +1747,14 @@ def Ids.go_made(
     case Con{+e, +rest}:
       +w => Equal.trans(
         Bool,
-        RKnown.Ids.made(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n}, e)), a),
+        RKnown.Ids.made(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n, tk}, e)), a),
         Bool.or(
           Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a),
-          RKnown.Ids.made(RKnown.Ids.put(RKnown.Ids{m, n}, e), a)
+          RKnown.Ids.made(RKnown.Ids.put(RKnown.Ids{m, n, tk}, e), a)
         ),
         Bool.or(
           Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, e <> rest, a),
-          RKnown.Ids.made(RKnown.Ids{m, n}, a)
+          RKnown.Ids.made(RKnown.Ids{m, n, tk}, a)
         ),
         Ids.go_made(
           rest,
@@ -1598,6 +1766,7 @@ def Ids.go_made(
             [RKnown.Found{n, e}]
           ),
           1n+n,
+          RKnown.Took.put(tk, n, RKnown.Entry.takes(e)),
           a
         )(
           Crits.Crit.upsert_wf(
@@ -1609,8 +1778,8 @@ def Ids.go_made(
           )(w)
         ),
         (
-          %Equal.sym(Bool, RKnown.Ids.made(RKnown.Ids.put(RKnown.Ids{m, n}, e), a), Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)), Ids.put_made(m, n, e, a)(w)): {Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), _) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), RKnown.Entry.made_by(a, e)), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool}
-          Lists.Bool.by(b => {Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), Bool.or(b, RKnown.Ids.made(RKnown.Ids{m, n}, a))) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), b), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool}, RKnown.Entry.made_by(a, e), et => Shared.Bool.or_true_right(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a)), ef => {==}))
+          %Equal.sym(Bool, RKnown.Ids.made(RKnown.Ids.put(RKnown.Ids{m, n, tk}, e), a), Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n, tk}, a)), Ids.put_made(m, n, tk, e, a)(w)): {Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), _) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), RKnown.Entry.made_by(a, e)), RKnown.Ids.made(RKnown.Ids{m, n, tk}, a)): Bool}
+          Lists.Bool.by(b => {Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), Bool.or(b, RKnown.Ids.made(RKnown.Ids{m, n, tk}, a))) == Bool.or(List.any.if(u => Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a), b), RKnown.Ids.made(RKnown.Ids{m, n, tk}, a)): Bool}, RKnown.Entry.made_by(a, e), et => Shared.Bool.or_true_right(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, rest, a)), ef => {==}))
       )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
@@ -1630,96 +1799,18 @@ def Ids.of_made(
     RKnown.Ids.made(RKnown.Ids.of(vs), a),
     Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a), False{}),
     Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a),
-    Ids.go_made(vs, Crits.Crit.new(List<&2, RKnown.Found>), 0n, a)({==}),
+    Ids.go_made(
+      vs,
+      Crits.Crit.new(List<&2, RKnown.Found>),
+      0n,
+      Crits.Crit.new(RKnown.Took),
+      a
+    )({==}),
     Equal.sym(
       Bool,
       Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a),
       Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a), False{}),
       Shared.Bool.or_false(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a))
-    )
-  )
-
-# the count of the versions by id with the versions vs: as many more
-def Ids.go_count(
-  vs: List<&2, Types.Entry>,
-  +m: Crits.Crit<List<&2, RKnown.Found>>,
-  +n: Nat
-) -> {
-  RKnown.Ids.count(
-    RKnown.Ids.go(vs, RKnown.Ids{m, n})
-  )
-    == Nat.add(List.length(&2, Types.Entry, vs), n): Nat
-}:
-  match vs:
-    case Nil{}:
-      {==}
-    case Con{+e, +rest}:
-      %Shared.Nat.add_succ(
-        List.length(&2, Types.Entry, rest),
-        n
-      ): {RKnown.Ids.count(RKnown.Ids.go(rest, RKnown.Ids.put(RKnown.Ids{m, n}, e))) == _: Nat}
-      Ids.go_count(
-        rest,
-        Crits.Crit.upsert(
-          ~List<&2, RKnown.Found>,
-          ~RKnown.Ids.join,
-          m,
-          RKnown.Id.key(RLines.Entry.id(e)),
-          [RKnown.Found{n, e}]
-        ),
-        1n+n
-      )
-
-# the count of the versions vs by id is the number of vs
-def Ids.of_count(
-  +vs: List<&2, Types.Entry>
-) -> {RKnown.Ids.count(RKnown.Ids.of(vs)) == List.length(&2, Types.Entry, vs): Nat}:
-  Equal.trans(
-    Nat,
-    RKnown.Ids.count(RKnown.Ids.of(vs)),
-    Nat.add(List.length(&2, Types.Entry, vs), 0n),
-    List.length(&2, Types.Entry, vs),
-    Ids.go_count(vs, Crits.Crit.new(List<&2, RKnown.Found>), 0n),
-    Shared.Nat.add_zero(List.length(&2, Types.Entry, vs))
-  )
-
-# two lines of one key are one line
-def Line.key_inj(
-  +a: Ledgers.Line,
-  +b: Ledgers.Line
-) -> {RKnown.Line.key(a) == RKnown.Line.key(b): List<&2, U32>} -> {a == b: Ledgers.Line}:
-  e => Equal.cong(
-    Maybe<&2, Codes.Read<Ledgers.Line>>,
-    Ledgers.Line,
-    m => Codes.Code.read_value(Ledgers.Line, m, a),
-    Some{Codes.Read{a, []}},
-    Some{Codes.Read{b, []}},
-    Equal.trans(
-      Maybe<&2, Codes.Read<Ledgers.Line>>,
-      Some{Codes.Read{a, []}},
-      Ledgers.Line.code.read(RKnown.Line.key(b)),
-      Some{Codes.Read{b, []}},
-      Equal.trans(
-        Maybe<&2, Codes.Read<Ledgers.Line>>,
-        Some{Codes.Read{a, []}},
-        Ledgers.Line.code.read(RKnown.Line.key(a)),
-        Ledgers.Line.code.read(RKnown.Line.key(b)),
-        Equal.sym(
-          Maybe<&2, Codes.Read<Ledgers.Line>>,
-          Ledgers.Line.code.read(RKnown.Line.key(a)),
-          Some{Codes.Read{a, []}},
-          Ledgers.Line.code_read(a, [])
-        ),
-        Equal.cong(
-          List<&2, U32>,
-          Maybe<&2, Codes.Read<Ledgers.Line>>,
-          Ledgers.Line.code.read,
-          RKnown.Line.key(a),
-          RKnown.Line.key(b),
-          e
-        )
-      ),
-      Ledgers.Line.code_read(b, [])
     )
   )
 
@@ -1851,7 +1942,7 @@ def Infos.of_line(
       Ledgers.Line,
       c,
       RKnown.Info.line(i),
-      Line.key_inj(
+      Seens.Line.key_inj(
         c,
         RKnown.Info.line(i)
       )(
@@ -2262,7 +2353,6 @@ def Known.find_ok(
     st
   )(Known.info_line(kn, s, c)(ok))(Known.info_ok(kn, s, c)(ok))(e)
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the ids that what is right of a line holds fit the state that the facts
 # give the line
 def Info.ids_ok(
@@ -2283,7 +2373,6 @@ def Info.ids_ok(
         %el: {RKnown.Made.fits(RLines.Line.state(s, _), y) == True{}: Bool}
         %e: {RContents.Made.ok(s, c2, _) == True{}: Bool}
         Info.ok_made(s, c2, m, r, x)(h))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the ids that a right table holds for a line fit the state that the facts
 # give the line
@@ -3831,13 +3920,14 @@ def Binds.voted(
         )
       )
 
-# right lines, without what a vote for a slot of the line c may change, are
-# right after the vote
-def Infos.voted_ok(
+# right lines, without what they hold of the branch of the head h and the
+# name b, are right after a vote for a slot of the branch
+def Branch.voted_ok(
   +l: Crits.Crit<RKnown.Info>,
   +name: String,
   +s: Facts.Facts(),
-  c: Ledgers.Line,
+  +h: Hashes.Hash,
+  +b: String,
   +k: Nat,
   +t: Nat,
   +x: Types.Cast
@@ -3845,157 +3935,97 @@ def Infos.voted_ok(
   RContents.Infos.ok(l, Facts.Facts.crit(s)) == True{}: Bool
 } -> {
   RContents.Infos.ok(
-    RKnown.Infos.voted(l, c),
-    Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+    RKnown.Infos.with(l, RKnown.Info.blank(Ledgers.Line{h, Some{b}})),
+    Facts.Facts.crit(
+      Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})
+    )
   )
     == True{}: Bool
 }:
-  match c:
-    case Ledgers.Line{+h, None{}}:
-      hl => {==}
-    case Ledgers.Line{+h, Some{+b}}:
-      +hl => Shared.Bool.and_both(
-        Orders.Crit.every(
+  +hl => Shared.Bool.and_both(
+    Orders.Crit.every(
+      ~RKnown.Info,
+      ~RFacts.Plain(),
+      ~RContents.Info.ok,
+      Crits.Crit.set(
+        ~RKnown.Info,
+        l,
+        RKnown.Line.key(Ledgers.Line{h, Some{b}}),
+        RKnown.Info.blank(Ledgers.Line{h, Some{b}})
+      ),
+      Facts.Facts.crit(
+        Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})
+      )
+    ),
+    Orders.Binds.keyed(
+      ~RKnown.Info,
+      ~RKnown.Info.key,
+      Crits.Crit.entries(
+        RKnown.Info,
+        Crits.Crit.set(
           ~RKnown.Info,
-          ~RFacts.Plain(),
-          ~RContents.Info.ok,
+          l,
+          RKnown.Line.key(Ledgers.Line{h, Some{b}}),
+          RKnown.Info.blank(Ledgers.Line{h, Some{b}})
+        )
+      )
+    )
+  )(
+    Shared.Bool.and_both(
+      Crits.Crit.wf(
+        ~RKnown.Info,
+        Crits.Crit.set(
+          ~RKnown.Info,
+          l,
+          RKnown.Line.key(Ledgers.Line{h, Some{b}}),
+          RKnown.Info.blank(Ledgers.Line{h, Some{b}})
+        ),
+        0n
+      ),
+      Orders.Binds.every(
+        ~RKnown.Info,
+        ~RFacts.Plain(),
+        ~RContents.Info.ok,
+        Crits.Crit.entries(
+          RKnown.Info,
           Crits.Crit.set(
             ~RKnown.Info,
             l,
             RKnown.Line.key(Ledgers.Line{h, Some{b}}),
             RKnown.Info.blank(Ledgers.Line{h, Some{b}})
-          ),
-          Facts.Facts.crit(
-            Facts.Facts.add(
-              s,
-              Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-            )
           )
         ),
-        Orders.Binds.keyed(
-          ~RKnown.Info,
-          ~RKnown.Info.key,
-          Crits.Crit.entries(
-            RKnown.Info,
-            Crits.Crit.set(
-              ~RKnown.Info,
-              l,
-              RKnown.Line.key(Ledgers.Line{h, Some{b}}),
-              RKnown.Info.blank(Ledgers.Line{h, Some{b}})
-            )
+        Facts.Facts.crit(
+          Facts.Facts.add(
+            s,
+            Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
           )
         )
-      )(
-        Shared.Bool.and_both(
-          Crits.Crit.wf(
-            ~RKnown.Info,
-            Crits.Crit.set(
-              ~RKnown.Info,
-              l,
-              RKnown.Line.key(Ledgers.Line{h, Some{b}}),
-              RKnown.Info.blank(Ledgers.Line{h, Some{b}})
-            ),
-            0n
-          ),
-          Orders.Binds.every(
-            ~RKnown.Info,
-            ~RFacts.Plain(),
-            ~RContents.Info.ok,
-            Crits.Crit.entries(
-              RKnown.Info,
-              Crits.Crit.set(
-                ~RKnown.Info,
-                l,
-                RKnown.Line.key(Ledgers.Line{h, Some{b}}),
-                RKnown.Info.blank(Ledgers.Line{h, Some{b}})
-              )
-            ),
-            Facts.Facts.crit(
-              Facts.Facts.add(
-                s,
-                Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-              )
-            )
-          )
-        )(
-          Crits.Crit.upsert_wf(
-            ~RKnown.Info,
-            ~(w => z => z),
-            l,
-            RKnown.Line.key(Ledgers.Line{h, Some{b}}),
-            RKnown.Info.blank(Ledgers.Line{h, Some{b}})
-          )(Infos.wf(l, Facts.Facts.crit(s))(hl))
-        )((
-            %Equal.sym(List<&2, Crits.Bind<RKnown.Info>>, Crits.Crit.entries(RKnown.Info, Crits.Crit.set(~RKnown.Info, l, RKnown.Line.key(Ledgers.Line{h, Some{b}}), RKnown.Info.blank(Ledgers.Line{h, Some{b}}))), Orders.Binds.insert(RKnown.Info, Crits.Crit.entries(RKnown.Info, l), RKnown.Line.key(Ledgers.Line{h, Some{b}}), RKnown.Info.blank(Ledgers.Line{h, Some{b}})), Orders.Crit.entries_set(~RKnown.Info, l, RKnown.Line.key(Ledgers.Line{h, Some{b}}), RKnown.Info.blank(Ledgers.Line{h, Some{b}}))(Infos.wf(l, Facts.Facts.crit(s))(hl))): {Orders.Binds.every(~RKnown.Info, ~RFacts.Plain(), ~RContents.Info.ok, _, Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))) == True{}: Bool}
-            Binds.voted(Crits.Crit.entries(RKnown.Info, l), name, s, h, b, k, t, x)(Orders.Crit.entries_sorted(~RKnown.Info, l)(Infos.wf(l, Facts.Facts.crit(s))(hl)))(Infos.keyed(l, Facts.Facts.crit(s))(hl))(Shared.Bool.and_true_right(Crits.Crit.wf(~RKnown.Info, l, 0n), Orders.Binds.every(~RKnown.Info, ~RFacts.Plain(), ~RContents.Info.ok, Crits.Crit.entries(RKnown.Info, l), Facts.Facts.crit(s)))(Infos.every(l, Facts.Facts.crit(s))(hl)))))
-      )(
-        Orders.Crit.keyed_set(
-          ~RKnown.Info,
-          ~RKnown.Info.key,
-          l,
-          RKnown.Line.key(Ledgers.Line{h, Some{b}}),
-          RKnown.Info.blank(Ledgers.Line{h, Some{b}})
-        )(
-          Infos.wf(l, Facts.Facts.crit(s))(hl)
-        )(
-          Infos.keyed(l, Facts.Facts.crit(s))(hl)
-        )(Crits.Key.is_eq_refl(RKnown.Line.key(Ledgers.Line{h, Some{b}})))
       )
-
-# a table that is right for the facts s, without the states that a vote for
-# the line c may change, is right after the vote
-def Known.voted_ok(
-  kn: RKnown.Known(),
-  +name: String,
-  +s: Facts.Facts(),
-  +c: Ledgers.Line,
-  +k: Nat,
-  +t: Nat,
-  +x: Types.Cast
-) -> {
-  RContents.Known.ok(kn, Facts.Facts.crit(s)) == True{}: Bool
-} -> {
-  RContents.Known.ok(
-    RKnown.Known.voted(kn, c),
-    Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+    )(
+      Crits.Crit.upsert_wf(
+        ~RKnown.Info,
+        ~(w => z => z),
+        l,
+        RKnown.Line.key(Ledgers.Line{h, Some{b}}),
+        RKnown.Info.blank(Ledgers.Line{h, Some{b}})
+      )(Infos.wf(l, Facts.Facts.crit(s))(hl))
+    )((
+        %Equal.sym(List<&2, Crits.Bind<RKnown.Info>>, Crits.Crit.entries(RKnown.Info, Crits.Crit.set(~RKnown.Info, l, RKnown.Line.key(Ledgers.Line{h, Some{b}}), RKnown.Info.blank(Ledgers.Line{h, Some{b}}))), Orders.Binds.insert(RKnown.Info, Crits.Crit.entries(RKnown.Info, l), RKnown.Line.key(Ledgers.Line{h, Some{b}}), RKnown.Info.blank(Ledgers.Line{h, Some{b}})), Orders.Crit.entries_set(~RKnown.Info, l, RKnown.Line.key(Ledgers.Line{h, Some{b}}), RKnown.Info.blank(Ledgers.Line{h, Some{b}}))(Infos.wf(l, Facts.Facts.crit(s))(hl))): {Orders.Binds.every(~RKnown.Info, ~RFacts.Plain(), ~RContents.Info.ok, _, Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))) == True{}: Bool}
+        Binds.voted(Crits.Crit.entries(RKnown.Info, l), name, s, h, b, k, t, x)(Orders.Crit.entries_sorted(~RKnown.Info, l)(Infos.wf(l, Facts.Facts.crit(s))(hl)))(Infos.keyed(l, Facts.Facts.crit(s))(hl))(Shared.Bool.and_true_right(Crits.Crit.wf(~RKnown.Info, l, 0n), Orders.Binds.every(~RKnown.Info, ~RFacts.Plain(), ~RContents.Info.ok, Crits.Crit.entries(RKnown.Info, l), Facts.Facts.crit(s)))(Infos.every(l, Facts.Facts.crit(s))(hl)))))
+  )(
+    Orders.Crit.keyed_set(
+      ~RKnown.Info,
+      ~RKnown.Info.key,
+      l,
+      RKnown.Line.key(Ledgers.Line{h, Some{b}}),
+      RKnown.Info.blank(Ledgers.Line{h, Some{b}})
+    )(
+      Infos.wf(l, Facts.Facts.crit(s))(hl)
+    )(
+      Infos.keyed(l, Facts.Facts.crit(s))(hl)
+    )(Crits.Key.is_eq_refl(RKnown.Line.key(Ledgers.Line{h, Some{b}})))
   )
-    == True{}: Bool
-}:
-  match kn:
-    case RKnown.Table{+l, +sh, +h, +q}:
-      ok => Ok.of(
-        RKnown.Infos.voted(l, c),
-        None{},
-        Crits.Crit.new(RKnown.Held),
-        0n,
-        Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
-      )(
-        Infos.voted_ok(l, name, s, c, k, t, x)(Ok.lines(l, sh, h, q, Facts.Facts.crit(s))(ok))
-      )(
-        Shared.Bool.and_both(
-          Orders.Crit.every(
-            ~RKnown.Held,
-            ~RFacts.Plain(),
-            ~RContents.Held.ok,
-            Crits.Crit.new(RKnown.Held),
-            Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
-          ),
-          Nat.is_le(
-            0n,
-            RFacts.Facts.fuel(
-              Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
-            )
-          )
-        )(
-          {==}
-        )(
-          Shared.Nat.le_zero(
-            RFacts.Facts.fuel(
-              Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
-            )
-          )
-        )
-      )
 
 # Open facts: laws
 # ----------------
@@ -5197,6 +5227,82 @@ def Work.offer.at_ok(
     case Some{RWorks.Open{+vs, +k, +ns}}:
       ok => o => Work.offer.at_ok.some(kn, s, name, c, a, vs, k, ns)(ok)(o)
 
+# the ids m, if any, fit the state x
+def Made.Ok(x: Maybe<&2, RLines.State>, m: Maybe<&2, RKnown.Ids>) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{y}:
+      {RKnown.Made.fits(x, y) == True{}: Bool}
+
+
+# ids that fit the state m, if any, are those of its versions
+def Ids.ok_of(
+  x: Maybe<&2, RKnown.Ids>,
+  m: Maybe<&2, RLines.State>
+) -> Made.Ok(
+  m,
+  x
+) -> Seens.Ids.Ok.Of(
+  x,
+  Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, m)
+):
+  match x:
+    case None{}:
+      x => Unit{}
+    case Some{value}:
+      match m:
+        case None{}:
+          x => Empty.absurd(
+            Seens.Ids.Ok.Of(
+              Some{value},
+              Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, None{})
+            ),
+            {(%x: {\{False: Unit; \{True: Empty; \{}}}: Bool -> Type}(_); Unit{}): Empty}
+          )
+        case Some{value1}:
+          match value1:
+            case RLines.State{versions, slot}:
+              x => (%Ids.same_sound(
+                value,
+                RKnown.Ids.go(versions, RKnown.Ids{Crits.Crit.Tip{}, 0n, Crits.Crit.Tip{}})
+              )(x): {Some{value} == Some{_}: Maybe<&2, RKnown.Ids>}; {==})
+
+# the ids that a right table holds of a line are those of the versions of
+# the line that it reads
+def Ids.ok_at(
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line
+) -> {RContents.Known.ok(kn, s) == True{}: Bool} -> Seens.Ids.Ok(kn, s, c):
+  +ok => (
+    %Equal.sym(Maybe<&2, RLines.State>, RKnown.Known.state(kn, s, c), RLines.Line.state(s, c), Known.state_ok(kn, s, c)(ok)): Seens.Ids.Ok.Of(RKnown.Known.ids(kn, c), Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _))
+    Ids.ok_of(RKnown.Known.ids(kn, c), RLines.Line.state(s, c))(Lists.Maybe.by(RKnown.Ids, m => Made.Ok(RLines.Line.state(s, c), m), RKnown.Known.ids(kn, c), en => Unit{}, +y => ey => Known.ids_ok(kn, s, c, y)(ok)(ey))))
+
+# what a request reads of a right table for its pins is right
+def Pins.ok_at(
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  r: Spec.Request
+) -> {RContents.Known.ok(kn, s) == True{}: Bool} -> Seens.Pins.Ok(kn, s, r):
+  match r:
+    case Spec.Request.Start{owners}:
+      x => Unit{}
+    case Spec.Request.Write{branch, path, words}:
+      x => Unit{}
+    case Spec.Request.Merge{from, into}:
+      x => Ids.ok_at(kn, s, from)(x)
+    case Spec.Request.Resolve{merge, path1, words1}:
+      x => Unit{}
+    case Spec.Request.Mark{branch1, name, version}:
+      x => Unit{}
+    case Spec.Request.Move{branch2, to, version1}:
+      x => Unit{}
+    case Spec.Request.Group{store, name1, members}:
+      x => Unit{}
+    case Spec.Request.Own{line, group}:
+      x => Unit{}
+
 # a right table changes no vote for an ask on its line
 def Work.offer.on_ok(
   +kn: RKnown.Known(),
@@ -5221,7 +5327,7 @@ def Work.offer.on_ok(
       ok => {==}
     case Some{+c}:
       +ok => (
-        %Equal.sym(Maybe<&2, RWorks.Plan>, RWorks.Work.offer.by(RKnown.Known.info(kn, c), kn, s, name, c, a), RWorks.Work.offer.at(kn, s, name, c, a, RWorks.Work.open(kn, s, name, c)), Seens.Work.offer_by(RKnown.Known.info(kn, c), kn, s, name, c, a)({==})): {_ == RWorks.Work.offer.at(RKnown.Known.none(), s, name, c, a, RWorks.Work.open(RKnown.Known.none(), s, name, c)): Maybe<&2, RWorks.Plan>}
+        %Equal.sym(Maybe<&2, RWorks.Plan>, RWorks.Work.offer.by(RKnown.Known.info(kn, c), kn, s, name, c, a), RWorks.Work.offer.at(kn, s, name, c, a, RWorks.Work.open(kn, s, name, c)), Seens.Work.offer_by(RKnown.Known.info(kn, c), kn, s, name, c, a)({==})(Ids.ok_at(kn, s, c)(Fit.ok(kn, s)(ok)))(Pins.ok_at(kn, s, RLines.Ask.request(a))(Fit.ok(kn, s)(ok)))): {_ == RWorks.Work.offer.at(RKnown.Known.none(), s, name, c, a, RWorks.Work.open(RKnown.Known.none(), s, name, c)): Maybe<&2, RWorks.Plan>}
         %Equal.sym(Maybe<&2, RWorks.Open>, RWorks.Work.open(kn, s, name, c), RWorks.Work.open(RKnown.Known.none(), s, name, c), Work.open_ok(kn, s, name, c)(Fit.ok(kn, s)(ok))): {RWorks.Work.offer.at(kn, s, name, c, a, _) == RWorks.Work.offer.at(RKnown.Known.none(), s, name, c, a, RWorks.Work.open(RKnown.Known.none(), s, name, c)): Maybe<&2, RWorks.Plan>}
         Work.offer.at_ok(kn, s, name, c, a, RWorks.Work.open(RKnown.Known.none(), s, name, c))(ok)(Work.open_from(s, name, c)))
 
@@ -6788,7 +6894,7 @@ def Merge.fits_ok(
     RContents.Entry.base(e),
     RContents.Entry.ours(e),
     RContents.Entry.theirs(e),
-    RContents.Point.or(c, RContents.Entry.takes(e))
+    RContents.Point.or(c, RKnown.Entry.takes(e))
   )(ok)
 
 # a right table changes no check of a version
@@ -8802,7 +8908,7 @@ def Reply.count_ok(
       +st => est => eq => (
         %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.state(s, c), Some{st}, est): {Some{Spec.Reply.Number{RKnown.Ids.count(y)}} == RAnswers.Reply.count(Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)): Maybe<&2, Spec.Reply>}
         %Equal.sym(RKnown.Ids, y, RKnown.Ids.of(RLines.State.versions(st)), eq): {Some{Spec.Reply.Number{RKnown.Ids.count(_)}} == Some{Spec.Reply.Number{List.length(&2, Types.Entry, RLines.State.versions(st))}}: Maybe<&2, Spec.Reply>}
-        %Equal.sym(Nat, RKnown.Ids.count(RKnown.Ids.of(RLines.State.versions(st))), List.length(&2, Types.Entry, RLines.State.versions(st)), Ids.of_count(RLines.State.versions(st))): {Some{Spec.Reply.Number{_}} == Some{Spec.Reply.Number{List.length(&2, Types.Entry, RLines.State.versions(st))}}: Maybe<&2, Spec.Reply>}
+        %Equal.sym(Nat, RKnown.Ids.count(RKnown.Ids.of(RLines.State.versions(st))), List.length(&2, Types.Entry, RLines.State.versions(st)), Seens.Ids.of_count(RLines.State.versions(st))): {Some{Spec.Reply.Number{_}} == Some{Spec.Reply.Number{List.length(&2, Types.Entry, RLines.State.versions(st))}}: Maybe<&2, Spec.Reply>}
         {==})
     )
   )
@@ -9073,13 +9179,13 @@ def View.quick_ok(
     case None{}:
       ok => est => (
         %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.state(s, b), Some{st}, est): {RAnswers.View.last(kn, s, b, p, RKnown.Ids.of(RLines.State.versions(st))) == RAnswers.View.newest(RKnown.Known.none(), s, b, p, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)): Maybe<&2, Maybe<&2, List<&2, U32>>>}
-        %Equal.sym(Nat, RKnown.Ids.count(RKnown.Ids.of(RLines.State.versions(st))), List.length(&2, Types.Entry, RLines.State.versions(st)), Ids.of_count(RLines.State.versions(st))): {RContents.Content.read(kn, s, b, Nat.sub(_, 1n), p) == RContents.Content.read(RKnown.Known.none(), s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        %Equal.sym(Nat, RKnown.Ids.count(RKnown.Ids.of(RLines.State.versions(st))), List.length(&2, Types.Entry, RLines.State.versions(st)), Seens.Ids.of_count(RLines.State.versions(st))): {RContents.Content.read(kn, s, b, Nat.sub(_, 1n), p) == RContents.Content.read(RKnown.Known.none(), s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p): Maybe<&2, Maybe<&2, List<&2, U32>>>}
         Content.read_ok(kn, s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p)(ok))
     case Some{+a}:
       ok => est => (
         %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.state(s, b), Some{st}, est): {RAnswers.View.quick(RKnown.Ids.of(RLines.State.versions(st)), kn, s, b, p, Some{a}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, RAnswers.View.decided(a, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)), u => RAnswers.View.newest(RKnown.Known.none(), s, b, p, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
         %Equal.sym(Bool, RKnown.Ids.made(RKnown.Ids.of(RLines.State.versions(st)), a), Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), Ids.of_made(RLines.State.versions(st), a)): {Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, _, u => RAnswers.View.last(kn, s, b, p, RKnown.Ids.of(RLines.State.versions(st))), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => RContents.Content.read(RKnown.Known.none(), s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
-        %Equal.sym(Nat, RKnown.Ids.count(RKnown.Ids.of(RLines.State.versions(st))), List.length(&2, Types.Entry, RLines.State.versions(st)), Ids.of_count(RLines.State.versions(st))): {Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => RContents.Content.read(kn, s, b, Nat.sub(_, 1n), p), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => RContents.Content.read(RKnown.Known.none(), s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
+        %Equal.sym(Nat, RKnown.Ids.count(RKnown.Ids.of(RLines.State.versions(st))), List.length(&2, Types.Entry, RLines.State.versions(st)), Seens.Ids.of_count(RLines.State.versions(st))): {Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => RContents.Content.read(kn, s, b, Nat.sub(_, 1n), p), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => RContents.Content.read(RKnown.Known.none(), s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
         %Content.read_ok(kn, s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p)(ok): {Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => RContents.Content.read(kn, s, b, Nat.sub(List.length(&2, Types.Entry, RLines.State.versions(st)), 1n), p), u => Some{RAnswers.Request.words(RLines.Ask.request(a))}) == Shared.Bool.when(Maybe<&2, Maybe<&2, List<&2, U32>>>, Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, RLines.State.versions(st), a), u => _, u => Some{RAnswers.Request.words(RLines.Ask.request(a))}): Maybe<&2, Maybe<&2, List<&2, U32>>>}
         {==})
 
@@ -10115,9 +10221,796 @@ def At.same(
     %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(s2, c), Lines.Line.state(s, c), es): {RLines.Line.at.of(Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _), k) == Some{e}: Maybe<&2, Types.Entry>}
     ee)
 
-# a version of a branch is read again after a ballot for the next slot of
-# its state st, when the state of its store is known
-def Branch.at_cast(
+# A store that grows
+# ------------------
+# A ballot for the next slot of the known state of a line only appends
+# versions: to the line, and, when the line is a store, to the branches of
+# the store. A branch is read from the same ballots and keeps each rule that
+# it knew (Stays.Rule.grows): each step that it took stays, so its versions
+# only grow, and they stay as they were when the rule after them was known.
+
+# the state m follows the state st: it is a state whose versions extend
+# those of st, at a slot no less than the slot of st
+def Grown(st: RLines.State, m: Maybe<&2, RLines.State>) -> Type:
+  Exists(
+    RLines.State,
+    st2 => {
+      m == Some{st2}: Maybe<&2, RLines.State>
+    }
+      & (
+        Lists.List.Ext(
+          Types.Entry,
+          RLines.State.versions(st),
+          RLines.State.versions(st2)
+        )
+          & {Nat.is_le(RLines.State.slot(st), RLines.State.slot(st2)) == True{}: Bool}
+      )
+  )
+
+# a state follows itself
+def Grown.eq(
+  +st: RLines.State,
+  m: Maybe<&2, RLines.State>
+) -> {m == Some{st}: Maybe<&2, RLines.State>} -> Grown(st, m):
+  e => (
+    st,
+    (
+      e,
+      (
+        Lists.List.ext_refl(Types.Entry, RLines.State.versions(st)),
+        Shared.Nat.le_refl(RLines.State.slot(st))
+      )
+    )
+  )
+
+# what follows from the state that follows st, and from what holds of it,
+# follows from g
+def Grown.by(
+  -Q: Type,
+  -st: RLines.State,
+  -m: Maybe<&2, RLines.State>,
+  g: Grown(st, m),
+  k: @st2: RLines.State -> {
+    m == Some{st2}: Maybe<&2, RLines.State>
+  } -> Lists.List.Ext(
+    Types.Entry,
+    RLines.State.versions(st),
+    RLines.State.versions(st2)
+  ) -> {Nat.is_le(RLines.State.slot(st), RLines.State.slot(st2)) == True{}: Bool} -> Q
+) -> Q:
+  (st2, w) = g
+  (e, w2) = w
+  (x, l) = w2
+  k(st2)(e)(x)(l)
+
+# a branch is not a store
+def Branch.ne_root(
+  +h2: Hashes.Hash,
+  +h: Hashes.Hash,
+  +b: String
+) -> {Ledgers.Line.is_eq(Ledgers.Line{h2, Some{b}}, Ledgers.Line{h, None{}}) == False{}: Bool}:
+  %Equal.sym(
+    Bool,
+    List.all.if(u => Ledgers.Sub.is_eq(Some{b}, None{}), Hashes.Hash.is_eq(h2, h)),
+    False{},
+    Crits.Crit.all_if_false(Hashes.Hash.is_eq(h2, h), Ledgers.Sub.is_eq(Some{b}, None{}))({==})
+  ):
+    {_ == False{}: Bool}
+  {==}
+
+# after the node adds d, a decided slot of a line that d is no vote for a
+# slot of stays decided, as the store of the line grows
+def Step.grown(
+  +d: Moves.Delta,
+  +s: Facts.Facts(),
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +zs: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  st: RLines.State,
+  -st1: RLines.State
+) -> {
+  Moves.Delta.spares(d, c) == True{}: Bool
+} -> {
+  Lines.Line.step(s, r, c, st) == Some{st1}: Maybe<&2, RLines.State>
+} -> {
+  Lines.Line.step(
+    Moves.Delta.to(d, s),
+    Stays.Store.grow(r, zs),
+    c,
+    st
+  )
+    == Some{st1}: Maybe<&2, RLines.State>
+}:
+  match st:
+    case RLines.State{+vs, +k}:
+      sp => e => (
+        %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, RLines.State{vs, k}), Lines.Line.step(s, Stays.Store.grow(r, zs), c, RLines.State{vs, k}), Moves.Step.same(d, s, Stays.Store.grow(r, zs), c, RLines.State{vs, k})(sp)): {_ == Some{st1}: Maybe<&2, RLines.State>}
+        Versions.Step.at_by({Lines.Line.step(s, Stays.Store.grow(r, zs), c, RLines.State{vs, k}) == Some{st1}: Maybe<&2, RLines.State>}, s, c, RLines.State{vs, k}, st1, RLines.Line.rule(r, c, vs), Versions.Step.at_inv(s, c, RLines.State{vs, k}, st1, RLines.Line.rule(r, c, vs))(e), +u => +pk => eu => ed => eb => (
+          %Equal.sym(Maybe<&2, RLines.Rule>, RLines.Line.rule(Stays.Store.grow(r, zs), c, vs), Some{u}, Stays.Rule.grows(r, zs, c, vs, u)(eu)): {Lines.Line.step.at(s, c, RLines.State{vs, k}, _) == Some{st1}: Maybe<&2, RLines.State>}
+          %Equal.sym(Maybe<&2, Types.Pick>, Lines.Votes.decided(s, c, k, RLines.Rule.nodes(u)), Some{pk}, ed): {RLines.Line.step.of(RLines.State{vs, k}, _) == Some{st1}: Maybe<&2, RLines.State>}
+          %eb: {Some{RLines.State.put(vs, k, pk)} == Some{_}: Maybe<&2, RLines.State>}
+          {==})))
+
+# after the node adds d, the versions after a run of a line that d is no
+# vote for a slot of extend those after the run before, as the store of the
+# line grows
+def Run.grown_ext(
+  f: Nat,
+  +d: Moves.Delta,
+  +s: Facts.Facts(),
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +zs: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +st: RLines.State
+) -> {
+  Moves.Delta.spares(d, c) == True{}: Bool
+} -> Lists.List.Ext(
+  Types.Entry,
+  RLines.State.versions(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st))),
+  RLines.State.versions(
+    Lines.Line.run(
+      f,
+      Moves.Delta.to(d, s),
+      Stays.Store.grow(r, zs),
+      c,
+      st,
+      Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st)
+    )
+  )
+):
+  match f:
+    case 0n:
+      sp => Lists.List.ext_refl(Types.Entry, RLines.State.versions(st))
+    case 1n+(+p):
+      +sp => Lists.Maybe.by(
+        RLines.State,
+        m => Lists.List.Ext(
+          Types.Entry,
+          RLines.State.versions(Lines.Line.run(1n+p, s, r, c, st, m)),
+          RLines.State.versions(
+            Lines.Line.run(
+              1n+p,
+              Moves.Delta.to(d, s),
+              Stays.Store.grow(r, zs),
+              c,
+              st,
+              Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st)
+            )
+          )
+        ),
+        Lines.Line.step(s, r, c, st),
+        en => Moves.Run.grows(1n+p, Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st),
+        +st1 => e1 => (
+          %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st), Some{st1}, Step.grown(d, s, r, zs, c, st, st1)(sp)(e1)): Lists.List.Ext(Types.Entry, RLines.State.versions(Lines.Line.run(p, s, r, c, st1, Lines.Line.step(s, r, c, st1))), RLines.State.versions(Lines.Line.run(1n+p, Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st, _)))
+          Run.grown_ext(p, d, s, r, zs, c, st1)(sp))
+      )
+
+# after the node adds d, the slot after a run of a line that d is no vote
+# for a slot of is no less than the slot after the run before, as the store
+# of the line grows
+def Run.grown_slot(
+  f: Nat,
+  +d: Moves.Delta,
+  +s: Facts.Facts(),
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +zs: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +st: RLines.State
+) -> {
+  Moves.Delta.spares(d, c) == True{}: Bool
+} -> {
+  Nat.is_le(
+    RLines.State.slot(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st))),
+    RLines.State.slot(
+      Lines.Line.run(
+        f,
+        Moves.Delta.to(d, s),
+        Stays.Store.grow(r, zs),
+        c,
+        st,
+        Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st)
+      )
+    )
+  )
+    == True{}: Bool
+}:
+  match f:
+    case 0n:
+      sp => Shared.Nat.le_refl(RLines.State.slot(st))
+    case 1n+(+p):
+      +sp => Lists.Maybe.by(
+        RLines.State,
+        m => {
+          Nat.is_le(
+            RLines.State.slot(Lines.Line.run(1n+p, s, r, c, st, m)),
+            RLines.State.slot(
+              Lines.Line.run(
+                1n+p,
+                Moves.Delta.to(d, s),
+                Stays.Store.grow(r, zs),
+                c,
+                st,
+                Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st)
+              )
+            )
+          )
+            == True{}: Bool
+        },
+        Lines.Line.step(s, r, c, st),
+        en => Moves.Run.slot_le(1n+p, Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st),
+        +st1 => e1 => (
+          %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st), Some{st1}, Step.grown(d, s, r, zs, c, st, st1)(sp)(e1)): {Nat.is_le(RLines.State.slot(Lines.Line.run(p, s, r, c, st1, Lines.Line.step(s, r, c, st1))), RLines.State.slot(Lines.Line.run(1n+p, Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st, _))) == True{}: Bool}
+          Run.grown_slot(p, d, s, r, zs, c, st1)(sp))
+      )
+
+# after the node adds d, a run of a line that d is no vote for a slot of ends
+# where it ended, as the store of the line grows, when the rule after the
+# versions where it ended is known
+def Run.held(
+  f: Nat,
+  +d: Moves.Delta,
+  +s: Facts.Facts(),
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +zs: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +st: RLines.State,
+  -u: RLines.Rule
+) -> {
+  Moves.Delta.spares(d, c) == True{}: Bool
+} -> {
+  RLines.Line.rule(
+    r,
+    c,
+    RLines.State.versions(Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st)))
+  )
+    == Some{u}: Maybe<&2, RLines.Rule>
+} -> {
+  Lines.Line.run(
+    f,
+    Moves.Delta.to(d, s),
+    Stays.Store.grow(r, zs),
+    c,
+    st,
+    Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st)
+  )
+    == Lines.Line.run(f, s, r, c, st, Lines.Line.step(s, r, c, st)): RLines.State
+}:
+  match f:
+    case 0n:
+      sp => eu => {==}
+    case 1n+(+p):
+      +sp => Lists.Maybe.by(
+        RLines.State,
+        m => {
+          RLines.Line.rule(
+            r,
+            c,
+            RLines.State.versions(Lines.Line.run(1n+p, s, r, c, st, m))
+          )
+            == Some{u}: Maybe<&2, RLines.Rule>
+        } -> {
+          Lines.Line.run(
+            1n+p,
+            Moves.Delta.to(d, s),
+            Stays.Store.grow(r, zs),
+            c,
+            st,
+            Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st)
+          )
+            == Lines.Line.run(1n+p, s, r, c, st, m): RLines.State
+        },
+        Lines.Line.step(s, r, c, st),
+        en => +eu => (
+          %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st), Lines.Line.step(s, Stays.Store.grow(r, zs), c, st), Moves.Step.same(d, s, Stays.Store.grow(r, zs), c, st)(sp)): {Lines.Line.run(1n+p, Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st, _) == st: RLines.State}
+          %Equal.sym(Maybe<&2, RLines.Rule>, RLines.Line.rule(Stays.Store.grow(r, zs), c, RLines.State.versions(st)), Some{u}, Stays.Rule.grows(r, zs, c, RLines.State.versions(st), u)(eu)): {Lines.Line.run(1n+p, Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st, Lines.Line.step.at(s, c, st, _)) == st: RLines.State}
+          %eu: {Lines.Line.run(1n+p, Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st, Lines.Line.step.at(s, c, st, _)) == st: RLines.State}
+          %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.step(s, r, c, st), None{}, en): {Lines.Line.run(1n+p, Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st, _) == st: RLines.State}
+          {==}),
+        +st1 => e1 => eu => (
+          %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st), Some{st1}, Step.grown(d, s, r, zs, c, st, st1)(sp)(e1)): {Lines.Line.run(1n+p, Moves.Delta.to(d, s), Stays.Store.grow(r, zs), c, st, _) == Lines.Line.run(p, s, r, c, st1, Lines.Line.step(s, r, c, st1)): RLines.State}
+          Run.held(p, d, s, r, zs, c, st1, u)(sp)(eu))
+      )
+
+# after the node adds d, which is no vote for a slot of the branch c2, the
+# state of c2 follows the state that it had, as its store grows from the
+# versions m
+def Branch.grown_at(
+  +d: Moves.Delta,
+  +s: Facts.Facts(),
+  +c2: Ledgers.Line,
+  m: Maybe<&2, List<&2, Types.Entry>>,
+  +zs: List<&2, Types.Entry>,
+  +st2: RLines.State
+) -> {
+  Moves.Delta.spares(d, c2) == True{}: Bool
+} -> {
+  Lines.Branch.state(s, c2, m) == Some{st2}: Maybe<&2, RLines.State>
+} -> Grown(st2, Lines.Branch.state(Moves.Delta.to(d, s), c2, Stays.Store.grow(m, zs))):
+  match m:
+    case None{}:
+      sp => e => Empty.absurd(Grown(st2, None{}), Shared.Maybe.none_ne_some(RLines.State, st2, e))
+    case Some{+R}:
+      +sp => Lists.Maybe.by(
+        Types.Entry,
+        y => {
+          Lines.Line.from(s, Some{R}, c2, y) == Some{st2}: Maybe<&2, RLines.State>
+        } -> Grown(
+          st2,
+          Lines.Line.from(
+            Moves.Delta.to(d, s),
+            Some{List.append(&2, Types.Entry, R, zs)},
+            c2,
+            RLines.Branch.first(List.append(&2, Types.Entry, R, zs), c2)
+          )
+        ),
+        RLines.Branch.first(R, c2),
+        en => e => Empty.absurd(
+          Grown(
+            st2,
+            Lines.Line.from(
+              Moves.Delta.to(d, s),
+              Some{List.append(&2, Types.Entry, R, zs)},
+              c2,
+              RLines.Branch.first(List.append(&2, Types.Entry, R, zs), c2)
+            )
+          ),
+          Shared.Maybe.none_ne_some(RLines.State, st2, e)
+        ),
+        +e0 => ef => e => (
+          %Shared.Maybe.some_inj(RLines.State, Lines.Line.start(s, Some{R}, c2, RLines.State{[e0], 1n}), st2, e): Grown(_, Lines.Line.from(Moves.Delta.to(d, s), Some{List.append(&2, Types.Entry, R, zs)}, c2, RLines.Branch.first(List.append(&2, Types.Entry, R, zs), c2)))
+          (Lines.Line.run(RLines.Line.bound(Facts.Facts.list(s), c2), Moves.Delta.to(d, s), Stays.Store.grow(Some{R}, zs), c2, RLines.State{[e0], 1n}, Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(Some{R}, zs), c2, RLines.State{[e0], 1n})), ((
+              %Equal.sym(Maybe<&2, Types.Entry>, RLines.Branch.first(List.append(&2, Types.Entry, R, zs), c2), Some{e0}, Stays.Branch.first_append(R, zs, c2, e0)(ef)): {Lines.Line.from(Moves.Delta.to(d, s), Some{List.append(&2, Types.Entry, R, zs)}, c2, _) == Some{Lines.Line.run(RLines.Line.bound(Facts.Facts.list(s), c2), Moves.Delta.to(d, s), Stays.Store.grow(Some{R}, zs), c2, RLines.State{[e0], 1n}, Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(Some{R}, zs), c2, RLines.State{[e0], 1n}))}: Maybe<&2, RLines.State>}
+              %Moves.Bound.same(d, s, c2)(sp): {Lines.Line.from(Moves.Delta.to(d, s), Some{List.append(&2, Types.Entry, R, zs)}, c2, Some{e0}) == Some{Lines.Line.run(_, Moves.Delta.to(d, s), Stays.Store.grow(Some{R}, zs), c2, RLines.State{[e0], 1n}, Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(Some{R}, zs), c2, RLines.State{[e0], 1n}))}: Maybe<&2, RLines.State>}
+              {==}), (Run.grown_ext(RLines.Line.bound(Facts.Facts.list(s), c2), d, s, Some{R}, zs, c2, RLines.State{[e0], 1n})(sp), Run.grown_slot(RLines.Line.bound(Facts.Facts.list(s), c2), d, s, Some{R}, zs, c2, RLines.State{[e0], 1n})(sp)))))
+      )
+
+# after the node adds d, which is no vote for a slot of the branch c2, the
+# state of c2 is as before, as its store grows from the versions m, when the
+# rule after its versions is known
+def Branch.held_at(
+  +d: Moves.Delta,
+  +s: Facts.Facts(),
+  +c2: Ledgers.Line,
+  m: Maybe<&2, List<&2, Types.Entry>>,
+  +zs: List<&2, Types.Entry>,
+  +st2: RLines.State,
+  -u: RLines.Rule
+) -> {
+  Moves.Delta.spares(d, c2) == True{}: Bool
+} -> {
+  Lines.Branch.state(s, c2, m) == Some{st2}: Maybe<&2, RLines.State>
+} -> {
+  RLines.Rule.after.of(c2, RLines.State.versions(st2), m) == Some{u}: Maybe<&2, RLines.Rule>
+} -> {
+  Lines.Branch.state(
+    Moves.Delta.to(d, s),
+    c2,
+    Stays.Store.grow(m, zs)
+  )
+    == Some{st2}: Maybe<&2, RLines.State>
+}:
+  match m:
+    case None{}:
+      sp => e => eu => Empty.absurd(
+        {None{} == Some{st2}: Maybe<&2, RLines.State>},
+        Shared.Maybe.none_ne_some(RLines.State, st2, e)
+      )
+    case Some{+R}:
+      +sp => Lists.Maybe.by(
+        Types.Entry,
+        y => {
+          Lines.Line.from(s, Some{R}, c2, y) == Some{st2}: Maybe<&2, RLines.State>
+        } -> {
+          RLines.Line.rule(
+            Some{R},
+            c2,
+            RLines.State.versions(st2)
+          )
+            == Some{u}: Maybe<&2, RLines.Rule>
+        } -> {
+          Lines.Line.from(
+            Moves.Delta.to(d, s),
+            Some{List.append(&2, Types.Entry, R, zs)},
+            c2,
+            RLines.Branch.first(List.append(&2, Types.Entry, R, zs), c2)
+          )
+            == Some{st2}: Maybe<&2, RLines.State>
+        },
+        RLines.Branch.first(R, c2),
+        en => e => eu => Empty.absurd(
+          {
+            Lines.Line.from(
+              Moves.Delta.to(d, s),
+              Some{List.append(&2, Types.Entry, R, zs)},
+              c2,
+              RLines.Branch.first(List.append(&2, Types.Entry, R, zs), c2)
+            )
+              == Some{st2}: Maybe<&2, RLines.State>
+          },
+          Shared.Maybe.none_ne_some(RLines.State, st2, e)
+        ),
+        +e0 => ef => +e => eu => (
+          %Equal.sym(Maybe<&2, Types.Entry>, RLines.Branch.first(List.append(&2, Types.Entry, R, zs), c2), Some{e0}, Stays.Branch.first_append(R, zs, c2, e0)(ef)): {Lines.Line.from(Moves.Delta.to(d, s), Some{List.append(&2, Types.Entry, R, zs)}, c2, _) == Some{st2}: Maybe<&2, RLines.State>}
+          %Shared.Maybe.some_inj(RLines.State, Lines.Line.start(s, Some{R}, c2, RLines.State{[e0], 1n}), st2, e): {Lines.Line.from(Moves.Delta.to(d, s), Some{List.append(&2, Types.Entry, R, zs)}, c2, Some{e0}) == Some{_}: Maybe<&2, RLines.State>}
+          %Equal.sym(Nat, RLines.Line.bound(Facts.Facts.list(Moves.Delta.to(d, s)), c2), RLines.Line.bound(Facts.Facts.list(s), c2), Moves.Bound.same(d, s, c2)(sp)): {Some{Lines.Line.run(_, Moves.Delta.to(d, s), Stays.Store.grow(Some{R}, zs), c2, RLines.State{[e0], 1n}, Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(Some{R}, zs), c2, RLines.State{[e0], 1n}))} == Some{Lines.Line.start(s, Some{R}, c2, RLines.State{[e0], 1n})}: Maybe<&2, RLines.State>}
+          Equal.cong(RLines.State, Maybe<&2, RLines.State>, y => Some{y}, Lines.Line.run(RLines.Line.bound(Facts.Facts.list(s), c2), Moves.Delta.to(d, s), Stays.Store.grow(Some{R}, zs), c2, RLines.State{[e0], 1n}, Lines.Line.step(Moves.Delta.to(d, s), Stays.Store.grow(Some{R}, zs), c2, RLines.State{[e0], 1n})), Lines.Line.start(s, Some{R}, c2, RLines.State{[e0], 1n}), Run.held(RLines.Line.bound(Facts.Facts.list(s), c2), d, s, Some{R}, zs, c2, RLines.State{[e0], 1n}, u)(sp)(Reads.Eq.to(RLines.State, z => {RLines.Line.rule(Some{R}, c2, RLines.State.versions(z)) == Some{u}: Maybe<&2, RLines.Rule>}, st2, Lines.Line.start(s, Some{R}, c2, RLines.State{[e0], 1n}), Equal.sym(RLines.State, Lines.Line.start(s, Some{R}, c2, RLines.State{[e0], 1n}), st2, Shared.Maybe.some_inj(RLines.State, Lines.Line.start(s, Some{R}, c2, RLines.State{[e0], 1n}), st2, e)), eu))))
+      )
+
+# the rule after some versions of a branch, once known, stays as its store
+# grows from the versions m
+def After.grows(
+  +c2: Ledgers.Line,
+  +vs: List<&2, Types.Entry>,
+  m: Maybe<&2, List<&2, Types.Entry>>,
+  +zs: List<&2, Types.Entry>,
+  -u: RLines.Rule
+) -> {
+  RLines.Rule.after.of(c2, vs, m) == Some{u}: Maybe<&2, RLines.Rule>
+} -> {RLines.Rule.after.of(c2, vs, Stays.Store.grow(m, zs)) == Some{u}: Maybe<&2, RLines.Rule>}:
+  match m:
+    case None{}:
+      e => e
+    case Some{+R}:
+      e => Stays.Rule.grows(Some{R}, zs, c2, vs, u)(e)
+
+# after a ballot for the next slot of the state st of the store h, the
+# versions of the store are those that it had, and more
+def Store.grown(
+  +name: String,
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +t: Nat,
+  +x: Types.Cast,
+  +st: RLines.State
+) -> {
+  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{st}: Maybe<&2, RLines.State>
+} -> Exists(
+  List<&2, Types.Entry>,
+  zs => {
+    Lines.Store.versions(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      ),
+      h
+    )
+      == Stays.Store.grow(Lines.Store.versions(s, h), zs): Maybe<&2, List<&2, Types.Entry>>
+  }
+):
+  +es => Reads.Ex.by(
+    List<&2, Types.Entry>,
+    zs => {
+      RLines.State.versions(
+        RKnown.Known.go.at(
+          Facts.Facts.crit(
+            Moves.Delta.to(
+              Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+              s
+            )
+          ),
+          Ledgers.Line{h, None{}},
+          st,
+          None{}
+        )
+      )
+        == List.append(&2, Types.Entry, RLines.State.versions(st), zs): List<&2, Types.Entry>
+    },
+    Exists(
+      List<&2, Types.Entry>,
+      zs => {
+        Lines.Store.versions(
+          Moves.Delta.to(
+            Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+            s
+          ),
+          h
+        )
+          == Stays.Store.grow(Lines.Store.versions(s, h), zs): Maybe<&2, List<&2, Types.Entry>>
+      }
+    ),
+    Moves.Run.grows(
+      1n+RLines.Line.bound(
+        Facts.Facts.list(
+          Moves.Delta.to(
+            Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+            s
+          )
+        ),
+        Ledgers.Line{h, None{}}
+      ),
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      ),
+      None{},
+      Ledgers.Line{h, None{}},
+      st
+    ),
+    +zs => eg => (zs, (
+        %Equal.sym(Maybe<&2, RLines.State>, Lines.Store.state(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s), h), Some{RKnown.Known.go.at(Facts.Facts.crit(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, None{}}, st, None{})}, Store.state_cast(name, s, h, t, x, st)(es)): {Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _) == Stays.Store.grow(Lines.Store.versions(s, h), zs): Maybe<&2, List<&2, Types.Entry>>}
+        %Equal.sym(Maybe<&2, RLines.State>, Lines.Store.state(s, h), Some{st}, es): {Some{RLines.State.versions(RKnown.Known.go.at(Facts.Facts.crit(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, None{}}, st, None{}))} == Stays.Store.grow(Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _), zs): Maybe<&2, List<&2, Types.Entry>>}
+        %eg: {Some{RLines.State.versions(RKnown.Known.go.at(Facts.Facts.crit(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, None{}}, st, None{}))} == Some{_}: Maybe<&2, List<&2, Types.Entry>>}
+        {==}))
+  )
+
+# after a ballot for the next slot of the state st of the store h, the state
+# of the store follows st
+def Store.grown_state(
+  +name: String,
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +t: Nat,
+  +x: Types.Cast,
+  +st: RLines.State
+) -> {
+  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{st}: Maybe<&2, RLines.State>
+} -> Grown(
+  st,
+  Lines.Line.state(
+    Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s),
+    Ledgers.Line{h, None{}}
+  )
+):
+  es => (
+    RKnown.Known.go.at(
+      Facts.Facts.crit(
+        Moves.Delta.to(
+          Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+          s
+        )
+      ),
+      Ledgers.Line{h, None{}},
+      st,
+      None{}
+    ),
+    (
+      Store.state_cast(name, s, h, t, x, st)(es),
+      (
+        Moves.Run.grows(
+          1n+RLines.Line.bound(
+            Facts.Facts.list(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              )
+            ),
+            Ledgers.Line{h, None{}}
+          ),
+          Moves.Delta.to(
+            Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+            s
+          ),
+          None{},
+          Ledgers.Line{h, None{}},
+          st
+        ),
+        Moves.Run.slot_le(
+          1n+RLines.Line.bound(
+            Facts.Facts.list(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              )
+            ),
+            Ledgers.Line{h, None{}}
+          ),
+          Moves.Delta.to(
+            Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+            s
+          ),
+          None{},
+          Ledgers.Line{h, None{}},
+          st
+        )
+      )
+    )
+  )
+
+# after a ballot for the next slot of the state st of the store h, the state
+# of each line follows the state that it had
+def Store.grown_line(
+  +name: String,
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +t: Nat,
+  +x: Types.Cast,
+  +st: RLines.State,
+  c2: Ledgers.Line,
+  +st2: RLines.State
+) -> {
+  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{st}: Maybe<&2, RLines.State>
+} -> {
+  Lines.Line.state(s, c2) == Some{st2}: Maybe<&2, RLines.State>
+} -> Grown(
+  st2,
+  Lines.Line.state(
+    Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s),
+    c2
+  )
+):
+  match c2:
+    case Ledgers.Line{+h2, None{}}:
+      +es => +e2 => Lists.Bool.by(
+        y => {
+          Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}) == y: Bool
+        } -> Grown(
+          st2,
+          Lines.Line.state(
+            Moves.Delta.to(
+              Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+              s
+            ),
+            Ledgers.Line{h2, None{}}
+          )
+        ),
+        Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}),
+        et => +eq => Reads.Eq.back(
+          Ledgers.Line,
+          l => Grown(
+            st2,
+            Lines.Line.state(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              ),
+              l
+            )
+          ),
+          Ledgers.Line{h2, None{}},
+          Ledgers.Line{h, None{}},
+          Ledgers.Line.is_eq_sound(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}})(eq),
+          (
+            %Shared.Maybe.some_inj(RLines.State, st, st2, Equal.trans(Maybe<&2, RLines.State>, Some{st}, Lines.Line.state(s, Ledgers.Line{h, None{}}), Some{st2}, Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(s, Ledgers.Line{h, None{}}), Some{st}, es), Reads.Eq.to(Ledgers.Line, l => {Lines.Line.state(s, l) == Some{st2}: Maybe<&2, RLines.State>}, Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}, Ledgers.Line.is_eq_sound(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}})(eq), e2))): Grown(_, Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s), Ledgers.Line{h, None{}}))
+            Store.grown_state(name, s, h, t, x, st)(es))
+        ),
+        ef => eq => Grown.eq(
+          st2,
+          Lines.Line.state(
+            Moves.Delta.to(
+              Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+              s
+            ),
+            Ledgers.Line{h2, None{}}
+          )
+        )(
+          Equal.trans(
+            Maybe<&2, RLines.State>,
+            Lines.Line.state(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              ),
+              Ledgers.Line{h2, None{}}
+            ),
+            Lines.Line.state(s, Ledgers.Line{h2, None{}}),
+            Some{st2},
+            Line.state_voted(
+              name,
+              s,
+              Ledgers.Line{h, None{}},
+              RLines.State.slot(st),
+              t,
+              x,
+              Ledgers.Line{h2, None{}}
+            )(
+              %Equal.sym(Bool, Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}), False{}, eq): {Bool.or(_, _) == False{}: Bool}
+              {==}),
+            e2
+          )
+        )
+      )({==})
+    case Ledgers.Line{+h2, Some{+b}}:
+      +es => +e2 => Lists.Bool.by(
+        y => {
+          Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}) == y: Bool
+        } -> Grown(
+          st2,
+          Lines.Line.state(
+            Moves.Delta.to(
+              Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+              s
+            ),
+            Ledgers.Line{h2, Some{b}}
+          )
+        ),
+        Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}),
+        et => +eq => Reads.Eq.back(
+          Hashes.Hash,
+          z => Grown(
+            st2,
+            Lines.Line.state(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              ),
+              Ledgers.Line{z, Some{b}}
+            )
+          ),
+          h2,
+          h,
+          Equal.cong(
+            Ledgers.Line,
+            Hashes.Hash,
+            l => RLines.Line.root(l),
+            Ledgers.Line{h2, None{}},
+            Ledgers.Line{h, None{}},
+            Ledgers.Line.is_eq_sound(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}})(eq)
+          ),
+          Reads.Ex.by(
+            List<&2, Types.Entry>,
+            zs => {
+              Lines.Store.versions(
+                Moves.Delta.to(
+                  Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                  s
+                ),
+                h
+              )
+                == Stays.Store.grow(
+                  Lines.Store.versions(s, h),
+                  zs
+                ): Maybe<&2, List<&2, Types.Entry>>
+            },
+            Grown(
+              st2,
+              Lines.Line.state(
+                Moves.Delta.to(
+                  Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                  s
+                ),
+                Ledgers.Line{h, Some{b}}
+              )
+            ),
+            Store.grown(name, s, h, t, x, st)(es),
+            +zs => ev => (
+              %Equal.sym(Maybe<&2, List<&2, Types.Entry>>, Lines.Store.versions(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s), h), Stays.Store.grow(Lines.Store.versions(s, h), zs), ev): Grown(st2, Lines.Branch.state(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s), Ledgers.Line{h, Some{b}}, _))
+              Branch.grown_at(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s, Ledgers.Line{h, Some{b}}, Lines.Store.versions(s, h), zs, st2)(
+              %Equal.sym(Bool, Ledgers.Line.is_eq(Ledgers.Line{h, Some{b}}, Ledgers.Line{h, None{}}), False{}, Branch.ne_root(h, h, b)): {Bool.not(_) == True{}: Bool}
+              {==})(Reads.Eq.to(Hashes.Hash, z => {Lines.Line.state(s, Ledgers.Line{z, Some{b}}) == Some{st2}: Maybe<&2, RLines.State>}, h2, h, Equal.cong(Ledgers.Line, Hashes.Hash, l => RLines.Line.root(l), Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}, Ledgers.Line.is_eq_sound(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}})(eq)), e2)))
+          )
+        ),
+        ef => eq => Grown.eq(
+          st2,
+          Lines.Line.state(
+            Moves.Delta.to(
+              Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+              s
+            ),
+            Ledgers.Line{h2, Some{b}}
+          )
+        )(
+          Equal.trans(
+            Maybe<&2, RLines.State>,
+            Lines.Line.state(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              ),
+              Ledgers.Line{h2, Some{b}}
+            ),
+            Lines.Line.state(s, Ledgers.Line{h2, Some{b}}),
+            Some{st2},
+            Line.state_voted(
+              name,
+              s,
+              Ledgers.Line{h, None{}},
+              RLines.State.slot(st),
+              t,
+              x,
+              Ledgers.Line{h2, Some{b}}
+            )(
+              %Equal.sym(Bool, Ledgers.Line.is_eq(Ledgers.Line{h2, Some{b}}, Ledgers.Line{h, None{}}), False{}, Branch.ne_root(h2, h, b)): {Bool.or(_, Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}})) == False{}: Bool}
+              %Equal.sym(Bool, Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}), False{}, eq): {Bool.or(False{}, _) == False{}: Bool}
+              {==}),
+            e2
+          )
+        )
+      )({==})
+
+# after a ballot for the next slot of the state st of the branch of the head
+# h and the name b, whose store is in the state of the versions rs and the
+# slot j, the state of each line follows the state that it had
+def Branch.grown_line(
   +name: String,
   +s: Facts.Facts(),
   +h: Hashes.Hash,
@@ -10127,33 +11020,94 @@ def Branch.at_cast(
   +rs: List<&2, Types.Entry>,
   +j: Nat,
   +st: RLines.State,
-  +i: Nat,
-  -e: Types.Entry
+  +c2: Ledgers.Line,
+  +st2: RLines.State
 ) -> {
   Lines.Line.state(s, Ledgers.Line{h, Some{b}}) == Some{st}: Maybe<&2, RLines.State>
 } -> {
   Lines.Store.state(s, h) == Some{RLines.State{rs, j}}: Maybe<&2, RLines.State>
 } -> {
-  Lines.Line.at(s, Ledgers.Line{h, Some{b}}, i) == Some{e}: Maybe<&2, Types.Entry>
-} -> {
-  Lines.Line.at(
+  Lines.Line.state(s, c2) == Some{st2}: Maybe<&2, RLines.State>
+} -> Grown(
+  st2,
+  Lines.Line.state(
     Moves.Delta.to(
       Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x},
       s
     ),
-    Ledgers.Line{h, Some{b}},
-    i
+    c2
   )
-    == Some{e}: Maybe<&2, Types.Entry>
-}:
-  +em => es => ee => (
-    %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s), Ledgers.Line{h, Some{b}}), Some{RKnown.Known.go.at(Facts.Facts.crit(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, Some{b}}, st, Some{rs})}, Branch.state_cast(name, s, h, b, t, x, rs, j, st)(em)(es)): {RLines.Line.at.of(Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _), i) == Some{e}: Maybe<&2, Types.Entry>}
-    Lists.List.ext_get.of(Types.Entry, RLines.State.versions(st), RLines.State.versions(RKnown.Known.go.at(Facts.Facts.crit(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, Some{b}}, st, Some{rs})), i, e, Versions.Run.keeps(~List<&2, Types.Entry>, ~Versions.Run.Ext, ~Versions.Run.ext_step, 1n+RLines.Line.bound(Facts.Facts.list(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, Some{b}}), RLines.State.versions(st), Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s), Some{rs}, Ledgers.Line{h, Some{b}}, st, Lists.List.ext_refl(Types.Entry, RLines.State.versions(st))), (
-      %em: {RLines.Line.at.of(Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _), i) == Some{e}: Maybe<&2, Types.Entry>}
-      ee)))
+):
+  +em => +es => +e2 => Lists.Bool.by(
+    y => {
+      Ledgers.Line.is_eq(c2, Ledgers.Line{h, Some{b}}) == y: Bool
+    } -> Grown(
+      st2,
+      Lines.Line.state(
+        Moves.Delta.to(
+          Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x},
+          s
+        ),
+        c2
+      )
+    ),
+    Ledgers.Line.is_eq(c2, Ledgers.Line{h, Some{b}}),
+    et => +eq => Reads.Eq.back(
+      Ledgers.Line,
+      l => Grown(
+        st2,
+        Lines.Line.state(
+          Moves.Delta.to(
+            Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x},
+            s
+          ),
+          l
+        )
+      ),
+      c2,
+      Ledgers.Line{h, Some{b}},
+      Ledgers.Line.is_eq_sound(c2, Ledgers.Line{h, Some{b}})(eq),
+      (
+        %Shared.Maybe.some_inj(RLines.State, st, st2, Equal.trans(Maybe<&2, RLines.State>, Some{st}, Lines.Line.state(s, Ledgers.Line{h, Some{b}}), Some{st2}, Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(s, Ledgers.Line{h, Some{b}}), Some{st}, em), Reads.Eq.to(Ledgers.Line, l => {Lines.Line.state(s, l) == Some{st2}: Maybe<&2, RLines.State>}, c2, Ledgers.Line{h, Some{b}}, Ledgers.Line.is_eq_sound(c2, Ledgers.Line{h, Some{b}})(eq), e2))): Grown(_, Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s), Ledgers.Line{h, Some{b}}))
+        (RKnown.Known.go.at(Facts.Facts.crit(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, Some{b}}, st, Some{rs}), (Branch.state_cast(name, s, h, b, t, x, rs, j, st)(em)(es), (Moves.Run.grows(1n+RLines.Line.bound(Facts.Facts.list(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, Some{b}}), Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s), Some{rs}, Ledgers.Line{h, Some{b}}, st), Moves.Run.slot_le(1n+RLines.Line.bound(Facts.Facts.list(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, Some{b}}), Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s), Some{rs}, Ledgers.Line{h, Some{b}}, st)))))
+    ),
+    ef => eq => Grown.eq(
+      st2,
+      Lines.Line.state(
+        Moves.Delta.to(
+          Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x},
+          s
+        ),
+        c2
+      )
+    )(
+      Equal.trans(
+        Maybe<&2, RLines.State>,
+        Lines.Line.state(
+          Moves.Delta.to(
+            Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x},
+            s
+          ),
+          c2
+        ),
+        Lines.Line.state(s, c2),
+        Some{st2},
+        Line.state_voted(
+          name,
+          s,
+          Ledgers.Line{h, Some{b}},
+          RLines.State.slot(st),
+          t,
+          x,
+          c2
+        )(Branch.hit_other(h, b, c2)(eq)),
+        e2
+      )
+    )
+  )({==})
 
-# Vote.at_kept, with the states m of the line and ms of its store
-def Vote.at_kept.of(
+# Safe.grown, with the states m of the line c and ms of its store
+def Safe.grown.of(
   +name: String,
   +s: Facts.Facts(),
   c: Ledgers.Line,
@@ -10163,14 +11117,141 @@ def Vote.at_kept.of(
   +t: Nat,
   +x: Types.Cast,
   +c2: Ledgers.Line,
-  +i: Nat,
-  -e: Types.Entry
+  +st2: RLines.State
 ) -> {
   Lines.Line.state(s, c) == m: Maybe<&2, RLines.State>
 } -> {
   Lines.Line.state(s, RKnown.Known.root(c)) == ms: Maybe<&2, RLines.State>
 } -> {
   RKnown.Known.safe(c, m, ms, k) == True{}: Bool
+} -> {
+  Lines.Line.state(s, c2) == Some{st2}: Maybe<&2, RLines.State>
+} -> Grown(st2, Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s), c2)):
+  match c m ms:
+    case Ledgers.Line{h, None{}} None{} ms:
+      em => es => hs => e2 => Empty.absurd(
+        Grown(
+          st2,
+          Lines.Line.state(
+            Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, k, t, x}, s),
+            c2
+          )
+        ),
+        Shared.Bool.false_ne_true(hs)
+      )
+    case Ledgers.Line{+h, None{}} Some{+st} ms:
+      em => es => hs => e2 => (
+        %Shared.Nat.is_eq_sound(RLines.State.slot(st), k)(hs): Grown(st2, Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, _, t, x}, s), c2))
+        Store.grown_line(name, s, h, t, x, st, c2, st2)(em)(e2))
+    case Ledgers.Line{h, Some{b}} None{} ms:
+      em => es => hs => e2 => Empty.absurd(
+        Grown(
+          st2,
+          Lines.Line.state(
+            Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, k, t, x}, s),
+            c2
+          )
+        ),
+        Shared.Bool.false_ne_true(hs)
+      )
+    case Ledgers.Line{h, Some{b}} Some{st} None{}:
+      em => es => hs => e2 => Empty.absurd(
+        Grown(
+          st2,
+          Lines.Line.state(
+            Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, k, t, x}, s),
+            c2
+          )
+        ),
+        Shared.Bool.false_ne_true(hs)
+      )
+    case Ledgers.Line{+h, Some{+b}} Some{+st} Some{RLines.State{+rs, +j}}:
+      em => es => hs => e2 => (
+        %Shared.Nat.is_eq_sound(RLines.State.slot(st), k)(hs): Grown(st2, Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, _, t, x}, s), c2))
+        Branch.grown_line(name, s, h, b, t, x, rs, j, st, c2, st2)(em)(es)(e2))
+
+# after a ballot that only continues the versions of each line (Known.safe),
+# the state of each line follows the state that it had
+def Safe.grown(
+  +name: String,
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +x: Types.Cast,
+  +c2: Ledgers.Line,
+  +st2: RLines.State
+) -> {
+  RKnown.Known.safe(
+    c,
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k
+  )
+    == True{}: Bool
+} -> {
+  Lines.Line.state(s, c2) == Some{st2}: Maybe<&2, RLines.State>
+} -> Grown(st2, Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s), c2)):
+  Safe.grown.of(
+    name,
+    s,
+    c,
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k,
+    t,
+    x,
+    c2,
+    st2
+  )({==})({==})
+
+# a ballot that only continues the versions of each line is for a slot that
+# waits
+def Safe.waits(
+  c: Ledgers.Line,
+  m: Maybe<&2, RLines.State>,
+  ms: Maybe<&2, RLines.State>,
+  +k: Nat
+) -> {RKnown.Known.safe(c, m, ms, k) == True{}: Bool} -> {RKnown.Slot.waits(m, k) == True{}: Bool}:
+  match c m ms:
+    case Ledgers.Line{h, None{}} None{} ms:
+      hs => {==}
+    case Ledgers.Line{h, None{}} Some{RLines.State{vs, +j}} ms:
+      hs => (
+        %Shared.Nat.is_eq_sound(j, k)(hs): {Nat.is_le(j, _) == True{}: Bool}
+        Shared.Nat.le_refl(j))
+    case Ledgers.Line{h, Some{b}} None{} ms:
+      hs => {==}
+    case Ledgers.Line{h, Some{b}} Some{st} None{}:
+      hs => Empty.absurd(
+        {RKnown.Slot.waits(Some{st}, k) == True{}: Bool},
+        Shared.Bool.false_ne_true(hs)
+      )
+    case Ledgers.Line{h, Some{b}} Some{RLines.State{vs, +j}} Some{y}:
+      hs => (
+        %Shared.Nat.is_eq_sound(j, k)(hs): {Nat.is_le(j, _) == True{}: Bool}
+        Shared.Nat.le_refl(j))
+
+# a version that was read is read again after a ballot that only continues
+# the versions of each line
+def Vote.at_kept(
+  +name: String,
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +x: Types.Cast,
+  +c2: Ledgers.Line,
+  +i: Nat,
+  -e: Types.Entry
+) -> {
+  RKnown.Known.safe(
+    c,
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k
+  )
+    == True{}: Bool
 } -> {
   Lines.Line.at(s, c2, i) == Some{e}: Maybe<&2, Types.Entry>
 } -> {
@@ -10181,47 +11262,1141 @@ def Vote.at_kept.of(
   )
     == Some{e}: Maybe<&2, Types.Entry>
 }:
-  match c m ms:
-    case Ledgers.Line{h, None{}} m ms:
-      em => es => hs => ee => Empty.absurd(
-        {
-          Lines.Line.at(
-            Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, k, t, x}, s),
-            c2,
-            i
-          )
-            == Some{e}: Maybe<&2, Types.Entry>
-        },
-        Shared.Bool.false_ne_true(hs)
+  +hs => Lists.Maybe.by(
+    RLines.State,
+    m => {
+      RLines.Line.at.of(
+        Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, m),
+        i
       )
-    case Ledgers.Line{h, Some{b}} None{} ms:
-      em => es => hs => ee => Empty.absurd(
-        {
-          Lines.Line.at(
-            Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, k, t, x}, s),
-            c2,
-            i
-          )
-            == Some{e}: Maybe<&2, Types.Entry>
-        },
-        Shared.Bool.false_ne_true(hs)
+        == Some{e}: Maybe<&2, Types.Entry>
+    } -> {
+      Lines.Line.at(
+        Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s),
+        c2,
+        i
       )
-    case Ledgers.Line{h, Some{b}} Some{st} None{}:
-      em => es => hs => ee => Empty.absurd(
-        {
-          Lines.Line.at(
-            Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, k, t, x}, s),
-            c2,
-            i
-          )
-            == Some{e}: Maybe<&2, Types.Entry>
-        },
-        Shared.Bool.false_ne_true(hs)
+        == Some{e}: Maybe<&2, Types.Entry>
+    },
+    Lines.Line.state(s, c2),
+    en => ee => Empty.absurd(
+      {
+        Lines.Line.at(
+          Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s),
+          c2,
+          i
+        )
+          == Some{e}: Maybe<&2, Types.Entry>
+      },
+      Shared.Maybe.none_ne_some(Types.Entry, e, ee)
+    ),
+    +st2 => e2 => ee => Grown.by(
+      {
+        Lines.Line.at(
+          Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s),
+          c2,
+          i
+        )
+          == Some{e}: Maybe<&2, Types.Entry>
+      },
+      st2,
+      Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s), c2),
+      Safe.grown(name, s, c, k, t, x, c2, st2)(hs)(e2),
+      +st3 => e3 => ext => le => (
+        %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s), c2), Some{st3}, e3): {RLines.Line.at.of(Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _), i) == Some{e}: Maybe<&2, Types.Entry>}
+        Lists.List.ext_get.of(Types.Entry, RLines.State.versions(st2), RLines.State.versions(st3), i, e, ext, ee))
+    )
+  )
+
+# after a ballot for the next slot of the state st of the store h, a branch
+# of the store whose rule after its versions is known is as it was, and so
+# is that rule
+def Store.held_line(
+  +name: String,
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +t: Nat,
+  +x: Types.Cast,
+  +st: RLines.State,
+  +b: String,
+  +st2: RLines.State,
+  -u: RLines.Rule
+) -> {
+  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{st}: Maybe<&2, RLines.State>
+} -> {
+  Lines.Line.state(s, Ledgers.Line{h, Some{b}}) == Some{st2}: Maybe<&2, RLines.State>
+} -> {
+  Lines.Rule.after(
+    s,
+    Ledgers.Line{h, Some{b}},
+    RLines.State.versions(st2)
+  )
+    == Some{u}: Maybe<&2, RLines.Rule>
+} -> {
+  Lines.Line.state(
+    Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s),
+    Ledgers.Line{h, Some{b}}
+  )
+    == Some{st2}: Maybe<&2, RLines.State>
+}
+  & {
+    Lines.Rule.after(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      ),
+      Ledgers.Line{h, Some{b}},
+      RLines.State.versions(st2)
+    )
+      == Some{u}: Maybe<&2, RLines.Rule>
+  }:
+  +es => +e2 => +eu => Reads.Ex.by(
+    List<&2, Types.Entry>,
+    zs => {
+      Lines.Store.versions(
+        Moves.Delta.to(
+          Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+          s
+        ),
+        h
       )
-    case Ledgers.Line{+h, Some{+b}} Some{+st} Some{RLines.State{+R, +j}}:
-      +em => +es => hs => +ee => (
-        %Shared.Nat.is_eq_sound(RLines.State.slot(st), k)(hs): {Lines.Line.at(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, _, t, x}, s), c2, i) == Some{e}: Maybe<&2, Types.Entry>}
-        Lists.Bool.by(y => {Lines.Line.at(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s), c2, i) == Some{e}: Maybe<&2, Types.Entry>}, Ledgers.Line.is_eq(c2, Ledgers.Line{h, Some{b}}), +et => Reads.Eq.back(Ledgers.Line, l => {Lines.Line.at(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s), l, i) == Some{e}: Maybe<&2, Types.Entry>}, c2, Ledgers.Line{h, Some{b}}, Ledgers.Line.is_eq_sound(c2, Ledgers.Line{h, Some{b}})(et), Branch.at_cast(name, s, h, b, t, x, R, j, st, i, e)(em)(es)(Reads.Eq.to(Ledgers.Line, l => {Lines.Line.at(s, l, i) == Some{e}: Maybe<&2, Types.Entry>}, c2, Ledgers.Line{h, Some{b}}, Ledgers.Line.is_eq_sound(c2, Ledgers.Line{h, Some{b}})(et), ee))), ef => At.same(s, Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x}, s), c2, i, e)(Line.state_voted(name, s, Ledgers.Line{h, Some{b}}, RLines.State.slot(st), t, x, c2)(Branch.hit_other(h, b, c2)(ef)))(ee)))
+        == Stays.Store.grow(Lines.Store.versions(s, h), zs): Maybe<&2, List<&2, Types.Entry>>
+    },
+    {
+      Lines.Line.state(
+        Moves.Delta.to(
+          Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+          s
+        ),
+        Ledgers.Line{h, Some{b}}
+      )
+        == Some{st2}: Maybe<&2, RLines.State>
+    }
+      & {
+        Lines.Rule.after(
+          Moves.Delta.to(
+            Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+            s
+          ),
+          Ledgers.Line{h, Some{b}},
+          RLines.State.versions(st2)
+        )
+          == Some{u}: Maybe<&2, RLines.Rule>
+      },
+    Store.grown(name, s, h, t, x, st)(es),
+    +zs => +ev => ((
+        %Equal.sym(Maybe<&2, List<&2, Types.Entry>>, Lines.Store.versions(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s), h), Stays.Store.grow(Lines.Store.versions(s, h), zs), ev): {Lines.Branch.state(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s), Ledgers.Line{h, Some{b}}, _) == Some{st2}: Maybe<&2, RLines.State>}
+        Branch.held_at(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s, Ledgers.Line{h, Some{b}}, Lines.Store.versions(s, h), zs, st2, u)(
+        %Equal.sym(Bool, Ledgers.Line.is_eq(Ledgers.Line{h, Some{b}}, Ledgers.Line{h, None{}}), False{}, Branch.ne_root(h, h, b)): {Bool.not(_) == True{}: Bool}
+        {==})(e2)(eu)), (
+        %Equal.sym(Maybe<&2, List<&2, Types.Entry>>, Lines.Store.versions(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s), h), Stays.Store.grow(Lines.Store.versions(s, h), zs), ev): {RLines.Rule.after.of(Ledgers.Line{h, Some{b}}, RLines.State.versions(st2), _) == Some{u}: Maybe<&2, RLines.Rule>}
+        After.grows(Ledgers.Line{h, Some{b}}, RLines.State.versions(st2), Lines.Store.versions(s, h), zs, u)(eu)))
+  )
+
+# a rule that a table holds for a line stays right, when the facts give the
+# line the same state, and the same rule after it
+def Ruled.grown(
+  +s: Facts.Facts(),
+  +s2: Facts.Facts(),
+  +c: Ledgers.Line,
+  +zu: Nat,
+  +u: RLines.Rule
+) -> {
+  Lines.Line.state(s2, c) == Lines.Line.state(s, c): Maybe<&2, RLines.State>
+} -> {
+  RKnown.Known.rule.next(
+    RKnown.Known.none(),
+    Facts.Facts.crit(s2),
+    c,
+    Lines.Line.state(s, c)
+  )
+    == RKnown.Known.rule.next(
+      RKnown.Known.none(),
+      Facts.Facts.crit(s),
+      c,
+      Lines.Line.state(s, c)
+    ): Maybe<&2, RLines.Rule>
+} -> {
+  RContents.Kept.ok(Facts.Facts.crit(s), RKnown.Ruled{c, zu, u}) == True{}: Bool
+} -> {RContents.Kept.ok(Facts.Facts.crit(s2), RKnown.Ruled{c, zu, u}) == True{}: Bool}:
+  x => x1 => x2 => (%Equal.sym(
+    Maybe<&2, RLines.State>,
+    RLines.Line.state(Sets.ValSet.crit(Types.Fact, Coded.Fact.words, s2), c),
+    RLines.Line.state(Sets.ValSet.crit(Types.Fact, Coded.Fact.words, s), c),
+    x
+  ): {
+    Bool.and(
+      RKnown.Rule.fits(
+        RKnown.Known.rule.next(
+          RKnown.Table{Crits.Crit.Tip{}, None{}, Crits.Crit.Tip{}, 0n},
+          Sets.ValSet.crit(Types.Fact, Coded.Fact.words, s2),
+          c,
+          _
+        ),
+        u
+      ),
+      RKnown.Era.fits(_, c, zu)
+    )
+      == True{}: Bool
+  }; (%Equal.sym(
+    Maybe<&2, RLines.Rule>,
+    RKnown.Known.rule.next(
+      RKnown.Table{Crits.Crit.Tip{}, None{}, Crits.Crit.Tip{}, 0n},
+      Sets.ValSet.crit(Types.Fact, Coded.Fact.words, s2),
+      c,
+      RLines.Line.state(Sets.ValSet.crit(Types.Fact, Coded.Fact.words, s), c)
+    ),
+    RKnown.Known.rule.next(
+      RKnown.Table{Crits.Crit.Tip{}, None{}, Crits.Crit.Tip{}, 0n},
+      Sets.ValSet.crit(Types.Fact, Coded.Fact.words, s),
+      c,
+      RLines.Line.state(Sets.ValSet.crit(Types.Fact, Coded.Fact.words, s), c)
+    ),
+    x1
+  ): {
+    Bool.and(
+      RKnown.Rule.fits(_, u),
+      RKnown.Era.fits(
+        RLines.Line.state(Sets.ValSet.crit(Types.Fact, Coded.Fact.words, s), c),
+        c,
+        zu
+      )
+    )
+      == True{}: Bool
+  }; x2))
+
+# Info.held_ok, once the state of the branch and the rule after it are known
+# after the ballot (ec, er)
+def Info.held_ok.at(
+  +name: String,
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +t: Nat,
+  +x: Types.Cast,
+  +st: RLines.State,
+  +b: String,
+  +rev: List<&2, Types.Entry>,
+  +n0: Nat,
+  +j: Nat,
+  +zn: Nat,
+  +u: RLines.Rule,
+  +y: Maybe<&2, RKnown.Ids>,
+  +e2: {
+    Lines.Line.state(
+      s,
+      Ledgers.Line{h, Some{b}}
+    )
+      == Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})}: Maybe<&2, RLines.State>
+  },
+  +eu: {
+    RKnown.Known.rule.next(
+      RKnown.Known.none(),
+      Facts.Facts.crit(s),
+      Ledgers.Line{h, Some{b}},
+      Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})}
+    )
+      == Some{u}: Maybe<&2, RLines.Rule>
+  },
+  +hi: {
+    RContents.Info.ok(
+      Facts.Facts.crit(s),
+      RKnown.Info{
+        Ledgers.Line{h, Some{b}},
+        Some{RKnown.Seen{rev, n0, j}},
+        Some{RKnown.Mark{zn, u}},
+        y
+      }
+    )
+      == True{}: Bool
+  },
+  +ec: {
+    Lines.Line.state(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      ),
+      Ledgers.Line{h, Some{b}}
+    )
+      == Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})}: Maybe<&2, RLines.State>
+  },
+  +er: {
+    Lines.Rule.after(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      ),
+      Ledgers.Line{h, Some{b}},
+      RLines.State.versions(RKnown.Seen.state(RKnown.Seen{rev, n0, j}))
+    )
+      == Some{u}: Maybe<&2, RLines.Rule>
+  }
+) -> {
+  RContents.Info.ok(
+    Facts.Facts.crit(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      )
+    ),
+    RKnown.Info{
+      Ledgers.Line{h, Some{b}},
+      Some{RKnown.Seen{rev, n0, j}},
+      Some{RKnown.Mark{zn, u}},
+      y
+    }
+  )
+    == True{}: Bool
+}:
+  +ec2 = Equal.trans(
+    Maybe<&2, RLines.State>,
+    Lines.Line.state(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      ),
+      Ledgers.Line{h, Some{b}}
+    ),
+    Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})},
+    Lines.Line.state(s, Ledgers.Line{h, Some{b}}),
+    ec,
+    Equal.sym(
+      Maybe<&2, RLines.State>,
+      Lines.Line.state(s, Ledgers.Line{h, Some{b}}),
+      Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})},
+      e2
+    )
+  )
+  Info.ok_of(
+    Facts.Facts.crit(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      )
+    ),
+    Ledgers.Line{h, Some{b}},
+    Some{RKnown.Seen{rev, n0, j}},
+    Some{RKnown.Mark{zn, u}},
+    y
+  )(
+    State.kept(
+      Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})},
+      s,
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      ),
+      Ledgers.Line{h, Some{b}}
+    )(
+      ec2
+    )(
+      Info.ok_state(
+        Facts.Facts.crit(s),
+        Ledgers.Line{h, Some{b}},
+        Some{RKnown.Seen{rev, n0, j}},
+        Some{RKnown.Mark{zn, u}},
+        y
+      )(hi)
+    )
+  )(
+    Ruled.grown(
+      s,
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      ),
+      Ledgers.Line{h, Some{b}},
+      zn,
+      u
+    )(ec2)(
+      %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(s, Ledgers.Line{h, Some{b}}), Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})}, e2): {RKnown.Known.rule.next(RKnown.Known.none(), Facts.Facts.crit(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, Some{b}}, _) == RKnown.Known.rule.next(RKnown.Known.none(), Facts.Facts.crit(s), Ledgers.Line{h, Some{b}}, _): Maybe<&2, RLines.Rule>}
+      Equal.trans(Maybe<&2, RLines.Rule>, RKnown.Known.rule.next(RKnown.Known.none(), Facts.Facts.crit(Moves.Delta.to(Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x}, s)), Ledgers.Line{h, Some{b}}, Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})}), Some{u}, RKnown.Known.rule.next(RKnown.Known.none(), Facts.Facts.crit(s), Ledgers.Line{h, Some{b}}, Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})}), er, Equal.sym(Maybe<&2, RLines.Rule>, RKnown.Known.rule.next(RKnown.Known.none(), Facts.Facts.crit(s), Ledgers.Line{h, Some{b}}, Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})}), Some{u}, eu)))(
+      Info.ok_mark(
+        Facts.Facts.crit(s),
+        Ledgers.Line{h, Some{b}},
+        Some{RKnown.Seen{rev, n0, j}},
+        Some{RKnown.Mark{zn, u}},
+        y
+      )(hi)
+    )
+  )(
+    Made.kept(
+      y,
+      s,
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      ),
+      Ledgers.Line{h, Some{b}}
+    )(
+      ec2
+    )(
+      Info.ok_made(
+        Facts.Facts.crit(s),
+        Ledgers.Line{h, Some{b}},
+        Some{RKnown.Seen{rev, n0, j}},
+        Some{RKnown.Mark{zn, u}},
+        y
+      )(hi)
+    )
+  )(
+    Info.ok_counted(
+      Facts.Facts.crit(s),
+      Ledgers.Line{h, Some{b}},
+      Some{RKnown.Seen{rev, n0, j}},
+      Some{RKnown.Mark{zn, u}},
+      y
+    )(hi)
+  )
+
+# what is right of a branch of the store h whose next rule is known is right
+# after a ballot for the next slot of the state st of the store
+def Info.held_ok(
+  +name: String,
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +t: Nat,
+  +x: Types.Cast,
+  +st: RLines.State,
+  +b: String,
+  +rev: List<&2, Types.Entry>,
+  +n0: Nat,
+  +j: Nat,
+  +zn: Nat,
+  +u: RLines.Rule,
+  +y: Maybe<&2, RKnown.Ids>,
+  +es: {Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{st}: Maybe<&2, RLines.State>},
+  +hi: {
+    RContents.Info.ok(
+      Facts.Facts.crit(s),
+      RKnown.Info{
+        Ledgers.Line{h, Some{b}},
+        Some{RKnown.Seen{rev, n0, j}},
+        Some{RKnown.Mark{zn, u}},
+        y
+      }
+    )
+      == True{}: Bool
+  }
+) -> {
+  RContents.Info.ok(
+    Facts.Facts.crit(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      )
+    ),
+    RKnown.Info{
+      Ledgers.Line{h, Some{b}},
+      Some{RKnown.Seen{rev, n0, j}},
+      Some{RKnown.Mark{zn, u}},
+      y
+    }
+  )
+    == True{}: Bool
+}:
+  +e2 = State.fits_sound(
+    Lines.Line.state(s, Ledgers.Line{h, Some{b}}),
+    RKnown.Seen.state(RKnown.Seen{rev, n0, j})
+  )(
+    Info.ok_state(
+      Facts.Facts.crit(s),
+      Ledgers.Line{h, Some{b}},
+      Some{RKnown.Seen{rev, n0, j}},
+      Some{RKnown.Mark{zn, u}},
+      y
+    )(hi)
+  )
+  +eu = Reads.Eq.to(
+    Maybe<&2, RLines.State>,
+    z => {
+      RKnown.Known.rule.next(
+        RKnown.Known.none(),
+        Facts.Facts.crit(s),
+        Ledgers.Line{h, Some{b}},
+        z
+      )
+        == Some{u}: Maybe<&2, RLines.Rule>
+    },
+    Lines.Line.state(s, Ledgers.Line{h, Some{b}}),
+    Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})},
+    e2,
+    Rule.fits_sound(
+      RKnown.Known.rule.next(
+        RKnown.Known.none(),
+        Facts.Facts.crit(s),
+        Ledgers.Line{h, Some{b}},
+        Lines.Line.state(s, Ledgers.Line{h, Some{b}})
+      ),
+      u
+    )(
+      Shared.Bool.and_true_left(
+        RKnown.Rule.fits(
+          RKnown.Known.rule.next(
+            RKnown.Known.none(),
+            Facts.Facts.crit(s),
+            Ledgers.Line{h, Some{b}},
+            Lines.Line.state(s, Ledgers.Line{h, Some{b}})
+          ),
+          u
+        ),
+        RKnown.Era.fits(Lines.Line.state(s, Ledgers.Line{h, Some{b}}), Ledgers.Line{h, Some{b}}, zn)
+      )(
+        Info.ok_mark(
+          Facts.Facts.crit(s),
+          Ledgers.Line{h, Some{b}},
+          Some{RKnown.Seen{rev, n0, j}},
+          Some{RKnown.Mark{zn, u}},
+          y
+        )(hi)
+      )
+    )
+  )
+  Reads.And.by(
+    {
+      Lines.Line.state(
+        Moves.Delta.to(
+          Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+          s
+        ),
+        Ledgers.Line{h, Some{b}}
+      )
+        == Some{RKnown.Seen.state(RKnown.Seen{rev, n0, j})}: Maybe<&2, RLines.State>
+    },
+    {
+      Lines.Rule.after(
+        Moves.Delta.to(
+          Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+          s
+        ),
+        Ledgers.Line{h, Some{b}},
+        RLines.State.versions(RKnown.Seen.state(RKnown.Seen{rev, n0, j}))
+      )
+        == Some{u}: Maybe<&2, RLines.Rule>
+    },
+    {
+      RContents.Info.ok(
+        Facts.Facts.crit(
+          Moves.Delta.to(
+            Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+            s
+          )
+        ),
+        RKnown.Info{
+          Ledgers.Line{h, Some{b}},
+          Some{RKnown.Seen{rev, n0, j}},
+          Some{RKnown.Mark{zn, u}},
+          y
+        }
+      )
+        == True{}: Bool
+    },
+    Store.held_line(
+      name,
+      s,
+      h,
+      t,
+      x,
+      st,
+      b,
+      RKnown.Seen.state(RKnown.Seen{rev, n0, j}),
+      u
+    )(es)(e2)(eu),
+    ec => er => Info.held_ok.at(name, s, h, t, x, st, b, rev, n0, j, zn, u, y, e2, eu, hi, ec, er)
+  )
+
+# Info.stays_ok for a branch of the head h2, which is the store h, with what
+# is held of its state m and of its next rule r
+def Info.held_ok.if(
+  m: Maybe<&2, RKnown.Seen>,
+  r: Maybe<&2, RKnown.Mark>,
+  +name: String,
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +h2: Hashes.Hash,
+  +t: Nat,
+  +x: Types.Cast,
+  +st: RLines.State,
+  +b: String,
+  +y: Maybe<&2, RKnown.Ids>
+) -> {
+  h2 == h: Hashes.Hash
+} -> {
+  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{st}: Maybe<&2, RLines.State>
+} -> {
+  RKnown.Info.stays(True{}, RKnown.Info{Ledgers.Line{h2, Some{b}}, m, r, y}) == True{}: Bool
+} -> {
+  RContents.Info.ok(
+    Facts.Facts.crit(s),
+    RKnown.Info{Ledgers.Line{h2, Some{b}}, m, r, y}
+  )
+    == True{}: Bool
+} -> {
+  RContents.Info.ok(
+    Facts.Facts.crit(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      )
+    ),
+    RKnown.Info{Ledgers.Line{h2, Some{b}}, m, r, y}
+  )
+    == True{}: Bool
+}:
+  match m r:
+    case None{} r:
+      eh => es => hk => hi => Empty.absurd(
+        {
+          RContents.Info.ok(
+            Facts.Facts.crit(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              )
+            ),
+            RKnown.Info{Ledgers.Line{h2, Some{b}}, None{}, r, y}
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(hk)
+      )
+    case Some{x0} None{}:
+      eh => es => hk => hi => Empty.absurd(
+        {
+          RContents.Info.ok(
+            Facts.Facts.crit(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              )
+            ),
+            RKnown.Info{Ledgers.Line{h2, Some{b}}, Some{x0}, None{}, y}
+          )
+            == True{}: Bool
+        },
+        Shared.Bool.false_ne_true(hk)
+      )
+    case Some{RKnown.Seen{+rev, +n0, +j}} Some{RKnown.Mark{+zn, +u}}:
+      +eh => es => hk => hi => Reads.Eq.back(
+        Hashes.Hash,
+        z => {
+          RContents.Info.ok(
+            Facts.Facts.crit(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              )
+            ),
+            RKnown.Info{
+              Ledgers.Line{z, Some{b}},
+              Some{RKnown.Seen{rev, n0, j}},
+              Some{RKnown.Mark{zn, u}},
+              y
+            }
+          )
+            == True{}: Bool
+        },
+        h2,
+        h,
+        eh,
+        Info.held_ok(
+          name,
+          s,
+          h,
+          t,
+          x,
+          st,
+          b,
+          rev,
+          n0,
+          j,
+          zn,
+          u,
+          y,
+          es,
+          Reads.Eq.to(
+            Hashes.Hash,
+            z => {
+              RContents.Info.ok(
+                Facts.Facts.crit(s),
+                RKnown.Info{
+                  Ledgers.Line{z, Some{b}},
+                  Some{RKnown.Seen{rev, n0, j}},
+                  Some{RKnown.Mark{zn, u}},
+                  y
+                }
+              )
+                == True{}: Bool
+            },
+            h2,
+            h,
+            eh,
+            hi
+          )
+        )
+      )
+
+# what a ballot for the next slot of the state st of the store h keeps of
+# what is right of a line is right after the ballot
+def Info.stays_ok(
+  i: RKnown.Info,
+  +name: String,
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +t: Nat,
+  +x: Types.Cast,
+  +st: RLines.State
+) -> {
+  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{st}: Maybe<&2, RLines.State>
+} -> {
+  RKnown.Info.stays(
+    RKnown.Known.hit(Ledgers.Line{h, None{}}, RKnown.Info.line(i)),
+    i
+  )
+    == True{}: Bool
+} -> {
+  RContents.Info.ok(Facts.Facts.crit(s), i) == True{}: Bool
+} -> {
+  RContents.Info.ok(
+    Facts.Facts.crit(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      )
+    ),
+    i
+  )
+    == True{}: Bool
+}:
+  match i:
+    case RKnown.Info{Ledgers.Line{+h2, None{}}, +m, +r, +y}:
+      +es => +hk => +hi => Lists.Bool.by(
+        z => {
+          Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}) == z: Bool
+        } -> {
+          RContents.Info.ok(
+            Facts.Facts.crit(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              )
+            ),
+            RKnown.Info{Ledgers.Line{h2, None{}}, m, r, y}
+          )
+            == True{}: Bool
+        },
+        Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}),
+        et => eq => Empty.absurd(
+          {
+            RContents.Info.ok(
+              Facts.Facts.crit(
+                Moves.Delta.to(
+                  Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                  s
+                )
+              ),
+              RKnown.Info{Ledgers.Line{h2, None{}}, m, r, y}
+            )
+              == True{}: Bool
+          },
+          Shared.Bool.false_ne_true(
+            Reads.Eq.to(
+              Bool,
+              z => {
+                RKnown.Info.stays(
+                  Bool.or(z, z),
+                  RKnown.Info{Ledgers.Line{h2, None{}}, m, r, y}
+                )
+                  == True{}: Bool
+              },
+              Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}),
+              True{},
+              eq,
+              hk
+            )
+          )
+        ),
+        ef => eq => Info.voted_ok(
+          RKnown.Info{Ledgers.Line{h2, None{}}, m, r, y},
+          name,
+          s,
+          Ledgers.Line{h, None{}},
+          RLines.State.slot(st),
+          t,
+          x
+        )(
+          %Equal.sym(Bool, Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}), False{}, eq): {Bool.or(_, _) == False{}: Bool}
+          {==})(hi)
+      )({==})
+    case RKnown.Info{Ledgers.Line{+h2, Some{+b}}, +m, +r, +y}:
+      +es => +hk => +hi => Lists.Bool.by(
+        z => {
+          Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}) == z: Bool
+        } -> {
+          RContents.Info.ok(
+            Facts.Facts.crit(
+              Moves.Delta.to(
+                Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+                s
+              )
+            ),
+            RKnown.Info{Ledgers.Line{h2, Some{b}}, m, r, y}
+          )
+            == True{}: Bool
+        },
+        Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}),
+        et => +eq => Info.held_ok.if(
+          m,
+          r,
+          name,
+          s,
+          h,
+          h2,
+          t,
+          x,
+          st,
+          b,
+          y
+        )(
+          Equal.cong(
+            Ledgers.Line,
+            Hashes.Hash,
+            l => RLines.Line.root(l),
+            Ledgers.Line{h2, None{}},
+            Ledgers.Line{h, None{}},
+            Ledgers.Line.is_eq_sound(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}})(eq)
+          )
+        )(
+          es
+        )(
+          Reads.Eq.to(
+            Bool,
+            z => {
+              RKnown.Info.stays(z, RKnown.Info{Ledgers.Line{h2, Some{b}}, m, r, y}) == True{}: Bool
+            },
+            Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}),
+            True{},
+            eq,
+            Reads.Eq.to(
+              Bool,
+              z => {
+                RKnown.Info.stays(
+                  Bool.or(z, Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}})),
+                  RKnown.Info{Ledgers.Line{h2, Some{b}}, m, r, y}
+                )
+                  == True{}: Bool
+              },
+              Ledgers.Line.is_eq(Ledgers.Line{h2, Some{b}}, Ledgers.Line{h, None{}}),
+              False{},
+              Branch.ne_root(h2, h, b),
+              hk
+            )
+          )
+        )(hi),
+        ef => eq => Info.voted_ok(
+          RKnown.Info{Ledgers.Line{h2, Some{b}}, m, r, y},
+          name,
+          s,
+          Ledgers.Line{h, None{}},
+          RLines.State.slot(st),
+          t,
+          x
+        )(
+          %Equal.sym(Bool, Ledgers.Line.is_eq(Ledgers.Line{h2, Some{b}}, Ledgers.Line{h, None{}}), False{}, Branch.ne_root(h2, h, b)): {Bool.or(_, Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}})) == False{}: Bool}
+          %Equal.sym(Bool, Ledgers.Line.is_eq(Ledgers.Line{h2, None{}}, Ledgers.Line{h, None{}}), False{}, eq): {Bool.or(False{}, _) == False{}: Bool}
+          {==})(hi)
+      )({==})
+
+# right lines, with what is right of a line if a ballot keeps it (keep), are
+# right
+def Put.if_ok(
+  keep: Bool,
+  +l: Crits.Crit<RKnown.Info>,
+  +s: RFacts.Plain(),
+  +i: RKnown.Info
+) -> (
+  {keep == True{}: Bool} -> {RContents.Info.ok(s, i) == True{}: Bool}
+) -> {
+  RContents.Infos.ok(l, s) == True{}: Bool
+} -> {RContents.Infos.ok(RKnown.Infos.put.if(keep, l, i), s) == True{}: Bool}:
+  match keep:
+    case True{}:
+      hi => hl => Infos.with_ok(l, s, i)(hl)(hi({==}))
+    case False{}:
+      hi => hl => hl
+
+# right lines acc, with what a ballot for the next slot of the state st of
+# the store h keeps of the right lines bs, are right after the ballot
+def Infos.kept_ok(
+  bs: List<&2, Crits.Bind<RKnown.Info>>,
+  +name: String,
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  +t: Nat,
+  +x: Types.Cast,
+  +st: RLines.State,
+  +acc: Crits.Crit<RKnown.Info>
+) -> {
+  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{st}: Maybe<&2, RLines.State>
+} -> {
+  Orders.Binds.every(
+    ~RKnown.Info,
+    ~RFacts.Plain(),
+    ~RContents.Info.ok,
+    bs,
+    Facts.Facts.crit(s)
+  )
+    == True{}: Bool
+} -> {
+  RContents.Infos.ok(
+    acc,
+    Facts.Facts.crit(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      )
+    )
+  )
+    == True{}: Bool
+} -> {
+  RContents.Infos.ok(
+    RKnown.Infos.kept.go(bs, Ledgers.Line{h, None{}}, acc),
+    Facts.Facts.crit(
+      Moves.Delta.to(
+        Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+        s
+      )
+    )
+  )
+    == True{}: Bool
+}:
+  match bs:
+    case Nil{}:
+      es => he => ha => ha
+    case Con{Crits.Bind{+k1, +v1}, +r}:
+      +es => +he => ha => Infos.kept_ok(
+        r,
+        name,
+        s,
+        h,
+        t,
+        x,
+        st,
+        RKnown.Infos.put.if(
+          RKnown.Info.stays(RKnown.Known.hit(Ledgers.Line{h, None{}}, RKnown.Info.line(v1)), v1),
+          acc,
+          v1
+        )
+      )(
+        es
+      )(
+        Shared.Bool.and_true_right(
+          RContents.Info.ok(Facts.Facts.crit(s), v1),
+          Orders.Binds.every(
+            ~RKnown.Info,
+            ~RFacts.Plain(),
+            ~RContents.Info.ok,
+            r,
+            Facts.Facts.crit(s)
+          )
+        )(he)
+      )(
+        Put.if_ok(
+          RKnown.Info.stays(RKnown.Known.hit(Ledgers.Line{h, None{}}, RKnown.Info.line(v1)), v1),
+          acc,
+          Facts.Facts.crit(
+            Moves.Delta.to(
+              Moves.Delta.Vote{name, Ledgers.Line{h, None{}}, RLines.State.slot(st), t, x},
+              s
+            )
+          ),
+          v1
+        )(
+          ek => Info.stays_ok(
+            v1,
+            name,
+            s,
+            h,
+            t,
+            x,
+            st
+          )(
+            es
+          )(
+            ek
+          )(
+            Shared.Bool.and_true_left(
+              RContents.Info.ok(Facts.Facts.crit(s), v1),
+              Orders.Binds.every(
+                ~RKnown.Info,
+                ~RFacts.Plain(),
+                ~RContents.Info.ok,
+                r,
+                Facts.Facts.crit(s)
+              )
+            )(he)
+          )
+        )(ha)
+      )
+
+# right lines, without what a vote for a slot of the line c may change, are
+# right after the vote, when it is for the next slot of the state of c if
+# next says so
+def Infos.voted_ok(
+  +l: Crits.Crit<RKnown.Info>,
+  +name: String,
+  +s: Facts.Facts(),
+  c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +x: Types.Cast,
+  next: Bool
+) -> {
+  RContents.Infos.ok(l, Facts.Facts.crit(s)) == True{}: Bool
+} -> (
+  {
+    next == True{}: Bool
+  } -> {
+    RKnown.Known.safe(
+      c,
+      Lines.Line.state(s, c),
+      Lines.Line.state(s, RKnown.Known.root(c)),
+      k
+    )
+      == True{}: Bool
+  }
+) -> {
+  RContents.Infos.ok(
+    RKnown.Infos.voted(l, c, next),
+    Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+  )
+    == True{}: Bool
+}:
+  match c next:
+    case Ledgers.Line{+h, None{}} True{}:
+      +hl => hn => Lists.Maybe.by(
+        RLines.State,
+        m => {
+          RKnown.Known.safe(
+            Ledgers.Line{h, None{}},
+            m,
+            Lines.Line.state(s, Ledgers.Line{h, None{}}),
+            k
+          )
+            == True{}: Bool
+        } -> {
+          RContents.Infos.ok(
+            RKnown.Infos.voted(l, Ledgers.Line{h, None{}}, True{}),
+            Facts.Facts.crit(
+              Facts.Facts.add(
+                s,
+                Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, None{}}, k, t}, x}
+              )
+            )
+          )
+            == True{}: Bool
+        },
+        Lines.Line.state(s, Ledgers.Line{h, None{}}),
+        en => hs => Empty.absurd(
+          {
+            RContents.Infos.ok(
+              RKnown.Infos.voted(l, Ledgers.Line{h, None{}}, True{}),
+              Facts.Facts.crit(
+                Facts.Facts.add(
+                  s,
+                  Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, None{}}, k, t}, x}
+                )
+              )
+            )
+              == True{}: Bool
+          },
+          Shared.Bool.false_ne_true(hs)
+        ),
+        +st => e => hs => (
+          %Shared.Nat.is_eq_sound(RLines.State.slot(st), k)(hs): {RContents.Infos.ok(RKnown.Infos.voted(l, Ledgers.Line{h, None{}}, True{}), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, None{}}, _, t}, x}))) == True{}: Bool}
+          Infos.kept_ok(Crits.Crit.entries(RKnown.Info, l), name, s, h, t, x, st, Crits.Crit.new(RKnown.Info))(e)(Shared.Bool.and_true_right(Crits.Crit.wf(~RKnown.Info, l, 0n), Orders.Binds.every(~RKnown.Info, ~RFacts.Plain(), ~RContents.Info.ok, Crits.Crit.entries(RKnown.Info, l), Facts.Facts.crit(s)))(Infos.every(l, Facts.Facts.crit(s))(hl)))({==}))
+      )(hn({==}))
+    case Ledgers.Line{h, None{}} False{}:
+      hl => hn => {==}
+    case Ledgers.Line{+h, Some{+b}} next:
+      hl => hn => Branch.voted_ok(l, name, s, h, b, k, t, x)(hl)
+
+# a table that is right for the facts s, without the states that a vote for
+# the line c may change, is right after the vote, when it is for the next
+# slot of the state of c if next says so
+def Known.voted_ok(
+  kn: RKnown.Known(),
+  +name: String,
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +t: Nat,
+  +x: Types.Cast,
+  +next: Bool
+) -> {
+  RContents.Known.ok(kn, Facts.Facts.crit(s)) == True{}: Bool
+} -> (
+  {
+    next == True{}: Bool
+  } -> {
+    RKnown.Known.safe(
+      c,
+      Lines.Line.state(s, c),
+      Lines.Line.state(s, RKnown.Known.root(c)),
+      k
+    )
+      == True{}: Bool
+  }
+) -> {
+  RContents.Known.ok(
+    RKnown.Known.voted(kn, c, next),
+    Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+  )
+    == True{}: Bool
+}:
+  match kn:
+    case RKnown.Table{+l, +sh, +h, +q}:
+      ok => hn => Ok.of(
+        RKnown.Infos.voted(l, c, next),
+        None{},
+        Crits.Crit.new(RKnown.Held),
+        0n,
+        Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+      )(
+        Infos.voted_ok(
+          l,
+          name,
+          s,
+          c,
+          k,
+          t,
+          x,
+          next
+        )(Ok.lines(l, sh, h, q, Facts.Facts.crit(s))(ok))(hn)
+      )(
+        Shared.Bool.and_both(
+          Orders.Crit.every(
+            ~RKnown.Held,
+            ~RFacts.Plain(),
+            ~RContents.Held.ok,
+            Crits.Crit.new(RKnown.Held),
+            Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+          ),
+          Nat.is_le(
+            0n,
+            RFacts.Facts.fuel(
+              Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+            )
+          )
+        )(
+          {==}
+        )(
+          Shared.Nat.le_zero(
+            RFacts.Facts.fuel(
+              Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+            )
+          )
+        )
+      )
 
 # a version that was read is read again after a node adds what is safe
 def Delta.at_kept(
@@ -10252,19 +12427,7 @@ def Delta.at_kept(
         )(Shared.Bool.not_true(RFacts.Request.is_start(RLines.Ask.request(a)))(hs))
       )
     case Moves.Delta.Vote{+name, +c, +k, +t, +x}:
-      Vote.at_kept.of(
-        name,
-        s,
-        c,
-        Lines.Line.state(s, c),
-        Lines.Line.state(s, RKnown.Known.root(c)),
-        k,
-        t,
-        x,
-        c2,
-        i,
-        e
-      )({==})({==})
+      Vote.at_kept(name, s, c, k, t, x, c2, i, e)
 
 # a hop stays when a node adds what is safe
 def Hop.kept(
@@ -10427,7 +12590,7 @@ def Merge.fits_kept(
     RContents.Entry.base(e),
     RContents.Entry.ours(e),
     RContents.Entry.theirs(e),
-    RContents.Point.or(c, RContents.Entry.takes(e))
+    RContents.Point.or(c, RKnown.Entry.takes(e))
   )
 
 # the content of version 0 stays when a node adds what is safe
@@ -11416,11 +13579,15 @@ def Safe.found(
   RKnown.Known.safe(c, m, ms, k) == True{}: Bool
 } -> {RKnown.Known.safe(c, x, xs, k) == True{}: Bool}:
   match c m ms:
-    case Ledgers.Line{h, None{}} m ms:
+    case Ledgers.Line{h, None{}} None{} ms:
       a => b => hs => Empty.absurd(
         {RKnown.Known.safe(Ledgers.Line{h, None{}}, x, xs, k) == True{}: Bool},
         Shared.Bool.false_ne_true(hs)
       )
+    case Ledgers.Line{h, None{}} Some{st} ms:
+      a => b => hs => (
+        %Equal.sym(Maybe<&2, RLines.State>, x, Some{st}, Known.have(Maybe<&2, RLines.State>, Some{st}, x, st, a)): {RKnown.Known.safe(Ledgers.Line{h, None{}}, _, xs, k) == True{}: Bool}
+        hs)
     case Ledgers.Line{h, Some{b0}} None{} ms:
       a => b => hs => Empty.absurd(
         {RKnown.Known.safe(Ledgers.Line{h, Some{b0}}, x, xs, k) == True{}: Bool},
@@ -11436,6 +13603,44 @@ def Safe.found(
         %Equal.sym(Maybe<&2, RLines.State>, x, Some{st}, Known.have(Maybe<&2, RLines.State>, Some{st}, x, st, a)): {RKnown.Known.safe(Ledgers.Line{h, Some{b0}}, _, xs, k) == True{}: Bool}
         %Equal.sym(Maybe<&2, RLines.State>, xs, Some{y}, Known.have(Maybe<&2, RLines.State>, Some{y}, xs, y, b)): {RKnown.Known.safe(Ledgers.Line{h, Some{b0}}, Some{st}, _, k) == True{}: Bool}
         hs)
+
+
+# a ballot that is safe by the states that a right table holds is safe by
+# the states that the facts give
+def Safe.next(
+  +kn: RKnown.Known(),
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +k: Nat
+) -> {
+  RContents.Known.ok(kn, Facts.Facts.crit(s)) == True{}: Bool
+} -> {
+  RKnown.Known.safe(
+    c,
+    RKnown.Known.find(kn, c),
+    RKnown.Known.find(kn, RKnown.Known.root(c)),
+    k
+  )
+    == True{}: Bool
+} -> {
+  RKnown.Known.safe(
+    c,
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k
+  )
+    == True{}: Bool
+}:
+  +ok => Safe.found(
+    c,
+    RKnown.Known.find(kn, c),
+    RKnown.Known.find(kn, RKnown.Known.root(c)),
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k
+  )(
+    Known.found(kn, Facts.Facts.crit(s), c)(ok)
+  )(Known.found(kn, Facts.Facts.crit(s), RKnown.Known.root(c))(ok))
 
 # the contents that a ballot spares of a table that is right for the facts s
 # are right for the facts with the ballot
@@ -11499,14 +13704,6 @@ def Known.spared_ok(
       Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
     )
   )
-
-# the ids m, if any, fit the state x
-def Made.Ok(x: Maybe<&2, RLines.State>, m: Maybe<&2, RKnown.Ids>) -> Type:
-  match m:
-    case None{}:
-      Unit
-    case Some{y}:
-      {RKnown.Made.fits(x, y) == True{}: Bool}
 
 # a right table with ids, if any, that fit the state that the facts give a
 # line, is right
@@ -11759,7 +13956,16 @@ def Known.cast_ok(
   +ok => hf => Known.made_put_ok(
     RKnown.Known.put(
       RKnown.Known.join(
-        RKnown.Known.voted(kn, c),
+        RKnown.Known.voted(
+          kn,
+          c,
+          RKnown.Known.safe(
+            c,
+            RKnown.Known.find(kn, c),
+            RKnown.Known.find(kn, RKnown.Known.root(c)),
+            k
+          )
+        ),
         RKnown.Known.spared(
           RKnown.Known.safe(
             c,
@@ -11843,7 +14049,16 @@ def Known.cast_ok(
   )(
     Known.put_fits(
       RKnown.Known.join(
-        RKnown.Known.voted(kn, c),
+        RKnown.Known.voted(
+          kn,
+          c,
+          RKnown.Known.safe(
+            c,
+            RKnown.Known.find(kn, c),
+            RKnown.Known.find(kn, RKnown.Known.root(c)),
+            k
+          )
+        ),
         RKnown.Known.spared(
           RKnown.Known.safe(
             c,
@@ -11879,7 +14094,16 @@ def Known.cast_ok(
       )(Known.found(kn, Facts.Facts.crit(s), RKnown.Known.root(c))(ok))
     )(
       Ok.append(
-        RKnown.Known.voted(kn, c),
+        RKnown.Known.voted(
+          kn,
+          c,
+          RKnown.Known.safe(
+            c,
+            RKnown.Known.find(kn, c),
+            RKnown.Known.find(kn, RKnown.Known.root(c)),
+            k
+          )
+        ),
         RKnown.Known.spared(
           RKnown.Known.safe(
             c,
@@ -11891,7 +14115,21 @@ def Known.cast_ok(
         ),
         Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
       )(
-        Known.voted_ok(kn, name, s, c, k, t, x)(ok)
+        Known.voted_ok(
+          kn,
+          name,
+          s,
+          c,
+          k,
+          t,
+          x,
+          RKnown.Known.safe(
+            c,
+            RKnown.Known.find(kn, c),
+            RKnown.Known.find(kn, RKnown.Known.root(c)),
+            k
+          )
+        )(ok)(Safe.next(kn, s, c, k)(ok))
       )(Known.spared_ok(kn, name, s, c, k, t, x)(ok)(hf))
     )
   )
@@ -15616,205 +17854,185 @@ def Id.back.at(
         )
       )
 
-# the state of a branch after a ballot for its next slot is the run from its
-# state before, when the state of its store is known
-def Voted.state(
-  +name: String,
-  +s: Facts.Facts(),
-  +h: Hashes.Hash,
-  +b: String,
-  +k: Nat,
-  +t: Nat,
-  +x: Types.Cast,
-  +st: RLines.State,
-  +rs: List<&2, Types.Entry>,
-  +j: Nat
-) -> {
-  Lines.Line.state(s, Ledgers.Line{h, Some{b}}) == Some{st}: Maybe<&2, RLines.State>
-} -> {
-  Nat.is_eq(RLines.State.slot(st), k) == True{}: Bool
-} -> {
-  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{RLines.State{rs, j}}: Maybe<&2, RLines.State>
-} -> {
-  Lines.Line.state(
-    Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}),
-    Ledgers.Line{h, Some{b}}
-  )
-    == Some{
-      RKnown.Known.go.at(
-        Facts.Facts.crit(
-          Facts.Facts.add(
-            s,
-            Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-          )
-        ),
-        Ledgers.Line{h, Some{b}},
-        st,
-        Some{rs}
-      )
-    }: Maybe<&2, RLines.State>
-}:
-  e1 => et => e2 => (
-    %et: Put.Ok(Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), Ledgers.Line{h, Some{b}}), Shared.Maybe.when(RLines.State, _, u => Some{RKnown.Known.go.at(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})), Ledgers.Line{h, Some{b}}, st, Some{rs})}))
-    Known.next_ok(name, s, Ledgers.Line{h, Some{b}}, k, t, x, Some{st}, Some{RLines.State{rs, j}})(Inr{e1})(Inr{e2}))
-
-# a ballot for a slot of a line waits no more after a ballot for the next
-# slot of a branch, if it did not wait before
+# a ballot for a slot of a line waits no more after a ballot that only
+# continues the versions of each line, if it did not wait before
 def Slot.back(
   +name: String,
   +s: Facts.Facts(),
-  +h: Hashes.Hash,
-  +b: String,
+  +c: Ledgers.Line,
   +k: Nat,
   +t: Nat,
   +x: Types.Cast,
-  +st: RLines.State,
-  +rs: List<&2, Types.Entry>,
-  +j: Nat,
   +c2: Ledgers.Line,
   +k2: Nat
 ) -> {
-  Lines.Line.state(s, Ledgers.Line{h, Some{b}}) == Some{st}: Maybe<&2, RLines.State>
-} -> {
-  Nat.is_eq(RLines.State.slot(st), k) == True{}: Bool
-} -> {
-  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{RLines.State{rs, j}}: Maybe<&2, RLines.State>
+  RKnown.Known.safe(
+    c,
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k
+  )
+    == True{}: Bool
 } -> {
   RKnown.Slot.waits(Lines.Line.state(s, c2), k2) == False{}: Bool
 } -> {
   RKnown.Slot.waits(
-    Lines.Line.state(
-      Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}),
-      c2
-    ),
+    Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c2),
     k2
   )
     == False{}: Bool
 }:
-  +e1 => et => e2 => +hw => Lists.Bool.by(
-    y => {
-      Ledgers.Line.is_eq(c2, Ledgers.Line{h, Some{b}}) == y: Bool
+  +hs => Lists.Maybe.by(
+    RLines.State,
+    m => {
+      RKnown.Slot.waits(m, k2) == False{}: Bool
     } -> {
       RKnown.Slot.waits(
-        Lines.Line.state(
-          Facts.Facts.add(
-            s,
-            Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-          ),
-          c2
-        ),
+        Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c2),
         k2
       )
         == False{}: Bool
     },
-    Ledgers.Line.is_eq(c2, Ledgers.Line{h, Some{b}}),
-    et2 => +eq => (
-      %Equal.sym(Ledgers.Line, c2, Ledgers.Line{h, Some{b}}, Ledgers.Line.is_eq_sound(c2, Ledgers.Line{h, Some{b}})(eq)): {RKnown.Slot.waits(Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), _), k2) == False{}: Bool}
-      %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), Ledgers.Line{h, Some{b}}), Some{RKnown.Known.go.at(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})), Ledgers.Line{h, Some{b}}, st, Some{rs})}, Voted.state(name, s, h, b, k, t, x, st, rs, j)(e1)(et)(e2)): {RKnown.Slot.waits(_, k2) == False{}: Bool}
-      Slot.back.at(st, RKnown.Known.go.at(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})), Ledgers.Line{h, Some{b}}, st, Some{rs}), k2)(Moves.Run.slot_le(1n+RLines.Line.bound(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})), Ledgers.Line{h, Some{b}}), Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), Some{rs}, Ledgers.Line{h, Some{b}}, st))((
-        %e1: {RKnown.Slot.waits(_, k2) == False{}: Bool}
-        %Ledgers.Line.is_eq_sound(c2, Ledgers.Line{h, Some{b}})(eq): {RKnown.Slot.waits(Lines.Line.state(s, _), k2) == False{}: Bool}
-        hw))),
-    ef2 => eq => (
-      %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), c2), Lines.Line.state(s, c2), Line.state_voted(name, s, Ledgers.Line{h, Some{b}}, k, t, x, c2)(Branch.hit_other(h, b, c2)(eq))): {RKnown.Slot.waits(_, k2) == False{}: Bool}
-      hw)
-  )({==})
+    Lines.Line.state(s, c2),
+    en => hw => Empty.absurd(
+      {
+        RKnown.Slot.waits(
+          Lines.Line.state(
+            Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+            c2
+          ),
+          k2
+        )
+          == False{}: Bool
+      },
+      Shared.Bool.true_ne_false(hw)
+    ),
+    +st2 => e2 => hw => Grown.by(
+      {
+        RKnown.Slot.waits(
+          Lines.Line.state(
+            Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+            c2
+          ),
+          k2
+        )
+          == False{}: Bool
+      },
+      st2,
+      Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s), c2),
+      Safe.grown(name, s, c, k, t, x, c2, st2)(hs)(e2),
+      +st3 => e3 => ext => le => (
+        %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s), c2), Some{st3}, e3): {RKnown.Slot.waits(_, k2) == False{}: Bool}
+        Slot.back.at(st2, st3, k2)(le)(hw))
+    )
+  )
 
-# a request waits no more on a line after a ballot for the next slot of a
-# branch, if it did not wait before
+# a request waits no more on a line after a ballot that only continues the
+# versions of each line, if it did not wait before
 def Id.back(
   +name: String,
   +s: Facts.Facts(),
-  +h: Hashes.Hash,
-  +b: String,
+  +c: Ledgers.Line,
   +k: Nat,
   +t: Nat,
   +x: Types.Cast,
-  +st: RLines.State,
-  +rs: List<&2, Types.Entry>,
-  +j: Nat,
   +c2: Ledgers.Line,
   +i: Ledgers.Id
 ) -> {
-  Lines.Line.state(s, Ledgers.Line{h, Some{b}}) == Some{st}: Maybe<&2, RLines.State>
-} -> {
-  Nat.is_eq(RLines.State.slot(st), k) == True{}: Bool
-} -> {
-  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{RLines.State{rs, j}}: Maybe<&2, RLines.State>
+  RKnown.Known.safe(
+    c,
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k
+  )
+    == True{}: Bool
 } -> {
   RKnown.Id.waits(Lines.Line.state(s, c2), RKnown.Known.none(), c2, i) == False{}: Bool
 } -> {
   RKnown.Id.waits(
-    Lines.Line.state(
-      Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}),
-      c2
-    ),
+    Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c2),
     RKnown.Known.none(),
     c2,
     i
   )
     == False{}: Bool
 }:
-  +e1 => et => e2 => +hw => Lists.Bool.by(
-    y => {
-      Ledgers.Line.is_eq(c2, Ledgers.Line{h, Some{b}}) == y: Bool
+  +hs => Lists.Maybe.by(
+    RLines.State,
+    m => {
+      RKnown.Id.waits(m, RKnown.Known.none(), c2, i) == False{}: Bool
     } -> {
       RKnown.Id.waits(
-        Lines.Line.state(
-          Facts.Facts.add(
-            s,
-            Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-          ),
-          c2
-        ),
+        Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c2),
         RKnown.Known.none(),
         c2,
         i
       )
         == False{}: Bool
     },
-    Ledgers.Line.is_eq(c2, Ledgers.Line{h, Some{b}}),
-    et2 => +eq => (
-      %Equal.sym(Ledgers.Line, c2, Ledgers.Line{h, Some{b}}, Ledgers.Line.is_eq_sound(c2, Ledgers.Line{h, Some{b}})(eq)): {RKnown.Id.waits(Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), _), RKnown.Known.none(), _, i) == False{}: Bool}
-      %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), Ledgers.Line{h, Some{b}}), Some{RKnown.Known.go.at(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})), Ledgers.Line{h, Some{b}}, st, Some{rs})}, Voted.state(name, s, h, b, k, t, x, st, rs, j)(e1)(et)(e2)): {RKnown.Id.waits(_, RKnown.Known.none(), Ledgers.Line{h, Some{b}}, i) == False{}: Bool}
-      Id.back.at(st, RKnown.Known.go.at(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})), Ledgers.Line{h, Some{b}}, st, Some{rs}), Ledgers.Line{h, Some{b}}, i)(Moves.Run.grows(1n+RLines.Line.bound(Facts.Facts.list(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})), Ledgers.Line{h, Some{b}}), Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), Some{rs}, Ledgers.Line{h, Some{b}}, st))((
-        %e1: {RKnown.Id.waits(_, RKnown.Known.none(), Ledgers.Line{h, Some{b}}, i) == False{}: Bool}
-        %Ledgers.Line.is_eq_sound(c2, Ledgers.Line{h, Some{b}})(eq): {RKnown.Id.waits(Lines.Line.state(s, _), RKnown.Known.none(), _, i) == False{}: Bool}
-        hw))),
-    ef2 => eq => (
-      %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), c2), Lines.Line.state(s, c2), Line.state_voted(name, s, Ledgers.Line{h, Some{b}}, k, t, x, c2)(Branch.hit_other(h, b, c2)(eq))): {RKnown.Id.waits(_, RKnown.Known.none(), c2, i) == False{}: Bool}
-      hw)
-  )({==})
+    Lines.Line.state(s, c2),
+    en => hw => Empty.absurd(
+      {
+        RKnown.Id.waits(
+          Lines.Line.state(
+            Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+            c2
+          ),
+          RKnown.Known.none(),
+          c2,
+          i
+        )
+          == False{}: Bool
+      },
+      Shared.Bool.true_ne_false(hw)
+    ),
+    +st2 => e2 => hw => Grown.by(
+      {
+        RKnown.Id.waits(
+          Lines.Line.state(
+            Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+            c2
+          ),
+          RKnown.Known.none(),
+          c2,
+          i
+        )
+          == False{}: Bool
+      },
+      st2,
+      Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s), c2),
+      Safe.grown(name, s, c, k, t, x, c2, st2)(hs)(e2),
+      +st3 => e3 => ext => le => (
+        %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(Moves.Delta.to(Moves.Delta.Vote{name, c, k, t, x}, s), c2), Some{st3}, e3): {RKnown.Id.waits(_, RKnown.Known.none(), c2, i) == False{}: Bool}
+        Id.back.at(st2, st3, c2, i)(ext)(hw))
+    )
+  )
 
-# a fact that a work could not act on before a ballot for the next slot of a
-# branch is one that it cannot act on after it
+# a fact that a work could not act on before a ballot that only continues
+# the versions of each line is one that it cannot act on after it
 def Waits.back(
   +name: String,
   +s: Facts.Facts(),
-  +h: Hashes.Hash,
-  +b: String,
+  +c: Ledgers.Line,
   +k: Nat,
   +t: Nat,
   +x: Types.Cast,
-  +st: RLines.State,
-  +rs: List<&2, Types.Entry>,
-  +j: Nat,
   f: Types.Fact
 ) -> {
-  Lines.Line.state(s, Ledgers.Line{h, Some{b}}) == Some{st}: Maybe<&2, RLines.State>
-} -> {
-  Nat.is_eq(RLines.State.slot(st), k) == True{}: Bool
-} -> {
-  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{RLines.State{rs, j}}: Maybe<&2, RLines.State>
+  RKnown.Known.safe(
+    c,
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k
+  )
+    == True{}: Bool
 } -> {
   RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}, f) == False{}: Bool
 } -> {
   RKnown.Fact.waits(
     RKnown.Scene{
       RKnown.Known.none(),
-      Facts.Facts.crit(
-        Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})
-      )
+      Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
     },
     f
   )
@@ -15822,40 +18040,30 @@ def Waits.back(
 }:
   match f:
     case Types.Fact.Vote{v2, Types.Step.Broken{}, x2}:
-      e1 => et => e2 => hw => {==}
+      hs => hw => {==}
     case Types.Fact.Vote{v2, Types.Step.At{+c2, +k2, t2}, x2}:
-      e1 => et => e2 => hw => Slot.back(name, s, h, b, k, t, x, st, rs, j, c2, k2)(e1)(et)(e2)(hw)
+      hs => hw => Slot.back(name, s, c, k, t, x, c2, k2)(hs)(hw)
     case Types.Fact.Ask{Types.Ask{+i2, n2, Spec.Request.Start{os}}}:
-      e1 => et => e2 => hw => hw
+      hs => hw => hw
     case Types.Fact.Ask{Types.Ask{+i2, n2, Spec.Request.Write{+b2, p2, w2}}}:
-      e1 => et => e2 => hw => Id.back(name, s, h, b, k, t, x, st, rs, j, b2, i2)(e1)(et)(e2)(hw)
+      hs => hw => Id.back(name, s, c, k, t, x, b2, i2)(hs)(hw)
     case Types.Fact.Ask{Types.Ask{+i2, n2, Spec.Request.Merge{f2, +x2}}}:
-      e1 => et => e2 => hw => Id.back(name, s, h, b, k, t, x, st, rs, j, x2, i2)(e1)(et)(e2)(hw)
+      hs => hw => Id.back(name, s, c, k, t, x, x2, i2)(hs)(hw)
     case Types.Fact.Ask{Types.Ask{+i2, n2, Spec.Request.Resolve{+m2, p2, w2}}}:
-      e1 => et => e2 => hw => Reads.Eq.back(
+      hs => hw => Reads.Eq.back(
         Maybe<&2, Ledgers.Line>,
         l => {
           RKnown.Resolve.waits(
             l,
             RKnown.Known.none(),
-            Facts.Facts.crit(
-              Facts.Facts.add(
-                s,
-                Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-              )
-            ),
+            Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})),
             i2
           )
             == False{}: Bool
         },
         RKnown.Merge.line(
           RFacts.Facts.list(
-            Facts.Facts.crit(
-              Facts.Facts.add(
-                s,
-                Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-              )
-            )
+            Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
           ),
           m2
         ),
@@ -15864,12 +18072,7 @@ def Waits.back(
           Maybe<&2, Ledgers.Line>,
           RKnown.Merge.line(
             RFacts.Facts.list(
-              Facts.Facts.crit(
-                Facts.Facts.add(
-                  s,
-                  Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-                )
-              )
+              Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
             ),
             m2
           ),
@@ -15878,7 +18081,7 @@ def Waits.back(
               ~Types.Fact,
               ~Coded.Fact.words,
               RFacts.Facts.list(Facts.Facts.crit(s)),
-              Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
+              Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}
             ),
             m2
           ),
@@ -15888,24 +18091,19 @@ def Waits.back(
             Maybe<&2, Ledgers.Line>,
             l => RKnown.Merge.line(l, m2),
             RFacts.Facts.list(
-              Facts.Facts.crit(
-                Facts.Facts.add(
-                  s,
-                  Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-                )
-              )
+              Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
             ),
             Orders.Values.insert(
               ~Types.Fact,
               ~Coded.Fact.words,
               RFacts.Facts.list(Facts.Facts.crit(s)),
-              Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
+              Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}
             ),
-            Listed.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})
+            Listed.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})
           ),
           Mergers.Merge.line_insert_pass(
             RFacts.Facts.list(Facts.Facts.crit(s)),
-            Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x},
+            Types.Fact.Vote{name, Types.Step.At{c, k, t}, x},
             m2
           )({==})
         ),
@@ -15918,10 +18116,7 @@ def Waits.back(
               l,
               RKnown.Known.none(),
               Facts.Facts.crit(
-                Facts.Facts.add(
-                  s,
-                  Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-                )
+                Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})
               ),
               i2
             )
@@ -15929,66 +18124,38 @@ def Waits.back(
           },
           RKnown.Merge.line(RFacts.Facts.list(Facts.Facts.crit(s)), m2),
           en => h2 => Empty.absurd({True{} == False{}: Bool}, Shared.Bool.true_ne_false(h2)),
-          +c => es => h2 => Id.back(name, s, h, b, k, t, x, st, rs, j, c, i2)(e1)(et)(e2)(h2)
+          +c3 => es => h2 => Id.back(name, s, c, k, t, x, c3, i2)(hs)(h2)
         )(hw)
       )
     case Types.Fact.Ask{Types.Ask{+i2, n2, Spec.Request.Mark{+b2, m2, v2}}}:
-      e1 => et => e2 => hw => Id.back(name, s, h, b, k, t, x, st, rs, j, b2, i2)(e1)(et)(e2)(hw)
+      hs => hw => Id.back(name, s, c, k, t, x, b2, i2)(hs)(hw)
     case Types.Fact.Ask{Types.Ask{+i2, n2, Spec.Request.Move{+b2, t2, v2}}}:
-      e1 => et => e2 => hw => Id.back(name, s, h, b, k, t, x, st, rs, j, b2, i2)(e1)(et)(e2)(hw)
+      hs => hw => Id.back(name, s, c, k, t, x, b2, i2)(hs)(hw)
     case Types.Fact.Ask{Types.Ask{+i2, n2, Spec.Request.Group{+h2, g2, ms2}}}:
-      e1 => et => e2 => hw => Id.back(
-        name,
-        s,
-        h,
-        b,
-        k,
-        t,
-        x,
-        st,
-        rs,
-        j,
-        Ledgers.Line{h2, None{}},
-        i2
-      )(e1)(et)(e2)(hw)
+      hs => hw => Id.back(name, s, c, k, t, x, Ledgers.Line{h2, None{}}, i2)(hs)(hw)
     case Types.Fact.Ask{Types.Ask{+i2, n2, Spec.Request.Own{Ledgers.Line{+h2, b2}, g2}}}:
-      e1 => et => e2 => hw => Id.back(
-        name,
-        s,
-        h,
-        b,
-        k,
-        t,
-        x,
-        st,
-        rs,
-        j,
-        Ledgers.Line{h2, None{}},
-        i2
-      )(e1)(et)(e2)(hw)
+      hs => hw => Id.back(name, s, c, k, t, x, Ledgers.Line{h2, None{}}, i2)(hs)(hw)
 
 # Open.again at one fact, once it is known whether a work could act on it
 # before the ballot (w)
 def Open.again.at(
   +name: String,
   +s: Facts.Facts(),
-  +h: Hashes.Hash,
-  +b: String,
+  +c: Ledgers.Line,
   +k: Nat,
   +t: Nat,
   +x: Types.Cast,
-  +st: RLines.State,
-  +rs: List<&2, Types.Entry>,
-  +j: Nat,
   +f: Types.Fact,
   +rest: List<&2, Types.Fact>,
   w: Bool
 ) -> {
-  Lines.Line.state(s, Ledgers.Line{h, Some{b}}) == Some{st}: Maybe<&2, RLines.State>
-} -> {
-  Nat.is_eq(RLines.State.slot(st), k) == True{}: Bool
-} -> {
-  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{RLines.State{rs, j}}: Maybe<&2, RLines.State>
+  RKnown.Known.safe(
+    c,
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k
+  )
+    == True{}: Bool
 } -> {
   w == RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}, f): Bool
 } -> {
@@ -15996,21 +18163,14 @@ def Open.again.at(
     RKnown.Open.of(rest, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}),
     RKnown.Scene{
       RKnown.Known.none(),
-      Facts.Facts.crit(
-        Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})
-      )
+      Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
     }
   )
     == RKnown.Open.of(
       rest,
       RKnown.Scene{
         RKnown.Known.none(),
-        Facts.Facts.crit(
-          Facts.Facts.add(
-            s,
-            Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-          )
-        )
+        Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
       }
     ): List<&2, Types.Fact>
 } -> {
@@ -16023,96 +18183,76 @@ def Open.again.at(
     ),
     RKnown.Scene{
       RKnown.Known.none(),
-      Facts.Facts.crit(
-        Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})
-      )
+      Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
     }
   )
     == RKnown.Open.of(
       f <> rest,
       RKnown.Scene{
         RKnown.Known.none(),
-        Facts.Facts.crit(
-          Facts.Facts.add(
-            s,
-            Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-          )
-        )
+        Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
       }
     ): List<&2, Types.Fact>
 }:
   match w:
     case True{}:
-      e1 => et => e2 => ew => ih => (
-        %ih: {RKnown.Open.of(f <> RKnown.Open.of(rest, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}) == List.filter.put(Types.Fact, f, _, RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}, f)): List<&2, Types.Fact>}
+      hs => ew => ih => (
+        %ih: {RKnown.Open.of(f <> RKnown.Open.of(rest, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}) == List.filter.put(Types.Fact, f, _, RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}, f)): List<&2, Types.Fact>}
         {==})
     case False{}:
-      e1 => et => e2 => ew => ih => (
-        %Equal.sym(Bool, RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}, f), False{}, Waits.back(name, s, h, b, k, t, x, st, rs, j, f)(e1)(et)(e2)(Equal.sym(Bool, False{}, RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}, f), ew))): {RKnown.Open.of(RKnown.Open.of(rest, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}) == List.filter.put(Types.Fact, f, RKnown.Open.of(rest, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}), _): List<&2, Types.Fact>}
+      hs => ew => ih => (
+        %Equal.sym(Bool, RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}, f), False{}, Waits.back(name, s, c, k, t, x, f)(hs)(Equal.sym(Bool, False{}, RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}, f), ew))): {RKnown.Open.of(RKnown.Open.of(rest, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}) == List.filter.put(Types.Fact, f, RKnown.Open.of(rest, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}), _): List<&2, Types.Fact>}
         ih)
 
-# the facts that a work may act on after a ballot for the next slot of a
-# branch are among those that it could act on before
+# the facts that a work may act on after a ballot that only continues the
+# versions of each line are among those that it could act on before
 def Open.again(
   +name: String,
   +s: Facts.Facts(),
-  +h: Hashes.Hash,
-  +b: String,
+  +c: Ledgers.Line,
   +k: Nat,
   +t: Nat,
   +x: Types.Cast,
-  +st: RLines.State,
-  +rs: List<&2, Types.Entry>,
-  +j: Nat,
   xs: List<&2, Types.Fact>
 ) -> {
-  Lines.Line.state(s, Ledgers.Line{h, Some{b}}) == Some{st}: Maybe<&2, RLines.State>
-} -> {
-  Nat.is_eq(RLines.State.slot(st), k) == True{}: Bool
-} -> {
-  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{RLines.State{rs, j}}: Maybe<&2, RLines.State>
+  RKnown.Known.safe(
+    c,
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k
+  )
+    == True{}: Bool
 } -> {
   RKnown.Open.of(
     RKnown.Open.of(xs, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}),
     RKnown.Scene{
       RKnown.Known.none(),
-      Facts.Facts.crit(
-        Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})
-      )
+      Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
     }
   )
     == RKnown.Open.of(
       xs,
       RKnown.Scene{
         RKnown.Known.none(),
-        Facts.Facts.crit(
-          Facts.Facts.add(
-            s,
-            Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-          )
-        )
+        Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
       }
     ): List<&2, Types.Fact>
 }:
   match xs:
     case Nil{}:
-      e1 => et => e2 => {==}
+      hs => {==}
     case Con{+f, +rest}:
-      +e1 => +et => +e2 => Open.again.at(
+      +hs => Open.again.at(
         name,
         s,
-        h,
-        b,
+        c,
         k,
         t,
         x,
-        st,
-        rs,
-        j,
         f,
         rest,
         RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}, f)
-      )(e1)(et)(e2)({==})(Open.again(name, s, h, b, k, t, x, st, rs, j, rest)(e1)(et)(e2))
+      )(hs)({==})(Open.again(name, s, c, k, t, x, rest)(hs))
 
 # a ballot for the next slot of a line waits
 def Slot.waits_eq(
@@ -16128,27 +18268,25 @@ def Slot.waits_eq(
         Shared.Nat.le_refl(j))
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
-# the facts that a work could act on, with a ballot for the next slot of a
-# branch: those among them that a work may act on after the ballot are all
+# the facts that a work could act on, with a ballot that only continues the
+# versions of each line: those among them that a work may act on after the ballot are all
 # that it may act on
 def Voted.open(
   +name: String,
   +s: Facts.Facts(),
-  +h: Hashes.Hash,
-  +b: String,
+  +c: Ledgers.Line,
   +k: Nat,
   +t: Nat,
   +x: Types.Cast,
-  +st: RLines.State,
-  +rs: List<&2, Types.Entry>,
-  +j: Nat,
   +fs: List<&2, Types.Fact>
 ) -> {
-  Lines.Line.state(s, Ledgers.Line{h, Some{b}}) == Some{st}: Maybe<&2, RLines.State>
-} -> {
-  Nat.is_eq(RLines.State.slot(st), k) == True{}: Bool
-} -> {
-  Lines.Line.state(s, Ledgers.Line{h, None{}}) == Some{RLines.State{rs, j}}: Maybe<&2, RLines.State>
+  RKnown.Known.safe(
+    c,
+    Lines.Line.state(s, c),
+    Lines.Line.state(s, RKnown.Known.root(c)),
+    k
+  )
+    == True{}: Bool
 } -> {
   fs
     == RKnown.Open.of(
@@ -16157,43 +18295,29 @@ def Voted.open(
     ): List<&2, Types.Fact>
 } -> {
   RKnown.Open.of(
-    RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}),
+    RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
     RKnown.Scene{
       RKnown.Known.none(),
-      Facts.Facts.crit(
-        Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})
-      )
+      Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
     }
   )
     == RKnown.Open.of(
       RFacts.Facts.list(
-        Facts.Facts.crit(
-          Facts.Facts.add(
-            s,
-            Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-          )
-        )
+        Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
       ),
       RKnown.Scene{
         RKnown.Known.none(),
-        Facts.Facts.crit(
-          Facts.Facts.add(
-            s,
-            Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-          )
-        )
+        Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
       }
     ): List<&2, Types.Fact>
 }:
-  +e1 => +et => e2 => efs => (
-    %Equal.sym(List<&2, Types.Fact>, RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))), Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), Listed.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})): {RKnown.Open.of(RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}) == RKnown.Open.of(_, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}): List<&2, Types.Fact>}
-    %Open.again(name, s, h, b, k, t, x, st, rs, j, Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))(e1)(et)(e2): {RKnown.Open.of(RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}) == _: List<&2, Types.Fact>}
-    %Equal.sym(List<&2, Types.Fact>, RKnown.Open.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), Bool.pick(List<&2, Types.Fact>, RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), Orders.Values.keep_insert(~Types.Fact, ~Coded.Fact.words, ~Coded.Fact.words_inj, ~RKnown.Scene, ~RKnown.Fact.waits, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})(Listed.sorted(s))): {RKnown.Open.of(RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}) == RKnown.Open.of(_, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}): List<&2, Types.Fact>}
-    %Equal.sym(Bool, RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), True{}, (
-      %Equal.sym(Maybe<&2, RLines.State>, Lines.Line.state(s, Ledgers.Line{h, Some{b}}), Some{st}, e1): {RKnown.Slot.waits(_, k) == True{}: Bool}
-      Slot.waits_eq(st, k)(et))): {RKnown.Open.of(RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}) == RKnown.Open.of(Bool.pick(List<&2, Types.Fact>, _, Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}): List<&2, Types.Fact>}
-    %efs: {RKnown.Open.of(RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}) == RKnown.Open.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, _, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}): List<&2, Types.Fact>}
-    Equal.cong(List<&2, Types.Fact>, List<&2, Types.Fact>, z => RKnown.Open.of(z, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}))}), RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}), Open.put_insert(fs, Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x})))
+  +hs => efs => (
+    %Equal.sym(List<&2, Types.Fact>, RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))), Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), Listed.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})): {RKnown.Open.of(RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}) == RKnown.Open.of(_, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}): List<&2, Types.Fact>}
+    %Open.again(name, s, c, k, t, x, Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))(hs): {RKnown.Open.of(RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}) == _: List<&2, Types.Fact>}
+    %Equal.sym(List<&2, Types.Fact>, RKnown.Open.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), Bool.pick(List<&2, Types.Fact>, RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), Orders.Values.keep_insert(~Types.Fact, ~Coded.Fact.words, ~Coded.Fact.words_inj, ~RKnown.Scene, ~RKnown.Fact.waits, RFacts.Facts.list(Facts.Facts.crit(s)), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})(Listed.sorted(s))): {RKnown.Open.of(RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}) == RKnown.Open.of(_, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}): List<&2, Types.Fact>}
+    %Equal.sym(Bool, RKnown.Fact.waits(RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), True{}, Safe.waits(c, Lines.Line.state(s, c), Lines.Line.state(s, RKnown.Known.root(c)), k)(hs)): {RKnown.Open.of(RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}) == RKnown.Open.of(Bool.pick(List<&2, Types.Fact>, _, Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(s)), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)})), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}): List<&2, Types.Fact>}
+    %efs: {RKnown.Open.of(RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}) == RKnown.Open.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, _, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}): List<&2, Types.Fact>}
+    Equal.cong(List<&2, Types.Fact>, List<&2, Types.Fact>, z => RKnown.Open.of(z, RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))}), RKnown.Open.put(fs, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), Open.put_insert(fs, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # A run reads the facts that a work may act on
@@ -17053,7 +19177,16 @@ def Known.cast_walk(
       kn,
       c,
       RKnown.Known.join(
-        RKnown.Known.voted(kn, c),
+        RKnown.Known.voted(
+          kn,
+          c,
+          RKnown.Known.safe(
+            c,
+            RKnown.Known.find(kn, c),
+            RKnown.Known.find(kn, RKnown.Known.root(c)),
+            k
+          )
+        ),
         RKnown.Known.spared(
           RKnown.Known.safe(
             c,
@@ -17574,12 +19707,12 @@ def Voted.moved_ok.at(
   +kn: RKnown.Known(),
   +name: String,
   +s: Facts.Facts(),
-  c: Ledgers.Line,
+  +c: Ledgers.Line,
   +k: Nat,
   +t: Nat,
   +x: Types.Cast,
-  m: Maybe<&2, RLines.State>,
-  ms: Maybe<&2, RLines.State>
+  +m: Maybe<&2, RLines.State>,
+  +ms: Maybe<&2, RLines.State>
 ) -> (
   {m == None{}: Maybe<&2, RLines.State>} | {Lines.Line.state(s, c) == m: Maybe<&2, RLines.State>}
 ) -> (
@@ -17596,89 +19729,46 @@ def Voted.moved_ok.at(
   ),
   Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
 ):
-  match c m ms:
-    case Ledgers.Line{h, None{}} None{} None{}:
-      e => es => hf => Unit{}
-    case Ledgers.Line{h, None{}} None{} Some{y}:
-      e => es => hf => Unit{}
-    case Ledgers.Line{h, None{}} Some{st} None{}:
-      e => es => hf => Unit{}
-    case Ledgers.Line{h, None{}} Some{st} Some{y}:
-      e => es => hf => Unit{}
-    case Ledgers.Line{h, Some{b}} None{} None{}:
-      e => es => hf => Unit{}
-    case Ledgers.Line{h, Some{b}} None{} Some{y}:
-      e => es => hf => Unit{}
-    case Ledgers.Line{h, Some{b}} Some{st} None{}:
-      e => es => hf => Unit{}
-    case Ledgers.Line{+h, Some{+b}} Some{+st} Some{RLines.State{+rs, +j}}:
-      e => es => hf => Lists.Bool.by(
-        y => Moved.Ok(
-          RKnown.Known.walk.if(
-            y,
-            RKnown.Known.walk(
-              kn,
-              Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-            )
-          ),
-          Facts.Facts.crit(
-            Facts.Facts.add(
-              s,
-              Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-            )
-          )
-        ),
-        Nat.is_eq(RLines.State.slot(st), k),
-        et => Lists.Maybe.by(
-          List<&2, Types.Fact>,
-          mm => Moved.Ok(
-            RKnown.Known.walk.of(
-              mm,
-              Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-            ),
-            Facts.Facts.crit(
-              Facts.Facts.add(
-                s,
-                Types.Fact.Vote{name, Types.Step.At{Ledgers.Line{h, Some{b}}, k, t}, x}
-              )
-            )
-          ),
-          RKnown.Known.open(kn),
-          en => Unit{},
-          +fs => efs => Voted.open(
-            name,
-            s,
-            h,
-            b,
-            k,
-            t,
-            x,
-            st,
-            rs,
-            j,
-            fs
-          )(
-            Known.have(
-              Maybe<&2, RLines.State>,
-              Some{st},
-              Lines.Line.state(s, Ledgers.Line{h, Some{b}}),
-              st,
-              e
-            )
-          )(
-            et
-          )(
-            Known.have(
-              Maybe<&2, RLines.State>,
-              Some{RLines.State{rs, j}},
-              Lines.Line.state(s, Ledgers.Line{h, None{}}),
-              RLines.State{rs, j},
-              es
-            )
-          )(Known.open_fit(kn, Facts.Facts.crit(s), fs)(hf)(efs))
-        ),
-        ef => Unit{}
-      )
+  e => es => +hf => Lists.Bool.by(
+    y => {
+      RKnown.Known.safe(c, m, ms, k) == y: Bool
+    } -> Moved.Ok(
+      RKnown.Known.walk.if(
+        y,
+        RKnown.Known.walk(kn, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})
+      ),
+      Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+    ),
+    RKnown.Known.safe(c, m, ms, k),
+    et => eq => Lists.Maybe.by(
+      List<&2, Types.Fact>,
+      mm => Moved.Ok(
+        RKnown.Known.walk.of(mm, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+        Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
+      ),
+      RKnown.Known.open(kn),
+      en => Unit{},
+      +fs => efs => Voted.open(
+        name,
+        s,
+        c,
+        k,
+        t,
+        x,
+        fs
+      )(
+        Safe.found(
+          c,
+          m,
+          ms,
+          Lines.Line.state(s, c),
+          Lines.Line.state(s, RKnown.Known.root(c)),
+          k
+        )(e)(es)(eq)
+      )(Known.open_fit(kn, Facts.Facts.crit(s), fs)(hf)(efs))
+    ),
+    ef => eq => Unit{}
+  )({==})
 
 # the facts that a table that fits holds for a work, when a ballot leaves
 # the other lines as they are, with the ballot: those among them that a work
@@ -17724,12 +19814,15 @@ def Voted.moved_ok(
 def Known.voted_append(
   kn: RKnown.Known(),
   +c: Ledgers.Line,
+  next: Bool,
   ys: RKnown.Known()
 ) -> {
   RKnown.Known.shelf(
     ys
   )
-    == RKnown.Known.shelf(RKnown.Known.join(RKnown.Known.voted(kn, c), ys)): Maybe<&2, RKnown.Kept>
+    == RKnown.Known.shelf(
+      RKnown.Known.join(RKnown.Known.voted(kn, c, next), ys)
+    ): Maybe<&2, RKnown.Kept>
 }:
   match kn ys:
     case RKnown.Table{+l, +sh, +h, +q} RKnown.Table{+l2, +sh2, +h2, +q2}:
@@ -17815,7 +19908,16 @@ def Known.cast_shut(
     kn,
     c,
     RKnown.Known.join(
-      RKnown.Known.voted(kn, c),
+      RKnown.Known.voted(
+        kn,
+        c,
+        RKnown.Known.safe(
+          c,
+          RKnown.Known.find(kn, c),
+          RKnown.Known.find(kn, RKnown.Known.root(c)),
+          k
+        )
+      ),
       RKnown.Known.spared(
         RKnown.Known.safe(
           c,
@@ -17835,7 +19937,7 @@ def Known.cast_shut(
       RKnown.Known.over(c, RKnown.Known.find(kn, RKnown.Known.root(c)))
     )
   )((
-      %Known.voted_append(kn, c, RKnown.Known.spared(RKnown.Known.safe(c, RKnown.Known.find(kn, c), RKnown.Known.find(kn, RKnown.Known.root(c)), k), kn)): {_ == None{}: Maybe<&2, RKnown.Kept>}
+      %Known.voted_append(kn, c, RKnown.Known.safe(c, RKnown.Known.find(kn, c), RKnown.Known.find(kn, RKnown.Known.root(c)), k), RKnown.Known.spared(RKnown.Known.safe(c, RKnown.Known.find(kn, c), RKnown.Known.find(kn, RKnown.Known.root(c)), k), kn)): {_ == None{}: Maybe<&2, RKnown.Kept>}
       Known.spared_shut(RKnown.Known.safe(c, RKnown.Known.find(kn, c), RKnown.Known.find(kn, RKnown.Known.root(c)), k), kn)))
 
 # A run that keeps the rule and the ids
@@ -19217,7 +21319,16 @@ def Known.cast_fits.at(
     case Some{+run}:
       +fit => hf => p => Known.ran_ok.at(
         RKnown.Known.join(
-          RKnown.Known.voted(kn, c),
+          RKnown.Known.voted(
+            kn,
+            c,
+            RKnown.Known.safe(
+              c,
+              RKnown.Known.find(kn, c),
+              RKnown.Known.find(kn, RKnown.Known.root(c)),
+              k
+            )
+          ),
           RKnown.Known.spared(
             RKnown.Known.safe(
               c,
@@ -19241,7 +21352,16 @@ def Known.cast_fits.at(
         p
       )(
         Ok.append(
-          RKnown.Known.voted(kn, c),
+          RKnown.Known.voted(
+            kn,
+            c,
+            RKnown.Known.safe(
+              c,
+              RKnown.Known.find(kn, c),
+              RKnown.Known.find(kn, RKnown.Known.root(c)),
+              k
+            )
+          ),
           RKnown.Known.spared(
             RKnown.Known.safe(
               c,
@@ -19253,7 +21373,23 @@ def Known.cast_fits.at(
           ),
           Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))
         )(
-          Known.voted_ok(kn, name, s, c, k, t, x)(Fit.ok(kn, Facts.Facts.crit(s))(fit))
+          Known.voted_ok(
+            kn,
+            name,
+            s,
+            c,
+            k,
+            t,
+            x,
+            RKnown.Known.safe(
+              c,
+              RKnown.Known.find(kn, c),
+              RKnown.Known.find(kn, RKnown.Known.root(c)),
+              k
+            )
+          )(
+            Fit.ok(kn, Facts.Facts.crit(s))(fit)
+          )(Safe.next(kn, s, c, k)(Fit.ok(kn, Facts.Facts.crit(s))(fit)))
         )(Known.spared_ok(kn, name, s, c, k, t, x)(Fit.ok(kn, Facts.Facts.crit(s))(fit))(hf))
       )
 
@@ -19320,6 +21456,12 @@ def Known.cast_shuts.at(
       %Known.voted_append(
         kn,
         c,
+        RKnown.Known.safe(
+          c,
+          RKnown.Known.find(kn, c),
+          RKnown.Known.find(kn, RKnown.Known.root(c)),
+          k
+        ),
         RKnown.Known.spared(
           RKnown.Known.safe(
             c,
@@ -19343,6 +21485,12 @@ def Known.cast_shuts.at(
       %Known.voted_append(
         kn,
         c,
+        RKnown.Known.safe(
+          c,
+          RKnown.Known.find(kn, c),
+          RKnown.Known.find(kn, RKnown.Known.root(c)),
+          k
+        ),
         RKnown.Known.spared(
           RKnown.Known.safe(
             c,

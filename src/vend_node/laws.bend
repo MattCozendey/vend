@@ -2581,7 +2581,7 @@ def Request.takes_parents(
     c,
     k
   }
-    <> Shared.Maybe.cons(Spec.Point, RContents.Request.takes(r, from), [])
+    <> Shared.Maybe.cons(Spec.Point, RKnown.Request.takes(r, from), [])
     == ps: List<&2, Spec.Point>
 } -> Mirror.Request.Parents(r, c, k, ps):
   match r:
@@ -2614,7 +2614,7 @@ def Entry.parents_of(
     c,
     k
   }
-    <> Shared.Maybe.cons(Spec.Point, RContents.Entry.takes(e), [])
+    <> Shared.Maybe.cons(Spec.Point, RKnown.Entry.takes(e), [])
     == ps: List<&2, Spec.Point>
 } -> Mirror.Request.Parents(RAnswers.Entry.request(e), c, k, ps):
   match e:

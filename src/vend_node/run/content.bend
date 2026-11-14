@@ -22,30 +22,13 @@ import ./lines.bend as Lines
 # Parents
 # -------
 
-# the version that the request r takes from another line, with the pinned
-# version from: where a move points, or what a merge merges
-def Request.takes(r: Spec.Request, from: Nat) -> Maybe<&2, Spec.Point>:
-  match r:
-    case Spec.Request.Move{b, t, v}:
-      Some{Spec.Point{t, v}}
-    case Spec.Request.Merge{f, x}:
-      Some{Spec.Point{f, from}}
-    case _:
-      None{}
-
-# the version that the entry e takes from another line
-def Entry.takes(e: Types.Entry) -> Maybe<&2, Spec.Point>:
-  match e:
-    case Types.Entry{Types.Pick{Types.Ask{i, n, r}, Types.Pins{era, from, base, ours, theirs}}, k}:
-      Request.takes(r, from)
-
 # the versions that version k of the line c, the entry e, comes from
 def Entry.parents(c: Ledgers.Line, k: Nat, e: Types.Entry) -> List<&2, Spec.Point>:
   match k:
     case 0n:
       []
     case 1n+j:
-      Spec.Point{c, j} <> Shared.Maybe.cons(Spec.Point, Entry.takes(e), [])
+      Spec.Point{c, j} <> Shared.Maybe.cons(Spec.Point, Knowns.Entry.takes(e), [])
 
 # the point m, or version 0 of the line c
 def Point.or(c: Ledgers.Line, m: Maybe<&2, Spec.Point>) -> Spec.Point:
@@ -85,7 +68,7 @@ def Way.hop.of(c: Ledgers.Line, k: Nat, +w: Spec.Point, m: Maybe<&2, Types.Entry
     case Some{e}:
       Bool.or(
         Bool.and(Ledgers.Line.is_eq(Spec.Point.line(w), c), Nat.is_le(Spec.Point.n(w), k)),
-        Shared.Maybe.is_eq(~Spec.Point, ~Spec.Point.is_eq, Entry.takes(e), Some{w})
+        Shared.Maybe.is_eq(~Spec.Point, ~Spec.Point.is_eq, Knowns.Entry.takes(e), Some{w})
       )
 
 # the point w is reached in one hop from version k of the line c
@@ -166,7 +149,7 @@ def Merge.fits(
     Entry.base(e),
     Entry.ours(e),
     Entry.theirs(e),
-    Point.or(c, Entry.takes(e))
+    Point.or(c, Knowns.Entry.takes(e))
   )
 
 # Merges
@@ -536,7 +519,7 @@ def Entry.taken(c: Ledgers.Line, m: Maybe<&2, Types.Entry>) -> Spec.Point:
     case None{}:
       Spec.Point{c, 0n}
     case Some{e}:
-      Point.or(c, Entry.takes(e))
+      Point.or(c, Knowns.Entry.takes(e))
 
 # the base that the entry m, if any, pins; else version 0 of the line c, which
 # holds nothing
