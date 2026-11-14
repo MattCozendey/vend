@@ -25,8 +25,14 @@ of work". These are the decisions.
    pick in one round. The ballots of a node for a slot are a chain (`Step.At{line, slot, turn}`):
    a ballot counts only with all the earlier ones, so a node cannot hide a vote. A ballot is a vote
    or a pass to a higher round; every reader checks it (`run/rounds.bend`). Two rounds never decide
-   two picks (`safety.bend`, the Paxos argument, no liar premise). When the node whose turn it is
-   is lost, the others pass and decide in the next round.
+   two picks (`safety.bend`, the Paxos argument, no liar premise). A round is alive for a node
+   when it is its turn, or when the node whose turn it is cast a ballot in it. While the top
+   round is alive a node joins it once and then waits; else it calls its own next round. So a
+   lost node does not block the others, and a second Work casts nothing (`Slot.pass_once`,
+   `Slot.most_decides`; 180 random runs with 2 and 3 nodes, one lost: all decided).
+   Open, yours: a node that joins the top round and is then lost before it leads blocks that
+   slot. No rule over the facts alone fixes it without endless passes; it needs a clock deed in
+   `spec.bend`. The history stays one; a request can stay pending.
 4. `Members`, `Nodes`, `IsGroup` and `Affects` are total. The closures are proven complete with
    `src/shared/shared/shared/reach.bend` (`Closure` in `groups.bend`); no check at run time.
 5. A vote keeps its whole request. A hash would make every read depend on which asks a node holds,
@@ -72,11 +78,14 @@ Measured, native build, one node, one owner:
 - Still growing: a cast appends to the oldest-first list of versions (0.23 ms at 160 writes, 0.7
   to 0.8 at 5120); `Pins.merge` scans the versions of both lines; a merge of another shape walks
   every path.
-- Two nodes are slow: a Sync takes every fact of the other node again (`Facts.take_all`) and
-  drops the table. With 50 writes, a Sync that adds nothing takes 0.26 s. A Start and a ballot
-  on a store line drop the table too.
-- A node that works twice in a row casts a pass after its vote; in the two-node test the slot
-  then did not decide. In work.
+- Sync folds each fact of the other node into the table: a held fact is one lookup, a new one
+  joins as an ask or a ballot does. Two nodes, both owners, 50 writes: a write pair (2 asks, 8
+  Syncs, Works) 33 ms (was 2.7 s); a Sync that adds nothing 3.3 ms (was 261). It is linear in
+  the facts of the other node (136 ms at 800 writes): the IO code should send only what the
+  other side lacks. A hash per subtree in the core cannot be proven equal to the plain Sync
+  (it needs "no two inputs with one hash").
+- A Start and a ballot on a store line drop the table: Group + Own takes 0.29 s at 50 writes
+  and 3.4 s at 200. In work.
 
 ## Lint
 
