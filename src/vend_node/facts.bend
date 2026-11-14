@@ -3447,6 +3447,7 @@ def Facts.ask_crit(
 # A node that takes in a fact that it holds stays as it is: what a Sync
 # costs is what it brings.
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # a set with a fact that it holds is the set
 def Facts.add_held(
   +s: Facts(),
@@ -3626,6 +3627,8 @@ def Facts.refuses_held(
           ef => e => Shared.Bool.false_ne_true(e)
         )
       )
+
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the asks of a set collide, when a fact that it holds collides with them
 def Facts.collided_held(

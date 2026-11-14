@@ -6500,21 +6500,21 @@ def Slot.added_at(
 # Alone: the vote that decides
 # ----------------------------
 
-# Slot.voted_decides, with the round that decides
-def Slot.voted_decides.fin(
+# a slot with a round that decides a pick is decided for that pick
+def Slot.won_is(
   +bs: List<&2, RRounds.Ballot>,
-  +name: String,
+  +ds: List<&2, String>,
   +k: Nat,
   +r: Nat,
   +pk: Types.Pick,
-  +w: Round.Won(bs, [name], k, r, pk)
-) -> {RRounds.Slot.decided(bs, [name], k) == Some{pk}: Maybe<&2, Types.Pick>}:
+  +w: Round.Won(bs, ds, k, r, pk)
+) -> {RRounds.Slot.decided(bs, ds, k) == Some{pk}: Maybe<&2, Types.Pick>}:
   Ex.by(
     Types.Pick,
-    p => {RRounds.Slot.decided(bs, [name], k) == Some{p}: Maybe<&2, Types.Pick>},
-    {RRounds.Slot.decided(bs, [name], k) == Some{pk}: Maybe<&2, Types.Pick>},
-    Slot.won_decided(bs, [name], k, r, pk)(w),
-    +p => +hd => Slot.decided_grows.fin(bs, [name], k, r, pk, p, w, hd)
+    p => {RRounds.Slot.decided(bs, ds, k) == Some{p}: Maybe<&2, Types.Pick>},
+    {RRounds.Slot.decided(bs, ds, k) == Some{pk}: Maybe<&2, Types.Pick>},
+    Slot.won_decided(bs, ds, k, r, pk)(w),
+    +p => +hd => Slot.decided_grows.fin(bs, ds, k, r, pk, p, w, hd)
   )
 
 # a slot that a node decides alone is decided for the pick of its ballot that
@@ -6533,9 +6533,9 @@ def Slot.voted_decides(
   ha: {RRounds.Ballots.at(bs, name, t) == Some{Types.Cast.Vote{r, pk, b}}: Maybe<&2, Types.Cast>},
   hr: {Nat.is_le(fl, r) == True{}: Bool}
 ) -> {RRounds.Slot.decided(bs, [name], k) == Some{pk}: Maybe<&2, Types.Pick>}:
-  Slot.voted_decides.fin(
+  Slot.won_is(
     bs,
-    name,
+    [name],
     k,
     r,
     pk,
@@ -7555,5 +7555,41 @@ def Slot.pass_once(
         er,
         ep
       )
+    )
+  )
+
+# Many owners
+# -----------
+
+# a slot is decided for a pick, when in one round the lead is sound for it
+# and more than half of the nodes cast a vote for it that counts: whatever
+# else the ballots hold (a later pass of a voter does not undo its vote), and
+# for good (Slot.decided_grows)
+def Slot.most_decides(
+  +bs: List<&2, RRounds.Ballot>,
+  +ds: List<&2, String>,
+  +k: Nat,
+  +r: Nat,
+  +pk: Types.Pick
+) -> {
+  Round.mind(bs, ds, k, r) == RRounds.Mind.Sound{pk}: RRounds.Mind
+} -> {
+  RRounds.Tally.most(bs, ds, r, pk) == True{}: Bool
+} -> {RRounds.Slot.decided(bs, ds, k) == Some{pk}: Maybe<&2, Types.Pick>}:
+  em => et => Slot.won_is(
+    bs,
+    ds,
+    k,
+    r,
+    pk,
+    Lists.Equal.to(
+      RRounds.Mind,
+      z => {RRounds.Round.won(bs, ds, r, z) == Some{pk}: Maybe<&2, Types.Pick>},
+      RRounds.Mind.Sound{pk},
+      Round.mind(bs, ds, k, r),
+      Equal.sym(RRounds.Mind, Round.mind(bs, ds, k, r), RRounds.Mind.Sound{pk}, em),
+      (
+        %Equal.sym(Bool, RRounds.Tally.most(bs, ds, r, pk), True{}, et): {Shared.Maybe.when(Types.Pick, _, u => Some{pk}) == Some{pk}: Maybe<&2, Types.Pick>}
+        {==})
     )
   )
