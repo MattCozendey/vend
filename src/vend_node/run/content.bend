@@ -343,12 +343,7 @@ def Paths.among(ps: List<&2, String>, +cs: List<&2, String>) -> List<&2, String>
     case Nil{}:
       []
     case Con{+p, rest}:
-      List.filter.put(
-        String,
-        p,
-        Paths.among(rest, cs),
-        List.contains(~String, ~String.eq, cs, p)
-      )
+      List.filter.put(String, p, Paths.among(rest, cs), List.contains(~String, ~String.eq, cs, p))
 
 # the paths among those that ps gives that are among cs: none when cs is
 # empty, and then ps is not read
@@ -720,23 +715,24 @@ def Known.fit(+kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
 # ----------------------------------
 
 # one more than the fuels a, b and c of three contents, if the table holds
-# them; else the fuel g
-def Fill.fuel.of(a: Maybe<&2, Nat>, b: Maybe<&2, Nat>, c: Maybe<&2, Nat>, g: Nat) -> Nat:
+# them; else the fuel that g gives
+def Fill.fuel.of(a: Maybe<&2, Nat>, b: Maybe<&2, Nat>, c: Maybe<&2, Nat>, g: Unit -> Nat) -> Nat:
   match a b c:
     case Some{x} Some{y} Some{z}:
       1n+Nat.max(x, Nat.max(y, z))
     case _ _ _:
-      g
+      g(Unit{})
 
 # a fuel that reads the content of version k of the line c, the entry e if the
 # node holds it, through the table kn: one more than the fuels of the contents
-# that the version reads, when the table holds them; else the fuel g
+# that the version reads, when the table holds them; else the fuel that g
+# gives, which is then read
 def Fill.fuel(
   k: Nat,
   +kn: Knowns.Known(),
   +c: Ledgers.Line,
   +e: Maybe<&2, Types.Entry>,
-  g: Nat
+  g: Unit -> Nat
 ) -> Nat:
   match k:
     case 0n:
@@ -785,7 +781,7 @@ def Known.fill.slow(
   +c: Ledgers.Line,
   +k: Nat
 ) -> Knowns.Known():
-  +d = Fill.fuel(k, kn, c, Knowns.Known.at(kn, s, c, k), Facts.Facts.fuel(s))
+  +d = Fill.fuel(k, kn, c, Knowns.Known.at(kn, s, c, k), u => Facts.Facts.fuel(s))
   Known.fill.at(d, kn, s, c, k)
 
 # the table kn with the content of the version after j of the line c, made

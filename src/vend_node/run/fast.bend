@@ -34,7 +34,10 @@ type Fast is Data:
 # a fast node of the name name, that holds nothing yet: a work may act on no
 # fact
 def Fast.new(name: String) -> Fast:
-  Fast{Nodes.Raw.new(name), [Known.Open{[], 0n, Crits.Crit.new(Types.Ask), Crits.Crit.new(Ledgers.Line)}]}
+  Fast{
+    Nodes.Raw.new(name),
+    [Known.Open{[], 0n, Crits.Crit.new(Types.Ask), Crits.Crit.new(Ledgers.Line)}]
+  }
 
 # the state of the fast node f
 def Fast.raw(f: Fast) -> Nodes.Raw:

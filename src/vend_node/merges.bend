@@ -65,13 +65,24 @@ def Writes.apply_other(
         Files.Files.get(Writes.apply(rest, Files.Files.set(b, q, w)), p),
         Files.Files.get(Files.Files.set(b, q, w), p),
         Files.Files.get(b, p),
-        Writes.apply_other(rest, Files.Files.set(b, q, w), p)(FileLaws.Files.set_wf(b, q, w)(h))(
+        Writes.apply_other(
+          rest,
+          Files.Files.set(b, q, w),
+          p
+        )(
+          FileLaws.Files.set_wf(b, q, w)(h)
+        )(
           Shared.List.any.if_false_rest(
             String.eq(q, p),
             u => List.contains(~String, ~String.eq, RContents.Writes.paths(rest), p)
           )(hc)
         ),
-        FileLaws.Files.get_set_other(b, q, w, p)(
+        FileLaws.Files.get_set_other(
+          b,
+          q,
+          w,
+          p
+        )(
           Shared.List.any.if_false_hit(
             String.eq(q, p),
             u => List.contains(~String, ~String.eq, RContents.Writes.paths(rest), p)
@@ -212,7 +223,10 @@ def Merge.put_clash(
       Reads.Eq.back(
         Maybe<&2, Maybe<&2, List<&2, U32>>>,
         m => {
-          Files.Files.get(RContents.Merge.put(acc, p, m), p)
+          Files.Files.get(
+            RContents.Merge.put(acc, p, m),
+            p
+          )
             == Files.Files.get(acc, p): Maybe<&2, List<&2, U32>>
         },
         RContents.Merge.at(b, o, t, p),
@@ -237,7 +251,10 @@ def Merge.fold_clash(
 } -> {
   RContents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>
 } -> {
-  Files.Files.get(RContents.Merge.fold(b, o, t, ps, acc), p)
+  Files.Files.get(
+    RContents.Merge.fold(b, o, t, ps, acc),
+    p
+  )
     == Files.Files.get(acc, p): Maybe<&2, List<&2, U32>>
 }:
   match ps:
@@ -288,7 +305,19 @@ def Few.hit(
     d => {Files.Files.get(RContents.Merge.fold(b, o, t, ps, o), p) == x: Maybe<&2, List<&2, U32>>},
     List.contains(~String, ~String.eq, ps, p),
     et => Reads.Merge.fold_in(b, o, t, ps, o, p, x)(wo)(hm)(et),
-    ef => Reads.Merge.fold_keep(b, o, t, ps, o, p, x)(wo)(hm)(
+    ef => Reads.Merge.fold_keep(
+      b,
+      o,
+      t,
+      ps,
+      o,
+      p,
+      x
+    )(
+      wo
+    )(
+      hm
+    )(
       Shared.Maybe.some_inj(
         Maybe<&2, List<&2, U32>>,
         Files.Files.get(o, p),
@@ -305,7 +334,12 @@ def Few.hit(
             Equal.trans(
               Maybe<&2, Maybe<&2, List<&2, U32>>>,
               RContents.Merge.at(b, o, t, p),
-              Formats.Format.merge(p, Files.Files.get(b, p), Files.Files.get(o, p), Files.Files.get(b, p)),
+              Formats.Format.merge(
+                p,
+                Files.Files.get(b, p),
+                Files.Files.get(o, p),
+                Files.Files.get(b, p)
+              ),
               Some{Files.Files.get(o, p)},
               Reads.Merge.at_as(
                 b,
@@ -340,13 +374,19 @@ def Few.get(
     List.contains(~String, ~String.eq, ps, p) == False{}: Bool
   } -> {Files.Files.get(t, p) == Files.Files.get(b, p): Maybe<&2, List<&2, U32>>}
 ) -> {
-  Files.Files.get(RContents.Merge.fold(b, o, t, ps, o), p)
+  Files.Files.get(
+    RContents.Merge.fold(b, o, t, ps, o),
+    p
+  )
     == Files.Files.get(RContents.Merge.files(b, o, t), p): Maybe<&2, List<&2, U32>>
 }:
   Lists.Maybe.by(
     Maybe<&2, List<&2, U32>>,
     m => {
-      Files.Files.get(RContents.Merge.fold(b, o, t, ps, o), p)
+      Files.Files.get(
+        RContents.Merge.fold(b, o, t, ps, o),
+        p
+      )
         == Files.Files.get(RContents.Merge.files(b, o, t), p): Maybe<&2, List<&2, U32>>
     },
     RContents.Merge.at(b, o, t, p),
@@ -407,14 +447,7 @@ def Clean.eq_crit(
 ) -> {Clean.crit(x) == Clean.crit(y): Crits.Crit<Files.Files.Item>} -> {x == y: Files.Files()}:
   match x y:
     case Files.Files{a} Files.Files{b}:
-      e => Equal.cong(
-        Crits.Crit<Files.Files.Item>,
-        Files.Files(),
-        d => Files.Files{d},
-        a,
-        b,
-        e
-      )
+      e => Equal.cong(Crits.Crit<Files.Files.Item>, Files.Files(), d => Files.Files{d}, a, b, e)
 
 # the entry of the path p with the words m, if any
 def Item.of(p: String, m: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Files.Files.Item>:
@@ -450,8 +483,13 @@ def Item.get_of(
       +h => Reads.Eq.back(
         Bool,
         d => {
-          Some{Files.Files.Item{q, ws}}
-            == Item.of(p, Bool.pick(Maybe<&2, List<&2, U32>>, d, Some{ws}, None{})): Maybe<&2, Files.Files.Item>
+          Some{
+            Files.Files.Item{q, ws}
+          }
+            == Item.of(
+              p,
+              Bool.pick(Maybe<&2, List<&2, U32>>, d, Some{ws}, None{})
+            ): Maybe<&2, Files.Files.Item>
         },
         String.eq(q, p),
         True{},
@@ -474,7 +512,11 @@ def Clean.get_crit(
 ) -> {
   Clean.at(t, p) == True{}: Bool
 } -> {
-  Crits.Crit.get(Files.Files.Item, Clean.crit(t), Files.Files.key(p))
+  Crits.Crit.get(
+    Files.Files.Item,
+    Clean.crit(t),
+    Files.Files.key(p)
+  )
     == Item.of(p, Files.Files.get(t, p)): Maybe<&2, Files.Files.Item>
 }:
   match t:
@@ -524,6 +566,7 @@ def Key.same_path(
     )
   )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # a write keeps what the files hold under the key of the path p of the path p
 def Clean.set(
   t: Files.Files(),
@@ -532,9 +575,7 @@ def Clean.set(
   +p: String
 ) -> {
   FileLaws.Files.wf(t) == True{}: Bool
-} -> {
-  Clean.at(t, p) == True{}: Bool
-} -> {Clean.at(Files.Files.set(t, q, w), p) == True{}: Bool}:
+} -> {Clean.at(t, p) == True{}: Bool} -> {Clean.at(Files.Files.set(t, q, w), p) == True{}: Bool}:
   match t w:
     case Files.Files{+d} None{}:
       wf => h => Reads.Eq.back(
@@ -588,6 +629,7 @@ def Clean.set(
           p
         )(hk => Key.same_path(q, p)(hk))(hf => h)
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # a merge put keeps the files clean at the path p
 def Merge.put_clean(
@@ -637,6 +679,7 @@ def Merge.fold_clean(
 # Paths by key
 # ------------
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this is said only in laws, and never runs
 # the first of the paths ps whose key is q
 def Keys.find(ps: List<&2, String>, +q: List<&2, U32>) -> Maybe<&2, String>:
   match ps:
@@ -649,6 +692,7 @@ def Keys.find(ps: List<&2, String>, +q: List<&2, U32>) -> Maybe<&2, String>:
         Some{p},
         Keys.find(rest, q)
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the path that Keys.find gives has the key
 def Keys.find_some(
@@ -667,7 +711,13 @@ def Keys.find_some(
     case Con{+p2, +rest}:
       h => Lists.Bool.by(
         d => {
-          Bool.pick(Maybe<&2, String>, d, Some{p2}, Keys.find(rest, q)) == Some{p}: Maybe<&2, String>
+          Bool.pick(
+            Maybe<&2, String>,
+            d,
+            Some{p2},
+            Keys.find(rest, q)
+          )
+            == Some{p}: Maybe<&2, String>
         } -> {Crits.Key.is_eq(Files.Files.key(p), q) == True{}: Bool},
         Crits.Key.is_eq(Files.Files.key(p2), q),
         et => h2 => Reads.Eq.to(
@@ -769,7 +819,13 @@ def Clean.all_find(
     case Con{+p2, +rest}:
       +hc => h => Lists.Bool.by(
         d => {
-          Bool.pick(Maybe<&2, String>, d, Some{p2}, Keys.find(rest, q)) == Some{p}: Maybe<&2, String>
+          Bool.pick(
+            Maybe<&2, String>,
+            d,
+            Some{p2},
+            Keys.find(rest, q)
+          )
+            == Some{p}: Maybe<&2, String>
         } -> {Clean.at(t, p) == True{}: Bool},
         Crits.Key.is_eq(Files.Files.key(p2), q),
         et => h2 => Reads.Eq.to(
@@ -788,6 +844,7 @@ def Clean.all_find(
         )(Shared.Bool.and_true_right(Clean.at(t, p2), Clean.all(t, rest))(hc))(h2)
       )(h)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # a write at the path p leaves what the files hold under another key
 def Clean.set_miss(
   t: Files.Files(),
@@ -799,14 +856,22 @@ def Clean.set_miss(
 } -> {
   Crits.Key.is_eq(q, Files.Files.key(p)) == False{}: Bool
 } -> {
-  Crits.Crit.get(Files.Files.Item, Clean.crit(Files.Files.set(t, p, w)), q)
+  Crits.Crit.get(
+    Files.Files.Item,
+    Clean.crit(Files.Files.set(t, p, w)),
+    q
+  )
     == Crits.Crit.get(Files.Files.Item, Clean.crit(t), q): Maybe<&2, Files.Files.Item>
 }:
   match t w:
     case Files.Files{+d} None{}:
       wf => hk => Equal.trans(
         Maybe<&2, Files.Files.Item>,
-        Crits.Crit.get(Files.Files.Item, Crits.Crit.drop(Files.Files.Item, d, Files.Files.key(p)), q),
+        Crits.Crit.get(
+          Files.Files.Item,
+          Crits.Crit.drop(Files.Files.Item, d, Files.Files.key(p)),
+          q
+        ),
         Bool.pick(
           Maybe<&2, Files.Files.Item>,
           Crits.Key.is_eq(q, Files.Files.key(p)),
@@ -871,6 +936,7 @@ def Clean.set_miss(
           {==}
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # a merge put at the path p leaves what the files hold under another key
 def Merge.put_miss(
@@ -883,7 +949,11 @@ def Merge.put_miss(
 } -> {
   Crits.Key.is_eq(q, Files.Files.key(p)) == False{}: Bool
 } -> {
-  Crits.Crit.get(Files.Files.Item, Clean.crit(RContents.Merge.put(acc, p, m)), q)
+  Crits.Crit.get(
+    Files.Files.Item,
+    Clean.crit(RContents.Merge.put(acc, p, m)),
+    q
+  )
     == Crits.Crit.get(Files.Files.Item, Clean.crit(acc), q): Maybe<&2, Files.Files.Item>
 }:
   match m:
@@ -934,7 +1004,11 @@ def Merge.fold_miss(
 } -> {
   Keys.find(ps, q) == None{}: Maybe<&2, String>
 } -> {
-  Crits.Crit.get(Files.Files.Item, Clean.crit(RContents.Merge.fold(b, o, t, ps, acc)), q)
+  Crits.Crit.get(
+    Files.Files.Item,
+    Clean.crit(RContents.Merge.fold(b, o, t, ps, acc)),
+    q
+  )
     == Crits.Crit.get(Files.Files.Item, Clean.crit(acc), q): Maybe<&2, Files.Files.Item>
 }:
   match ps:
@@ -971,10 +1045,15 @@ def Merge.fold_miss(
           q
         )(
           Contents.Merge.put_wf(acc, p, RContents.Merge.at(b, o, t, p))(wa)
+        )(Pick.none_rest(Crits.Key.is_eq(Files.Files.key(p), q), p, Keys.find(rest, q))(hn)),
+        Merge.put_miss(
+          acc,
+          p,
+          RContents.Merge.at(b, o, t, p),
+          q
         )(
-          Pick.none_rest(Crits.Key.is_eq(Files.Files.key(p), q), p, Keys.find(rest, q))(hn)
-        ),
-        Merge.put_miss(acc, p, RContents.Merge.at(b, o, t, p), q)(wa)(
+          wa
+        )(
           Crits.Key.ne_sym(
             Files.Files.key(p),
             q
@@ -1075,14 +1154,16 @@ def Few.same_at(
   +wb: {FileLaws.Files.wf(b) == True{}: Bool},
   +wo: {FileLaws.Files.wf(o) == True{}: Bool},
   +wt: {FileLaws.Files.wf(t) == True{}: Bool},
-  +hc: {
-    Clean.all(o, List.append(&2, String, ps, RContents.Merge.paths(b, o, t))) == True{}: Bool
-  },
+  +hc: {Clean.all(o, List.append(&2, String, ps, RContents.Merge.paths(b, o, t))) == True{}: Bool},
   out: @p: String -> {
     List.contains(~String, ~String.eq, ps, p) == False{}: Bool
   } -> {Files.Files.get(t, p) == Files.Files.get(b, p): Maybe<&2, List<&2, U32>>}
 ) -> {
-  Crits.Crit.get(Files.Files.Item, Clean.crit(RContents.Merge.fold(b, o, t, ps, o)), q)
+  Crits.Crit.get(
+    Files.Files.Item,
+    Clean.crit(RContents.Merge.fold(b, o, t, ps, o)),
+    q
+  )
     == Crits.Crit.get(
       Files.Files.Item,
       Clean.crit(RContents.Merge.files(b, o, t)),
@@ -1092,7 +1173,11 @@ def Few.same_at(
   Lists.Maybe.by(
     String,
     m => {
-      Crits.Crit.get(Files.Files.Item, Clean.crit(RContents.Merge.fold(b, o, t, ps, o)), q)
+      Crits.Crit.get(
+        Files.Files.Item,
+        Clean.crit(RContents.Merge.fold(b, o, t, ps, o)),
+        q
+      )
         == Crits.Crit.get(
           Files.Files.Item,
           Clean.crit(RContents.Merge.files(b, o, t)),
@@ -1130,7 +1215,11 @@ def Few.same_at(
     +p => +es => Reads.Eq.to(
       List<&2, U32>,
       k => {
-        Crits.Crit.get(Files.Files.Item, Clean.crit(RContents.Merge.fold(b, o, t, ps, o)), k)
+        Crits.Crit.get(
+          Files.Files.Item,
+          Clean.crit(RContents.Merge.fold(b, o, t, ps, o)),
+          k
+        )
           == Crits.Crit.get(
             Files.Files.Item,
             Clean.crit(RContents.Merge.files(b, o, t)),
@@ -1142,9 +1231,7 @@ def Few.same_at(
       Crits.Key.is_eq_sound(
         Files.Files.key(p),
         q
-      )(
-        Keys.find_some(List.append(&2, String, ps, RContents.Merge.paths(b, o, t)), q, p)(es)
-      ),
+      )(Keys.find_some(List.append(&2, String, ps, RContents.Merge.paths(b, o, t)), q, p)(es)),
       Few.key(
         b,
         o,
@@ -1205,7 +1292,162 @@ def Few.binds_at(
       q
     ): Maybe<&2, Files.Files.Item>
 }:
-  Equal.trans(Maybe<&2, Files.Files.Item>, Orders.Binds.get(Files.Files.Item, Crits.Crit.entries(Files.Files.Item, Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws))), q), Crits.Crit.lookup(Files.Files.Item, Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)), q), Orders.Binds.get(Files.Files.Item, Crits.Crit.entries(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))), q), Orders.Crit.get_entries(Files.Files.Item, Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)), q), Equal.trans(Maybe<&2, Files.Files.Item>, Crits.Crit.lookup(Files.Files.Item, Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)), q), Crits.Crit.get(Files.Files.Item, Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)), q), Orders.Binds.get(Files.Files.Item, Crits.Crit.entries(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))), q), Equal.sym(Maybe<&2, Files.Files.Item>, Crits.Crit.get(Files.Files.Item, Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)), q), Crits.Crit.lookup(Files.Files.Item, Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)), q), Crits.Crit.get_lookup(~Files.Files.Item, Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)), q)(Clean.wf_crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws))(Contents.Merge.fold_wf(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws), o)(wo)))), Equal.trans(Maybe<&2, Files.Files.Item>, Crits.Crit.get(Files.Files.Item, Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)), q), Crits.Crit.get(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))), q), Orders.Binds.get(Files.Files.Item, Crits.Crit.entries(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))), q), Few.same_at(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws), q, wb, wo, Writes.apply_wf(ws, b)(wb), hc, p => ho => Writes.apply_other(ws, b, p)(wb)(ho)), Equal.trans(Maybe<&2, Files.Files.Item>, Crits.Crit.get(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))), q), Crits.Crit.lookup(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))), q), Orders.Binds.get(Files.Files.Item, Crits.Crit.entries(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))), q), Crits.Crit.get_lookup(~Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))), q)(Clean.wf_crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))(Contents.Merge.files_wf(b, o, Writes.apply(ws, b))(wo))), Equal.sym(Maybe<&2, Files.Files.Item>, Orders.Binds.get(Files.Files.Item, Crits.Crit.entries(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))), q), Crits.Crit.lookup(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))), q), Orders.Crit.get_entries(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))), q))))))
+  Equal.trans(
+    Maybe<&2, Files.Files.Item>,
+    Orders.Binds.get(
+      Files.Files.Item,
+      Crits.Crit.entries(
+        Files.Files.Item,
+        Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws))
+      ),
+      q
+    ),
+    Crits.Crit.lookup(
+      Files.Files.Item,
+      Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)),
+      q
+    ),
+    Orders.Binds.get(
+      Files.Files.Item,
+      Crits.Crit.entries(
+        Files.Files.Item,
+        Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))
+      ),
+      q
+    ),
+    Orders.Crit.get_entries(
+      Files.Files.Item,
+      Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)),
+      q
+    ),
+    Equal.trans(
+      Maybe<&2, Files.Files.Item>,
+      Crits.Crit.lookup(
+        Files.Files.Item,
+        Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)),
+        q
+      ),
+      Crits.Crit.get(
+        Files.Files.Item,
+        Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)),
+        q
+      ),
+      Orders.Binds.get(
+        Files.Files.Item,
+        Crits.Crit.entries(
+          Files.Files.Item,
+          Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))
+        ),
+        q
+      ),
+      Equal.sym(
+        Maybe<&2, Files.Files.Item>,
+        Crits.Crit.get(
+          Files.Files.Item,
+          Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)),
+          q
+        ),
+        Crits.Crit.lookup(
+          Files.Files.Item,
+          Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)),
+          q
+        ),
+        Crits.Crit.get_lookup(
+          ~Files.Files.Item,
+          Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)),
+          q
+        )(
+          Clean.wf_crit(
+            RContents.Merge.few(b, o, Writes.apply(ws, b), ws)
+          )(Contents.Merge.fold_wf(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws), o)(wo))
+        )
+      ),
+      Equal.trans(
+        Maybe<&2, Files.Files.Item>,
+        Crits.Crit.get(
+          Files.Files.Item,
+          Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws)),
+          q
+        ),
+        Crits.Crit.get(
+          Files.Files.Item,
+          Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))),
+          q
+        ),
+        Orders.Binds.get(
+          Files.Files.Item,
+          Crits.Crit.entries(
+            Files.Files.Item,
+            Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))
+          ),
+          q
+        ),
+        Few.same_at(
+          b,
+          o,
+          Writes.apply(ws, b),
+          RContents.Writes.paths(ws),
+          q,
+          wb,
+          wo,
+          Writes.apply_wf(ws, b)(wb),
+          hc,
+          p => ho => Writes.apply_other(ws, b, p)(wb)(ho)
+        ),
+        Equal.trans(
+          Maybe<&2, Files.Files.Item>,
+          Crits.Crit.get(
+            Files.Files.Item,
+            Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))),
+            q
+          ),
+          Crits.Crit.lookup(
+            Files.Files.Item,
+            Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))),
+            q
+          ),
+          Orders.Binds.get(
+            Files.Files.Item,
+            Crits.Crit.entries(
+              Files.Files.Item,
+              Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))
+            ),
+            q
+          ),
+          Crits.Crit.get_lookup(
+            ~Files.Files.Item,
+            Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))),
+            q
+          )(
+            Clean.wf_crit(
+              RContents.Merge.files(b, o, Writes.apply(ws, b))
+            )(Contents.Merge.files_wf(b, o, Writes.apply(ws, b))(wo))
+          ),
+          Equal.sym(
+            Maybe<&2, Files.Files.Item>,
+            Orders.Binds.get(
+              Files.Files.Item,
+              Crits.Crit.entries(
+                Files.Files.Item,
+                Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))
+              ),
+              q
+            ),
+            Crits.Crit.lookup(
+              Files.Files.Item,
+              Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))),
+              q
+            ),
+            Orders.Crit.get_entries(
+              Files.Files.Item,
+              Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))),
+              q
+            )
+          )
+        )
+      )
+    )
+  )
 
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the entries of the merge of the paths of the writes ws, and those of the
@@ -1236,10 +1478,7 @@ def Few.same(
     Files.Files.Item,
     Clean.crit(RContents.Merge.few(b, o, Writes.apply(ws, b), ws))
   ),
-  Crits.Crit.entries(
-    Files.Files.Item,
-    Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b)))
-  )
+  Crits.Crit.entries(Files.Files.Item, Clean.crit(RContents.Merge.files(b, o, Writes.apply(ws, b))))
 ):
   match es:
     case Nil{}:
@@ -1311,9 +1550,7 @@ def Few.files(
         )(
           Clean.wf_crit(
             RContents.Merge.few(b, o, Writes.apply(ws, b), ws)
-          )(
-            Contents.Merge.fold_wf(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws), o)(wo)
-          )
+          )(Contents.Merge.fold_wf(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws), o)(wo))
         )
       )(
         Orders.Crit.entries_sorted(
@@ -1561,7 +1798,10 @@ def Content.at_clean_all(
 # ----------------------------
 
 # the content m, if the node holds it, after the writes ws
-def Writes.over(ws: List<&2, RContents.Write>, m: Maybe<&2, Files.Files()>) -> Maybe<&2, Files.Files()>:
+def Writes.over(
+  ws: List<&2, RContents.Write>,
+  m: Maybe<&2, Files.Files()>
+) -> Maybe<&2, Files.Files()>:
   match m:
     case None{}:
       None{}
@@ -1569,7 +1809,9 @@ def Writes.over(ws: List<&2, RContents.Write>, m: Maybe<&2, Files.Files()>) -> M
       Some{Writes.apply(ws, b)}
 
 # a content after no write is the content
-def Writes.over_nil(m: Maybe<&2, Files.Files()>) -> {m == Writes.over([], m): Maybe<&2, Files.Files()>}:
+def Writes.over_nil(
+  m: Maybe<&2, Files.Files()>
+) -> {m == Writes.over([], m): Maybe<&2, Files.Files()>}:
   match m:
     case None{}:
       {==}
@@ -1584,7 +1826,10 @@ def Writes.over_step(
   w: Maybe<&2, List<&2, U32>>,
   m: Maybe<&2, Files.Files()>
 ) -> {
-  Writes.over(RContents.Write{q, w} <> ws, m)
+  Writes.over(
+    RContents.Write{q, w} <> ws,
+    m
+  )
     == Writes.over(ws, RContents.Content.write(q, w, m)): Maybe<&2, Files.Files()>
 }:
   match m:
@@ -1664,18 +1909,26 @@ def Next.of(
 def Writes.put_at(
   r: Spec.Request,
   -fits: Bool,
-  prev: Maybe<&2, Files.Files()>,
+  +prev: Maybe<&2, Files.Files()>,
   -other: Maybe<&2, Files.Files()>,
   -base: Maybe<&2, Files.Files()>,
   m: Maybe<&2, List<&2, RContents.Write>>,
-  ws: List<&2, RContents.Write>,
+  +ws: List<&2, RContents.Write>,
   -top: Maybe<&2, Files.Files()>
 ) -> {
   RContents.Request.wrote(r, u => m) == Some{ws}: Maybe<&2, List<&2, RContents.Write>>
 } -> (
-  @ws2: List<&2, RContents.Write> -> {
+  @ws2: List<
+    &2,
+    RContents.Write> -> {
     m == Some{ws2}: Maybe<&2, List<&2, RContents.Write>>
-  } -> {top == Writes.over(ws2, RContents.Content.apply(r, fits, prev, other, base)): Maybe<&2, Files.Files()>}
+  } -> {
+    top
+      == Writes.over(
+        ws2,
+        RContents.Content.apply(r, fits, prev, other, base)
+      ): Maybe<&2, Files.Files()>
+  }
 ) -> {top == Writes.over(ws, prev): Maybe<&2, Files.Files()>}:
   match r m:
     case Spec.Request.Start{os} m:
@@ -1749,7 +2002,7 @@ def Writes.put_at(
     case Spec.Request.Own{cc, gg} m:
       h => ih => ih(ws)(h)
 
-# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- a proof does not run
 # the content of a version, n versions after version j of its line, is the
 # content of version j after the writes of the n versions between them, when
 # each changes at most one path: es is the versions after j, and vs all the
@@ -1762,7 +2015,7 @@ def Writes.at(
   +c: Ledgers.Line,
   +j: Nat,
   +vs: List<&2, Types.Entry>,
-  ws: List<&2, RContents.Write>
+  +ws: List<&2, RContents.Write>
 ) -> {
   RLines.Line.versions(s, c) == Some{vs}: Maybe<&2, List<&2, Types.Entry>>
 } -> {
@@ -1770,14 +2023,35 @@ def Writes.at(
 } -> {
   RContents.Writes.of(n, es) == Some{ws}: Maybe<&2, List<&2, RContents.Write>>
 } -> {
-  RContents.Content.at(Nat.add(n, g), RKnown.Known.none(), s, c, Nat.add(n, j))
-    == Writes.over(ws, RContents.Content.at(g, RKnown.Known.none(), s, c, j)): Maybe<&2, Files.Files()>
+  RContents.Content.at(
+    Nat.add(n, g),
+    RKnown.Known.none(),
+    s,
+    c,
+    Nat.add(n, j)
+  )
+    == Writes.over(
+      ws,
+      RContents.Content.at(g, RKnown.Known.none(), s, c, j)
+    ): Maybe<&2, Files.Files()>
 }:
   match n es:
     case 0n es:
       hv => he => h => Reads.Eq.to(
         List<&2, RContents.Write>,
-        y => {RContents.Content.at(g, RKnown.Known.none(), s, c, j) == Writes.over(y, RContents.Content.at(g, RKnown.Known.none(), s, c, j)): Maybe<&2, Files.Files()>},
+        y => {
+          RContents.Content.at(
+            g,
+            RKnown.Known.none(),
+            s,
+            c,
+            j
+          )
+            == Writes.over(
+              y,
+              RContents.Content.at(g, RKnown.Known.none(), s, c, j)
+            ): Maybe<&2, Files.Files()>
+        },
         [],
         ws,
         Shared.Maybe.some_inj(List<&2, RContents.Write>, [], ws, h),
@@ -1786,40 +2060,124 @@ def Writes.at(
     case 1n+d Nil{}:
       hv => he => h => Empty.absurd(
         {
-          RContents.Content.at(1n+Nat.add(d, g), RKnown.Known.none(), s, c, 1n+Nat.add(d, j))
-            == Writes.over(ws, RContents.Content.at(g, RKnown.Known.none(), s, c, j)): Maybe<&2, Files.Files()>
+          RContents.Content.at(
+            1n+Nat.add(d, g),
+            RKnown.Known.none(),
+            s,
+            c,
+            1n+Nat.add(d, j)
+          )
+            == Writes.over(
+              ws,
+              RContents.Content.at(g, RKnown.Known.none(), s, c, j)
+            ): Maybe<&2, Files.Files()>
         },
         Shared.Maybe.none_ne_some(List<&2, RContents.Write>, ws, h)
       )
     case 1n+(+d) Con{Types.Entry{Types.Pick{Types.Ask{+i, +k0, +r}, +pins}, +slot}, +rest}:
       +hv => +he => h => Writes.put_at(
         r,
-        RContents.Entry.fits(RKnown.Known.none(), s, c, j, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}}),
+        RContents.Entry.fits(
+          RKnown.Known.none(),
+          s,
+          c,
+          j,
+          Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}}
+        ),
         RContents.Content.at(g, RKnown.Known.none(), s, c, j),
-        RContents.Content.at(g, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.taken(c, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}})), Spec.Point.n(RContents.Entry.taken(c, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}}))),
-        RContents.Content.at(g, RKnown.Known.none(), s, Spec.Point.line(RContents.Entry.based(c, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}})), Spec.Point.n(RContents.Entry.based(c, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}}))),
+        RContents.Content.at(
+          g,
+          RKnown.Known.none(),
+          s,
+          Spec.Point.line(
+            RContents.Entry.taken(c, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}})
+          ),
+          Spec.Point.n(
+            RContents.Entry.taken(c, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}})
+          )
+        ),
+        RContents.Content.at(
+          g,
+          RKnown.Known.none(),
+          s,
+          Spec.Point.line(
+            RContents.Entry.based(c, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}})
+          ),
+          Spec.Point.n(
+            RContents.Entry.based(c, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}})
+          )
+        ),
         RContents.Writes.of(d, rest),
         ws,
         RContents.Content.at(1n+Nat.add(d, g), RKnown.Known.none(), s, c, 1n+Nat.add(d, j))
-      )(h)(
+      )(
+        h
+      )(
         ws2 => e2 => Equal.trans(
           Maybe<&2, Files.Files()>,
           RContents.Content.at(1n+Nat.add(d, g), RKnown.Known.none(), s, c, 1n+Nat.add(d, j)),
           Writes.over(ws2, RContents.Content.at(1n+g, RKnown.Known.none(), s, c, 1n+j)),
-          Writes.over(ws2, Next.of(g, s, c, j, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}})),
+          Writes.over(
+            ws2,
+            Next.of(g, s, c, j, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}})
+          ),
           Reads.Eq.to(
             Nat,
-            x => {RContents.Content.at(x, RKnown.Known.none(), s, c, 1n+Nat.add(d, j)) == Writes.over(ws2, RContents.Content.at(1n+g, RKnown.Known.none(), s, c, 1n+j)): Maybe<&2, Files.Files()>},
+            x => {
+              RContents.Content.at(
+                x,
+                RKnown.Known.none(),
+                s,
+                c,
+                1n+Nat.add(d, j)
+              )
+                == Writes.over(
+                  ws2,
+                  RContents.Content.at(1n+g, RKnown.Known.none(), s, c, 1n+j)
+                ): Maybe<&2, Files.Files()>
+            },
             Nat.add(d, 1n+g),
             1n+Nat.add(d, g),
             Shared.Nat.add_succ(d, g),
             Reads.Eq.to(
               Nat,
-              y => {RContents.Content.at(Nat.add(d, 1n+g), RKnown.Known.none(), s, c, y) == Writes.over(ws2, RContents.Content.at(1n+g, RKnown.Known.none(), s, c, 1n+j)): Maybe<&2, Files.Files()>},
+              y => {
+                RContents.Content.at(
+                  Nat.add(d, 1n+g),
+                  RKnown.Known.none(),
+                  s,
+                  c,
+                  y
+                )
+                  == Writes.over(
+                    ws2,
+                    RContents.Content.at(1n+g, RKnown.Known.none(), s, c, 1n+j)
+                  ): Maybe<&2, Files.Files()>
+              },
               Nat.add(d, 1n+j),
               1n+Nat.add(d, j),
               Shared.Nat.add_succ(d, j),
-              Writes.at(d, rest, 1n+g, s, c, 1n+j, vs, ws2)(hv)(Shared.List.drop_step(&2, Types.Entry, vs, 1n+j, Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}, rest)(he))(e2)
+              Writes.at(
+                d,
+                rest,
+                1n+g,
+                s,
+                c,
+                1n+j,
+                vs,
+                ws2
+              )(
+                hv
+              )(
+                Shared.List.drop_step(
+                  &2,
+                  Types.Entry,
+                  vs,
+                  1n+j,
+                  Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot},
+                  rest
+                )(he)
+              )(e2)
             )
           ),
           Equal.cong(
@@ -1830,23 +2188,45 @@ def Writes.at(
             Next.of(g, s, c, j, Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}}),
             Reads.Eq.to(
               Maybe<&2, Types.Entry>,
-              m => {RContents.Content.at(1n+g, RKnown.Known.none(), s, c, 1n+j) == Next.of(g, s, c, j, m): Maybe<&2, Files.Files()>},
+              m => {
+                RContents.Content.at(
+                  1n+g,
+                  RKnown.Known.none(),
+                  s,
+                  c,
+                  1n+j
+                )
+                  == Next.of(g, s, c, j, m): Maybe<&2, Files.Files()>
+              },
               RLines.Line.at(s, c, 1n+j),
               Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}},
               Reads.Eq.back(
                 Maybe<&2, List<&2, Types.Entry>>,
-                m => {RLines.Line.at.of(m, 1n+j) == Some{Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}}: Maybe<&2, Types.Entry>},
+                m => {
+                  RLines.Line.at.of(
+                    m,
+                    1n+j
+                  )
+                    == Some{
+                      Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}
+                    }: Maybe<&2, Types.Entry>
+                },
                 RLines.Line.versions(s, c),
                 Some{vs},
                 hv,
-                Drop.head(vs, 1n+j, Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot}, rest)(he)
+                Drop.head(
+                  vs,
+                  1n+j,
+                  Types.Entry{Types.Pick{Types.Ask{i, k0, r}, pins}, slot},
+                  rest
+                )(he)
               ),
               {==}
             )
           )
         )
       )
-# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
 
 # A merge that reads a few paths
 # ------------------------------
@@ -1870,11 +2250,28 @@ def Few.of(
 ) -> (
   @o: Files.Files() -> @b: Files.Files() -> {
     ours == Some{o}: Maybe<&2, Files.Files()>
-  } -> {base == Some{b}: Maybe<&2, Files.Files()>} -> {
-    Clean.all(o, List.append(&2, String, RContents.Writes.paths(ws), RContents.Merge.paths(b, o, Writes.apply(ws, b)))) == True{}: Bool
+  } -> {
+    base == Some{b}: Maybe<&2, Files.Files()>
+  } -> {
+    Clean.all(
+      o,
+      List.append(
+        &2,
+        String,
+        RContents.Writes.paths(ws),
+        RContents.Merge.paths(b, o, Writes.apply(ws, b))
+      )
+    )
+      == True{}: Bool
   }
 ) -> {
-  RContents.Merge.of.few(ws, fits, ours, theirs, base)
+  RContents.Merge.of.few(
+    ws,
+    fits,
+    ours,
+    theirs,
+    base
+  )
     == RContents.Merge.of(fits, ours, theirs, base): Maybe<&2, Files.Files()>
 }:
   match fits ours theirs base:
@@ -1882,7 +2279,10 @@ def Few.of(
       wo => wb => hr => hc => Reads.Eq.back(
         Files.Files(),
         y => {
-          Some{RContents.Merge.few(b, o, y, ws)} == Some{RContents.Merge.files(b, o, y)}: Maybe<&2, Files.Files()>
+          Some{
+            RContents.Merge.few(b, o, y, ws)
+          }
+            == Some{RContents.Merge.files(b, o, y)}: Maybe<&2, Files.Files()>
         },
         t,
         Writes.apply(ws, b),
@@ -1925,11 +2325,29 @@ def Few.apply(
 ) -> (
   @o: Files.Files() -> @b: Files.Files() -> {
     prev == Some{o}: Maybe<&2, Files.Files()>
-  } -> {base == Some{b}: Maybe<&2, Files.Files()>} -> {
-    Clean.all(o, List.append(&2, String, RContents.Writes.paths(ws), RContents.Merge.paths(b, o, Writes.apply(ws, b)))) == True{}: Bool
+  } -> {
+    base == Some{b}: Maybe<&2, Files.Files()>
+  } -> {
+    Clean.all(
+      o,
+      List.append(
+        &2,
+        String,
+        RContents.Writes.paths(ws),
+        RContents.Merge.paths(b, o, Writes.apply(ws, b))
+      )
+    )
+      == True{}: Bool
   }
 ) -> {
-  RContents.Content.apply.few(ws, r, fits, prev, other, base)
+  RContents.Content.apply.few(
+    ws,
+    r,
+    fits,
+    prev,
+    other,
+    base
+  )
     == RContents.Content.apply(r, fits, prev, other, base): Maybe<&2, Files.Files()>
 }:
   match r:
@@ -1965,21 +2383,43 @@ def Few.next(
 } -> {
   Contents.Content.sound(base) == True{}: Bool
 } -> (
-  @ws: List<&2, RContents.Write> -> @t: Files.Files() -> @b: Files.Files() -> {
+  @ws: List<
+    &2,
+    RContents.Write> -> @t: Files.Files() -> @b: Files.Files() -> {
     h == Some{ws}: Maybe<&2, List<&2, RContents.Write>>
   } -> {
     other == Some{t}: Maybe<&2, Files.Files()>
   } -> {base == Some{b}: Maybe<&2, Files.Files()>} -> {t == Writes.apply(ws, b): Files.Files()}
 ) -> (
-  @ws: List<&2, RContents.Write> -> @o: Files.Files() -> @b: Files.Files() -> {
+  @ws: List<
+    &2,
+    RContents.Write> -> @o: Files.Files() -> @b: Files.Files() -> {
     h == Some{ws}: Maybe<&2, List<&2, RContents.Write>>
   } -> {
     prev == Some{o}: Maybe<&2, Files.Files()>
-  } -> {base == Some{b}: Maybe<&2, Files.Files()>} -> {
-    Clean.all(o, List.append(&2, String, RContents.Writes.paths(ws), RContents.Merge.paths(b, o, Writes.apply(ws, b)))) == True{}: Bool
+  } -> {
+    base == Some{b}: Maybe<&2, Files.Files()>
+  } -> {
+    Clean.all(
+      o,
+      List.append(
+        &2,
+        String,
+        RContents.Writes.paths(ws),
+        RContents.Merge.paths(b, o, Writes.apply(ws, b))
+      )
+    )
+      == True{}: Bool
   }
 ) -> {
-  RContents.Content.quick(h, m, fits, prev, other, base)
+  RContents.Content.quick(
+    h,
+    m,
+    fits,
+    prev,
+    other,
+    base
+  )
     == RContents.Content.next(m, fits, prev, other, base): Maybe<&2, Files.Files()>
 }:
   match h m:
@@ -1995,7 +2435,11 @@ def Few.next(
         prev,
         other,
         base
-      )(wo)(wb)(
+      )(
+        wo
+      )(
+        wb
+      )(
         t => b => et => eb => hr(ws)(t)(b)({==})(et)(eb)
       )(o => b => ep => eb => hc(ws)(o)(b)({==})(ep)(eb))
 
@@ -2017,7 +2461,12 @@ def Nat.sub_add(
       h => Equal.cong(Nat, Nat, z => 1n+z, Nat.add(ap, 0n), ap, Shared.Nat.add_zero(ap))
     case 1n+(+ap) 1n+(+bp):
       h =>
-        %Equal.sym(Nat, Nat.add(Nat.sub(ap, bp), 1n+bp), 1n+Nat.add(Nat.sub(ap, bp), bp), Shared.Nat.add_succ(Nat.sub(ap, bp), bp)): {_ == 1n+ap: Nat}
+        %Equal.sym(
+          Nat,
+          Nat.add(Nat.sub(ap, bp), 1n+bp),
+          1n+Nat.add(Nat.sub(ap, bp), bp),
+          Shared.Nat.add_succ(Nat.sub(ap, bp), bp)
+        ): {_ == 1n+ap: Nat}
         Equal.cong(Nat, Nat, z => 1n+z, Nat.add(Nat.sub(ap, bp), bp), ap, Nat.sub_add(ap, bp)(h))
 
 # a "when" that gives something has a test that holds
@@ -2061,7 +2510,9 @@ def Among.nil(ps: List<&2, String>) -> {RContents.Paths.among(ps, []) == []: Lis
 def Among.few(
   cs: List<&2, String>,
   +ps: List<&2, String>
-) -> {RContents.Merge.clashes.few.of(cs, u => ps) == RContents.Paths.among(ps, cs): List<&2, String>}:
+) -> {
+  RContents.Merge.clashes.few.of(cs, u => ps) == RContents.Paths.among(ps, cs): List<&2, String>
+}:
   match cs:
     case Nil{}:
       Equal.sym(List<&2, String>, RContents.Paths.among(ps, []), [], Among.nil(ps))
@@ -2071,12 +2522,17 @@ def Among.few(
 # a Maybe that is none is None
 def None.of(
   m: Maybe<&2, Maybe<&2, List<&2, U32>>>
-) -> {Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, m) == True{}: Bool} -> {m == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+) -> {
+  Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, m) == True{}: Bool
+} -> {m == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
   match m:
     case None{}:
       h => {==}
     case Some{x}:
-      h => Empty.absurd({Some{x} == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Some{x} == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Shared.Bool.false_ne_true(h)
+      )
 
 # a path among the clashes of ps clashes
 def Clash.sound(
@@ -2090,16 +2546,29 @@ def Clash.sound(
 } -> {RContents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
   match ps:
     case Nil{}:
-      h => Empty.absurd({RContents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {RContents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
+        Shared.Bool.false_ne_true(h)
+      )
     case Con{+q, +rest}:
       h => Lists.Bool.by(
         d => {
-          List.contains(~String, ~String.eq, List.filter.put(String, q, RContents.Merge.clashes.go(b, o, t, rest), d), p) == True{}: Bool
+          List.contains(
+            ~String,
+            ~String.eq,
+            List.filter.put(String, q, RContents.Merge.clashes.go(b, o, t, rest), d),
+            p
+          )
+            == True{}: Bool
         } -> {RContents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
         Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, RContents.Merge.at(b, o, t, q)),
         +et => h2 => Lists.Bool.by(
           e => {
-            List.any.if(u => List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, t, rest), p), e) == True{}: Bool
+            List.any.if(
+              u => List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, t, rest), p),
+              e
+            )
+              == True{}: Bool
           } -> {RContents.Merge.at(b, o, t, p) == None{}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
           String.eq(q, p),
           eq => h3 => Reads.Eq.to(
@@ -2123,7 +2592,9 @@ def Merge.at_ours(
   +p: String
 ) -> {
   Files.Files.get(t, p) == Files.Files.get(b, p): Maybe<&2, List<&2, U32>>
-} -> {RContents.Merge.at(b, o, t, p) == Some{Files.Files.get(o, p)}: Maybe<&2, Maybe<&2, List<&2, U32>>>}:
+} -> {
+  RContents.Merge.at(b, o, t, p) == Some{Files.Files.get(o, p)}: Maybe<&2, Maybe<&2, List<&2, U32>>>
+}:
   h => Equal.trans(
     Maybe<&2, Maybe<&2, List<&2, U32>>>,
     RContents.Merge.at(b, o, t, p),
@@ -2152,15 +2623,32 @@ def Clash.same(
   out: {
     List.contains(~String, ~String.eq, ps, p) == False{}: Bool
   } -> {Files.Files.get(t, p) == Files.Files.get(b, p): Maybe<&2, List<&2, U32>>}
-) -> {Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, RContents.Merge.at(b, o, t, p)) == List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, t, ps), p): Bool}:
+) -> {
+  Maybe.is_none(
+    &2,
+    Maybe<&2, List<&2, U32>>,
+    RContents.Merge.at(b, o, t, p)
+  )
+    == List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, t, ps), p): Bool
+}:
   Lists.Bool.by(
-    d => {d == List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, t, ps), p): Bool},
+    d => {
+      d == List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, t, ps), p): Bool
+    },
     Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, RContents.Merge.at(b, o, t, p)),
     +et => Equal.sym(
       Bool,
       List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, t, ps), p),
       True{},
-      Reads.Merge.clashes_in(b, o, t, ps, p)(None.of(RContents.Merge.at(b, o, t, p))(et))(
+      Reads.Merge.clashes_in(
+        b,
+        o,
+        t,
+        ps,
+        p
+      )(
+        None.of(RContents.Merge.at(b, o, t, p))(et)
+      )(
         Lists.Bool.by(
           d2 => {d2 == True{}: Bool},
           List.contains(~String, ~String.eq, ps, p),
@@ -2210,8 +2698,16 @@ def Clash.among(
   +ws: List<&2, RContents.Write>,
   +wb: {FileLaws.Files.wf(b) == True{}: Bool}
 ) -> {
-  RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), ps)
-    == RContents.Paths.among(ps, RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws))): List<&2, String>
+  RContents.Merge.clashes.go(
+    b,
+    o,
+    Writes.apply(ws, b),
+    ps
+  )
+    == RContents.Paths.among(
+      ps,
+      RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws))
+    ): List<&2, String>
 }:
   match ps:
     case Nil{}:
@@ -2220,16 +2716,38 @@ def Clash.among(
       Reads.Eq.back(
         Bool,
         d => {
-          List.filter.put(String, p, RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), rest), d)
+          List.filter.put(
+            String,
+            p,
+            RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), rest),
+            d
+          )
             == List.filter.put(
               String,
               p,
-              RContents.Paths.among(rest, RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws))),
-              List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws)), p)
+              RContents.Paths.among(
+                rest,
+                RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws))
+              ),
+              List.contains(
+                ~String,
+                ~String.eq,
+                RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws)),
+                p
+              )
             ): List<&2, String>
         },
-        Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, RContents.Merge.at(b, o, Writes.apply(ws, b), p)),
-        List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws)), p),
+        Maybe.is_none(
+          &2,
+          Maybe<&2, List<&2, U32>>,
+          RContents.Merge.at(b, o, Writes.apply(ws, b), p)
+        ),
+        List.contains(
+          ~String,
+          ~String.eq,
+          RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws)),
+          p
+        ),
         Clash.same(
           b,
           o,
@@ -2241,9 +2759,22 @@ def Clash.among(
         Equal.cong(
           List<&2, String>,
           List<&2, String>,
-          l => List.filter.put(String, p, l, List.contains(~String, ~String.eq, RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws)), p)),
+          l => List.filter.put(
+            String,
+            p,
+            l,
+            List.contains(
+              ~String,
+              ~String.eq,
+              RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws)),
+              p
+            )
+          ),
           RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), rest),
-          RContents.Paths.among(rest, RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws))),
+          RContents.Paths.among(
+            rest,
+            RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws))
+          ),
           Clash.among(rest, b, o, ws, wb)
         )
       )
@@ -2256,18 +2787,33 @@ def Few.clashes(
   +ws: List<&2, RContents.Write>,
   wb: {FileLaws.Files.wf(b) == True{}: Bool}
 ) -> {
-  RContents.Merge.clashes.few(b, o, Writes.apply(ws, b), ws) == RContents.Merge.clashes(b, o, Writes.apply(ws, b)): List<&2, String>
+  RContents.Merge.clashes.few(
+    b,
+    o,
+    Writes.apply(ws, b),
+    ws
+  )
+    == RContents.Merge.clashes(b, o, Writes.apply(ws, b)): List<&2, String>
 }:
   Equal.trans(
     List<&2, String>,
     RContents.Merge.clashes.few(b, o, Writes.apply(ws, b), ws),
-    RContents.Paths.among(RContents.Merge.paths(b, o, Writes.apply(ws, b)), RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws))),
+    RContents.Paths.among(
+      RContents.Merge.paths(b, o, Writes.apply(ws, b)),
+      RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws))
+    ),
     RContents.Merge.clashes(b, o, Writes.apply(ws, b)),
-    Among.few(RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws)), RContents.Merge.paths(b, o, Writes.apply(ws, b))),
+    Among.few(
+      RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws)),
+      RContents.Merge.paths(b, o, Writes.apply(ws, b))
+    ),
     Equal.sym(
       List<&2, String>,
       RContents.Merge.clashes(b, o, Writes.apply(ws, b)),
-      RContents.Paths.among(RContents.Merge.paths(b, o, Writes.apply(ws, b)), RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws))),
+      RContents.Paths.among(
+        RContents.Merge.paths(b, o, Writes.apply(ws, b)),
+        RContents.Merge.clashes.go(b, o, Writes.apply(ws, b), RContents.Writes.paths(ws))
+      ),
       Clash.among(RContents.Merge.paths(b, o, Writes.apply(ws, b)), b, o, ws, wb)
     )
   )
@@ -2287,7 +2833,13 @@ def Few.clashes_few(
     theirs == Some{t}: Maybe<&2, Files.Files()>
   } -> {base == Some{b}: Maybe<&2, Files.Files()>} -> {t == Writes.apply(ws, b): Files.Files()}
 ) -> {
-  RAnswers.Clashes.at.few(ws, fits, base, ours, theirs)
+  RAnswers.Clashes.at.few(
+    ws,
+    fits,
+    base,
+    ours,
+    theirs
+  )
     == RAnswers.Clashes.at(fits, base, ours, theirs): Maybe<&2, List<&2, String>>
 }:
   match fits base ours theirs:
@@ -2295,7 +2847,9 @@ def Few.clashes_few(
       wb => hr => Reads.Eq.back(
         Files.Files(),
         y => {
-          Some{RContents.Merge.clashes.few(b, o, y, ws)}
+          Some{
+            RContents.Merge.clashes.few(b, o, y, ws)
+          }
             == Some{RContents.Merge.clashes(b, o, y)}: Maybe<&2, List<&2, String>>
         },
         t,
@@ -2330,13 +2884,21 @@ def Few.clashes_at(
 ) -> {
   Contents.Content.sound(base) == True{}: Bool
 } -> (
-  @ws: List<&2, RContents.Write> -> @t: Files.Files() -> @b: Files.Files() -> {
+  @ws: List<
+    &2,
+    RContents.Write> -> @t: Files.Files() -> @b: Files.Files() -> {
     h == Some{ws}: Maybe<&2, List<&2, RContents.Write>>
   } -> {
     theirs == Some{t}: Maybe<&2, Files.Files()>
   } -> {base == Some{b}: Maybe<&2, Files.Files()>} -> {t == Writes.apply(ws, b): Files.Files()}
 ) -> {
-  RAnswers.Clashes.quick(h, fits, base, ours, theirs)
+  RAnswers.Clashes.quick(
+    h,
+    fits,
+    base,
+    ours,
+    theirs
+  )
     == RAnswers.Clashes.at(fits, base, ours, theirs): Maybe<&2, List<&2, String>>
 }:
   match h:

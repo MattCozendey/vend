@@ -20,7 +20,12 @@ import ./types.bend as Types
 
 # the line m, unless the request r of the id j is a merge and the key of j is
 # q: then the line of the merge
-def Request.keyed(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -> Maybe<&2, Ledgers.Line>:
+def Request.keyed(
+  r: Spec.Request,
+  j: Ledgers.Id,
+  q: List<&2, U32>,
+  m: Maybe<&2, Ledgers.Line>
+) -> Maybe<&2, Ledgers.Line>:
   match r:
     case Spec.Request.Merge{ff, x}:
       Bool.pick(Maybe<&2, Ledgers.Line>, Crits.Key.is_eq(q, RKnown.Id.code(j)), Some{x}, m)
@@ -29,7 +34,11 @@ def Request.keyed(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Maybe<&2,
 
 # the line m, unless the fact f is the ask of a merge of an id of the key q:
 # then the line of the merge
-def Fact.keyed(f: Types.Fact, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -> Maybe<&2, Ledgers.Line>:
+def Fact.keyed(
+  f: Types.Fact,
+  q: List<&2, U32>,
+  m: Maybe<&2, Ledgers.Line>
+) -> Maybe<&2, Ledgers.Line>:
   match f:
     case Types.Fact.Vote{v, st, x}:
       m
@@ -45,7 +54,13 @@ def Line.keyed(fs: List<&2, Types.Fact>, +q: List<&2, U32>) -> Maybe<&2, Ledgers
       Fact.keyed(f, q, Line.keyed(rest, q))
 
 # one of Some and m is None only when it is m
-def Pick.cond(c: Bool, -x: Ledgers.Line, -m: Maybe<&2, Ledgers.Line>) -> {Bool.pick(Maybe<&2, Ledgers.Line>, c, Some{x}, m) == None{}: Maybe<&2, Ledgers.Line>} -> {c == False{}: Bool}:
+def Pick.cond(
+  c: Bool,
+  -x: Ledgers.Line,
+  -m: Maybe<&2, Ledgers.Line>
+) -> {
+  Bool.pick(Maybe<&2, Ledgers.Line>, c, Some{x}, m) == None{}: Maybe<&2, Ledgers.Line>
+} -> {c == False{}: Bool}:
   match c:
     case True{}:
       h => Empty.absurd({True{} == False{}: Bool}, Crits.Crit.some_ne_none(Ledgers.Line, x, h))
@@ -53,15 +68,30 @@ def Pick.cond(c: Bool, -x: Ledgers.Line, -m: Maybe<&2, Ledgers.Line>) -> {Bool.p
       h => {==}
 
 # one of Some and m that is None is m, which is None
-def Pick.rest(c: Bool, -x: Ledgers.Line, -m: Maybe<&2, Ledgers.Line>) -> {Bool.pick(Maybe<&2, Ledgers.Line>, c, Some{x}, m) == None{}: Maybe<&2, Ledgers.Line>} -> {m == None{}: Maybe<&2, Ledgers.Line>}:
+def Pick.rest(
+  c: Bool,
+  -x: Ledgers.Line,
+  -m: Maybe<&2, Ledgers.Line>
+) -> {
+  Bool.pick(Maybe<&2, Ledgers.Line>, c, Some{x}, m) == None{}: Maybe<&2, Ledgers.Line>
+} -> {m == None{}: Maybe<&2, Ledgers.Line>}:
   match c:
     case True{}:
-      h => Empty.absurd({m == None{}: Maybe<&2, Ledgers.Line>}, Crits.Crit.some_ne_none(Ledgers.Line, x, h))
+      h => Empty.absurd(
+        {m == None{}: Maybe<&2, Ledgers.Line>},
+        Crits.Crit.some_ne_none(Ledgers.Line, x, h)
+      )
     case False{}:
       h => h
 
 # one of Some and None that is Some is the Some
-def Pick.hit(c: Bool, -x: Ledgers.Line, -y: Ledgers.Line) -> {Bool.pick(Maybe<&2, Ledgers.Line>, c, Some{x}, None{}) == Some{y}: Maybe<&2, Ledgers.Line>} -> {c == True{}: Bool}:
+def Pick.hit(
+  c: Bool,
+  -x: Ledgers.Line,
+  -y: Ledgers.Line
+) -> {
+  Bool.pick(Maybe<&2, Ledgers.Line>, c, Some{x}, None{}) == Some{y}: Maybe<&2, Ledgers.Line>
+} -> {c == True{}: Bool}:
   match c:
     case True{}:
       h => {==}
@@ -69,8 +99,18 @@ def Pick.hit(c: Bool, -x: Ledgers.Line, -y: Ledgers.Line) -> {Bool.pick(Maybe<&2
       h => Empty.absurd({False{} == True{}: Bool}, Shared.Maybe.none_ne_some(Ledgers.Line, y, h))
 
 # one of Some and None, else m, is one of the Some and m
-def Pick.or(c: Bool, -x: Ledgers.Line, -m: Maybe<&2, Ledgers.Line>) -> {
-  Maybe.or(&2, Ledgers.Line, Bool.pick(Maybe<&2, Ledgers.Line>, c, Some{x}, None{}), m) == Bool.pick(Maybe<&2, Ledgers.Line>, c, Some{x}, m): Maybe<&2, Ledgers.Line>
+def Pick.or(
+  c: Bool,
+  -x: Ledgers.Line,
+  -m: Maybe<&2, Ledgers.Line>
+) -> {
+  Maybe.or(
+    &2,
+    Ledgers.Line,
+    Bool.pick(Maybe<&2, Ledgers.Line>, c, Some{x}, None{}),
+    m
+  )
+    == Bool.pick(Maybe<&2, Ledgers.Line>, c, Some{x}, m): Maybe<&2, Ledgers.Line>
 }:
   match c:
     case True{}:
@@ -79,7 +119,12 @@ def Pick.or(c: Bool, -x: Ledgers.Line, -m: Maybe<&2, Ledgers.Line>) -> {
       {==}
 
 # a request that gives no line of the key q gives the line that it is given
-def Request.keyed_pass(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -> {
+def Request.keyed_pass(
+  r: Spec.Request,
+  +j: Ledgers.Id,
+  +q: List<&2, U32>,
+  m: Maybe<&2, Ledgers.Line>
+) -> {
   Request.keyed(r, j, q, None{}) == None{}: Maybe<&2, Ledgers.Line>
 } -> {Request.keyed(r, j, q, m) == m: Maybe<&2, Ledgers.Line>}:
   match r:
@@ -88,7 +133,14 @@ def Request.keyed_pass(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Mayb
     case Spec.Request.Write{b, p, w}:
       h => {==}
     case Spec.Request.Merge{ff, +x}:
-      h => Reads.Eq.back(Bool, d => {Bool.pick(Maybe<&2, Ledgers.Line>, d, Some{x}, m) == m: Maybe<&2, Ledgers.Line>}, Crits.Key.is_eq(q, RKnown.Id.code(j)), False{}, Pick.cond(Crits.Key.is_eq(q, RKnown.Id.code(j)), x, None{})(h), {==})
+      h => Reads.Eq.back(
+        Bool,
+        d => {Bool.pick(Maybe<&2, Ledgers.Line>, d, Some{x}, m) == m: Maybe<&2, Ledgers.Line>},
+        Crits.Key.is_eq(q, RKnown.Id.code(j)),
+        False{},
+        Pick.cond(Crits.Key.is_eq(q, RKnown.Id.code(j)), x, None{})(h),
+        {==}
+      )
     case Spec.Request.Resolve{mm, p, w}:
       h => {==}
     case Spec.Request.Mark{b, mk, v}:
@@ -101,7 +153,11 @@ def Request.keyed_pass(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Mayb
       h => {==}
 
 # a fact that gives no line of the key q gives the line that it is given
-def Fact.keyed_pass(f: Types.Fact, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -> {
+def Fact.keyed_pass(
+  f: Types.Fact,
+  q: List<&2, U32>,
+  m: Maybe<&2, Ledgers.Line>
+) -> {
   Fact.keyed(f, q, None{}) == None{}: Maybe<&2, Ledgers.Line>
 } -> {Fact.keyed(f, q, m) == m: Maybe<&2, Ledgers.Line>}:
   match f:
@@ -111,7 +167,12 @@ def Fact.keyed_pass(f: Types.Fact, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>)
       h => Request.keyed_pass(r, j, q, m)(h)
 
 # a request gives no line only when it is given none
-def Request.keyed_none(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -> {
+def Request.keyed_none(
+  r: Spec.Request,
+  j: Ledgers.Id,
+  q: List<&2, U32>,
+  m: Maybe<&2, Ledgers.Line>
+) -> {
   Request.keyed(r, j, q, m) == None{}: Maybe<&2, Ledgers.Line>
 } -> {m == None{}: Maybe<&2, Ledgers.Line>}:
   match r:
@@ -133,7 +194,11 @@ def Request.keyed_none(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Mayb
       h => h
 
 # a fact gives no line only when it is given none
-def Fact.keyed_none(f: Types.Fact, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -> {
+def Fact.keyed_none(
+  f: Types.Fact,
+  q: List<&2, U32>,
+  m: Maybe<&2, Ledgers.Line>
+) -> {
   Fact.keyed(f, q, m) == None{}: Maybe<&2, Ledgers.Line>
 } -> {m == None{}: Maybe<&2, Ledgers.Line>}:
   match f:
@@ -143,7 +208,12 @@ def Fact.keyed_none(f: Types.Fact, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>)
       h => Request.keyed_none(r, j, q, m)(h)
 
 # a request that gives no line gives none when it is given none
-def Request.keyed_out(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -> {
+def Request.keyed_out(
+  r: Spec.Request,
+  +j: Ledgers.Id,
+  +q: List<&2, U32>,
+  m: Maybe<&2, Ledgers.Line>
+) -> {
   Request.keyed(r, j, q, m) == None{}: Maybe<&2, Ledgers.Line>
 } -> {Request.keyed(r, j, q, None{}) == None{}: Maybe<&2, Ledgers.Line>}:
   match r:
@@ -152,7 +222,16 @@ def Request.keyed_out(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Maybe
     case Spec.Request.Write{b, p, w}:
       h => {==}
     case Spec.Request.Merge{ff, +x}:
-      h => Reads.Eq.back(Bool, d => {Bool.pick(Maybe<&2, Ledgers.Line>, d, Some{x}, None{}) == None{}: Maybe<&2, Ledgers.Line>}, Crits.Key.is_eq(q, RKnown.Id.code(j)), False{}, Pick.cond(Crits.Key.is_eq(q, RKnown.Id.code(j)), x, m)(h), {==})
+      h => Reads.Eq.back(
+        Bool,
+        d => {
+          Bool.pick(Maybe<&2, Ledgers.Line>, d, Some{x}, None{}) == None{}: Maybe<&2, Ledgers.Line>
+        },
+        Crits.Key.is_eq(q, RKnown.Id.code(j)),
+        False{},
+        Pick.cond(Crits.Key.is_eq(q, RKnown.Id.code(j)), x, m)(h),
+        {==}
+      )
     case Spec.Request.Resolve{mm, p, w}:
       h => {==}
     case Spec.Request.Mark{b, mk, v}:
@@ -165,7 +244,11 @@ def Request.keyed_out(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Maybe
       h => {==}
 
 # a fact that gives no line gives none when it is given none
-def Fact.keyed_out(f: Types.Fact, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -> {
+def Fact.keyed_out(
+  f: Types.Fact,
+  q: List<&2, U32>,
+  m: Maybe<&2, Ledgers.Line>
+) -> {
   Fact.keyed(f, q, m) == None{}: Maybe<&2, Ledgers.Line>
 } -> {Fact.keyed(f, q, None{}) == None{}: Maybe<&2, Ledgers.Line>}:
   match f:
@@ -175,8 +258,19 @@ def Fact.keyed_out(f: Types.Fact, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) 
       h => Request.keyed_out(r, j, q, m)(h)
 
 # the line of a request, else m, is what the request gives when it is given m
-def Request.keyed_or(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -> {
-  Maybe.or(&2, Ledgers.Line, Request.keyed(r, j, q, None{}), m) == Request.keyed(r, j, q, m): Maybe<&2, Ledgers.Line>
+def Request.keyed_or(
+  r: Spec.Request,
+  j: Ledgers.Id,
+  q: List<&2, U32>,
+  m: Maybe<&2, Ledgers.Line>
+) -> {
+  Maybe.or(
+    &2,
+    Ledgers.Line,
+    Request.keyed(r, j, q, None{}),
+    m
+  )
+    == Request.keyed(r, j, q, m): Maybe<&2, Ledgers.Line>
 }:
   match r:
     case Spec.Request.Start{os}:
@@ -197,8 +291,18 @@ def Request.keyed_or(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>, m: Maybe<
       {==}
 
 # the line of a fact, else m, is what the fact gives when it is given m
-def Fact.keyed_or(f: Types.Fact, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -> {
-  Maybe.or(&2, Ledgers.Line, Fact.keyed(f, q, None{}), m) == Fact.keyed(f, q, m): Maybe<&2, Ledgers.Line>
+def Fact.keyed_or(
+  f: Types.Fact,
+  q: List<&2, U32>,
+  m: Maybe<&2, Ledgers.Line>
+) -> {
+  Maybe.or(
+    &2,
+    Ledgers.Line,
+    Fact.keyed(f, q, None{}),
+    m
+  )
+    == Fact.keyed(f, q, m): Maybe<&2, Ledgers.Line>
 }:
   match f:
     case Types.Fact.Vote{v, st, x}:
@@ -208,26 +312,66 @@ def Fact.keyed_or(f: Types.Fact, q: List<&2, U32>, m: Maybe<&2, Ledgers.Line>) -
 
 # a fact that gives no line of the key q, put among the facts xs, leaves the
 # line of the key q as it was
-def Line.keyed_insert_pass(xs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2, U32>) -> {
+def Line.keyed_insert_pass(
+  xs: List<&2, Types.Fact>,
+  +f: Types.Fact,
+  +q: List<&2, U32>
+) -> {
   Fact.keyed(f, q, None{}) == None{}: Maybe<&2, Ledgers.Line>
-} -> {Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, xs, f), q) == Line.keyed(xs, q): Maybe<&2, Ledgers.Line>}:
+} -> {
+  Line.keyed(
+    Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, xs, f),
+    q
+  )
+    == Line.keyed(xs, q): Maybe<&2, Ledgers.Line>
+}:
   match xs:
     case Nil{}:
       h => h
     case Con{+y, +r}:
       +h => Lists.Bool.by(
-        d => {Line.keyed(Shared.Bool.when(List<&2, Types.Fact>, d, u => f <> y <> r, u => Shared.Bool.when(List<&2, Types.Fact>, Crits.Key.is_eq(Coded.Fact.words(y), Coded.Fact.words(f)), u => f <> r, u => y <> Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, r, f))), q) == Line.keyed(y <> r, q): Maybe<&2, Ledgers.Line>},
+        d => {
+          Line.keyed(
+            Shared.Bool.when(
+              List<&2, Types.Fact>,
+              d,
+              u => f <> y <> r,
+              u => Shared.Bool.when(
+                List<&2, Types.Fact>,
+                Crits.Key.is_eq(Coded.Fact.words(y), Coded.Fact.words(f)),
+                u => f <> r,
+                u => y <> Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, r, f)
+              )
+            ),
+            q
+          )
+            == Line.keyed(y <> r, q): Maybe<&2, Ledgers.Line>
+        },
         Orders.Key.lt(Coded.Fact.words(f), Coded.Fact.words(y)),
         et => Fact.keyed_pass(f, q, Line.keyed(y <> r, q))(h),
         ef => Lists.Bool.by(
-          d2 => {Line.keyed(Shared.Bool.when(List<&2, Types.Fact>, d2, u => f <> r, u => y <> Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, r, f)), q) == Line.keyed(y <> r, q): Maybe<&2, Ledgers.Line>},
+          d2 => {
+            Line.keyed(
+              Shared.Bool.when(
+                List<&2, Types.Fact>,
+                d2,
+                u => f <> r,
+                u => y <> Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, r, f)
+              ),
+              q
+            )
+              == Line.keyed(y <> r, q): Maybe<&2, Ledgers.Line>
+          },
           Crits.Key.is_eq(Coded.Fact.words(y), Coded.Fact.words(f)),
           e2 => Reads.Eq.back(
             Types.Fact,
             z => {Line.keyed(f <> r, q) == Line.keyed(z <> r, q): Maybe<&2, Ledgers.Line>},
             y,
             f,
-            Coded.Fact.words_inj(y, f)(Crits.Key.is_eq_sound(Coded.Fact.words(y), Coded.Fact.words(f))(e2)),
+            Coded.Fact.words_inj(
+              y,
+              f
+            )(Crits.Key.is_eq_sound(Coded.Fact.words(y), Coded.Fact.words(f))(e2)),
             {==}
           ),
           e2 => Equal.cong(
@@ -242,19 +386,63 @@ def Line.keyed_insert_pass(xs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2
       )
 
 # a fact put among facts that hold no line of the key q gives the line of q
-def Line.keyed_insert_new(xs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2, U32>) -> {
+def Line.keyed_insert_new(
+  xs: List<&2, Types.Fact>,
+  +f: Types.Fact,
+  +q: List<&2, U32>
+) -> {
   Line.keyed(xs, q) == None{}: Maybe<&2, Ledgers.Line>
-} -> {Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, xs, f), q) == Fact.keyed(f, q, None{}): Maybe<&2, Ledgers.Line>}:
+} -> {
+  Line.keyed(
+    Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, xs, f),
+    q
+  )
+    == Fact.keyed(f, q, None{}): Maybe<&2, Ledgers.Line>
+}:
   match xs:
     case Nil{}:
       h => {==}
     case Con{+y, +r}:
       +h => Lists.Bool.by(
-        d => {Line.keyed(Shared.Bool.when(List<&2, Types.Fact>, d, u => f <> y <> r, u => Shared.Bool.when(List<&2, Types.Fact>, Crits.Key.is_eq(Coded.Fact.words(y), Coded.Fact.words(f)), u => f <> r, u => y <> Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, r, f))), q) == Fact.keyed(f, q, None{}): Maybe<&2, Ledgers.Line>},
+        d => {
+          Line.keyed(
+            Shared.Bool.when(
+              List<&2, Types.Fact>,
+              d,
+              u => f <> y <> r,
+              u => Shared.Bool.when(
+                List<&2, Types.Fact>,
+                Crits.Key.is_eq(Coded.Fact.words(y), Coded.Fact.words(f)),
+                u => f <> r,
+                u => y <> Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, r, f)
+              )
+            ),
+            q
+          )
+            == Fact.keyed(f, q, None{}): Maybe<&2, Ledgers.Line>
+        },
         Orders.Key.lt(Coded.Fact.words(f), Coded.Fact.words(y)),
-        et => Equal.cong(Maybe<&2, Ledgers.Line>, Maybe<&2, Ledgers.Line>, m => Fact.keyed(f, q, m), Line.keyed(y <> r, q), None{}, h),
+        et => Equal.cong(
+          Maybe<&2, Ledgers.Line>,
+          Maybe<&2, Ledgers.Line>,
+          m => Fact.keyed(f, q, m),
+          Line.keyed(y <> r, q),
+          None{},
+          h
+        ),
         ef => Lists.Bool.by(
-          d2 => {Line.keyed(Shared.Bool.when(List<&2, Types.Fact>, d2, u => f <> r, u => y <> Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, r, f)), q) == Fact.keyed(f, q, None{}): Maybe<&2, Ledgers.Line>},
+          d2 => {
+            Line.keyed(
+              Shared.Bool.when(
+                List<&2, Types.Fact>,
+                d2,
+                u => f <> r,
+                u => y <> Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, r, f)
+              ),
+              q
+            )
+              == Fact.keyed(f, q, None{}): Maybe<&2, Ledgers.Line>
+          },
           Crits.Key.is_eq(Coded.Fact.words(y), Coded.Fact.words(f)),
           e2 => Equal.cong(
             Maybe<&2, Ledgers.Line>,
@@ -266,7 +454,11 @@ def Line.keyed_insert_new(xs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2,
           ),
           e2 => Equal.trans(
             Maybe<&2, Ledgers.Line>,
-            Fact.keyed(y, q, Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, r, f), q)),
+            Fact.keyed(
+              y,
+              q,
+              Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, r, f), q)
+            ),
             Fact.keyed(y, q, Fact.keyed(f, q, None{})),
             Fact.keyed(f, q, None{}),
             Equal.cong(
@@ -277,7 +469,11 @@ def Line.keyed_insert_new(xs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2,
               Fact.keyed(f, q, None{}),
               Line.keyed_insert_new(r, f, q)(Fact.keyed_none(y, q, Line.keyed(r, q))(h))
             ),
-            Fact.keyed_pass(y, q, Fact.keyed(f, q, None{}))(Fact.keyed_out(y, q, Line.keyed(r, q))(h))
+            Fact.keyed_pass(
+              y,
+              q,
+              Fact.keyed(f, q, None{})
+            )(Fact.keyed_out(y, q, Line.keyed(r, q))(h))
           )
         )
       )
@@ -286,7 +482,11 @@ def Line.keyed_insert_new(xs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2,
 # -----------------
 
 # a request keeps the lines of merges well formed
-def Mergers.put_wf(+mx: Crits.Crit<Ledgers.Line>, i: Ledgers.Id, r: Spec.Request) -> {
+def Mergers.put_wf(
+  +mx: Crits.Crit<Ledgers.Line>,
+  i: Ledgers.Id,
+  r: Spec.Request
+) -> {
   Crits.Crit.wf(~Ledgers.Line, mx, 0n) == True{}: Bool
 } -> {Crits.Crit.wf(~Ledgers.Line, RKnown.Mergers.put(mx, i, r), 0n) == True{}: Bool}:
   match r:
@@ -308,7 +508,10 @@ def Mergers.put_wf(+mx: Crits.Crit<Ledgers.Line>, i: Ledgers.Id, r: Spec.Request
       h => h
 
 # a fact keeps the lines of merges well formed
-def Mergers.step_wf(+mx: Crits.Crit<Ledgers.Line>, f: Types.Fact) -> {
+def Mergers.step_wf(
+  +mx: Crits.Crit<Ledgers.Line>,
+  f: Types.Fact
+) -> {
   Crits.Crit.wf(~Ledgers.Line, mx, 0n) == True{}: Bool
 } -> {Crits.Crit.wf(~Ledgers.Line, RKnown.Mergers.step(mx, f), 0n) == True{}: Bool}:
   match f:
@@ -318,7 +521,10 @@ def Mergers.step_wf(+mx: Crits.Crit<Ledgers.Line>, f: Types.Fact) -> {
       h => Mergers.put_wf(mx, j, r)(h)
 
 # facts keep the lines of merges well formed
-def Mergers.go_wf(fs: List<&2, Types.Fact>, +mx: Crits.Crit<Ledgers.Line>) -> {
+def Mergers.go_wf(
+  fs: List<&2, Types.Fact>,
+  +mx: Crits.Crit<Ledgers.Line>
+) -> {
   Crits.Crit.wf(~Ledgers.Line, mx, 0n) == True{}: Bool
 } -> {Crits.Crit.wf(~Ledgers.Line, RKnown.Mergers.go(fs, mx), 0n) == True{}: Bool}:
   match fs:
@@ -328,7 +534,9 @@ def Mergers.go_wf(fs: List<&2, Types.Fact>, +mx: Crits.Crit<Ledgers.Line>) -> {
       h => Mergers.go_wf(rest, RKnown.Mergers.step(mx, f))(Mergers.step_wf(mx, f)(h))
 
 # the lines of the merges of facts are well formed
-def Mergers.of_wf(fs: List<&2, Types.Fact>) -> {Crits.Crit.wf(~Ledgers.Line, RKnown.Mergers.of(fs), 0n) == True{}: Bool}:
+def Mergers.of_wf(
+  fs: List<&2, Types.Fact>
+) -> {Crits.Crit.wf(~Ledgers.Line, RKnown.Mergers.of(fs), 0n) == True{}: Bool}:
   Mergers.go_wf(fs, Crits.Crit.new(Ledgers.Line))(Crits.Crit.new_wf(~Ledgers.Line))
 
 # What the lines hold
@@ -336,8 +544,14 @@ def Mergers.of_wf(fs: List<&2, Types.Fact>) -> {Crits.Crit.wf(~Ledgers.Line, RKn
 
 # the line that a map holds for a key after a write that keeps the old line:
 # the line that it held, else the new one
-def First.kept(e: Maybe<&2, Ledgers.Line>, -x: Ledgers.Line) -> {
-  Some{Crits.Crit.merge(~Ledgers.Line, ~RKnown.Line.first, e, x)} == Maybe.or(&2, Ledgers.Line, e, Some{x}): Maybe<&2, Ledgers.Line>
+def First.kept(
+  e: Maybe<&2, Ledgers.Line>,
+  -x: Ledgers.Line
+) -> {
+  Some{
+    Crits.Crit.merge(~Ledgers.Line, ~RKnown.Line.first, e, x)
+  }
+    == Maybe.or(&2, Ledgers.Line, e, Some{x}): Maybe<&2, Ledgers.Line>
 }:
   match e:
     case None{}:
@@ -345,117 +559,333 @@ def First.kept(e: Maybe<&2, Ledgers.Line>, -x: Ledgers.Line) -> {
     case Some{y}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # what the lines hold under the key q after the line x is put for the id i,
 # unless they hold one
-def Mergers.merge_lookup(+mx: Crits.Crit<Ledgers.Line>, +i: Ledgers.Id, +x: Ledgers.Line, +q: List<&2, U32>) -> {
+def Mergers.merge_lookup(
+  +mx: Crits.Crit<Ledgers.Line>,
+  +i: Ledgers.Id,
+  +x: Ledgers.Line,
+  +q: List<&2, U32>
+) -> {
   Crits.Crit.wf(~Ledgers.Line, mx, 0n) == True{}: Bool
 } -> {
-  Crits.Crit.lookup(Ledgers.Line, Crits.Crit.upsert(~Ledgers.Line, ~RKnown.Line.first, mx, RKnown.Id.code(i), x), q)
-    == Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Bool.pick(Maybe<&2, Ledgers.Line>, Crits.Key.is_eq(q, RKnown.Id.code(i)), Some{x}, None{})): Maybe<&2, Ledgers.Line>
+  Crits.Crit.lookup(
+    Ledgers.Line,
+    Crits.Crit.upsert(~Ledgers.Line, ~RKnown.Line.first, mx, RKnown.Id.code(i), x),
+    q
+  )
+    == Maybe.or(
+      &2,
+      Ledgers.Line,
+      Crits.Crit.lookup(Ledgers.Line, mx, q),
+      Bool.pick(Maybe<&2, Ledgers.Line>, Crits.Key.is_eq(q, RKnown.Id.code(i)), Some{x}, None{})
+    ): Maybe<&2, Ledgers.Line>
 }:
   h => Equal.trans(
     Maybe<&2, Ledgers.Line>,
-    Crits.Crit.lookup(Ledgers.Line, Crits.Crit.upsert(~Ledgers.Line, ~RKnown.Line.first, mx, RKnown.Id.code(i), x), q),
-    Bool.pick(Maybe<&2, Ledgers.Line>, Crits.Key.is_eq(q, RKnown.Id.code(i)), Some{Crits.Crit.merge(~Ledgers.Line, ~RKnown.Line.first, Crits.Crit.lookup(Ledgers.Line, mx, RKnown.Id.code(i)), x)}, Crits.Crit.lookup(Ledgers.Line, mx, q)),
-    Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Bool.pick(Maybe<&2, Ledgers.Line>, Crits.Key.is_eq(q, RKnown.Id.code(i)), Some{x}, None{})),
+    Crits.Crit.lookup(
+      Ledgers.Line,
+      Crits.Crit.upsert(~Ledgers.Line, ~RKnown.Line.first, mx, RKnown.Id.code(i), x),
+      q
+    ),
+    Bool.pick(
+      Maybe<&2, Ledgers.Line>,
+      Crits.Key.is_eq(q, RKnown.Id.code(i)),
+      Some{
+        Crits.Crit.merge(
+          ~Ledgers.Line,
+          ~RKnown.Line.first,
+          Crits.Crit.lookup(Ledgers.Line, mx, RKnown.Id.code(i)),
+          x
+        )
+      },
+      Crits.Crit.lookup(Ledgers.Line, mx, q)
+    ),
+    Maybe.or(
+      &2,
+      Ledgers.Line,
+      Crits.Crit.lookup(Ledgers.Line, mx, q),
+      Bool.pick(Maybe<&2, Ledgers.Line>, Crits.Key.is_eq(q, RKnown.Id.code(i)), Some{x}, None{})
+    ),
     Crits.Crit.upsert_lookup(~Ledgers.Line, ~RKnown.Line.first, mx, RKnown.Id.code(i), x, q)(h),
     Lists.Bool.by(
       d => {
-        Bool.pick(Maybe<&2, Ledgers.Line>, d, Some{Crits.Crit.merge(~Ledgers.Line, ~RKnown.Line.first, Crits.Crit.lookup(Ledgers.Line, mx, RKnown.Id.code(i)), x)}, Crits.Crit.lookup(Ledgers.Line, mx, q))
-          == Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Bool.pick(Maybe<&2, Ledgers.Line>, d, Some{x}, None{})): Maybe<&2, Ledgers.Line>
+        Bool.pick(
+          Maybe<&2, Ledgers.Line>,
+          d,
+          Some{
+            Crits.Crit.merge(
+              ~Ledgers.Line,
+              ~RKnown.Line.first,
+              Crits.Crit.lookup(Ledgers.Line, mx, RKnown.Id.code(i)),
+              x
+            )
+          },
+          Crits.Crit.lookup(Ledgers.Line, mx, q)
+        )
+          == Maybe.or(
+            &2,
+            Ledgers.Line,
+            Crits.Crit.lookup(Ledgers.Line, mx, q),
+            Bool.pick(Maybe<&2, Ledgers.Line>, d, Some{x}, None{})
+          ): Maybe<&2, Ledgers.Line>
       },
       Crits.Key.is_eq(q, RKnown.Id.code(i)),
       et => Reads.Eq.to(
         List<&2, U32>,
         k => {
-          Some{Crits.Crit.merge(~Ledgers.Line, ~RKnown.Line.first, Crits.Crit.lookup(Ledgers.Line, mx, k), x)}
-            == Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Some{x}): Maybe<&2, Ledgers.Line>
+          Some{
+            Crits.Crit.merge(
+              ~Ledgers.Line,
+              ~RKnown.Line.first,
+              Crits.Crit.lookup(Ledgers.Line, mx, k),
+              x
+            )
+          }
+            == Maybe.or(
+              &2,
+              Ledgers.Line,
+              Crits.Crit.lookup(Ledgers.Line, mx, q),
+              Some{x}
+            ): Maybe<&2, Ledgers.Line>
         },
         q,
         RKnown.Id.code(i),
         Crits.Key.is_eq_sound(q, RKnown.Id.code(i))(et),
         First.kept(Crits.Crit.lookup(Ledgers.Line, mx, q), x)
       ),
-      ef => Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}), Crits.Crit.lookup(Ledgers.Line, mx, q), Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q)))
+      ef => Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}),
+        Crits.Crit.lookup(Ledgers.Line, mx, q),
+        Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q))
+      )
     )
   )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # what the lines hold under the key q after a request: what they held, else
 # the line of the request, if it is a merge of an id of the key q
-def Mergers.put_lookup(+mx: Crits.Crit<Ledgers.Line>, +i: Ledgers.Id, r: Spec.Request, +q: List<&2, U32>) -> {
+def Mergers.put_lookup(
+  +mx: Crits.Crit<Ledgers.Line>,
+  +i: Ledgers.Id,
+  r: Spec.Request,
+  +q: List<&2, U32>
+) -> {
   Crits.Crit.wf(~Ledgers.Line, mx, 0n) == True{}: Bool
 } -> {
-  Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.put(mx, i, r), q)
-    == Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Request.keyed(r, i, q, None{})): Maybe<&2, Ledgers.Line>
+  Crits.Crit.lookup(
+    Ledgers.Line,
+    RKnown.Mergers.put(mx, i, r),
+    q
+  )
+    == Maybe.or(
+      &2,
+      Ledgers.Line,
+      Crits.Crit.lookup(Ledgers.Line, mx, q),
+      Request.keyed(r, i, q, None{})
+    ): Maybe<&2, Ledgers.Line>
 }:
   match r:
     case Spec.Request.Start{os}:
-      h => Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}), Crits.Crit.lookup(Ledgers.Line, mx, q), Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q)))
+      h => Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}),
+        Crits.Crit.lookup(Ledgers.Line, mx, q),
+        Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q))
+      )
     case Spec.Request.Write{b, p, w}:
-      h => Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}), Crits.Crit.lookup(Ledgers.Line, mx, q), Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q)))
+      h => Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}),
+        Crits.Crit.lookup(Ledgers.Line, mx, q),
+        Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q))
+      )
     case Spec.Request.Merge{ff, +x}:
       h => Mergers.merge_lookup(mx, i, x, q)(h)
     case Spec.Request.Resolve{mm, p, w}:
-      h => Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}), Crits.Crit.lookup(Ledgers.Line, mx, q), Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q)))
+      h => Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}),
+        Crits.Crit.lookup(Ledgers.Line, mx, q),
+        Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q))
+      )
     case Spec.Request.Mark{b, mk, v}:
-      h => Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}), Crits.Crit.lookup(Ledgers.Line, mx, q), Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q)))
+      h => Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}),
+        Crits.Crit.lookup(Ledgers.Line, mx, q),
+        Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q))
+      )
     case Spec.Request.Move{b, t, v}:
-      h => Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}), Crits.Crit.lookup(Ledgers.Line, mx, q), Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q)))
+      h => Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}),
+        Crits.Crit.lookup(Ledgers.Line, mx, q),
+        Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q))
+      )
     case Spec.Request.Group{hh, gg, ms}:
-      h => Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}), Crits.Crit.lookup(Ledgers.Line, mx, q), Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q)))
+      h => Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}),
+        Crits.Crit.lookup(Ledgers.Line, mx, q),
+        Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q))
+      )
     case Spec.Request.Own{cc, gg}:
-      h => Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}), Crits.Crit.lookup(Ledgers.Line, mx, q), Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q)))
+      h => Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}),
+        Crits.Crit.lookup(Ledgers.Line, mx, q),
+        Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q))
+      )
 
 # what the lines hold under the key q after a fact
-def Mergers.step_lookup(+mx: Crits.Crit<Ledgers.Line>, f: Types.Fact, +q: List<&2, U32>) -> {
+def Mergers.step_lookup(
+  +mx: Crits.Crit<Ledgers.Line>,
+  f: Types.Fact,
+  +q: List<&2, U32>
+) -> {
   Crits.Crit.wf(~Ledgers.Line, mx, 0n) == True{}: Bool
 } -> {
-  Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.step(mx, f), q)
-    == Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Fact.keyed(f, q, None{})): Maybe<&2, Ledgers.Line>
+  Crits.Crit.lookup(
+    Ledgers.Line,
+    RKnown.Mergers.step(mx, f),
+    q
+  )
+    == Maybe.or(
+      &2,
+      Ledgers.Line,
+      Crits.Crit.lookup(Ledgers.Line, mx, q),
+      Fact.keyed(f, q, None{})
+    ): Maybe<&2, Ledgers.Line>
 }:
   match f:
     case Types.Fact.Vote{v, st, x}:
-      h => Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}), Crits.Crit.lookup(Ledgers.Line, mx, q), Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q)))
+      h => Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}),
+        Crits.Crit.lookup(Ledgers.Line, mx, q),
+        Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q))
+      )
     case Types.Fact.Ask{Types.Ask{+j, k, r}}:
       h => Mergers.put_lookup(mx, j, r, q)(h)
 
 # what the lines hold under the key q after facts: what they held, else the
 # line of the first merge among the facts whose id has the key q
-def Mergers.go_lookup(fs: List<&2, Types.Fact>, +mx: Crits.Crit<Ledgers.Line>, +q: List<&2, U32>) -> {
+def Mergers.go_lookup(
+  fs: List<&2, Types.Fact>,
+  +mx: Crits.Crit<Ledgers.Line>,
+  +q: List<&2, U32>
+) -> {
   Crits.Crit.wf(~Ledgers.Line, mx, 0n) == True{}: Bool
 } -> {
-  Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.go(fs, mx), q)
-    == Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Line.keyed(fs, q)): Maybe<&2, Ledgers.Line>
+  Crits.Crit.lookup(
+    Ledgers.Line,
+    RKnown.Mergers.go(fs, mx),
+    q
+  )
+    == Maybe.or(
+      &2,
+      Ledgers.Line,
+      Crits.Crit.lookup(Ledgers.Line, mx, q),
+      Line.keyed(fs, q)
+    ): Maybe<&2, Ledgers.Line>
 }:
   match fs:
     case Nil{}:
-      h => Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}), Crits.Crit.lookup(Ledgers.Line, mx, q), Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q)))
+      h => Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), None{}),
+        Crits.Crit.lookup(Ledgers.Line, mx, q),
+        Orders.Maybe.or_none(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q))
+      )
     case Con{+f, +rest}:
       +h => Equal.trans(
         Maybe<&2, Ledgers.Line>,
         Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.go(rest, RKnown.Mergers.step(mx, f)), q),
-        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.step(mx, f), q), Line.keyed(rest, q)),
-        Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Fact.keyed(f, q, Line.keyed(rest, q))),
+        Maybe.or(
+          &2,
+          Ledgers.Line,
+          Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.step(mx, f), q),
+          Line.keyed(rest, q)
+        ),
+        Maybe.or(
+          &2,
+          Ledgers.Line,
+          Crits.Crit.lookup(Ledgers.Line, mx, q),
+          Fact.keyed(f, q, Line.keyed(rest, q))
+        ),
         Mergers.go_lookup(rest, RKnown.Mergers.step(mx, f), q)(Mergers.step_wf(mx, f)(h)),
         Equal.trans(
           Maybe<&2, Ledgers.Line>,
-          Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.step(mx, f), q), Line.keyed(rest, q)),
-          Maybe.or(&2, Ledgers.Line, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Fact.keyed(f, q, None{})), Line.keyed(rest, q)),
-          Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Fact.keyed(f, q, Line.keyed(rest, q))),
+          Maybe.or(
+            &2,
+            Ledgers.Line,
+            Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.step(mx, f), q),
+            Line.keyed(rest, q)
+          ),
+          Maybe.or(
+            &2,
+            Ledgers.Line,
+            Maybe.or(
+              &2,
+              Ledgers.Line,
+              Crits.Crit.lookup(Ledgers.Line, mx, q),
+              Fact.keyed(f, q, None{})
+            ),
+            Line.keyed(rest, q)
+          ),
+          Maybe.or(
+            &2,
+            Ledgers.Line,
+            Crits.Crit.lookup(Ledgers.Line, mx, q),
+            Fact.keyed(f, q, Line.keyed(rest, q))
+          ),
           Equal.cong(
             Maybe<&2, Ledgers.Line>,
             Maybe<&2, Ledgers.Line>,
             m => Maybe.or(&2, Ledgers.Line, m, Line.keyed(rest, q)),
             Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.step(mx, f), q),
-            Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Fact.keyed(f, q, None{})),
+            Maybe.or(
+              &2,
+              Ledgers.Line,
+              Crits.Crit.lookup(Ledgers.Line, mx, q),
+              Fact.keyed(f, q, None{})
+            ),
             Mergers.step_lookup(mx, f, q)(h)
           ),
           Equal.trans(
             Maybe<&2, Ledgers.Line>,
-            Maybe.or(&2, Ledgers.Line, Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Fact.keyed(f, q, None{})), Line.keyed(rest, q)),
-            Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Maybe.or(&2, Ledgers.Line, Fact.keyed(f, q, None{}), Line.keyed(rest, q))),
-            Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Fact.keyed(f, q, Line.keyed(rest, q))),
-            Orders.Maybe.or_assoc(Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, mx, q), Fact.keyed(f, q, None{}), Line.keyed(rest, q)),
+            Maybe.or(
+              &2,
+              Ledgers.Line,
+              Maybe.or(
+                &2,
+                Ledgers.Line,
+                Crits.Crit.lookup(Ledgers.Line, mx, q),
+                Fact.keyed(f, q, None{})
+              ),
+              Line.keyed(rest, q)
+            ),
+            Maybe.or(
+              &2,
+              Ledgers.Line,
+              Crits.Crit.lookup(Ledgers.Line, mx, q),
+              Maybe.or(&2, Ledgers.Line, Fact.keyed(f, q, None{}), Line.keyed(rest, q))
+            ),
+            Maybe.or(
+              &2,
+              Ledgers.Line,
+              Crits.Crit.lookup(Ledgers.Line, mx, q),
+              Fact.keyed(f, q, Line.keyed(rest, q))
+            ),
+            Orders.Maybe.or_assoc(
+              Ledgers.Line,
+              Crits.Crit.lookup(Ledgers.Line, mx, q),
+              Fact.keyed(f, q, None{}),
+              Line.keyed(rest, q)
+            ),
             Equal.cong(
               Maybe<&2, Ledgers.Line>,
               Maybe<&2, Ledgers.Line>,
@@ -470,8 +900,16 @@ def Mergers.go_lookup(fs: List<&2, Types.Fact>, +mx: Crits.Crit<Ledgers.Line>, +
 
 # the lines of the merges of facts hold under the key q the line of the first
 # merge among them whose id has the key q
-def Mergers.of_lookup(fs: List<&2, Types.Fact>, +q: List<&2, U32>) -> {
-  Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.of(fs), q) == Line.keyed(fs, q): Maybe<&2, Ledgers.Line>
+def Mergers.of_lookup(
+  fs: List<&2, Types.Fact>,
+  +q: List<&2, U32>
+) -> {
+  Crits.Crit.lookup(
+    Ledgers.Line,
+    RKnown.Mergers.of(fs),
+    q
+  )
+    == Line.keyed(fs, q): Maybe<&2, Ledgers.Line>
 }:
   Mergers.go_lookup(fs, Crits.Crit.new(Ledgers.Line), q)(Crits.Crit.new_wf(~Ledgers.Line))
 
@@ -479,9 +917,10 @@ def Mergers.of_lookup(fs: List<&2, Types.Fact>, +q: List<&2, U32>) -> {
 # -------------------
 
 # two ids have one key only when they are one id
-def Id.code_eq(+j: Ledgers.Id, +i: Ledgers.Id) -> {
-  Crits.Key.is_eq(RKnown.Id.code(i), RKnown.Id.code(j)) == Ledgers.Id.is_eq(j, i): Bool
-}:
+def Id.code_eq(
+  +j: Ledgers.Id,
+  +i: Ledgers.Id
+) -> {Crits.Key.is_eq(RKnown.Id.code(i), RKnown.Id.code(j)) == Ledgers.Id.is_eq(j, i): Bool}:
   Lists.Bool.by(
     d => {Crits.Key.is_eq(RKnown.Id.code(i), RKnown.Id.code(j)) == d: Bool},
     Ledgers.Id.is_eq(j, i),
@@ -505,21 +944,21 @@ def Id.code_eq(+j: Ledgers.Id, +i: Ledgers.Id) -> {
             Ledgers.Id.is_eq(j, j),
             False{},
             Equal.sym(Bool, Ledgers.Id.is_eq(j, j), True{}, Ledgers.Id.is_eq_refl(j)),
-          Reads.Eq.to(
-            Ledgers.Id,
-            y => {Ledgers.Id.is_eq(j, y) == False{}: Bool},
-            i,
-            j,
-            Codes.Code.is_eq_sound(
-              ~Ledgers.Id,
-              ~Ledgers.Id.code,
-              ~Ledgers.Id.code.read,
-              ~(a => r => Ledgers.Id.code_read(a, r)),
+            Reads.Eq.to(
+              Ledgers.Id,
+              y => {Ledgers.Id.is_eq(j, y) == False{}: Bool},
               i,
-              j
-            )(e2),
-            ef
-          )
+              j,
+              Codes.Code.is_eq_sound(
+                ~Ledgers.Id,
+                ~Ledgers.Id.code,
+                ~Ledgers.Id.code.read,
+                ~(a => r => Ledgers.Id.code_read(a, r)),
+                i,
+                j
+              )(e2),
+              ef
+            )
           )
         )
       ),
@@ -529,9 +968,10 @@ def Id.code_eq(+j: Ledgers.Id, +i: Ledgers.Id) -> {
 
 # the line of the first merge whose id has the key of the id i is the line
 # of the merge of the id i
-def Line.keyed_line(fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> {
-  Line.keyed(fs, RKnown.Id.code(i)) == RKnown.Merge.line(fs, i): Maybe<&2, Ledgers.Line>
-}:
+def Line.keyed_line(
+  fs: List<&2, Types.Fact>,
+  +i: Ledgers.Id
+) -> {Line.keyed(fs, RKnown.Id.code(i)) == RKnown.Merge.line(fs, i): Maybe<&2, Ledgers.Line>}:
   match fs:
     case Nil{}:
       {==}
@@ -545,16 +985,36 @@ def Line.keyed_line(fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> {
       Reads.Eq.back(
         Bool,
         d => {
-          Bool.pick(Maybe<&2, Ledgers.Line>, d, Some{x}, Line.keyed(rest, RKnown.Id.code(i)))
-            == Shared.Bool.when(Maybe<&2, Ledgers.Line>, Ledgers.Id.is_eq(j, i), u => Some{x}, u => RKnown.Merge.line(rest, i)): Maybe<&2, Ledgers.Line>
+          Bool.pick(
+            Maybe<&2, Ledgers.Line>,
+            d,
+            Some{x},
+            Line.keyed(rest, RKnown.Id.code(i))
+          )
+            == Shared.Bool.when(
+              Maybe<&2, Ledgers.Line>,
+              Ledgers.Id.is_eq(j, i),
+              u => Some{x},
+              u => RKnown.Merge.line(rest, i)
+            ): Maybe<&2, Ledgers.Line>
         },
         Crits.Key.is_eq(RKnown.Id.code(i), RKnown.Id.code(j)),
         Ledgers.Id.is_eq(j, i),
         Id.code_eq(j, i),
         Lists.Bool.by(
           d => {
-            Bool.pick(Maybe<&2, Ledgers.Line>, d, Some{x}, Line.keyed(rest, RKnown.Id.code(i)))
-              == Shared.Bool.when(Maybe<&2, Ledgers.Line>, d, u => Some{x}, u => RKnown.Merge.line(rest, i)): Maybe<&2, Ledgers.Line>
+            Bool.pick(
+              Maybe<&2, Ledgers.Line>,
+              d,
+              Some{x},
+              Line.keyed(rest, RKnown.Id.code(i))
+            )
+              == Shared.Bool.when(
+                Maybe<&2, Ledgers.Line>,
+                d,
+                u => Some{x},
+                u => RKnown.Merge.line(rest, i)
+              ): Maybe<&2, Ledgers.Line>
           },
           Ledgers.Id.is_eq(j, i),
           et => {==},
@@ -573,7 +1033,10 @@ def Line.keyed_line(fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> {
       Line.keyed_line(rest, i)
 
 # the lines of the merges of facts hold for an id the line of its merge
-def Mergers.get_line(+fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> {
+def Mergers.get_line(
+  +fs: List<&2, Types.Fact>,
+  +i: Ledgers.Id
+) -> {
   RKnown.Mergers.get(RKnown.Mergers.of(fs), i) == RKnown.Merge.line(fs, i): Maybe<&2, Ledgers.Line>
 }:
   Equal.trans(
@@ -581,7 +1044,11 @@ def Mergers.get_line(+fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> {
     RKnown.Mergers.get(RKnown.Mergers.of(fs), i),
     Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.of(fs), RKnown.Id.code(i)),
     RKnown.Merge.line(fs, i),
-    Crits.Crit.get_lookup(~Ledgers.Line, RKnown.Mergers.of(fs), RKnown.Id.code(i))(Mergers.of_wf(fs)),
+    Crits.Crit.get_lookup(
+      ~Ledgers.Line,
+      RKnown.Mergers.of(fs),
+      RKnown.Id.code(i)
+    )(Mergers.of_wf(fs)),
     Equal.trans(
       Maybe<&2, Ledgers.Line>,
       Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.of(fs), RKnown.Id.code(i)),
@@ -596,7 +1063,9 @@ def Mergers.get_line(+fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> {
 # ----------------------
 
 # a Maybe that is none is None
-def None.of(m: Maybe<&2, Ledgers.Line>) -> {Maybe.is_none(&2, Ledgers.Line, m) == True{}: Bool} -> {m == None{}: Maybe<&2, Ledgers.Line>}:
+def None.of(
+  m: Maybe<&2, Ledgers.Line>
+) -> {Maybe.is_none(&2, Ledgers.Line, m) == True{}: Bool} -> {m == None{}: Maybe<&2, Ledgers.Line>}:
   match m:
     case None{}:
       h => {==}
@@ -605,7 +1074,10 @@ def None.of(m: Maybe<&2, Ledgers.Line>) -> {Maybe.is_none(&2, Ledgers.Line, m) =
 
 # facts whose lines hold none for the id i hold no merge whose id has the key
 # of i
-def Fresh.id(+fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> {
+def Fresh.id(
+  +fs: List<&2, Types.Fact>,
+  +i: Ledgers.Id
+) -> {
   Maybe.is_none(&2, Ledgers.Line, RKnown.Mergers.get(RKnown.Mergers.of(fs), i)) == True{}: Bool
 } -> {Line.keyed(fs, RKnown.Id.code(i)) == None{}: Maybe<&2, Ledgers.Line>}:
   h => Equal.trans(
@@ -622,7 +1094,11 @@ def Fresh.id(+fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> {
         RKnown.Mergers.get(RKnown.Mergers.of(fs), i),
         Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.of(fs), RKnown.Id.code(i)),
         Line.keyed(fs, RKnown.Id.code(i)),
-        Crits.Crit.get_lookup(~Ledgers.Line, RKnown.Mergers.of(fs), RKnown.Id.code(i))(Mergers.of_wf(fs)),
+        Crits.Crit.get_lookup(
+          ~Ledgers.Line,
+          RKnown.Mergers.of(fs),
+          RKnown.Id.code(i)
+        )(Mergers.of_wf(fs)),
         Mergers.of_lookup(fs, RKnown.Id.code(i))
       )
     ),
@@ -631,7 +1107,13 @@ def Fresh.id(+fs: List<&2, Types.Fact>, +i: Ledgers.Id) -> {
 
 # facts hold no merge of the key q, when the request r of the id i gives a
 # line of q and gives their lines none for an id that they hold one for
-def Fresh.request(+fs: List<&2, Types.Fact>, +i: Ledgers.Id, r: Spec.Request, +q: List<&2, U32>, -y: Ledgers.Line) -> {
+def Fresh.request(
+  +fs: List<&2, Types.Fact>,
+  +i: Ledgers.Id,
+  r: Spec.Request,
+  +q: List<&2, U32>,
+  -y: Ledgers.Line
+) -> {
   RKnown.Mergers.free(RKnown.Mergers.of(fs), i, r) == True{}: Bool
 } -> {
   Request.keyed(r, i, q, None{}) == Some{y}: Maybe<&2, Ledgers.Line>
@@ -653,7 +1135,10 @@ def Fresh.request(+fs: List<&2, Types.Fact>, +i: Ledgers.Id, r: Spec.Request, +q
         k => {Line.keyed(fs, k) == None{}: Maybe<&2, Ledgers.Line>},
         q,
         RKnown.Id.code(i),
-        Crits.Key.is_eq_sound(q, RKnown.Id.code(i))(Pick.hit(Crits.Key.is_eq(q, RKnown.Id.code(i)), x, y)(es)),
+        Crits.Key.is_eq_sound(
+          q,
+          RKnown.Id.code(i)
+        )(Pick.hit(Crits.Key.is_eq(q, RKnown.Id.code(i)), x, y)(es)),
         Fresh.id(fs, i)(hf)
       )
     case Spec.Request.Resolve{mm, p, w}:
@@ -684,7 +1169,12 @@ def Fresh.request(+fs: List<&2, Types.Fact>, +i: Ledgers.Id, r: Spec.Request, +q
 
 # facts hold no merge of the key q, when the fact f gives a line of q and
 # gives their lines none for an id that they hold one for
-def Fresh.fact(+fs: List<&2, Types.Fact>, f: Types.Fact, +q: List<&2, U32>, -y: Ledgers.Line) -> {
+def Fresh.fact(
+  +fs: List<&2, Types.Fact>,
+  f: Types.Fact,
+  +q: List<&2, U32>,
+  -y: Ledgers.Line
+) -> {
   RKnown.Mergers.fresh(RKnown.Mergers.of(fs), f) == True{}: Bool
 } -> {
   Fact.keyed(f, q, None{}) == Some{y}: Maybe<&2, Ledgers.Line>
@@ -701,16 +1191,32 @@ def Fresh.fact(+fs: List<&2, Types.Fact>, f: Types.Fact, +q: List<&2, U32>, -y: 
 # the facts with the fact f hold, for the key q, the line that the facts
 # hold, else the line that f gives: when f gives their lines none for an id
 # that they hold one for
-def Line.keyed_insert(+fs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2, U32>) -> {
+def Line.keyed_insert(
+  +fs: List<&2, Types.Fact>,
+  +f: Types.Fact,
+  +q: List<&2, U32>
+) -> {
   RKnown.Mergers.fresh(RKnown.Mergers.of(fs), f) == True{}: Bool
 } -> {
-  Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), q)
-    == Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), Fact.keyed(f, q, None{})): Maybe<&2, Ledgers.Line>
+  Line.keyed(
+    Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f),
+    q
+  )
+    == Maybe.or(
+      &2,
+      Ledgers.Line,
+      Line.keyed(fs, q),
+      Fact.keyed(f, q, None{})
+    ): Maybe<&2, Ledgers.Line>
 }:
   +hf => Lists.Maybe.by(
     Ledgers.Line,
     m => {
-      Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), q) == Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), m): Maybe<&2, Ledgers.Line>
+      Line.keyed(
+        Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f),
+        q
+      )
+        == Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), m): Maybe<&2, Ledgers.Line>
     },
     Fact.keyed(f, q, None{}),
     en => Equal.trans(
@@ -719,12 +1225,21 @@ def Line.keyed_insert(+fs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2, U3
       Line.keyed(fs, q),
       Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), None{}),
       Line.keyed_insert_pass(fs, f, q)(en),
-      Equal.sym(Maybe<&2, Ledgers.Line>, Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), None{}), Line.keyed(fs, q), Orders.Maybe.or_none(Ledgers.Line, Line.keyed(fs, q)))
+      Equal.sym(
+        Maybe<&2, Ledgers.Line>,
+        Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), None{}),
+        Line.keyed(fs, q),
+        Orders.Maybe.or_none(Ledgers.Line, Line.keyed(fs, q))
+      )
     ),
     y => +es => Reads.Eq.back(
       Maybe<&2, Ledgers.Line>,
       m => {
-        Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), q) == Maybe.or(&2, Ledgers.Line, m, Some{y}): Maybe<&2, Ledgers.Line>
+        Line.keyed(
+          Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f),
+          q
+        )
+          == Maybe.or(&2, Ledgers.Line, m, Some{y}): Maybe<&2, Ledgers.Line>
       },
       Line.keyed(fs, q),
       None{},
@@ -742,25 +1257,72 @@ def Line.keyed_insert(+fs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2, U3
 
 # the lines of the facts with the fact f, and the lines of the facts with f
 # put, hold the same under the key q
-def Mergers.insert_at(+fs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2, U32>) -> {
+def Mergers.insert_at(
+  +fs: List<&2, Types.Fact>,
+  +f: Types.Fact,
+  +q: List<&2, U32>
+) -> {
   RKnown.Mergers.fresh(RKnown.Mergers.of(fs), f) == True{}: Bool
 } -> {
-  Orders.Binds.get(Ledgers.Line, Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))), q) == Orders.Binds.get(Ledgers.Line, Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)), q): Maybe<&2, Ledgers.Line>
+  Orders.Binds.get(
+    Ledgers.Line,
+    Crits.Crit.entries(
+      Ledgers.Line,
+      RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))
+    ),
+    q
+  )
+    == Orders.Binds.get(
+      Ledgers.Line,
+      Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)),
+      q
+    ): Maybe<&2, Ledgers.Line>
 }:
   hf => Equal.trans(
     Maybe<&2, Ledgers.Line>,
-    Orders.Binds.get(Ledgers.Line, Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))), q),
-    Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)), q),
-    Orders.Binds.get(Ledgers.Line, Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)), q),
-    Orders.Crit.get_entries(Ledgers.Line, RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)), q),
+    Orders.Binds.get(
+      Ledgers.Line,
+      Crits.Crit.entries(
+        Ledgers.Line,
+        RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))
+      ),
+      q
+    ),
+    Crits.Crit.lookup(
+      Ledgers.Line,
+      RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)),
+      q
+    ),
+    Orders.Binds.get(
+      Ledgers.Line,
+      Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)),
+      q
+    ),
+    Orders.Crit.get_entries(
+      Ledgers.Line,
+      RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)),
+      q
+    ),
     Equal.trans(
       Maybe<&2, Ledgers.Line>,
-      Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)), q),
+      Crits.Crit.lookup(
+        Ledgers.Line,
+        RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)),
+        q
+      ),
       Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), Fact.keyed(f, q, None{})),
-      Orders.Binds.get(Ledgers.Line, Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)), q),
+      Orders.Binds.get(
+        Ledgers.Line,
+        Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)),
+        q
+      ),
       Equal.trans(
         Maybe<&2, Ledgers.Line>,
-        Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)), q),
+        Crits.Crit.lookup(
+          Ledgers.Line,
+          RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)),
+          q
+        ),
         Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), q),
         Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), Fact.keyed(f, q, None{})),
         Mergers.of_lookup(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), q),
@@ -768,18 +1330,31 @@ def Mergers.insert_at(+fs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2, U3
       ),
       Equal.sym(
         Maybe<&2, Ledgers.Line>,
-        Orders.Binds.get(Ledgers.Line, Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)), q),
+        Orders.Binds.get(
+          Ledgers.Line,
+          Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)),
+          q
+        ),
         Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), Fact.keyed(f, q, None{})),
         Equal.trans(
           Maybe<&2, Ledgers.Line>,
-          Orders.Binds.get(Ledgers.Line, Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)), q),
+          Orders.Binds.get(
+            Ledgers.Line,
+            Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)),
+            q
+          ),
           Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f), q),
           Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), Fact.keyed(f, q, None{})),
           Orders.Crit.get_entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f), q),
           Equal.trans(
             Maybe<&2, Ledgers.Line>,
             Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f), q),
-            Maybe.or(&2, Ledgers.Line, Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.of(fs), q), Fact.keyed(f, q, None{})),
+            Maybe.or(
+              &2,
+              Ledgers.Line,
+              Crits.Crit.lookup(Ledgers.Line, RKnown.Mergers.of(fs), q),
+              Fact.keyed(f, q, None{})
+            ),
             Maybe.or(&2, Ledgers.Line, Line.keyed(fs, q), Fact.keyed(f, q, None{})),
             Mergers.step_lookup(RKnown.Mergers.of(fs), f, q)(Mergers.of_wf(fs)),
             Equal.cong(
@@ -799,9 +1374,20 @@ def Mergers.insert_at(+fs: List<&2, Types.Fact>, +f: Types.Fact, +q: List<&2, U3
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the lines of the facts with the fact f, and the lines of the facts with f
 # put, hold the same under the key of each of the entries es
-def Mergers.insert_same(es: List<&2, Crits.Bind<Ledgers.Line>>, +fs: List<&2, Types.Fact>, +f: Types.Fact, +hf: {
-  RKnown.Mergers.fresh(RKnown.Mergers.of(fs), f) == True{}: Bool
-}) -> Orders.Binds.Same(Ledgers.Line, es, Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))), Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f))):
+def Mergers.insert_same(
+  es: List<&2, Crits.Bind<Ledgers.Line>>,
+  +fs: List<&2, Types.Fact>,
+  +f: Types.Fact,
+  +hf: {RKnown.Mergers.fresh(RKnown.Mergers.of(fs), f) == True{}: Bool}
+) -> Orders.Binds.Same(
+  Ledgers.Line,
+  es,
+  Crits.Crit.entries(
+    Ledgers.Line,
+    RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))
+  ),
+  Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f))
+):
   match es:
     case Nil{}:
       Unit{}
@@ -812,9 +1398,17 @@ def Mergers.insert_same(es: List<&2, Crits.Bind<Ledgers.Line>>, +fs: List<&2, Ty
 # the lines of the merges of the facts with the fact f are the lines of the
 # facts with f put: when f gives them no line for an id that they hold one
 # for
-def Mergers.of_insert(+fs: List<&2, Types.Fact>, +f: Types.Fact) -> {
+def Mergers.of_insert(
+  +fs: List<&2, Types.Fact>,
+  +f: Types.Fact
+) -> {
   RKnown.Mergers.fresh(RKnown.Mergers.of(fs), f) == True{}: Bool
-} -> {RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)) == RKnown.Mergers.step(RKnown.Mergers.of(fs), f): Crits.Crit<Ledgers.Line>}:
+} -> {
+  RKnown.Mergers.of(
+    Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)
+  )
+    == RKnown.Mergers.step(RKnown.Mergers.of(fs), f): Crits.Crit<Ledgers.Line>
+}:
   +hf => Crits.Crit.ext(
     ~Ledgers.Line,
     RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)),
@@ -826,16 +1420,38 @@ def Mergers.of_insert(+fs: List<&2, Types.Fact>, +f: Types.Fact) -> {
   )(
     Orders.Binds.ext(
       ~Ledgers.Line,
-      Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))),
+      Crits.Crit.entries(
+        Ledgers.Line,
+        RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))
+      ),
       Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f))
     )(
-      Orders.Crit.entries_sorted(~Ledgers.Line, RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)))(Mergers.of_wf(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)))
+      Orders.Crit.entries_sorted(
+        ~Ledgers.Line,
+        RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))
+      )(Mergers.of_wf(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f)))
     )(
-      Orders.Crit.entries_sorted(~Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f))(Mergers.step_wf(RKnown.Mergers.of(fs), f)(Mergers.of_wf(fs)))
+      Orders.Crit.entries_sorted(
+        ~Ledgers.Line,
+        RKnown.Mergers.step(RKnown.Mergers.of(fs), f)
+      )(Mergers.step_wf(RKnown.Mergers.of(fs), f)(Mergers.of_wf(fs)))
     )(
-      Mergers.insert_same(Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))), fs, f, hf)
+      Mergers.insert_same(
+        Crits.Crit.entries(
+          Ledgers.Line,
+          RKnown.Mergers.of(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f))
+        ),
+        fs,
+        f,
+        hf
+      )
     )(
-      Mergers.insert_same(Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)), fs, f, hf)
+      Mergers.insert_same(
+        Crits.Crit.entries(Ledgers.Line, RKnown.Mergers.step(RKnown.Mergers.of(fs), f)),
+        fs,
+        f,
+        hf
+      )
     )
   )
 
@@ -843,7 +1459,11 @@ def Mergers.of_insert(+fs: List<&2, Types.Fact>, +f: Types.Fact) -> {
 # -----------------------
 
 # a request that is no merge gives no line
-def Request.keyed_plain(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>) -> {
+def Request.keyed_plain(
+  r: Spec.Request,
+  j: Ledgers.Id,
+  q: List<&2, U32>
+) -> {
   RKnown.Request.merges(r) == False{}: Bool
 } -> {Request.keyed(r, j, q, None{}) == None{}: Maybe<&2, Ledgers.Line>}:
   match r:
@@ -852,7 +1472,10 @@ def Request.keyed_plain(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>) -> {
     case Spec.Request.Write{b, p, w}:
       h => {==}
     case Spec.Request.Merge{ff, x}:
-      h => Empty.absurd({Request.keyed(Spec.Request.Merge{ff, x}, j, q, None{}) == None{}: Maybe<&2, Ledgers.Line>}, Shared.Bool.true_ne_false(h))
+      h => Empty.absurd(
+        {Request.keyed(Spec.Request.Merge{ff, x}, j, q, None{}) == None{}: Maybe<&2, Ledgers.Line>},
+        Shared.Bool.true_ne_false(h)
+      )
     case Spec.Request.Resolve{mm, p, w}:
       h => {==}
     case Spec.Request.Mark{b, mk, v}:
@@ -865,7 +1488,10 @@ def Request.keyed_plain(r: Spec.Request, j: Ledgers.Id, q: List<&2, U32>) -> {
       h => {==}
 
 # a fact that is no ask of a merge gives no line
-def Fact.keyed_plain(f: Types.Fact, q: List<&2, U32>) -> {
+def Fact.keyed_plain(
+  f: Types.Fact,
+  q: List<&2, U32>
+) -> {
   RKnown.Fact.merges(f) == False{}: Bool
 } -> {Fact.keyed(f, q, None{}) == None{}: Maybe<&2, Ledgers.Line>}:
   match f:
@@ -876,15 +1502,30 @@ def Fact.keyed_plain(f: Types.Fact, q: List<&2, U32>) -> {
 
 # a fact that is no ask of a merge, put among facts, leaves the line of each
 # merge as it was
-def Merge.line_insert_pass(+fs: List<&2, Types.Fact>, +f: Types.Fact, +i: Ledgers.Id) -> {
+def Merge.line_insert_pass(
+  +fs: List<&2, Types.Fact>,
+  +f: Types.Fact,
+  +i: Ledgers.Id
+) -> {
   RKnown.Fact.merges(f) == False{}: Bool
-} -> {RKnown.Merge.line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i) == RKnown.Merge.line(fs, i): Maybe<&2, Ledgers.Line>}:
+} -> {
+  RKnown.Merge.line(
+    Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f),
+    i
+  )
+    == RKnown.Merge.line(fs, i): Maybe<&2, Ledgers.Line>
+}:
   h => Equal.trans(
     Maybe<&2, Ledgers.Line>,
     RKnown.Merge.line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i),
     Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), RKnown.Id.code(i)),
     RKnown.Merge.line(fs, i),
-    Equal.sym(Maybe<&2, Ledgers.Line>, Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), RKnown.Id.code(i)), RKnown.Merge.line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i), Line.keyed_line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i)),
+    Equal.sym(
+      Maybe<&2, Ledgers.Line>,
+      Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), RKnown.Id.code(i)),
+      RKnown.Merge.line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i),
+      Line.keyed_line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i)
+    ),
     Equal.trans(
       Maybe<&2, Ledgers.Line>,
       Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), RKnown.Id.code(i)),
@@ -897,29 +1538,65 @@ def Merge.line_insert_pass(+fs: List<&2, Types.Fact>, +f: Types.Fact, +i: Ledger
 
 # a fact put among facts leaves the line that they hold for a merge: when it
 # gives their lines none for an id that they hold one for
-def Merge.line_insert_keep(+fs: List<&2, Types.Fact>, +f: Types.Fact, +i: Ledgers.Id, +c: Ledgers.Line) -> {
+def Merge.line_insert_keep(
+  +fs: List<&2, Types.Fact>,
+  +f: Types.Fact,
+  +i: Ledgers.Id,
+  +c: Ledgers.Line
+) -> {
   RKnown.Mergers.fresh(RKnown.Mergers.of(fs), f) == True{}: Bool
 } -> {
   RKnown.Merge.line(fs, i) == Some{c}: Maybe<&2, Ledgers.Line>
-} -> {RKnown.Merge.line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i) == Some{c}: Maybe<&2, Ledgers.Line>}:
+} -> {
+  RKnown.Merge.line(
+    Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f),
+    i
+  )
+    == Some{c}: Maybe<&2, Ledgers.Line>
+}:
   hf => es => Equal.trans(
     Maybe<&2, Ledgers.Line>,
     RKnown.Merge.line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i),
     Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), RKnown.Id.code(i)),
     Some{c},
-    Equal.sym(Maybe<&2, Ledgers.Line>, Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), RKnown.Id.code(i)), RKnown.Merge.line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i), Line.keyed_line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i)),
+    Equal.sym(
+      Maybe<&2, Ledgers.Line>,
+      Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), RKnown.Id.code(i)),
+      RKnown.Merge.line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i),
+      Line.keyed_line(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), i)
+    ),
     Equal.trans(
       Maybe<&2, Ledgers.Line>,
       Line.keyed(Orders.Values.insert(~Types.Fact, ~Coded.Fact.words, fs, f), RKnown.Id.code(i)),
-      Maybe.or(&2, Ledgers.Line, Line.keyed(fs, RKnown.Id.code(i)), Fact.keyed(f, RKnown.Id.code(i), None{})),
+      Maybe.or(
+        &2,
+        Ledgers.Line,
+        Line.keyed(fs, RKnown.Id.code(i)),
+        Fact.keyed(f, RKnown.Id.code(i), None{})
+      ),
       Some{c},
       Line.keyed_insert(fs, f, RKnown.Id.code(i))(hf),
       Reads.Eq.back(
         Maybe<&2, Ledgers.Line>,
-        m => {Maybe.or(&2, Ledgers.Line, m, Fact.keyed(f, RKnown.Id.code(i), None{})) == Some{c}: Maybe<&2, Ledgers.Line>},
+        m => {
+          Maybe.or(
+            &2,
+            Ledgers.Line,
+            m,
+            Fact.keyed(f, RKnown.Id.code(i), None{})
+          )
+            == Some{c}: Maybe<&2, Ledgers.Line>
+        },
         Line.keyed(fs, RKnown.Id.code(i)),
         Some{c},
-        Equal.trans(Maybe<&2, Ledgers.Line>, Line.keyed(fs, RKnown.Id.code(i)), RKnown.Merge.line(fs, i), Some{c}, Line.keyed_line(fs, i), es),
+        Equal.trans(
+          Maybe<&2, Ledgers.Line>,
+          Line.keyed(fs, RKnown.Id.code(i)),
+          RKnown.Merge.line(fs, i),
+          Some{c},
+          Line.keyed_line(fs, i),
+          es
+        ),
         {==}
       )
     )

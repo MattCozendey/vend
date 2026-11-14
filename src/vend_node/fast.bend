@@ -1095,9 +1095,11 @@ def Table.voted_fit(
         )
       )(
         Knowns.Voted.moved_ok(kn, name, s, c, k, t, x)(h)
-      )(Knowns.Voted.top(kn, name, s, c, k, t, x)(h))(Knowns.Voted.tops(kn, name, s, c, k, t, x)(h))(
-        Knowns.Voted.merges(kn, name, s, c, k, t, x)(h)
-      )
+      )(
+        Knowns.Voted.top(kn, name, s, c, k, t, x)(h)
+      )(
+        Knowns.Voted.tops(kn, name, s, c, k, t, x)(h)
+      )(Knowns.Voted.merges(kn, name, s, c, k, t, x)(h))
 
 # the table kn after a work of the node name on the facts s casts the ballot
 # m, if any (as Works.Work.cast does: not when s holds a ballot of the node

@@ -575,10 +575,7 @@ def Mergers.step(mx: Crits.Crit<Ledgers.Line>, f: Types.Fact) -> Crits.Crit<Ledg
       Mergers.put(mx, i, r)
 
 # the lines mx of merges with each of the facts fs, in their order
-def Mergers.go(
-  fs: List<&2, Types.Fact>,
-  mx: Crits.Crit<Ledgers.Line>
-) -> Crits.Crit<Ledgers.Line>:
+def Mergers.go(fs: List<&2, Types.Fact>, mx: Crits.Crit<Ledgers.Line>) -> Crits.Crit<Ledgers.Line>:
   match fs:
     case Nil{}:
       mx
@@ -965,7 +962,12 @@ def Line.waits(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, i: Ledgers.Id)
 
 # the request of the id i, that resolves a merge of the line m, if the node
 # holds an ask of the merge, waits: it made no version of the line
-def Resolve.waits(m: Maybe<&2, Ledgers.Line>, +kn: Known(), +s: Facts.Plain(), i: Ledgers.Id) -> Bool:
+def Resolve.waits(
+  m: Maybe<&2, Ledgers.Line>,
+  +kn: Known(),
+  +s: Facts.Plain(),
+  i: Ledgers.Id
+) -> Bool:
   match m:
     case None{}:
       True{}
@@ -1036,7 +1038,12 @@ def Fact.merges(f: Types.Fact) -> Bool:
 # the facts fs that a work may act on, with the fact f if a work may act on
 # it in the scene g: when f is the ask of a merge, a request among fs that
 # resolves it may wait no more, so each of fs is tested again
-def Open.join(merges: Bool, +fs: List<&2, Types.Fact>, +f: Types.Fact, +g: Scene) -> List<&2, Types.Fact>:
+def Open.join(
+  merges: Bool,
+  +fs: List<&2, Types.Fact>,
+  +f: Types.Fact,
+  +g: Scene
+) -> List<&2, Types.Fact>:
   match merges:
     case True{}:
       Open.of(Open.with(fs, f, g), g)

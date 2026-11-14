@@ -61,10 +61,15 @@ Measured, native build, one node, one owner:
 - One branch, from 160 to 5120 writes, per call: an ask 0.07 ms, a view 0.03 ms, a status
   0.04 ms, a read 0.015 ms: all flat. A Work that casts: 0.24 to 0.68 ms. 5120 writes, each with a
   Work: 3 s. 50 branches and two writers, 400 to 6400 writes: all flat (a cast 0.5 ms).
-- Still growing: a cast appends to the oldest-first list of versions; merge and resolve asks never
-  leave the open list (11 us per such ask per Work); a merge and its status walk every path of the
-  three sides (not only the changed ones); the table is a list by line; a Sync that adds facts, a
-  Start and a ballot on a store line drop the table.
+- Merges: a merge whose base is an earlier version of the line it takes from, with only writes
+  between, folds only the written paths (`merges.bend`); merge and resolve asks leave the open
+  list once they made a version (`mergers.bend`). Two branches, a merge and a resolve every 20
+  writes, 40 to 320 writes: a merge with its Work 0.35 to 0.8 ms (was 6 to 9.6), its status
+  0.15 to 0.2 ms (was 2.6 to 4), an idle Work under 0.05 ms (was 0.1 to 1.4).
+- Still growing: a cast appends to the oldest-first list of versions (0.2 ms at 160 writes, 0.7
+  at 5120); `Pins.merge` scans the versions of both lines; a merge of another shape walks every
+  path; the table is a list by line; a Sync that adds facts, a Start and a ballot on a store line
+  drop the table; crit reads and writes walk bits.
 
 ## Lint
 
