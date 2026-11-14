@@ -34,13 +34,33 @@ def Turn.go(k: Nat, +x: String, +ns: List<&2, String>, y: String, r: List<&2, St
     case 1n+j Con{z, r2}:
       Turn.go(j, x, ns, z, r2)
 
-# the node among ns whose turn the number k is
-def Turn.of(ns: List<&2, String>, k: Nat) -> String:
+# the node among ns whose turn the number k is, by a walk of k steps: a
+# clear def, for the laws
+def Turn.walk(ns: List<&2, String>, k: Nat) -> String:
   match ns:
     case Nil{}:
       ""
     case Con{+x, +r}:
       Turn.go(k, x, r, x, r)
+
+# the node at the place j among ns; "" when ns ends before
+def Turn.nth(ns: List<&2, String>, j: Nat) -> String:
+  match ns j:
+    case Nil{} j2:
+      ""
+    case Con{y, r} 0n:
+      y
+    case Con{y, r} 1n+p:
+      Turn.nth(r, p)
+
+# the node among ns whose turn the number k is: the one at the place of k
+# in a round, with no walk (rounds.bend proves that it is Turn.walk)
+def Turn.of(ns: List<&2, String>, k: Nat) -> String:
+  match ns:
+    case Nil{}:
+      ""
+    case Con{x, +r}:
+      Turn.nth(x <> r, Nat.mod(k, 1n+List.length(&2, String, r)))
 
 # The ballots of a slot
 # ---------------------

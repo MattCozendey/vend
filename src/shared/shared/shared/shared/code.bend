@@ -135,9 +135,31 @@ def Code.count.go(+n: Nat, c: U32, +r: List<&2, U32>) -> List<&2, U32>:
         u => Code.count.go(p, d, r)
       )
 
-# the count n, then r
+# the count n, then r: the token x when n is a number below the top that x
+# holds (one), else read digit by digit
+def Code.count.if(one: Bool, n: Nat, x: U32, r: List<&2, U32>) -> List<&2, U32>:
+  match one:
+    case True{}:
+      x <> r
+    case False{}:
+      Code.count.go(n, 0, r)
+
+# the token x holds the number n, and is below the top
+def Code.count.fits(n: Nat, +x: U32) -> Bool:
+  Bool.and(Nat.is_eq(U32.to_nat(x), n), Bool.not(U32.is_eq(x, 4294967295)))
+
+# the count n, then r, where x is the token of n
+def Code.count.of(+n: Nat, +x: U32, r: List<&2, U32>) -> List<&2, U32>:
+  Code.count.if(Code.count.fits(n, x), n, x, r)
+
+# the count n, then r, with n used more than once
+def Code.count.one(+n: Nat, r: List<&2, U32>) -> List<&2, U32>:
+  Code.count.of(n, U32.from_nat(n), r)
+
+# the count n, then r: a number below the top is one token, with no walk
+# (Code.count_go)
 def Code.count(n: Nat, r: List<&2, U32>) -> List<&2, U32>:
-  Code.count.go(n, 0, r)
+  Code.count.one(n, r)
 
 # a count
 def Code.count.read(ts: List<&2, U32>) -> Maybe<&2, Read<Nat>>:
@@ -361,11 +383,310 @@ def Code.five.read(
   mk: A -> B -> C -> D -> E -> T,
   ts: List<&2, U32>
 ) -> Maybe<&2, Read<T>>:
-  Read.then(A, T, da(ts), a => r => Code.four.read(~B, ~C, ~D, ~E, ~T, ~db, ~dc, ~dd, ~de, mk(a), r))
+  Read.then(
+    A,
+    T,
+    da(ts),
+    a => r => Code.four.read(~B, ~C, ~D, ~E, ~T, ~db, ~dc, ~dd, ~de, mk(a), r)
+  )
 
 # Laws
 # ----
 
+# the digit c, n steps on
+def Count.jump(n: Nat, c: U32) -> U32:
+  match n:
+    case 0n:
+      c
+    case 1n+p:
+      Count.jump(p, U32.inc(c))
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this is said only in laws, and never runs
+# no step from the digit c to n steps on reaches the top
+def Count.clear(n: Nat, +c: U32) -> Bool:
+  match n:
+    case 0n:
+      True{}
+    case 1n+p:
+      Bool.and(Bool.not(U32.is_eq(U32.inc(c), 4294967295)), Count.clear(p, U32.inc(c)))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# Unit of a successor, Empty of zero: what tells them apart
+def Count.zero_ne.Of(n: Nat) -> Type:
+  match n:
+    case 0n:
+      Empty
+    case 1n+p:
+      Unit
+
+# zero is no successor
+def Count.zero_ne(-j: Nat, e: {0n == 1n+j: Nat}) -> Empty:
+  %Equal.sym(Nat, 0n, 1n+j, e): Count.zero_ne.Of(_)
+  Unit{}
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a token that holds one more than j comes after a token below the top
+def Count.below.at(
+  j: Nat,
+  b: Bool,
+  eb: {U32.is_eq(U32.from_nat(j), 4294967295) == b: Bool},
+  h: {U32.to_nat(U32.from_nat(1n+j)) == 1n+j: Nat}
+) -> {U32.is_eq(U32.from_nat(j), 4294967295) == False{}: Bool}:
+  match b:
+    case False{}:
+      eb
+    case True{}:
+      Empty.absurd(
+        {U32.is_eq(U32.from_nat(j), 4294967295) == False{}: Bool},
+        Count.zero_ne(
+          j,
+          Equal.trans(
+            Nat,
+            0n,
+            U32.to_nat(U32.inc(U32.from_nat(j))),
+            1n+j,
+            Equal.cong(
+              U32,
+              Nat,
+              x => U32.to_nat(U32.inc(x)),
+              4294967295,
+              U32.from_nat(j),
+              Equal.sym(
+                U32,
+                U32.from_nat(j),
+                4294967295,
+                Shared.U32.is_eq_sound(U32.from_nat(j), 4294967295)(eb)
+              )
+            ),
+            h
+          )
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a token that holds one more than j comes after a token below the top
+def Count.below(
+  +j: Nat
+) -> {
+  U32.to_nat(U32.from_nat(1n+j)) == 1n+j: Nat
+} -> {U32.is_eq(U32.from_nat(j), 4294967295) == False{}: Bool}:
+  h => Count.below.at(j, U32.is_eq(U32.from_nat(j), 4294967295), {==}, h)
+
+# the number before n
+def Count.pred(n: Nat) -> Nat:
+  match n:
+    case 0n:
+      0n
+    case 1n+p:
+      p
+
+# a token that holds one more than j comes after a token that holds j
+def Count.down(
+  +j: Nat
+) -> {U32.to_nat(U32.from_nat(1n+j)) == 1n+j: Nat} -> {U32.to_nat(U32.from_nat(j)) == j: Nat}:
+  +h => Equal.cong(
+    Nat,
+    Nat,
+    Count.pred,
+    1n+U32.to_nat(U32.from_nat(j)),
+    1n+j,
+    Equal.trans(
+      Nat,
+      1n+U32.to_nat(U32.from_nat(j)),
+      U32.to_nat(U32.inc(U32.from_nat(j))),
+      1n+j,
+      Equal.sym(
+        Nat,
+        U32.to_nat(U32.inc(U32.from_nat(j))),
+        1n+U32.to_nat(U32.from_nat(j)),
+        Shared.U32.inc_to_nat(U32.from_nat(j))(Count.below(j)(h))
+      ),
+      h
+    )
+  )
+
+# a token that holds a + b comes after a token that holds b
+def Count.under(
+  a: Nat,
+  +b: Nat
+) -> {
+  U32.to_nat(U32.from_nat(Nat.add(a, b))) == Nat.add(a, b): Nat
+} -> {U32.to_nat(U32.from_nat(b)) == b: Nat}:
+  match a:
+    case 0n:
+      h => h
+    case 1n+p:
+      +p = p
+      h => Count.under(p, b)(Count.down(Nat.add(p, b))(h))
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# a token that holds a + b, below the top, comes after a token below the top
+def Count.under_top(
+  a: Nat,
+  +b: Nat
+) -> {
+  U32.to_nat(U32.from_nat(Nat.add(a, b))) == Nat.add(a, b): Nat
+} -> {
+  U32.is_eq(U32.from_nat(Nat.add(a, b)), 4294967295) == False{}: Bool
+} -> {U32.is_eq(U32.from_nat(b), 4294967295) == False{}: Bool}:
+  match a:
+    case 0n:
+      h => t => t
+    case 1n+p:
+      +p = p
+      +h => t => Count.under_top(p, b)(Count.down(Nat.add(p, b))(h))(Count.below(Nat.add(p, b))(h))
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# no step from a token that holds m reaches the top, when the token n steps
+# on holds n + m, below the top
+def Count.clear_from(
+  n: Nat,
+  +m: Nat
+) -> {
+  U32.to_nat(U32.from_nat(Nat.add(n, m))) == Nat.add(n, m): Nat
+} -> {
+  U32.is_eq(U32.from_nat(Nat.add(n, m)), 4294967295) == False{}: Bool
+} -> {Count.clear(n, U32.from_nat(m)) == True{}: Bool}:
+  match n:
+    case 0n:
+      h => t => {==}
+    case 1n+p:
+      +p = p
+      +h => +t =>
+        +h2 = {(
+            %Equal.sym(Nat, Nat.add(p, 1n+m), 1n+Nat.add(p, m), Shared.Nat.add_succ(p, m)): {U32.to_nat(U32.from_nat(_)) == _: Nat}
+            h): {U32.to_nat(U32.from_nat(Nat.add(p, 1n+m))) == Nat.add(p, 1n+m): Nat}}
+        +t2 = {(
+            %Equal.sym(Nat, Nat.add(p, 1n+m), 1n+Nat.add(p, m), Shared.Nat.add_succ(p, m)): {U32.is_eq(U32.from_nat(_), 4294967295) == False{}: Bool}
+            t): {U32.is_eq(U32.from_nat(Nat.add(p, 1n+m)), 4294967295) == False{}: Bool}}
+        Shared.Bool.and_both(
+          Bool.not(U32.is_eq(U32.from_nat(1n+m), 4294967295)),
+          Count.clear(p, U32.from_nat(1n+m))
+        )(
+          %Equal.sym(Bool, U32.is_eq(U32.from_nat(1n+m), 4294967295), False{}, Count.under_top(p, 1n+m)(h2)(t2)): {Bool.not(_) == True{}: Bool}
+          {==})(Count.clear_from(p, 1n+m)(h2)(t2))
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# n steps on from a token of m is a token of n + m
+def Count.jump_from(
+  n: Nat,
+  +m: Nat
+) -> {Count.jump(n, U32.from_nat(m)) == U32.from_nat(Nat.add(n, m)): U32}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      +p = p
+      %Shared.Nat.add_succ(p, m): {Count.jump(p, U32.from_nat(1n+m)) == U32.from_nat(_): U32}
+      Count.jump_from(p, 1n+m)
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# a count whose steps do not reach the top is one token
+def Count.go_clear(
+  n: Nat,
+  +c: U32,
+  r: List<&2, U32>
+) -> {
+  Count.clear(n, c) == True{}: Bool
+} -> {Code.count.go(n, c, r) == Count.jump(n, c) <> r: List<&2, U32>}:
+  match n:
+    case 0n:
+      h => {==}
+    case 1n+p:
+      +p = p
+      +h =>
+        %Equal.sym(
+          Bool,
+          U32.is_eq(U32.inc(c), 4294967295),
+          False{},
+          Shared.Bool.not_true(
+            U32.is_eq(U32.inc(c), 4294967295)
+          )(
+            Shared.Bool.and_true_left(
+              Bool.not(U32.is_eq(U32.inc(c), 4294967295)),
+              Count.clear(p, U32.inc(c))
+            )(h)
+          )
+        ): {
+          Shared.Bool.when(
+            List<&2, U32>,
+            _,
+            u => U32.inc(c) <> Code.count.go(p, 0, r),
+            u => Code.count.go(p, U32.inc(c), r)
+          )
+            == Count.jump(p, U32.inc(c))
+            <> r: List<&2, U32>
+        }
+        Count.go_clear(
+          p,
+          U32.inc(c),
+          r
+        )(
+          Shared.Bool.and_true_right(
+            Bool.not(U32.is_eq(U32.inc(c), 4294967295)),
+            Count.clear(p, U32.inc(c))
+          )(h)
+        )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Code.count_go, once it is known whether n is one token (one)
+def Code.count_go.at(
+  +n: Nat,
+  r: List<&2, U32>,
+  one: Bool,
+  e: {Code.count.fits(n, U32.from_nat(n)) == one: Bool}
+) -> {Code.count.if(one, n, U32.from_nat(n), r) == Code.count.go(n, 0, r): List<&2, U32>}:
+  match one:
+    case False{}:
+      {==}
+    case True{}:
+      +e = e
+      h = {(
+          %Equal.sym(Nat, Nat.add(n, 0n), n, Shared.Nat.add_zero(n)): {U32.to_nat(U32.from_nat(_)) == _: Nat}
+          Shared.Nat.is_eq_sound(U32.to_nat(U32.from_nat(n)), n)(Shared.Bool.and_true_left(Nat.is_eq(U32.to_nat(U32.from_nat(n)), n), Bool.not(U32.is_eq(U32.from_nat(n), 4294967295)))(e))): {U32.to_nat(U32.from_nat(Nat.add(n, 0n))) == Nat.add(n, 0n): Nat}}
+      t = {(
+          %Equal.sym(Nat, Nat.add(n, 0n), n, Shared.Nat.add_zero(n)): {U32.is_eq(U32.from_nat(_), 4294967295) == False{}: Bool}
+          Shared.Bool.not_true(U32.is_eq(U32.from_nat(n), 4294967295))(Shared.Bool.and_true_right(Nat.is_eq(U32.to_nat(U32.from_nat(n)), n), Bool.not(U32.is_eq(U32.from_nat(n), 4294967295)))(e))): {U32.is_eq(U32.from_nat(Nat.add(n, 0n)), 4294967295) == False{}: Bool}}
+      Equal.sym(
+        List<&2, U32>,
+        Code.count.go(n, 0, r),
+        U32.from_nat(n) <> r,
+        Equal.trans(
+          List<&2, U32>,
+          Code.count.go(n, 0, r),
+          Count.jump(n, 0) <> r,
+          U32.from_nat(n) <> r,
+          Count.go_clear(n, 0, r)(Count.clear_from(n, 0n)(h)(t)),
+          Equal.cong(
+            U32,
+            List<&2, U32>,
+            x => x <> r,
+            Count.jump(n, 0),
+            U32.from_nat(n),
+            Equal.trans(
+              U32,
+              Count.jump(n, 0),
+              U32.from_nat(Nat.add(n, 0n)),
+              U32.from_nat(n),
+              Count.jump_from(n, 0n),
+              Equal.cong(Nat, U32, U32.from_nat, Nat.add(n, 0n), n, Shared.Nat.add_zero(n))
+            )
+          )
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a count is its digits, read one by one: one token for a number below the
+# top
+def Code.count_go(
+  +n: Nat,
+  r: List<&2, U32>
+) -> {Code.count(n, r) == Code.count.go(n, 0, r): List<&2, U32>}:
+  Code.count_go.at(n, r, Code.count.fits(n, U32.from_nat(n)), {==})
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
 # bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # Code.count_read.go one digit on, once it is known whether c + 1 is the top
 # (b); ih is the law for the rest p
@@ -376,8 +697,12 @@ def Code.count_read.next(
   h: {U32.is_eq(c, 4294967295) == False{}: Bool},
   b: Bool,
   eb: {U32.is_eq(U32.inc(c), 4294967295) == b: Bool},
-  ih: @d: U32 -> {U32.is_eq(d, 4294967295) == False{}: Bool} -> {
-    Code.count.read(Code.count.go(p, d, r))
+  ih: @d: U32 -> {
+    U32.is_eq(d, 4294967295) == False{}: Bool
+  } -> {
+    Code.count.read(
+      Code.count.go(p, d, r)
+    )
       == Some{Read{Nat.add(U32.to_nat(d), p), r}}: Maybe<&2, Read<Nat>>
   }
 ) -> {
@@ -393,13 +718,33 @@ def Code.count_read.next(
 }:
   match b:
     case True{}:
-      %Equal.sym(Nat, Nat.add(U32.to_nat(c), 1n+p), 1n+Nat.add(U32.to_nat(c), p), Shared.Nat.add_succ(U32.to_nat(c), p)): {
-        Code.count.read(U32.inc(c) <> Code.count.go(p, 0, r)) == Some{Read{_, r}}: Maybe<&2, Read<Nat>>
+      %Equal.sym(
+        Nat,
+        Nat.add(U32.to_nat(c), 1n+p),
+        1n+Nat.add(U32.to_nat(c), p),
+        Shared.Nat.add_succ(U32.to_nat(c), p)
+      ): {
+        Code.count.read(
+          U32.inc(c) <> Code.count.go(p, 0, r)
+        )
+          == Some{Read{_, r}}: Maybe<&2, Read<Nat>>
       }
-      %Shared.U32.inc_to_nat(c)(h): {
-        Code.count.read(U32.inc(c) <> Code.count.go(p, 0, r)) == Some{Read{Nat.add(_, p), r}}: Maybe<&2, Read<Nat>>
+      %Shared.U32.inc_to_nat(
+        c
+      )(
+        h
+      ): {
+        Code.count.read(
+          U32.inc(c) <> Code.count.go(p, 0, r)
+        )
+          == Some{Read{Nat.add(_, p), r}}: Maybe<&2, Read<Nat>>
       }
-      %Equal.sym(Bool, U32.is_eq(U32.inc(c), 4294967295), True{}, eb): {
+      %Equal.sym(
+        Bool,
+        U32.is_eq(U32.inc(c), 4294967295),
+        True{},
+        eb
+      ): {
         Shared.Bool.when(
           Maybe<&2, Read<Nat>>,
           _,
@@ -429,13 +774,26 @@ def Code.count_read.next(
       }
       {==}
     case False{}:
-      %Equal.sym(Nat, Nat.add(U32.to_nat(c), 1n+p), 1n+Nat.add(U32.to_nat(c), p), Shared.Nat.add_succ(U32.to_nat(c), p)): {
+      %Equal.sym(
+        Nat,
+        Nat.add(U32.to_nat(c), 1n+p),
+        1n+Nat.add(U32.to_nat(c), p),
+        Shared.Nat.add_succ(U32.to_nat(c), p)
+      ): {
         Code.count.read(Code.count.go(p, U32.inc(c), r)) == Some{Read{_, r}}: Maybe<&2, Read<Nat>>
       }
-      %Shared.U32.inc_to_nat(c)(h): {
-        Code.count.read(Code.count.go(p, U32.inc(c), r)) == Some{Read{Nat.add(_, p), r}}: Maybe<&2, Read<Nat>>
+      %Shared.U32.inc_to_nat(
+        c
+      )(
+        h
+      ): {
+        Code.count.read(
+          Code.count.go(p, U32.inc(c), r)
+        )
+          == Some{Read{Nat.add(_, p), r}}: Maybe<&2, Read<Nat>>
       }
       ih(U32.inc(c))(eb)
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a count from the digit c, below the top, reads back as c and n
 def Code.count_read.go(
@@ -444,15 +802,25 @@ def Code.count_read.go(
   +r: List<&2, U32>,
   h: {U32.is_eq(c, 4294967295) == False{}: Bool}
 ) -> {
-  Code.count.read(Code.count.go(n, c, r))
+  Code.count.read(
+    Code.count.go(n, c, r)
+  )
     == Some{Read{Nat.add(U32.to_nat(c), n), r}}: Maybe<&2, Read<Nat>>
 }:
   match n:
     case 0n:
-      %Equal.sym(Nat, Nat.add(U32.to_nat(c), 0n), U32.to_nat(c), Shared.Nat.add_zero(U32.to_nat(c))): {
-        Code.count.read(c <> r) == Some{Read{_, r}}: Maybe<&2, Read<Nat>>
-      }
-      %Equal.sym(Bool, U32.is_eq(c, 4294967295), False{}, h): {
+      %Equal.sym(
+        Nat,
+        Nat.add(U32.to_nat(c), 0n),
+        U32.to_nat(c),
+        Shared.Nat.add_zero(U32.to_nat(c))
+      ): {Code.count.read(c <> r) == Some{Read{_, r}}: Maybe<&2, Read<Nat>>}
+      %Equal.sym(
+        Bool,
+        U32.is_eq(c, 4294967295),
+        False{},
+        h
+      ): {
         Shared.Bool.when(
           Maybe<&2, Read<Nat>>,
           _,
@@ -486,7 +854,13 @@ def Code.count_append.next(
   +x: List<&2, U32>,
   b: Bool,
   ih: @d: U32 -> {
-    List.append(&2, U32, Code.count.go(p, d, r), x) == Code.count.go(p, d, List.append(&2, U32, r, x)): List<&2, U32>
+    List.append(
+      &2,
+      U32,
+      Code.count.go(p, d, r),
+      x
+    )
+      == Code.count.go(p, d, List.append(&2, U32, r, x)): List<&2, U32>
   }
 ) -> {
   List.append(
@@ -514,7 +888,14 @@ def Code.count_append.next(
         List.append(&2, U32, Code.count.go(p, 0, r), x),
         Code.count.go(p, 0, List.append(&2, U32, r, x)),
         ih(0)
-      ): {U32.inc(c) <> _ == U32.inc(c) <> Code.count.go(p, 0, List.append(&2, U32, r, x)): List<&2, U32>}
+      ): {
+        U32.inc(
+          c
+        )
+          <> _
+          == U32.inc(c)
+          <> Code.count.go(p, 0, List.append(&2, U32, r, x)): List<&2, U32>
+      }
       {==}
     case False{}:
       ih(U32.inc(c))
@@ -526,19 +907,66 @@ def Code.count_append(
   +r: List<&2, U32>,
   +x: List<&2, U32>
 ) -> {
-  List.append(&2, U32, Code.count.go(n, c, r), x) == Code.count.go(n, c, List.append(&2, U32, r, x)): List<&2, U32>
+  List.append(
+    &2,
+    U32,
+    Code.count.go(n, c, r),
+    x
+  )
+    == Code.count.go(n, c, List.append(&2, U32, r, x)): List<&2, U32>
 }:
   match n:
     case 0n:
       {==}
     case 1n+p:
-      Code.count_append.next(p, c, r, x, U32.is_eq(U32.inc(c), 4294967295), d => Code.count_append(p, d, r, x))
+      Code.count_append.next(
+        p,
+        c,
+        r,
+        x,
+        U32.is_eq(U32.inc(c), 4294967295),
+        d => Code.count_append(p, d, r, x)
+      )
+
+# words after a count are the count, then those words and the rest
+def Code.count_then(
+  +n: Nat,
+  +r: List<&2, U32>,
+  +x: List<&2, U32>
+) -> {
+  List.append(
+    &2,
+    U32,
+    Code.count(n, r),
+    x
+  )
+    == Code.count(n, List.append(&2, U32, r, x)): List<&2, U32>
+}:
+  %Equal.sym(
+    List<&2, U32>,
+    Code.count(n, r),
+    Code.count.go(n, 0, r),
+    Code.count_go(n, r)
+  ): {List.append(&2, U32, _, x) == Code.count(n, List.append(&2, U32, r, x)): List<&2, U32>}
+  %Equal.sym(
+    List<&2, U32>,
+    Code.count(n, List.append(&2, U32, r, x)),
+    Code.count.go(n, 0, List.append(&2, U32, r, x)),
+    Code.count_go(n, List.append(&2, U32, r, x))
+  ): {List.append(&2, U32, Code.count.go(n, 0, r), x) == _: List<&2, U32>}
+  Code.count_append(n, 0, r, x)
 
 # a count reads back
 def Code.count_read(
-  n: Nat,
-  r: List<&2, U32>
+  +n: Nat,
+  +r: List<&2, U32>
 ) -> {Code.count.read(Code.count(n, r)) == Some{Read{n, r}}: Maybe<&2, Read<Nat>>}:
+  %Equal.sym(
+    List<&2, U32>,
+    Code.count(n, r),
+    Code.count.go(n, 0, r),
+    Code.count_go(n, r)
+  ): {Code.count.read(_) == Some{Read{n, r}}: Maybe<&2, Read<Nat>>}
   Code.count_read.go(n, 0, r, {==})
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
@@ -947,7 +1375,10 @@ def Code.five_read(
     ~Codec.dec(D, cd),
     ~Codec.dec(E, ce),
     mk,
-    Codec.enc(A, ca)(a)(Codec.enc(B, cb)(b)(Codec.enc(C, cc)(c)(Codec.enc(D, cd)(d)(Codec.enc(E, ce)(e)(r)))))
+    Codec.enc(
+      A,
+      ca
+    )(a)(Codec.enc(B, cb)(b)(Codec.enc(C, cc)(c)(Codec.enc(D, cd)(d)(Codec.enc(E, ce)(e)(r)))))
   )
     == Some{Read{mk(a)(b)(c)(d)(e), r}}: Maybe<&2, Read<T>>
 }:
@@ -978,7 +1409,10 @@ def Code.five_read(
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 
 # a bit reads back
-def Code.bool_read(b: Bool, r: List<&2, U32>) -> {Code.bool.read(Code.bool(b, r)) == Some{Read{b, r}}: Maybe<&2, Read<Bool>>}:
+def Code.bool_read(
+  b: Bool,
+  r: List<&2, U32>
+) -> {Code.bool.read(Code.bool(b, r)) == Some{Read{b, r}}: Maybe<&2, Read<Bool>>}:
   match b:
     case False{}:
       {==}
@@ -986,7 +1420,10 @@ def Code.bool_read(b: Bool, r: List<&2, U32>) -> {Code.bool.read(Code.bool(b, r)
       {==}
 
 # a character reads back
-def Code.char_read(c: Char, r: List<&2, U32>) -> {Code.char.read(Code.char(c, r)) == Some{Read{c, r}}: Maybe<&2, Read<Char>>}:
+def Code.char_read(
+  c: Char,
+  r: List<&2, U32>
+) -> {Code.char.read(Code.char(c, r)) == Some{Read{c, r}}: Maybe<&2, Read<Char>>}:
   match c:
     case Chr{x}:
       {==}
@@ -1083,12 +1520,7 @@ def Code.whole.check(
     case None{}:
       None{}
     case Some{+a}:
-      Bool.pick(
-        Maybe<&2, A>,
-        Shared.List.is_eq(~U32, ~U32.is_eq, enc(a)([]), ws),
-        Some{a},
-        None{}
-      )
+      Bool.pick(Maybe<&2, A>, Shared.List.is_eq(~U32, ~U32.is_eq, enc(a)([]), ws), Some{a}, None{})
 
 # the value whose code is exactly the words ws
 def Code.whole.read(
@@ -1122,9 +1554,12 @@ law Code.whole_read:
   {Code.whole.read(~A, ~enc, ~dec, enc(a)([])) == Some{a}: Maybe<&2, A>}
 
 def Code.whole_read(ty, enc, dec, laws, a):
-  %Equal.sym(Maybe<&2, Read<ty>>, dec(enc(a)([])), Some{Read{a, []}}, laws(a)([])): {
-    Code.whole.check(~ty, ~enc, Read.whole(ty, _), enc(a)([])) == Some{a}: Maybe<&2, ty>
-  }
+  %Equal.sym(
+    Maybe<&2, Read<ty>>,
+    dec(enc(a)([])),
+    Some{Read{a, []}},
+    laws(a)([])
+  ): {Code.whole.check(~ty, ~enc, Read.whole(ty, _), enc(a)([])) == Some{a}: Maybe<&2, ty>}
   %Equal.sym(
     Bool,
     Shared.List.is_eq(~U32, ~U32.is_eq, enc(a)([]), enc(a)([])),
@@ -1142,7 +1577,9 @@ def Code.whole_back.at(
   -a: A,
   t: Bool,
   et: {Shared.List.is_eq(~U32, ~U32.is_eq, enc(b)([]), ws) == t: Bool}
-) -> {Bool.pick(Maybe<&2, A>, t, Some{b}, None{}) == Some{a}: Maybe<&2, A>} -> {enc(a)([]) == ws: List<&2, U32>}:
+) -> {
+  Bool.pick(Maybe<&2, A>, t, Some{b}, None{}) == Some{a}: Maybe<&2, A>
+} -> {enc(a)([]) == ws: List<&2, U32>}:
   match t:
     case True{}:
       e =>
@@ -1158,7 +1595,9 @@ def Code.whole_back.of(
   m: Maybe<&2, A>,
   +ws: List<&2, U32>,
   -a: A
-) -> {Code.whole.check(~A, ~enc, m, ws) == Some{a}: Maybe<&2, A>} -> {enc(a)([]) == ws: List<&2, U32>}:
+) -> {
+  Code.whole.check(~A, ~enc, m, ws) == Some{a}: Maybe<&2, A>
+} -> {enc(a)([]) == ws: List<&2, U32>}:
   match m:
     case None{}:
       e => Empty.absurd({enc(a)([]) == ws: List<&2, U32>}, Shared.Maybe.none_ne_some(A, a, e))
@@ -1180,7 +1619,9 @@ law Code.whole_back:
   for ~dec: List<&2, U32> -> Maybe<&2, Read<A>>
   for +ws: List<&2, U32>
   for a: A
-  {Code.whole.read(~A, ~enc, ~dec, ws) == Some{a}: Maybe<&2, A>} -> {enc(a)([]) == ws: List<&2, U32>}
+  {
+    Code.whole.read(~A, ~enc, ~dec, ws) == Some{a}: Maybe<&2, A>
+  } -> {enc(a)([]) == ws: List<&2, U32>}
 
 def Code.whole_back(ty, enc, dec, ws, a):
   Code.whole_back.of(~ty, ~enc, Read.whole(ty, dec(ws)), ws, a)

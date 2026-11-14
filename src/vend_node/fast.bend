@@ -964,6 +964,8 @@ def Table.mid_ok(
 ) -> {
   RContents.Known.fit(kn, Facts.Facts.crit(s)) == True{}: Bool
 } -> {
+  Facts.Facts.has(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}) == False{}: Bool
+} -> {
   RContents.Known.ok(
     Table.mid(
       kn,
@@ -976,9 +978,35 @@ def Table.mid_ok(
   )
     == True{}: Bool
 }:
-  +h => (
-    %Equal.sym(RKnown.Known(), RKnown.Known.cast(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c, k, RKnown.Known.walk(kn, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), RKnown.Known.cast(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c, k, None{}), Knowns.Known.cast_walk(kn, name, s, c, k, t, x)(h)): {RContents.Known.ok(RKnown.Known.learn(RContents.Known.grow(kn, _, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c), RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c), RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})) == True{}: Bool}
-    Knowns.Known.learn_ok(RContents.Known.grow(kn, RKnown.Known.cast(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c, k, None{}), RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c), RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c)(Knowns.Known.grow_ok(kn, RKnown.Known.cast(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c, k, None{}), RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c)(Knowns.Known.cast_ok(kn, name, s, c, k, t, x)(Knowns.Fit.ok(kn, Facts.Facts.crit(s))(h)))))
+  +h => hf => Knowns.Known.learn_ok(
+    RContents.Known.grow(
+      kn,
+      RKnown.Known.cast(
+        kn,
+        RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+        c,
+        k,
+        RKnown.Known.walk(kn, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})
+      ),
+      RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+      c
+    ),
+    RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+    c
+  )(
+    Knowns.Known.grow_ok(
+      kn,
+      RKnown.Known.cast(
+        kn,
+        RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+        c,
+        k,
+        RKnown.Known.walk(kn, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})
+      ),
+      RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+      c
+    )(Knowns.Known.cast_fits(kn, name, s, c, k, t, x)(h)(hf))
+  )
 
 # the table that a ballot leaves, before the facts that a work may act on
 # join it, holds no facts for a work
@@ -992,7 +1020,7 @@ def Table.mid_shut(
   (
     %Knowns.Known.learn_open(RContents.Known.grow(kn, RKnown.Known.cast(kn, s, c, k, w), s, c), s, c): {_ == None{}: Maybe<&2, RKnown.Kept>}
     %Knowns.Known.grow_open(Maybe.is_some(&2, Nat, RKnown.Known.depth(RKnown.Known.cast(kn, s, c, k, w), c, Nat.sub(RContents.State.count(RKnown.Known.find(kn, c)), 1n))), RContents.State.count(RKnown.Known.find(kn, c)), RContents.State.count(RKnown.Known.find(RKnown.Known.cast(kn, s, c, k, w), c)), RKnown.Known.cast(kn, s, c, k, w), s, c): {_ == None{}: Maybe<&2, RKnown.Kept>}
-    Knowns.Known.cast_shut(kn, s, c, k, w))
+    Knowns.Known.cast_shuts(kn, s, c, k, w))
 
 # the table that a ballot at the step st leaves of a table that fits fits
 # the facts with the ballot
@@ -1004,6 +1032,8 @@ def Table.voted_fit(
   +x: Types.Cast
 ) -> {
   RContents.Known.fit(kn, Facts.Facts.crit(s)) == True{}: Bool
+} -> {
+  RFacts.Facts.cast(Facts.Facts.crit(s), name, st) == False{}: Bool
 } -> {
   RContents.Known.fit(
     RFasts.Table.voted(
@@ -1018,9 +1048,9 @@ def Table.voted_fit(
 }:
   match st:
     case Types.Step.Broken{}:
-      h => {==}
+      h => hc => {==}
     case Types.Step.At{+c, +k, +t}:
-      +h => Knowns.Known.moved_fit(
+      +h => hc => Knowns.Known.moved_fit(
         Table.mid(
           kn,
           RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
@@ -1043,7 +1073,15 @@ def Table.voted_fit(
           RKnown.Shelf.top(RKnown.Known.shelf(kn))
         )
       )(
-        Table.mid_ok(kn, name, s, c, k, t, x)(h)
+        Table.mid_ok(
+          kn,
+          name,
+          s,
+          c,
+          k,
+          t,
+          x
+        )(h)(Knowns.Vote.fresh(name, s, Types.Step.At{c, k, t}, x)(hc))
       )(
         Table.mid_shut(
           kn,
@@ -1190,7 +1228,7 @@ def Table.cast_fit(
         },
         RFacts.Facts.cast(Facts.Facts.crit(s), name, st),
         et => h,
-        ef => Table.voted_fit(kn, name, s, st, x)(h)
+        ef => Table.voted_fit(kn, name, s, st, x)(h)(ef)
       )
 
 # What a fast node does

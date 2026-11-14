@@ -4516,7 +4516,7 @@ def Book.text_append(+t: String, +x: List<&2, U32>, +r: List<&2, U32>) -> {Codes
   %Equal.sym(List<&2, U32>, Codes.Code.chars(t, List.append(&2, U32, x, r)), List.append(&2, U32, Codes.Code.chars(t, x), r), Book.chars_append(t, x, r)): {
     Codes.Code.count(Codes.Code.length(t), _) == List.append(&2, U32, Codes.Code.text(t, x), r): List<&2, U32>
   }
-  Equal.sym(List<&2, U32>, List.append(&2, U32, Codes.Code.count.go(Codes.Code.length(t), 0, Codes.Code.chars(t, x)), r), Codes.Code.count.go(Codes.Code.length(t), 0, List.append(&2, U32, Codes.Code.chars(t, x), r)), Codes.Code.count_append(Codes.Code.length(t), 0, Codes.Code.chars(t, x), r))
+  Equal.sym(List<&2, U32>, List.append(&2, U32, Codes.Code.count(Codes.Code.length(t), Codes.Code.chars(t, x)), r), Codes.Code.count(Codes.Code.length(t), List.append(&2, U32, Codes.Code.chars(t, x), r)), Codes.Code.count_then(Codes.Code.length(t), Codes.Code.chars(t, x), r))
 
 # the name of a sub line before x then r
 def Book.sub_append(k: Maybe<&2, String>, +x: List<&2, U32>, +r: List<&2, U32>) -> {Codes.Code.maybe(~String, ~Codes.Code.text, k, List.append(&2, U32, x, r)) == List.append(&2, U32, Codes.Code.maybe(~String, ~Codes.Code.text, k, x), r): List<&2, U32>}:
@@ -4540,7 +4540,7 @@ def Book.line_append(c: Line, +x: List<&2, U32>, +r: List<&2, U32>) -> {Line.cod
 def Book.place_append(w: Place, +x: List<&2, U32>, +r: List<&2, U32>) -> {Place.code(w, List.append(&2, U32, x, r)) == List.append(&2, U32, Place.code(w, x), r): List<&2, U32>}:
   match w:
     case Place{+l, +h, +k}:
-      %Codes.Code.count_append(k, 0, x, r): {
+      %Codes.Code.count_then(k, x, r): {
         Line.code(l, h <> _) == List.append(&2, U32, Line.code(l, h <> Codes.Code.count(k, x)), r): List<&2, U32>
       }
       Book.line_append(l, h <> Codes.Code.count(k, x), r)

@@ -10441,7 +10441,9 @@ def Words.rev_rev(ws: List<&2, U32>, +r: List<&2, U32>) -> {Words.rev(Words.rev(
 # Key.ord_value, with r used more than once
 def Key.ord_value.go(+n: Nat, +r: List<&2, U32>) -> {Key.ord.value(Key.ord(n, r)) == Some{n}: Maybe<&2, Nat>}:
   %Equal.sym(List<&2, U32>, Words.rev(Words.rev(Codes.Code.count(n, []), r), []), List.append(&2, U32, Codes.Code.count(n, []), Words.rev(r, [])), Words.rev_rev(Codes.Code.count(n, []), r)): {Key.ord.of(Codes.Code.count.read(_)) == Some{n}: Maybe<&2, Nat>}
+  %Equal.sym(List<&2, U32>, Codes.Code.count(n, []), Codes.Code.count.go(n, 0, []), Codes.Code.count_go(n, [])): {Key.ord.of(Codes.Code.count.read(List.append(&2, U32, _, Words.rev(r, [])))) == Some{n}: Maybe<&2, Nat>}
   %Equal.sym(List<&2, U32>, List.append(&2, U32, Codes.Code.count.go(n, 0, []), Words.rev(r, [])), Codes.Code.count.go(n, 0, Words.rev(r, [])), Codes.Code.count_append(n, 0, [], Words.rev(r, []))): {Key.ord.of(Codes.Code.count.read(_)) == Some{n}: Maybe<&2, Nat>}
+  %Codes.Code.count_go(n, Words.rev(r, [])): {Key.ord.of(Codes.Code.count.read(_)) == Some{n}: Maybe<&2, Nat>}
   %Equal.sym(Maybe<&2, Codes.Read<Nat>>, Codes.Code.count.read(Codes.Code.count(n, Words.rev(r, []))), Some{Codes.Read{n, Words.rev(r, [])}}, Codes.Code.count_read(n, Words.rev(r, []))): {Key.ord.of(_) == Some{n}: Maybe<&2, Nat>}
   {==}
 
@@ -10689,6 +10691,13 @@ law Key.ord_value:
 def Key.ord_value(n, r):
   Key.ord_value.go(n, r)
 
+# Key.ord_lt, with a and b used more than once
+def Key.ord_lt.go(+a: Nat, +b: Nat, x: List<&2, U32>, y: List<&2, U32>) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Bits.lt(Key.bits(Key.ord(a, x)), Key.bits(Key.ord(b, y))) == True{}: Bool}:
+  h =>
+    %Equal.sym(List<&2, U32>, Codes.Code.count(a, []), Codes.Code.count.go(a, 0, []), Codes.Code.count_go(a, [])): {Bits.lt(Key.bits(Words.rev(_, x)), Key.bits(Words.rev(Codes.Code.count(b, []), y))) == True{}: Bool}
+    %Equal.sym(List<&2, U32>, Codes.Code.count(b, []), Codes.Code.count.go(b, 0, []), Codes.Code.count_go(b, [])): {Bits.lt(Key.bits(Words.rev(Codes.Code.count.go(a, 0, []), x)), Key.bits(Words.rev(_, y))) == True{}: Bool}
+    Crit.count_lt(a, b, 0, x, y)(h)({==})
+
 # the keys of numbers are in the order of the numbers, whatever follows them
 law Key.ord_lt:
   for a: Nat
@@ -10698,7 +10707,7 @@ law Key.ord_lt:
   {Nat.is_lt(a, b) == True{}: Bool} -> {Bits.lt(Key.bits(Key.ord(a, x)), Key.bits(Key.ord(b, y))) == True{}: Bool}
 
 def Key.ord_lt(a, b, x, y):
-  h => Crit.count_lt(a, b, 0, x, y)(h)({==})
+  Key.ord_lt.go(a, b, x, y)
 
 # keys that start with the same words are in the order of what follows
 law Key.lt_after:

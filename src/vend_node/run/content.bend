@@ -1,5 +1,6 @@
 import Base
 import ../../shared/shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/shared/crit_order.bend as Orders
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../codes.bend as Coded
 import ../shared/format.bend as Formats
@@ -400,14 +401,19 @@ def Content.from(
 ) -> Maybe<&2, Files.Files()>:
   Content.or(Knowns.Known.files(kn, c, k, g), u => Content.at(g, kn, s, c, k))
 
-# the content of version k of the line c in the facts s
+# the content of version k of the line c in the facts s: as the table kn
+# holds it, when a read with at most as much fuel as the node holds facts
+# gives it (Known.low); else read with the fuel of the facts
 def Content.of(
   +kn: Knowns.Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   +k: Nat
 ) -> Maybe<&2, Files.Files()>:
-  Content.from(Facts.Facts.fuel(s), kn, s, c, k)
+  Content.or(
+    Knowns.Known.files(kn, c, k, Knowns.Known.low(kn)),
+    u => Content.from(Facts.Facts.fuel(s), kn, s, c, k)
+  )
 
 # the words at the path p of the content m
 def Content.get(m: Maybe<&2, Files.Files()>, +p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
@@ -430,23 +436,41 @@ def Content.read(
 # A table that is right
 # ---------------------
 
+# the content e is right: it is what a read of the facts s with its fuel
+# gives
+def Held.ok(s: Facts.Plain(), e: Knowns.Held) -> Bool:
+  match e:
+    case Knowns.Held{c, k, d, x}:
+      Files.Files.fits(Content.at(d, Knowns.Known.none(), s, c, k), x)
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for an entry that is wrong, which then costs no more than a right entry, where both sides run
 # the entry e is right: its state is the state that the facts s give its
-# line, or its content is what a read of the facts s with its fuel gives, or
-# its rule is the rule of the next version of its line in the facts s, or its
-# ids are those of the versions of its line in the facts s; the facts that a
-# work may act on are checked apart (Known.fit), since only the first counts
+# line, or each of its contents is right, or its rule and its era are those
+# of the next version of its line in the facts s, or its ids are those of the
+# versions of its line in the facts s; the facts that a work may act on are
+# checked apart (Known.fit), since only the first counts
 def Kept.ok(+s: Facts.Plain(), e: Knowns.Kept) -> Bool:
   match e:
     case Knowns.Kept{c, st}:
       Knowns.State.fits(Lines.Line.state(s, c), st)
-    case Knowns.Held{c, k, d, x}:
-      Files.Files.fits(Content.at(d, Knowns.Known.none(), s, c, k), x)
-    case Knowns.Ruled{+c, u}:
-      Knowns.Rule.fits(Knowns.Known.rule.next(Knowns.Known.none(), s, c, Lines.Line.state(s, c)), u)
+    case Knowns.Stock{m, q}:
+      Bool.and(
+        Orders.Crit.every(~Knowns.Held, ~Facts.Plain(), ~Held.ok, m, s),
+        Nat.is_le(q, Facts.Facts.fuel(s))
+      )
+    case Knowns.Ruled{+c, m, u}:
+      Bool.and(
+        Knowns.Rule.fits(
+          Knowns.Known.rule.next(Knowns.Known.none(), s, c, Lines.Line.state(s, c)),
+          u
+        ),
+        Knowns.Era.fits(Lines.Line.state(s, c), c, m)
+      )
     case Knowns.Made{c, x}:
       Knowns.Made.fits(Lines.Line.state(s, c), x)
     case Knowns.Open{fs, n}:
       True{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a table that is wrong, which then costs no more than a right table, where both sides run
 # the table kn is right for the facts s: each state and each content that it
@@ -580,7 +604,7 @@ def Known.fill.write(
 # entry e if the node holds it, when prev is what the table holds of the
 # content of version j
 def Known.fill.next(
-  prev: Maybe<&2, Knowns.Kept>,
+  prev: Maybe<&2, Knowns.Held>,
   e: Maybe<&2, Types.Entry>,
   +kn: Knowns.Known(),
   +s: Facts.Plain(),
@@ -653,7 +677,13 @@ def Versions.count(m: Maybe<&2, List<&2, Types.Entry>>) -> Nat:
 
 # the table kn with the content of each version of the line c in the facts s
 def Known.warm(+kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Knowns.Known():
-  Known.warm.go(Versions.count(Knowns.Known.versions(kn, s, c)), 0n, kn, s, c)
+  Known.warm.go(
+    Versions.count(Knowns.Known.versions(kn, s, c)),
+    0n,
+    Knowns.Known.sync(kn, Facts.Facts.fuel(s)),
+    s,
+    c
+  )
 
 # the number of the versions of the state m, if any
 def State.count(m: Maybe<&2, Lines.State>) -> Nat:
@@ -674,7 +704,7 @@ def Known.grow.if(
     case True{}:
       Known.warm.go(Nat.sub(b, a), a, kn, s, c)
     case False{}:
-      Known.warm.go(b, 0n, kn, s, c)
+      Known.warm.go(b, 0n, Knowns.Known.sync(kn, Facts.Facts.fuel(s)), s, c)
 
 # the table kn with the content of each version of the line c in the facts s
 # that the table old did not know: those after the versions of the state that

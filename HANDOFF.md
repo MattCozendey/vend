@@ -54,12 +54,15 @@ Measured, native build, one node, one owner:
   parameter; `known.bend` and `fast.bend` prove that it does and answers what `Raw` does. 80
   writes take 0.25 s, 320 take 6 s; a read of the newest version is one lookup.
 - Indexes: the table also keeps the facts that a work may still act on (in set order, by the
-  order laws of `crit_order.bend`), the newest ask number and the ids of the versions of each
-  line. Writes, each with a Work: 320 take 0.31 s, 640 take 0.91 s, 1280 take 2.8 s, 2560 take
-  13 s. At 1280: an ask 0.14 ms, an idle Work 0.04 ms, a Work that casts 3.8 ms, a view 2.9 ms.
-- Still linear in the history: a cast (`State.put`, `Line.rule`, `Line.era` walk the versions; the
-  table is an association list), a view (`Writes.of`), a status (`Versions.find`), `Content.of`
-  (fuel). Merge and resolve asks never leave the open list. In work.
+  order laws of `crit_order.bend`), the newest ask number, the ids of the versions of each line,
+  the contents in one map, and the rule and era of each line. The codec writes a number without a
+  loop (same words), and the turn of a round is one division. Writes on one branch, each with a
+  Work: 1280 take 0.59 s, 2560 take 1.5 s, 5120 take 4.1 s. From 160 to 2560 writes: an ask
+  stays at 0.05 ms, a read at 0.01 ms, a Work that casts goes from 0.27 to 0.6 ms.
+- Still linear in the history: a view (`Writes.of` scans the facts: 6 ms at 2560), a status
+  (`Versions.find`: 1.4 ms at 2560), the append of a version to the oldest-first list. Merge and
+  resolve asks never leave the open list (an idle Work with 16 merges: 1.3 ms). The table is a
+  list by line. A ballot on a store line, a Start and a Sync drop the table. In work.
 
 ## Lint
 

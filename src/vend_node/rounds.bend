@@ -5199,6 +5199,205 @@ def Slot.Alone(
 # Alone: the chain of the node
 # ----------------------------
 
+# the node after as many nodes as pre holds is the one that follows them
+def Turn.nth_mid(
+  pre: List<&2, String>,
+  -y: String,
+  -rest: List<&2, String>
+) -> {
+  RRounds.Turn.nth(
+    List.append(&2, String, pre, y <> rest),
+    List.length(&2, String, pre)
+  )
+    == y: String
+}:
+  match pre:
+    case Nil{}:
+      {==}
+    case Con{z, r}:
+      Turn.nth_mid(r, y, rest)
+
+# the number before n
+def Turn.pred(n: Nat) -> Nat:
+  match n:
+    case 0n:
+      0n
+    case 1n+p:
+      p
+
+# bend-lint: expect-begin bend-lint-rules/performance/append_in_loop@warning -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/dead_accumulator@information -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- a proof does not run
+# a walk of k steps from the node y, that follows the nodes pre in the round
+# of x then ns, ends at the place that the division of k gives
+def Turn.go_nth(
+  k: Nat,
+  +x: String,
+  +ns: List<&2, String>,
+  +pre: List<&2, String>,
+  +y: String,
+  rest: List<&2, String>,
+  +d: Nat
+) -> {
+  x <> ns == List.append(&2, String, pre, y <> rest): List<&2, String>
+} -> {
+  RRounds.Turn.go(
+    k,
+    x,
+    ns,
+    y,
+    rest
+  )
+    == RRounds.Turn.nth(
+      x <> ns,
+      Pair.snd(
+        Nat,
+        Nat,
+        Nat.divmod.go(k, List.length(&2, String, rest), d, List.length(&2, String, pre))
+      )
+    ): String
+}:
+  match k rest:
+    case 0n Nil{}:
+      e =>
+        %Equal.sym(
+          List<&2, String>,
+          x <> ns,
+          List.append(&2, String, pre, [y]),
+          e
+        ): {y == RRounds.Turn.nth(_, List.length(&2, String, pre)): String}
+        Equal.sym(
+          String,
+          RRounds.Turn.nth(List.append(&2, String, pre, [y]), List.length(&2, String, pre)),
+          y,
+          Turn.nth_mid(pre, y, [])
+        )
+    case 0n Con{+z, +r2}:
+      e =>
+        %Equal.sym(
+          List<&2, String>,
+          x <> ns,
+          List.append(&2, String, pre, y <> z <> r2),
+          e
+        ): {y == RRounds.Turn.nth(_, List.length(&2, String, pre)): String}
+        Equal.sym(
+          String,
+          RRounds.Turn.nth(
+            List.append(&2, String, pre, y <> z <> r2),
+            List.length(&2, String, pre)
+          ),
+          y,
+          Turn.nth_mid(pre, y, z <> r2)
+        )
+    case 1n+j Nil{}:
+      e =>
+        %Equal.sym(
+          Nat,
+          List.length(&2, String, pre),
+          List.length(&2, String, ns),
+          Equal.cong(
+            Nat,
+            Nat,
+            Turn.pred,
+            1n+List.length(&2, String, pre),
+            1n+List.length(&2, String, ns),
+            Equal.trans(
+              Nat,
+              1n+List.length(&2, String, pre),
+              List.length(&2, String, List.append(&2, String, pre, [y])),
+              1n+List.length(&2, String, ns),
+              Equal.sym(
+                Nat,
+                List.length(&2, String, List.append(&2, String, pre, [y])),
+                1n+List.length(&2, String, pre),
+                Shared.List.length_snoc(String, pre, y)
+              ),
+              Equal.cong(
+                List<&2, String>,
+                Nat,
+                zs => List.length(&2, String, zs),
+                List.append(&2, String, pre, [y]),
+                x <> ns,
+                Equal.sym(List<&2, String>, x <> ns, List.append(&2, String, pre, [y]), e)
+              )
+            )
+          )
+        ): {
+          RRounds.Turn.go(
+            j,
+            x,
+            ns,
+            x,
+            ns
+          )
+            == RRounds.Turn.nth(x <> ns, Pair.snd(Nat, Nat, Nat.divmod.go(j, _, 1n+d, 0n))): String
+        }
+        Turn.go_nth(j, x, ns, [], x, ns, 1n+d)({==})
+    case 1n+j Con{+z, +r2}:
+      e =>
+        %Shared.List.length_snoc(
+          String,
+          pre,
+          y
+        ): {
+          RRounds.Turn.go(
+            j,
+            x,
+            ns,
+            z,
+            r2
+          )
+            == RRounds.Turn.nth(
+              x <> ns,
+              Pair.snd(Nat, Nat, Nat.divmod.go(j, List.length(&2, String, r2), d, _))
+            ): String
+        }
+        Turn.go_nth(
+          j,
+          x,
+          ns,
+          List.append(&2, String, pre, [y]),
+          z,
+          r2,
+          d
+        )(
+          Equal.trans(
+            List<&2, String>,
+            x <> ns,
+            List.append(&2, String, pre, y <> z <> r2),
+            List.append(&2, String, List.append(&2, String, pre, [y]), z <> r2),
+            e,
+            Equal.sym(
+              List<&2, String>,
+              List.append(&2, String, List.append(&2, String, pre, [y]), z <> r2),
+              List.append(&2, String, pre, y <> z <> r2),
+              Shared.List.append_assoc(String, pre, [y], z <> r2)
+            )
+          )
+        )
+# bend-lint: expect-end bend-lint-rules/performance/append_in_loop@warning
+# bend-lint: expect-end bend-lint-rules/performance/dead_accumulator@information
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# the node whose turn a number is, read at its place in a round, is the one
+# that a walk of as many steps ends at
+def Turn.of_walk(
+  ns: List<&2, String>,
+  k: Nat
+) -> {RRounds.Turn.of(ns, k) == RRounds.Turn.walk(ns, k): String}:
+  match ns:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Equal.sym(
+        String,
+        RRounds.Turn.go(k, x, r, x, r),
+        RRounds.Turn.nth(x <> r, Nat.mod(k, 1n+List.length(&2, String, r))),
+        Turn.go_nth(k, x, r, [], x, r, 0n)({==})
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
 # the turn of each number is of the node that decides alone
 def Turn.go_one(k: Nat, +name: String) -> {RRounds.Turn.go(k, name, [], name, []) == name: String}:
   match k:
@@ -5206,6 +5405,18 @@ def Turn.go_one(k: Nat, +name: String) -> {RRounds.Turn.go(k, name, [], name, []
       {==}
     case 1n+j:
       Turn.go_one(j, name)
+
+# the turn of each number is of the node that decides alone, as Turn.of
+# reads it
+def Turn.of_one(+k: Nat, +name: String) -> {RRounds.Turn.of([name], k) == name: String}:
+  Equal.trans(
+    String,
+    RRounds.Turn.of([name], k),
+    RRounds.Turn.go(k, name, [], name, []),
+    name,
+    Turn.of_walk([name], k),
+    Turn.go_one(k, name)
+  )
 
 # the promise that a node that leads gives itself, when it cast no vote that
 # counts before
@@ -5305,9 +5516,9 @@ def Round.won_own(
 ) -> Round.Won(bs, [name], k, r, p):
   %Equal.sym(
     String,
-    RRounds.Turn.go(Nat.add(k, r), name, [], name, []),
+    RRounds.Turn.of([name], Nat.add(k, r)),
     name,
-    Turn.go_one(Nat.add(k, r), name)
+    Turn.of_one(Nat.add(k, r), name)
   ): {
     RRounds.Round.won(
       bs,
@@ -6436,9 +6647,9 @@ def Slot.chance_own(
   }
   %Equal.sym(
     String,
-    RRounds.Turn.go(Nat.add(k, Nat.max(fl, RRounds.Rounds.top(bs))), name, [], name, []),
+    RRounds.Turn.of([name], Nat.add(k, Nat.max(fl, RRounds.Rounds.top(bs)))),
     name,
-    Turn.go_one(Nat.add(k, Nat.max(fl, RRounds.Rounds.top(bs))), name)
+    Turn.of_one(Nat.add(k, Nat.max(fl, RRounds.Rounds.top(bs))), name)
   ): {
     Shared.Maybe.when(
       RRounds.Chance,

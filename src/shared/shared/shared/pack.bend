@@ -424,6 +424,12 @@ def Pack.read_pieces(ps):
         +goal = List.append(&2, U32, bs, List.concat(&2, U32, rest))
         %Equal.sym(
           List<&2, U32>,
+          Codes.Code.count(n, w),
+          Codes.Code.count.go(n, 0, w),
+          Codes.Code.count_go(n, w)
+        ): {Pack.read(List.append(&2, U32, _, x), At.Length{0n}) == goal: List<&2, U32>}
+        %Equal.sym(
+          List<&2, U32>,
           List.append(&2, U32, Codes.Code.count.go(n, 0, w), x),
           Codes.Code.count.go(n, 0, List.append(&2, U32, w, x)),
           Codes.Code.count_append(n, 0, w, x)

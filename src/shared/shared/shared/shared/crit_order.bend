@@ -3476,3 +3476,506 @@ def Crit.values_sorted(
     ~key,
     Crits.Crit.entries(V, m)
   )(hk)(Crit.entries_sorted(~V, m)(h))
+
+# The order of keys, word by word
+# -------------------------------
+# Key.lt reads the bits of both keys. Keys that share their first words are
+# told apart faster word by word: equal words are skipped, and the first two
+# words that differ are read by their bits.
+
+# the bits of the word x
+def Word.bits_of(x: U32) -> List<&2, Bool>:
+  match x:
+    case U32{w}:
+      Crits.Word.bits(32n, w)
+
+# the key a comes before the key b, read word by word
+def Key.before(a: List<&2, U32>, b: List<&2, U32>) -> Bool:
+  match a b:
+    case x Nil{}:
+      False{}
+    case Nil{} Con{y, rb}:
+      True{}
+    case Con{+x, ra} Con{+y, rb}:
+      Shared.Bool.when(
+        Bool,
+        U32.is_eq(x, y),
+        u => Key.before(ra, rb),
+        u => Crits.Bits.lt(Word.bits_of(x), Word.bits_of(y))
+      )
+
+# the values xs, sorted by their keys, with x, whose key is k: as
+# Values.insert gives them, with the key of x read once and the keys told
+# apart word by word
+def Values.put(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  xs: List<&2, V>,
+  +x: V,
+  +k: List<&2, U32>
+) -> List<&2, V>:
+  match xs:
+    case Nil{}:
+      [x]
+    case Con{+y, +r}:
+      +ky = key(y)
+      Shared.Bool.when(
+        List<&2, V>,
+        Key.before(k, ky),
+        u => x <> y <> r,
+        u => Shared.Bool.when(
+          List<&2, V>,
+          Crits.Key.is_eq(ky, k),
+          w => x <> r,
+          w => y <> Values.put(~V, ~key, r, x, k)
+        )
+      )
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# words that differ are told apart by their own bits, whatever follows them
+def Bits.lt_differ(
+  n: Nat,
+  u: Word(n),
+  v: Word(n),
+  x: List<&2, Bool>,
+  y: List<&2, Bool>
+) -> {
+  Crits.Bits.agree_n(n, Crits.Word.bits(n, u), Crits.Word.bits(n, v)) == False{}: Bool
+} -> {
+  Crits.Bits.lt(
+    List.append(&2, Bool, Crits.Word.bits(n, u), x),
+    List.append(&2, Bool, Crits.Word.bits(n, v), y)
+  )
+    == Crits.Bits.lt(Crits.Word.bits(n, u), Crits.Word.bits(n, v)): Bool
+}:
+  match n:
+    case 0n:
+      match u v:
+        case WNil{} WNil{}:
+          h => Empty.absurd({Crits.Bits.lt(x, y) == False{}: Bool}, Shared.Bool.true_ne_false(h))
+    case 1n+(q):
+      match u v:
+        case WCon{True{}, at} WCon{True{}, bt}:
+          h => Bits.lt_differ(q, at, bt, x, y)(h)
+        case WCon{False{}, +at} WCon{False{}, bt}:
+          h => Bits.lt_differ(q, at, bt, x, y)(h)
+        case WCon{True{}, at} WCon{False{}, bt}:
+          h => {==}
+        case WCon{False{}, at} WCon{True{}, bt}:
+          h => {==}
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# Key.before_lt at two keys whose first words are the same
+def Key.before_lt.same(
+  u: Word(32n),
+  v: Word(32n),
+  ra: List<&2, U32>,
+  rb: List<&2, U32>
+) -> {
+  U32{u} == U32{v}: U32
+} -> {
+  Key.before(ra, rb) == Key.lt(ra, rb): Bool
+} -> {
+  Key.before(
+    ra,
+    rb
+  )
+    == Crits.Bits.lt(
+      List.append(&2, Bool, Crits.Word.bits(32n, u), Crits.Key.bits(ra)),
+      List.append(&2, Bool, Crits.Word.bits(32n, v), Crits.Key.bits(rb))
+    ): Bool
+}:
+  e => ih =>
+    %e: {
+      Key.before(
+        ra,
+        rb
+      )
+        == Crits.Bits.lt(
+          List.append(&2, Bool, Crits.Word.bits(32n, u), Crits.Key.bits(ra)),
+          List.append(&2, Bool, Word.bits_of(_), Crits.Key.bits(rb))
+        ): Bool
+    }
+    Equal.trans(
+      Bool,
+      Key.before(ra, rb),
+      Key.lt(ra, rb),
+      Crits.Bits.lt(
+        List.append(&2, Bool, Crits.Word.bits(32n, u), Crits.Key.bits(ra)),
+        List.append(&2, Bool, Crits.Word.bits(32n, u), Crits.Key.bits(rb))
+      ),
+      ih,
+      Equal.sym(
+        Bool,
+        Crits.Bits.lt(
+          List.append(&2, Bool, Crits.Word.bits(32n, u), Crits.Key.bits(ra)),
+          List.append(&2, Bool, Crits.Word.bits(32n, u), Crits.Key.bits(rb))
+        ),
+        Crits.Bits.lt(Crits.Key.bits(ra), Crits.Key.bits(rb)),
+        Crits.Bits.lt_append(Crits.Word.bits(32n, u), Crits.Key.bits(ra), Crits.Key.bits(rb))
+      )
+    )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# the order of keys read word by word is the order of their bits
+def Key.before_lt(a: List<&2, U32>, b: List<&2, U32>) -> {Key.before(a, b) == Key.lt(a, b): Bool}:
+  match a b:
+    case Nil{} Nil{}:
+      {==}
+    case Con{U32{WCon{x, t}}, ra} Nil{}:
+      {==}
+    case Nil{} Con{U32{WCon{y, t}}, rb}:
+      {==}
+    case Con{U32{+u}, +ra} Con{U32{+v}, +rb}:
+      Bool.by(
+        c => {
+          U32.is_eq(U32{u}, U32{v}) == c: Bool
+        } -> {
+          Shared.Bool.when(
+            Bool,
+            c,
+            w => Key.before(ra, rb),
+            w => Crits.Bits.lt(Crits.Word.bits(32n, u), Crits.Word.bits(32n, v))
+          )
+            == Crits.Bits.lt(
+              List.append(&2, Bool, Crits.Word.bits(32n, u), Crits.Key.bits(ra)),
+              List.append(&2, Bool, Crits.Word.bits(32n, v), Crits.Key.bits(rb))
+            ): Bool
+        },
+        U32.is_eq(U32{u}, U32{v}),
+        et => e => Key.before_lt.same(
+          u,
+          v,
+          ra,
+          rb
+        )(Shared.U32.is_eq_sound(U32{u}, U32{v})(et))(Key.before_lt(ra, rb)),
+        ef => +e => Equal.sym(
+          Bool,
+          Crits.Bits.lt(
+            List.append(&2, Bool, Crits.Word.bits(32n, u), Crits.Key.bits(ra)),
+            List.append(&2, Bool, Crits.Word.bits(32n, v), Crits.Key.bits(rb))
+          ),
+          Crits.Bits.lt(Crits.Word.bits(32n, u), Crits.Word.bits(32n, v)),
+          Bits.lt_differ(
+            32n,
+            u,
+            v,
+            Crits.Key.bits(ra),
+            Crits.Key.bits(rb)
+          )(
+            Equal.trans(
+              Bool,
+              Crits.Bits.agree_n(32n, Crits.Word.bits(32n, u), Crits.Word.bits(32n, v)),
+              U32.is_eq(U32{u}, U32{v}),
+              False{},
+              Equal.sym(
+                Bool,
+                U32.is_eq(U32{u}, U32{v}),
+                Crits.Bits.agree_n(32n, Crits.Word.bits(32n, u), Crits.Word.bits(32n, v)),
+                Crits.Crit.word_eq_bits(32n, u, v)
+              ),
+              e
+            )
+          )
+        )
+      )({==})
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# Values.put with the key of the value is Values.insert
+def Values.put_insert(
+  ~V: Data,
+  ~key: V -> List<&2, U32>,
+  xs: List<&2, V>,
+  +x: V
+) -> {Values.put(~V, ~key, xs, x, key(x)) == Values.insert(~V, ~key, xs, x): List<&2, V>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{y, r}:
+      %Equal.sym(
+        Bool,
+        Key.before(key(x), key(y)),
+        Key.lt(key(x), key(y)),
+        Key.before_lt(key(x), key(y))
+      ): {
+        Shared.Bool.when(
+          List<&2, V>,
+          _,
+          u => x <> y <> r,
+          u => Shared.Bool.when(
+            List<&2, V>,
+            Crits.Key.is_eq(key(y), key(x)),
+            w => x <> r,
+            w => y <> Values.put(~V, ~key, r, x, key(x))
+          )
+        )
+          == Values.insert(~V, ~key, y <> r, x): List<&2, V>
+      }
+      %Equal.sym(
+        List<&2, V>,
+        Values.put(~V, ~key, r, x, key(x)),
+        Values.insert(~V, ~key, r, x),
+        Values.put_insert(~V, ~key, r, x)
+      ): {
+        Shared.Bool.when(
+          List<&2, V>,
+          Key.lt(key(x), key(y)),
+          u => x <> y <> r,
+          u => Shared.Bool.when(
+            List<&2, V>,
+            Crits.Key.is_eq(key(y), key(x)),
+            w => x <> r,
+            w => y <> _
+          )
+        )
+          == Values.insert(~V, ~key, y <> r, x): List<&2, V>
+      }
+      {==}
+
+# What holds of each value of a map
+# ---------------------------------
+# A test that holds of each value of a map holds of the value that a read
+# gives, and still holds after a write of a value that it holds of.
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this is said only in laws, and never runs
+# p holds of g and the value of each of the entries es
+def Binds.every(~V: Data, ~G: Data, ~p: G -> V -> Bool, es: List<&2, Crits.Bind<V>>, +g: G) -> Bool:
+  match es:
+    case Nil{}:
+      True{}
+    case Con{Crits.Bind{k, v}, r}:
+      Bool.and(p(g)(v), Binds.every(~V, ~G, ~p, r, g))
+
+# the map m is well formed, and p holds of g and each of its values
+def Crit.every(~V: Data, ~G: Data, ~p: G -> V -> Bool, +m: Crits.Crit<V>, g: G) -> Bool:
+  Bool.and(Crits.Crit.wf(~V, m, 0n), Binds.every(~V, ~G, ~p, Crits.Crit.entries(V, m), g))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
+# what holds of each value of the entries holds of the value under a key
+def Binds.every_get(
+  ~V: Data,
+  ~G: Data,
+  ~p: G -> V -> Bool,
+  es: List<&2, Crits.Bind<V>>,
+  +g: G,
+  +k: List<&2, U32>,
+  v: V
+) -> {
+  Binds.every(~V, ~G, ~p, es, g) == True{}: Bool
+} -> {Binds.get(V, es, k) == Some{v}: Maybe<&2, V>} -> {p(g)(v) == True{}: Bool}:
+  match es:
+    case Nil{}:
+      h => e => Empty.absurd({p(g)(v) == True{}: Bool}, Shared.Maybe.none_ne_some(V, v, e))
+    case Con{Crits.Bind{k2, +v2}, +r}:
+      +h => Bool.by(
+        c => {
+          Bool.pick(Maybe<&2, V>, c, Some{v2}, Binds.get(V, r, k)) == Some{v}: Maybe<&2, V>
+        } -> {p(g)(v) == True{}: Bool},
+        Crits.Key.is_eq(k2, k),
+        et => e => (
+          %Shared.Maybe.some_inj(V, v2, v, e): {p(g)(_) == True{}: Bool}
+          Shared.Bool.and_true_left(p(g)(v2), Binds.every(~V, ~G, ~p, r, g))(h)),
+        ef => e => Binds.every_get(
+          ~V,
+          ~G,
+          ~p,
+          r,
+          g,
+          k,
+          v
+        )(Shared.Bool.and_true_right(p(g)(v2), Binds.every(~V, ~G, ~p, r, g))(h))(e)
+      )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- this is said only in laws, and never runs
+# what holds of each value of the entries, and of v, holds of each value of
+# the entries with v under a key
+def Binds.every_insert(
+  ~V: Data,
+  ~G: Data,
+  ~p: G -> V -> Bool,
+  es: List<&2, Crits.Bind<V>>,
+  +g: G,
+  +k: List<&2, U32>,
+  +v: V
+) -> {
+  Binds.every(~V, ~G, ~p, es, g) == True{}: Bool
+} -> {
+  p(g)(v) == True{}: Bool
+} -> {Binds.every(~V, ~G, ~p, Binds.insert(V, es, k, v), g) == True{}: Bool}:
+  match es:
+    case Nil{}:
+      h => hv => Shared.Bool.and_both(p(g)(v), True{})(hv)({==})
+    case Con{Crits.Bind{+k1, +v1}, +r}:
+      +h => +hv => Bool.by(
+        c => {
+          Binds.every(
+            ~V,
+            ~G,
+            ~p,
+            Shared.Bool.when(
+              List<&2, Crits.Bind<V>>,
+              c,
+              u => Crits.Bind{k, v} <> Crits.Bind{k1, v1} <> r,
+              u => Shared.Bool.when(
+                List<&2, Crits.Bind<V>>,
+                Crits.Key.is_eq(k1, k),
+                w => Crits.Bind{k1, v} <> r,
+                w => Crits.Bind{k1, v1} <> Binds.insert(V, r, k, v)
+              )
+            ),
+            g
+          )
+            == True{}: Bool
+        },
+        Key.lt(k, k1),
+        et => Shared.Bool.and_both(
+          p(g)(v),
+          Bool.and(p(g)(v1), Binds.every(~V, ~G, ~p, r, g))
+        )(hv)(h),
+        ef => Bool.by(
+          c => {
+            Binds.every(
+              ~V,
+              ~G,
+              ~p,
+              Shared.Bool.when(
+                List<&2, Crits.Bind<V>>,
+                c,
+                w => Crits.Bind{k1, v} <> r,
+                w => Crits.Bind{k1, v1} <> Binds.insert(V, r, k, v)
+              ),
+              g
+            )
+              == True{}: Bool
+          },
+          Crits.Key.is_eq(k1, k),
+          et => Shared.Bool.and_both(
+            p(g)(v),
+            Binds.every(~V, ~G, ~p, r, g)
+          )(hv)(Shared.Bool.and_true_right(p(g)(v1), Binds.every(~V, ~G, ~p, r, g))(h)),
+          en => Shared.Bool.and_both(
+            p(g)(v1),
+            Binds.every(~V, ~G, ~p, Binds.insert(V, r, k, v), g)
+          )(
+            Shared.Bool.and_true_left(p(g)(v1), Binds.every(~V, ~G, ~p, r, g))(h)
+          )(
+            Binds.every_insert(
+              ~V,
+              ~G,
+              ~p,
+              r,
+              g,
+              k,
+              v
+            )(Shared.Bool.and_true_right(p(g)(v1), Binds.every(~V, ~G, ~p, r, g))(h))(hv)
+          )
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# what holds of each value of a map holds of the value that a read gives
+def Crit.every_get(
+  ~V: Data,
+  ~G: Data,
+  ~p: G -> V -> Bool,
+  +m: Crits.Crit<V>,
+  +g: G,
+  +k: List<&2, U32>,
+  v: V
+) -> {
+  Crit.every(~V, ~G, ~p, m, g) == True{}: Bool
+} -> {Crits.Crit.get(V, m, k) == Some{v}: Maybe<&2, V>} -> {p(g)(v) == True{}: Bool}:
+  +h => e => Binds.every_get(
+    ~V,
+    ~G,
+    ~p,
+    Crits.Crit.entries(V, m),
+    g,
+    k,
+    v
+  )(
+    Shared.Bool.and_true_right(
+      Crits.Crit.wf(~V, m, 0n),
+      Binds.every(~V, ~G, ~p, Crits.Crit.entries(V, m), g)
+    )(h)
+  )(
+    Equal.trans(
+      Maybe<&2, V>,
+      Binds.get(V, Crits.Crit.entries(V, m), k),
+      Crits.Crit.get(V, m, k),
+      Some{v},
+      Equal.trans(
+        Maybe<&2, V>,
+        Binds.get(V, Crits.Crit.entries(V, m), k),
+        Crits.Crit.lookup(V, m, k),
+        Crits.Crit.get(V, m, k),
+        Crit.get_entries(V, m, k),
+        Equal.sym(
+          Maybe<&2, V>,
+          Crits.Crit.get(V, m, k),
+          Crits.Crit.lookup(V, m, k),
+          Crits.Crit.get_lookup(
+            ~V,
+            m,
+            k
+          )(
+            Shared.Bool.and_true_left(
+              Crits.Crit.wf(~V, m, 0n),
+              Binds.every(~V, ~G, ~p, Crits.Crit.entries(V, m), g)
+            )(h)
+          )
+        )
+      ),
+      e
+    )
+  )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# what holds of each value of a map, and of v, holds of each value of the
+# map with v under a key
+def Crit.every_set(
+  ~V: Data,
+  ~G: Data,
+  ~p: G -> V -> Bool,
+  +m: Crits.Crit<V>,
+  +g: G,
+  +k: List<&2, U32>,
+  +v: V
+) -> {
+  Crit.every(~V, ~G, ~p, m, g) == True{}: Bool
+} -> {
+  p(g)(v) == True{}: Bool
+} -> {Crit.every(~V, ~G, ~p, Crits.Crit.set(~V, m, k, v), g) == True{}: Bool}:
+  +h => hv => Shared.Bool.and_both(
+    Crits.Crit.wf(~V, Crits.Crit.set(~V, m, k, v), 0n),
+    Binds.every(~V, ~G, ~p, Crits.Crit.entries(V, Crits.Crit.set(~V, m, k, v)), g)
+  )(
+    Crits.Crit.upsert_wf(
+      ~V,
+      ~(w => x => x),
+      m,
+      k,
+      v
+    )(
+      Shared.Bool.and_true_left(
+        Crits.Crit.wf(~V, m, 0n),
+        Binds.every(~V, ~G, ~p, Crits.Crit.entries(V, m), g)
+      )(h)
+    )
+  )((
+      %Equal.sym(List<&2, Crits.Bind<V>>, Crits.Crit.entries(V, Crits.Crit.set(~V, m, k, v)), Binds.insert(V, Crits.Crit.entries(V, m), k, v), Crit.entries_set(~V, m, k, v)(Shared.Bool.and_true_left(Crits.Crit.wf(~V, m, 0n), Binds.every(~V, ~G, ~p, Crits.Crit.entries(V, m), g))(h))): {Binds.every(~V, ~G, ~p, _, g) == True{}: Bool}
+      Binds.every_insert(~V, ~G, ~p, Crits.Crit.entries(V, m), g, k, v)(Shared.Bool.and_true_right(Crits.Crit.wf(~V, m, 0n), Binds.every(~V, ~G, ~p, Crits.Crit.entries(V, m), g))(h))(hv)))
+
+# each value of the map with no entry holds
+def Crit.every_new(
+  ~V: Data,
+  ~G: Data,
+  ~p: G -> V -> Bool,
+  g: G
+) -> {Crit.every(~V, ~G, ~p, Crits.Crit.new(V), g) == True{}: Bool}:
+  {==}
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
