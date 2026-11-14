@@ -3441,3 +3441,279 @@ def Facts.ask_crit(
     == RFacts.Facts.ask(name, Facts.crit(s), i, r): RFacts.Plain()
 }:
   Facts.take_crit(name, s, Types.Fact.Ask{Facts.asked(s, i, r)})
+
+# Facts that a set holds
+# ----------------------
+# A node that takes in a fact that it holds stays as it is: what a Sync
+# costs is what it brings.
+
+# a set with a fact that it holds is the set
+def Facts.add_held(
+  +s: Facts(),
+  +f: Types.Fact
+) -> {Facts.has(s, f) == True{}: Bool} -> {Facts.add(s, f) == s: Facts()}:
+  +hf => Facts.ext(
+    Facts.add(s, f),
+    s
+  )(
+    +x => Equal.trans(
+      Bool,
+      Facts.has(Facts.add(s, f), x),
+      Bool.or(Coded.Fact.is_eq(x, f), Facts.has(s, x)),
+      Facts.has(s, x),
+      Facts.has_add(s, f, x),
+      Lists.Bool.by(
+        z => {Bool.or(z, Facts.has(s, x)) == Facts.has(s, x): Bool},
+        Coded.Fact.is_eq(x, f),
+        et => Lists.Equal.to(
+          Types.Fact,
+          z => {True{} == Facts.has(s, z): Bool},
+          f,
+          x,
+          Equal.sym(Types.Fact, x, f, Coded.Fact.is_eq_sound(x, f)(et)),
+          Equal.sym(Bool, Facts.has(s, f), True{}, hf)
+        ),
+        ef => {==}
+      )
+    )
+  )
+
+# a set that says that the trust of a node broke is the set where it broke
+def Trust.break_held(
+  +s: Facts(),
+  +name: String
+) -> {Trust.broken(s, name) == True{}: Bool} -> {Trust.break(s, name) == s: Facts()}:
+  +h => (
+    %Equal.sym(Facts(), Facts.add(s, RFacts.Trust.one(name)), s, Facts.add_held(s, RFacts.Trust.one(name))(Shared.Bool.and_true_left(Facts.has(s, RFacts.Trust.one(name)), Facts.has(s, RFacts.Trust.two(name)))(h))): {Facts.add(_, RFacts.Trust.two(name)) == s: Facts()}
+    Facts.add_held(s, RFacts.Trust.two(name))(Shared.Bool.and_true_right(Facts.has(s, RFacts.Trust.one(name)), Facts.has(s, RFacts.Trust.two(name)))(h)))
+
+# Facts.refuses_held, with a vote g of the set that contradicts the vote
+def Facts.refuses_held.fin(
+  +name: String,
+  +s: Facts(),
+  +v: String,
+  +st: Types.Step,
+  +pk: Types.Cast,
+  +g: Types.Fact,
+  ok: {Facts.ok(name, s) == True{}: Bool},
+  hf: {Facts.has(s, Types.Fact.Vote{v, st, pk}) == True{}: Bool},
+  ev: {String.eq(v, name) == True{}: Bool},
+  hg: {Facts.has(s, g) == True{}: Bool}
+) -> {
+  RFacts.Fact.clashes(Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}, g) == True{}: Bool
+} -> Empty:
+  match g:
+    case Types.Fact.Ask{a}:
+      h => Shared.Bool.false_ne_true(h)
+    case Types.Fact.Vote{+w, +st2, +pk2}:
+      +h => Lists.Bool.clash(
+        Empty,
+        List.contains(~String, ~String.eq, Facts.liars(s), name),
+        Facts.ok_never(name, s)(ok),
+        Lists.Equal.to(
+          String,
+          z => {List.contains(~String, ~String.eq, Facts.liars(s), z) == True{}: Bool},
+          v,
+          name,
+          Texts.String.eq_sound(v, name)(ev),
+          Facts.liars_in(
+            s,
+            Types.Fact.Vote{v, st, pk},
+            Types.Fact.Vote{w, st2, pk2},
+            v,
+            Coded.Step.words(st),
+            Coded.Cast.words(pk),
+            Coded.Cast.words(pk2)
+          )(hf)(hg)({==})(
+            %Texts.String.eq_sound(v, w)(Shared.Bool.and_true_left(String.eq(v, w), Bool.and(RFacts.Words.is_eq(Coded.Step.words(st), Coded.Step.words(st2)), Bool.not(RFacts.Words.is_eq(Coded.Cast.words(pk), Coded.Cast.words(pk2)))))(h)): {Some{Spec.Ballot{_, Coded.Step.words(st2), Coded.Cast.words(pk2)}} == Some{Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk2)}}: Maybe<&2, Spec.Ballot>}
+            %Words.is_eq_sound(Coded.Step.words(st), Coded.Step.words(st2))(Shared.Bool.and_true_left(RFacts.Words.is_eq(Coded.Step.words(st), Coded.Step.words(st2)), Bool.not(RFacts.Words.is_eq(Coded.Cast.words(pk), Coded.Cast.words(pk2))))(Shared.Bool.and_true_right(String.eq(v, w), Bool.and(RFacts.Words.is_eq(Coded.Step.words(st), Coded.Step.words(st2)), Bool.not(RFacts.Words.is_eq(Coded.Cast.words(pk), Coded.Cast.words(pk2)))))(h))): {Some{Spec.Ballot{v, _, Coded.Cast.words(pk2)}} == Some{Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk2)}}: Maybe<&2, Spec.Ballot>}
+            {==})(
+            Shared.Bool.and_true_right(
+              RFacts.Words.is_eq(Coded.Step.words(st), Coded.Step.words(st2)),
+              Bool.not(RFacts.Words.is_eq(Coded.Cast.words(pk), Coded.Cast.words(pk2)))
+            )(
+              Shared.Bool.and_true_right(
+                String.eq(v, w),
+                Bool.and(
+                  RFacts.Words.is_eq(Coded.Step.words(st), Coded.Step.words(st2)),
+                  Bool.not(RFacts.Words.is_eq(Coded.Cast.words(pk), Coded.Cast.words(pk2)))
+                )
+              )(h)
+            )
+          )
+        )
+      )
+
+# Facts.refuses_held, with the member of the set that contradicts the vote
+def Facts.refuses_held.at(
+  +name: String,
+  +s: Facts(),
+  +v: String,
+  +st: Types.Step,
+  +pk: Types.Cast,
+  ok: {Facts.ok(name, s) == True{}: Bool},
+  hf: {Facts.has(s, Types.Fact.Vote{v, st, pk}) == True{}: Bool},
+  ev: {String.eq(v, name) == True{}: Bool},
+  r: Exists(
+    Types.Fact,
+    g => {
+      List.contains(~Types.Fact, ~Coded.Fact.is_eq, Facts.list(s), g) == True{}: Bool
+    }
+      & {
+        RFacts.Fact.clashes(
+          Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)},
+          g
+        )
+          == True{}: Bool
+      }
+  )
+) -> Empty:
+  (+g, p) = r
+  (c, h) = p
+  Facts.refuses_held.fin(name, s, v, st, pk, g, ok, hf, ev, Facts.in_has(s, g)(c))(h)
+
+# a node refuses no fact that it holds, in a set that is sound for it
+def Facts.refuses_held(
+  +name: String,
+  +s: Facts(),
+  +f: Types.Fact
+) -> {
+  Facts.ok(name, s) == True{}: Bool
+} -> {Facts.has(s, f) == True{}: Bool} -> {Facts.refuses(name, s, f) == False{}: Bool}:
+  match f:
+    case Types.Fact.Ask{a}:
+      ok => hf => {==}
+    case Types.Fact.Vote{+v, +st, +pk}:
+      ok => hf => Case.false_of(
+        Facts.refuses(name, s, Types.Fact.Vote{v, st, pk})
+      )(
+        Lists.Bool.by(
+          z => {
+            Shared.Bool.when(
+              Bool,
+              z,
+              u => Shared.List.some(
+                ~Types.Fact,
+                ~Spec.Ballot,
+                ~RFacts.Fact.clashes,
+                Facts.list(s),
+                Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}
+              ),
+              u => False{}
+            )
+              == True{}: Bool
+          } -> Empty,
+          String.eq(v, name),
+          et => e => Facts.refuses_held.at(
+            name,
+            s,
+            v,
+            st,
+            pk,
+            ok,
+            hf,
+            et,
+            Lists.List.some_in(
+              ~Types.Fact,
+              ~Spec.Ballot,
+              ~RFacts.Fact.clashes,
+              ~Coded.Fact.is_eq,
+              ~Coded.Fact.laws(),
+              Facts.list(s),
+              Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}
+            )(e)
+          ),
+          ef => e => Shared.Bool.false_ne_true(e)
+        )
+      )
+
+# the asks of a set collide, when a fact that it holds collides with them
+def Facts.collided_held(
+  +s: Facts(),
+  +f: Types.Fact
+) -> {
+  Facts.has(s, f) == True{}: Bool
+} -> {RFacts.Fact.collided(Facts.list(s), f) == True{}: Bool} -> {Facts.collide(s) == True{}: Bool}:
+  hf => hc => Lists.List.in_some(
+    ~Types.Fact,
+    ~List<&2, Types.Fact>,
+    ~RFacts.Fact.collided,
+    ~Coded.Fact.is_eq,
+    ~Coded.Fact.laws(),
+    Facts.list(s),
+    Facts.list(s),
+    f
+  )(Facts.has_in(s, f)(hf))(hc)
+
+# b is true, when c is, and b or not c
+def Case.or_not(
+  c: Bool,
+  b: Bool
+) -> {c == True{}: Bool} -> {Bool.or(Bool.not(c), b) == True{}: Bool} -> {b == True{}: Bool}:
+  match c:
+    case True{}:
+      hc => h => h
+    case False{}:
+      hc => h => Empty.absurd({b == True{}: Bool}, Shared.Bool.false_ne_true(hc))
+
+# a node that takes in a fact that it holds stays as it is, when its set is
+# sound for it
+def Facts.take_held(
+  +name: String,
+  +s: Facts(),
+  +f: Types.Fact
+) -> {
+  Facts.ok(name, s) == True{}: Bool
+} -> {Facts.has(s, f) == True{}: Bool} -> {Facts.take(name, s, f) == s: Facts()}:
+  +ok => +hf => Facts.take_by(
+    t => {t == s: Facts()},
+    name,
+    s,
+    f,
+    er => Lists.Bool.clash(
+      {Trust.break(s, name) == s: Facts()},
+      Facts.refuses(name, s, f),
+      Facts.refuses_held(name, s, f)(ok)(hf),
+      er
+    ),
+    er => ec => (
+      %Equal.sym(Facts(), Facts.add(s, f), s, Facts.add_held(s, f)(hf)): {Trust.break(_, name) == s: Facts()}
+      Trust.break_held(s, name)(Case.or_not(Facts.collide(s), Trust.broken(s, name))(Facts.collided_held(s, f)(hf)(ec))(Facts.ok_trust(name, s)(ok)))),
+    er => ec => Facts.add_held(s, f)(hf)
+  )
+
+# a node that takes in a vote of another voter holds its set with the vote
+def Facts.take_vote(
+  +name: String,
+  +s: Facts(),
+  +v: String,
+  +st: Types.Step,
+  +x: Types.Cast
+) -> {
+  String.eq(v, name) == False{}: Bool
+} -> {
+  Facts.take(name, s, Types.Fact.Vote{v, st, x}) == Facts.add(s, Types.Fact.Vote{v, st, x}): Facts()
+}:
+  h => Facts.take_by(
+    t => {t == Facts.add(s, Types.Fact.Vote{v, st, x}): Facts()},
+    name,
+    s,
+    Types.Fact.Vote{v, st, x},
+    er => Lists.Bool.clash(
+      {Trust.break(s, name) == Facts.add(s, Types.Fact.Vote{v, st, x}): Facts()},
+      Facts.refuses(name, s, Types.Fact.Vote{v, st, x}),
+      Facts.refuses_other(name, s, v, st, x)(h),
+      er
+    ),
+    er => ec => Empty.absurd(
+      {
+        Trust.break(
+          Facts.add(s, Types.Fact.Vote{v, st, x}),
+          name
+        )
+          == Facts.add(s, Types.Fact.Vote{v, st, x}): Facts()
+      },
+      Shared.Bool.false_ne_true(ec)
+    ),
+    er => ec => {==}
+  )

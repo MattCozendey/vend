@@ -2493,3 +2493,8 @@ def List.contains_filter_map_inv(
         )
       )
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# what holds of a holds of b, when a is b
+def Equal.to(-A: Data, -P: A -> Type, -a: A, -b: A, e: {a == b: A}, pa: P(a)) -> P(b):
+  %e: P(_)
+  pa

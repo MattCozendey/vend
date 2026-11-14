@@ -18,8 +18,10 @@ import ./rounds.bend as Rounds
 # one number. A slot is decided in rounds (Rounds): the node whose turn a
 # round is proposes the request that it took in last, or what the votes of
 # the rounds before bind it to; the others vote as it did. A node that has
-# nothing to vote for passes to a later round, so a lost node does not stop
-# a slot.
+# nothing to vote for promises the highest round, or calls its own next
+# round when the node whose turn it is cast no ballot there
+# (Rounds.Slot.pass): a lost node does not stop a slot, and a work casts
+# nothing when the node holds no new ballot.
 
 # Where a request goes
 # --------------------

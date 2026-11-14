@@ -10,8 +10,10 @@ import ../types.bend as Types
 # A slot of a line is decided in rounds: 0, 1, 2, ... Each round is the turn
 # of one of the nodes that decide the slot: it votes for a pick, and the
 # others vote as it did. A slot is decided for a pick when, in one round,
-# more than half of the nodes cast a sound vote for it. A node that waited
-# passes to a later round, so a lost node does not stop a slot.
+# more than half of the nodes cast a sound vote for it. When the node whose
+# turn a round is cast no ballot there, another node calls its own next
+# round and the others promise it (Slot.pass), so a lost node does not stop
+# a slot.
 #
 # The ballots of a voter for a slot are a chain: they have the numbers 0, 1,
 # 2, ..., and a ballot is read only when all the ballots before it are held.
@@ -770,15 +772,6 @@ def Slot.follow(
 ) -> Maybe<&2, Draft>:
   Slot.follow.at(bs, ds, k, name, Chain.reach(bs, name))
 
-# the round that a voter is in, when it may vote in no round below fl and
-# its votes are vs: the round of its last vote or pass
-def Seen.level(+fl: Nat, vs: List<&2, Voted>) -> Nat:
-  match vs:
-    case Nil{}:
-      fl
-    case Con{Voted{+r, p}, rest}:
-      Bool.pick(Nat, Nat.is_eq(1n+r, fl), r, fl)
-
 # a voter and a round
 type Call is Data:
   Call{voter: String, round: Nat}
@@ -796,7 +789,13 @@ def Rounds.heard(bs: List<&2, Ballot>, h: String, r: Nat) -> Bool:
 
 # the round top of the slot k is alive for the node name, where the nodes ds
 # decide: it is the turn of name, or the node whose turn it is came to it
-def Round.alive(bs: List<&2, Ballot>, ds: List<&2, String>, k: Nat, +name: String, +top: Nat) -> Bool:
+def Round.alive(
+  bs: List<&2, Ballot>,
+  ds: List<&2, String>,
+  k: Nat,
+  +name: String,
+  +top: Nat
+) -> Bool:
   +h = Turn.of(ds, Nat.add(k, top))
   Shared.Bool.when(Bool, String.eq(h, name), u => True{}, u => Rounds.heard(bs, h, top))
 
@@ -814,14 +813,6 @@ def Rounds.mine(n: Nat, +ds: List<&2, String>, +k: Nat, +name: String, +r: Nat) 
         u => Rounds.mine(m, ds, k, name, 1n+r)
       )
 
-# the pass to the round to, of the number t, when go
-def Slot.pass.if(t: Nat, to: Nat, go: Bool) -> Maybe<&2, Draft>:
-  match go:
-    case True{}:
-      Some{Draft{t, Types.Cast.Pass{to}}}
-    case False{}:
-      None{}
-
 # the pass to the round m, if any, of the number t
 def Slot.pass.to(t: Nat, m: Maybe<&2, Nat>) -> Maybe<&2, Draft>:
   match m:
@@ -830,41 +821,36 @@ def Slot.pass.to(t: Nat, m: Maybe<&2, Nat>) -> Maybe<&2, Draft>:
     case Some{to}:
       Some{Draft{t, Types.Cast.Pass{to}}}
 
-# the pass of a voter in the round level, whose next ballot is of the number
-# t, where top is the highest round of a ballot for the slot. While top is
-# alive: to top when the voter is below it, else none (it waits). Else: to
-# own, its next round above top
+# the pass of a voter that may vote in no round below fl, whose next ballot
+# is of the number t, where top is the highest round of a ballot for the
+# slot. While top is alive: to top when the voter has not promised it (fl is
+# below top), else none (it waits). Else: to own, its next round above top
 def Slot.pass.of(
   t: Nat,
-  level: Nat,
+  fl: Nat,
   +top: Nat,
   alive: Bool,
   own: Unit -> Maybe<&2, Nat>
 ) -> Maybe<&2, Draft>:
   match alive:
     case True{}:
-      Slot.pass.if(t, top, Nat.is_lt(level, top))
+      Slot.pass.to(t, Shared.Maybe.when(Nat, Nat.is_lt(fl, top), u => Some{top}))
     case False{}:
       Slot.pass.to(t, own(Unit{}))
 
 # the pass of a voter whose ballots are held as far as m
-def Slot.pass.at(
-  +top: Nat,
-  alive: Bool,
-  own: Unit -> Maybe<&2, Nat>,
-  m: Reach
-) -> Maybe<&2, Draft>:
+def Slot.pass.at(+top: Nat, alive: Bool, own: Unit -> Maybe<&2, Nat>, m: Reach) -> Maybe<&2, Draft>:
   match m:
-    case Reach{t, Seen{+fl, vs}}:
-      Slot.pass.of(t, Seen.level(fl, vs), top, alive, own)
+    case Reach{t, Seen{fl, vs}}:
+      Slot.pass.of(t, fl, top, alive, own)
 
 # the pass that the node name casts next for the slot k of the ballots bs,
-# where the nodes ds decide. It reads only the ballots, and no node passes
-# twice for the same ballots: while the highest round of a ballot is alive
-# (it is the turn of the node, or the node whose turn it is came to it), the
-# node comes up to it, and then waits; when it is not (the node whose turn
-# it is cast no ballot there: it may be lost), the node calls its own next
-# round, which the others then come up to
+# where the nodes ds decide. It reads only the ballots, and a node passes
+# once for the same ballots (rounds.bend: Slot.pass_once): while the highest
+# round of a ballot is alive (it is the turn of the node, or the node whose
+# turn it is came to it), the node promises it, and then waits; when it is
+# not (the node whose turn it is cast no ballot there: it may be lost), the
+# node calls its own next round, which the others then promise
 def Slot.pass(
   +bs: List<&2, Ballot>,
   +ds: List<&2, String>,

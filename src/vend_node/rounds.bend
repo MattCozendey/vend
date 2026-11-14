@@ -6899,3 +6899,661 @@ def Slot.alone(
     k,
     pk
   )({==})(Chain.reach_held(Slot.ballots(s, c, k), name))(hl)(hu)
+
+# Passes
+# ------
+# A node passes once for the same ballots: after a pass it has promised the
+# highest round of a ballot, and that round is alive, so it waits.
+
+# a round that Rounds.mine gives is the turn of the node
+def Rounds.mine_turn(
+  n: Nat,
+  +ds: List<&2, String>,
+  +k: Nat,
+  +name: String,
+  +r: Nat,
+  +to: Nat
+) -> {
+  RRounds.Rounds.mine(n, ds, k, name, r) == Some{to}: Maybe<&2, Nat>
+} -> {String.eq(RRounds.Turn.of(ds, Nat.add(k, to)), name) == True{}: Bool}:
+  match n:
+    case 0n:
+      e => Empty.absurd(
+        {String.eq(RRounds.Turn.of(ds, Nat.add(k, to)), name) == True{}: Bool},
+        Shared.Maybe.none_ne_some(Nat, to, e)
+      )
+    case 1n+m:
+      Lists.Bool.by(
+        z => {
+          Shared.Bool.when(
+            Maybe<&2, Nat>,
+            z,
+            u => Some{1n+r},
+            u => RRounds.Rounds.mine(m, ds, k, name, 1n+r)
+          )
+            == Some{to}: Maybe<&2, Nat>
+        } -> {String.eq(RRounds.Turn.of(ds, Nat.add(k, to)), name) == True{}: Bool},
+        String.eq(RRounds.Turn.of(ds, Nat.add(k, 1n+r)), name),
+        et => e => (
+          %Shared.Maybe.some_inj(Nat, 1n+r, to, e): {String.eq(RRounds.Turn.of(ds, Nat.add(k, _)), name) == True{}: Bool}
+          et),
+        ef => e => Rounds.mine_turn(m, ds, k, name, 1n+r, to)(e)
+      )
+
+# a round that Rounds.mine gives is above the round that it starts after
+def Rounds.mine_above(
+  n: Nat,
+  +ds: List<&2, String>,
+  +k: Nat,
+  +name: String,
+  +r: Nat,
+  +to: Nat
+) -> {
+  RRounds.Rounds.mine(n, ds, k, name, r) == Some{to}: Maybe<&2, Nat>
+} -> {Nat.is_lt(r, to) == True{}: Bool}:
+  match n:
+    case 0n:
+      e => Empty.absurd({Nat.is_lt(r, to) == True{}: Bool}, Shared.Maybe.none_ne_some(Nat, to, e))
+    case 1n+m:
+      Lists.Bool.by(
+        z => {
+          Shared.Bool.when(
+            Maybe<&2, Nat>,
+            z,
+            u => Some{1n+r},
+            u => RRounds.Rounds.mine(m, ds, k, name, 1n+r)
+          )
+            == Some{to}: Maybe<&2, Nat>
+        } -> {Nat.is_lt(r, to) == True{}: Bool},
+        String.eq(RRounds.Turn.of(ds, Nat.add(k, 1n+r)), name),
+        et => e => (
+          %Shared.Maybe.some_inj(Nat, 1n+r, to, e): {Nat.is_lt(r, _) == True{}: Bool}
+          Shared.Nat.lt_succ(r)),
+        ef => e => Shared.Nat.le_lt(
+          r,
+          1n+r,
+          to
+        )(
+          Shared.Nat.lt_weak(r, 1n+r)(Shared.Nat.lt_succ(r))
+        )(Rounds.mine_above(m, ds, k, name, 1n+r, to)(e))
+      )
+
+# a number that is not at most another is not below it
+def Nat.nle_nlt(
+  a: Nat,
+  b: Nat
+) -> {Nat.is_le(a, b) == False{}: Bool} -> {Nat.is_lt(a, b) == False{}: Bool}:
+  +a = a
+  +b = b
+  ef => Lists.Bool.by(
+    z => {Nat.is_lt(a, b) == z: Bool} -> {Nat.is_lt(a, b) == False{}: Bool},
+    Nat.is_lt(a, b),
+    et => e => Empty.absurd(
+      {Nat.is_lt(a, b) == False{}: Bool},
+      Shared.Bool.true_ne_false(
+        Equal.trans(
+          Bool,
+          True{},
+          Nat.is_le(a, b),
+          False{},
+          Equal.sym(Bool, Nat.is_le(a, b), True{}, Shared.Nat.lt_weak(a, b)(et)),
+          ef
+        )
+      )
+    ),
+    ef2 => e => e
+  )({==})
+
+# after a pass to a round, a voter may vote in no round below it
+def Seen.passed_floor(
+  m: RRounds.Seen,
+  +to: Nat
+) -> {
+  Nat.is_lt(RRounds.Seen.floor(RRounds.Seen.step(m, Types.Cast.Pass{to})), to) == False{}: Bool
+}:
+  match m:
+    case RRounds.Seen{+fl, +vs}:
+      Lists.Bool.by(
+        z => {
+          Nat.is_lt(
+            RRounds.Seen.floor(
+              Bool.pick(RRounds.Seen, z, RRounds.Seen{to, vs}, RRounds.Seen{fl, vs})
+            ),
+            to
+          )
+            == False{}: Bool
+        },
+        Nat.is_le(fl, to),
+        et => Shared.Nat.lt_irrefl(to),
+        ef => Nat.nle_nlt(fl, to)(ef)
+      )
+
+# a voter that promised the highest round casts no pass while it is alive
+def Slot.pass.at_waits(
+  +top: Nat,
+  alive: Bool,
+  own: Unit -> Maybe<&2, Nat>,
+  t: Nat,
+  m: RRounds.Seen
+) -> {
+  alive == True{}: Bool
+} -> {
+  Nat.is_lt(RRounds.Seen.floor(m), top) == False{}: Bool
+} -> {
+  RRounds.Slot.pass.at(top, alive, own, RRounds.Reach{t, m}) == None{}: Maybe<&2, RRounds.Draft>
+}:
+  match m:
+    case RRounds.Seen{floor, votes}:
+      ea => x => (
+        %Equal.sym(Bool, alive, True{}, ea): {RRounds.Slot.pass.of(t, floor, top, _, own) == None{}: Maybe<&2, RRounds.Draft>}
+        %Equal.sym(Bool, Nat.is_lt(floor, top), False{}, x): {RRounds.Slot.pass.to(t, Shared.Maybe.when(Nat, _, u => Some{top})) == None{}: Maybe<&2, RRounds.Draft>}
+        {==})
+
+# the node h, that came to the round r, came to it with one more ballot
+def Rounds.heard_grows(
+  b: RRounds.Ballot,
+  bs: List<&2, RRounds.Ballot>,
+  +h: String,
+  +r: Nat
+) -> {
+  RRounds.Rounds.heard(bs, h, r) == True{}: Bool
+} -> {RRounds.Rounds.heard(b <> bs, h, r) == True{}: Bool}:
+  +b = b
+  +bs = bs
+  e => Lists.Bool.by(
+    z => {List.any.if(u => RRounds.Rounds.heard(bs, h, r), z) == True{}: Bool},
+    RRounds.Ballot.reaches(RRounds.Call{h, r}, b),
+    et => {==},
+    ef => e
+  )
+
+# a round that is alive stays alive with one more ballot
+def Round.alive_grows(
+  b: RRounds.Ballot,
+  bs: List<&2, RRounds.Ballot>,
+  ds: List<&2, String>,
+  k: Nat,
+  +name: String,
+  +top: Nat
+) -> {
+  RRounds.Round.alive(bs, ds, k, name, top) == True{}: Bool
+} -> {RRounds.Round.alive(b <> bs, ds, k, name, top) == True{}: Bool}:
+  +b = b
+  +bs = bs
+  +ds = ds
+  +k = k
+  Lists.Bool.by(
+    z => {
+      Shared.Bool.when(
+        Bool,
+        z,
+        u => True{},
+        u => RRounds.Rounds.heard(bs, RRounds.Turn.of(ds, Nat.add(k, top)), top)
+      )
+        == True{}: Bool
+    } -> {
+      Shared.Bool.when(
+        Bool,
+        z,
+        u => True{},
+        u => RRounds.Rounds.heard(b <> bs, RRounds.Turn.of(ds, Nat.add(k, top)), top)
+      )
+        == True{}: Bool
+    },
+    String.eq(RRounds.Turn.of(ds, Nat.add(k, top)), name),
+    et => e => {==},
+    ef => e => Rounds.heard_grows(b, bs, RRounds.Turn.of(ds, Nat.add(k, top)), top)(e)
+  )
+
+# the greater of a and b is a, when b is at most a
+def Nat.max_above(a: Nat, b: Nat) -> {Nat.is_le(b, a) == True{}: Bool} -> {Nat.max(a, b) == a: Nat}:
+  match a b:
+    case 0n 0n:
+      h => {==}
+    case 0n 1n+q:
+      h => Empty.absurd({Nat.max(0n, 1n+q) == 0n: Nat}, Shared.Bool.false_ne_true(h))
+    case 1n+p 0n:
+      h => {==}
+    case 1n+p 1n+q:
+      h => Equal.cong(Nat, Nat, n => 1n+n, Nat.max(p, q), p, Nat.max_above(p, q)(h))
+
+# the greater of a and a is a
+def Nat.max_same(+a: Nat) -> {Nat.max(a, a) == a: Nat}:
+  Nat.max_above(a, a)(Shared.Nat.le_refl(a))
+
+# what the draft d casts
+def Draft.cast(d: RRounds.Draft) -> Types.Cast:
+  match d:
+    case RRounds.Draft{t, x}:
+      x
+
+# the next pass of a node, read from the ballots bs, where its ballots are
+# held as far as m
+def Pass.next(
+  +bs: List<&2, RRounds.Ballot>,
+  +ds: List<&2, String>,
+  +k: Nat,
+  +name: String,
+  m: RRounds.Reach
+) -> Maybe<&2, RRounds.Draft>:
+  RRounds.Slot.pass.at(
+    RRounds.Rounds.top(bs),
+    RRounds.Round.alive(bs, ds, k, name, RRounds.Rounds.top(bs)),
+    u => RRounds.Rounds.mine(List.length(&2, String, ds), ds, k, name, RRounds.Rounds.top(bs)),
+    m
+  )
+
+# no pass follows a pass to the highest round of a ballot, which is alive
+def Pass.next_top(
+  +bs: List<&2, RRounds.Ballot>,
+  +ds: List<&2, String>,
+  +k: Nat,
+  +name: String,
+  +t: Nat,
+  +m: RRounds.Seen
+) -> {
+  RRounds.Round.alive(bs, ds, k, name, RRounds.Rounds.top(bs)) == True{}: Bool
+} -> {
+  Pass.next(
+    (RRounds.Ballot{name, t, Types.Cast.Pass{RRounds.Rounds.top(bs)}} <> bs),
+    ds,
+    k,
+    name,
+    RRounds.Reach{1n+t, RRounds.Seen.step(m, Types.Cast.Pass{RRounds.Rounds.top(bs)})}
+  )
+    == None{}: Maybe<&2, RRounds.Draft>
+}:
+  ea => Lists.Equal.to(
+    Nat,
+    top2 => {
+      RRounds.Slot.pass.at(
+        top2,
+        RRounds.Round.alive(
+          (RRounds.Ballot{name, t, Types.Cast.Pass{RRounds.Rounds.top(bs)}} <> bs),
+          ds,
+          k,
+          name,
+          top2
+        ),
+        u => RRounds.Rounds.mine(List.length(&2, String, ds), ds, k, name, top2),
+        RRounds.Reach{1n+t, RRounds.Seen.step(m, Types.Cast.Pass{RRounds.Rounds.top(bs)})}
+      )
+        == None{}: Maybe<&2, RRounds.Draft>
+    },
+    RRounds.Rounds.top(bs),
+    Nat.max(RRounds.Rounds.top(bs), RRounds.Rounds.top(bs)),
+    Equal.sym(
+      Nat,
+      Nat.max(RRounds.Rounds.top(bs), RRounds.Rounds.top(bs)),
+      RRounds.Rounds.top(bs),
+      Nat.max_same(RRounds.Rounds.top(bs))
+    ),
+    Slot.pass.at_waits(
+      RRounds.Rounds.top(bs),
+      RRounds.Round.alive(
+        (RRounds.Ballot{name, t, Types.Cast.Pass{RRounds.Rounds.top(bs)}} <> bs),
+        ds,
+        k,
+        name,
+        RRounds.Rounds.top(bs)
+      ),
+      u => RRounds.Rounds.mine(List.length(&2, String, ds), ds, k, name, RRounds.Rounds.top(bs)),
+      1n+t,
+      RRounds.Seen.step(m, Types.Cast.Pass{RRounds.Rounds.top(bs)})
+    )(
+      Round.alive_grows(
+        RRounds.Ballot{name, t, Types.Cast.Pass{RRounds.Rounds.top(bs)}},
+        bs,
+        ds,
+        k,
+        name,
+        RRounds.Rounds.top(bs)
+      )(ea)
+    )(Seen.passed_floor(m, RRounds.Rounds.top(bs)))
+  )
+
+# no pass follows a pass of a node to its own next round
+def Pass.next_own(
+  +bs: List<&2, RRounds.Ballot>,
+  +ds: List<&2, String>,
+  +k: Nat,
+  +name: String,
+  +t: Nat,
+  +m: RRounds.Seen,
+  +to: Nat
+) -> {
+  RRounds.Rounds.mine(
+    List.length(&2, String, ds),
+    ds,
+    k,
+    name,
+    RRounds.Rounds.top(bs)
+  )
+    == Some{to}: Maybe<&2, Nat>
+} -> {
+  Pass.next(
+    (RRounds.Ballot{name, t, Types.Cast.Pass{to}} <> bs),
+    ds,
+    k,
+    name,
+    RRounds.Reach{1n+t, RRounds.Seen.step(m, Types.Cast.Pass{to})}
+  )
+    == None{}: Maybe<&2, RRounds.Draft>
+}:
+  +em => Lists.Equal.to(
+    Nat,
+    top2 => {
+      RRounds.Slot.pass.at(
+        top2,
+        RRounds.Round.alive(
+          (RRounds.Ballot{name, t, Types.Cast.Pass{to}} <> bs),
+          ds,
+          k,
+          name,
+          top2
+        ),
+        u => RRounds.Rounds.mine(List.length(&2, String, ds), ds, k, name, top2),
+        RRounds.Reach{1n+t, RRounds.Seen.step(m, Types.Cast.Pass{to})}
+      )
+        == None{}: Maybe<&2, RRounds.Draft>
+    },
+    to,
+    Nat.max(to, RRounds.Rounds.top(bs)),
+    Equal.sym(
+      Nat,
+      Nat.max(to, RRounds.Rounds.top(bs)),
+      to,
+      Nat.max_above(
+        to,
+        RRounds.Rounds.top(bs)
+      )(
+        Shared.Nat.lt_weak(
+          RRounds.Rounds.top(bs),
+          to
+        )(
+          Rounds.mine_above(
+            List.length(&2, String, ds),
+            ds,
+            k,
+            name,
+            RRounds.Rounds.top(bs),
+            to
+          )(em)
+        )
+      )
+    ),
+    Slot.pass.at_waits(
+      to,
+      RRounds.Round.alive((RRounds.Ballot{name, t, Types.Cast.Pass{to}} <> bs), ds, k, name, to),
+      u => RRounds.Rounds.mine(List.length(&2, String, ds), ds, k, name, to),
+      1n+t,
+      RRounds.Seen.step(m, Types.Cast.Pass{to})
+    )(
+      %Equal.sym(Bool, String.eq(RRounds.Turn.of(ds, Nat.add(k, to)), name), True{}, Rounds.mine_turn(List.length(&2, String, ds), ds, k, name, RRounds.Rounds.top(bs), to)(em)): {Shared.Bool.when(Bool, _, u => True{}, u => RRounds.Rounds.heard((RRounds.Ballot{name, t, Types.Cast.Pass{to}} <> bs), RRounds.Turn.of(ds, Nat.add(k, to)), to)) == True{}: Bool}
+      {==})(Seen.passed_floor(m, to))
+  )
+
+# the next pass of a node after the cast y, as its ballot of the number t,
+# where its ballots were held as far as that number and it was seen as m
+def Pass.after(
+  +bs: List<&2, RRounds.Ballot>,
+  +ds: List<&2, String>,
+  +k: Nat,
+  +name: String,
+  +t: Nat,
+  +m: RRounds.Seen,
+  +y: Types.Cast
+) -> Maybe<&2, RRounds.Draft>:
+  Pass.next(
+    RRounds.Ballot{name, t, y} <> bs,
+    ds,
+    k,
+    name,
+    RRounds.Reach{1n+t, RRounds.Seen.step(m, y)}
+  )
+
+# what the draft d casts is x, when d is a draft of x
+def Draft.cast_of(
+  -t: Nat,
+  -t2: Nat,
+  -y: Types.Cast,
+  -x: Types.Cast,
+  e: {Some{RRounds.Draft{t, y}} == Some{RRounds.Draft{t2, x}}: Maybe<&2, RRounds.Draft>}
+) -> {y == x: Types.Cast}:
+  Equal.cong(
+    RRounds.Draft,
+    Types.Cast,
+    Draft.cast,
+    RRounds.Draft{t, y},
+    RRounds.Draft{t2, x},
+    Shared.Maybe.some_inj(RRounds.Draft, RRounds.Draft{t, y}, RRounds.Draft{t2, x}, e)
+  )
+
+# no pass follows the pass of a node, where its ballots are held as far as
+# the pass
+def Pass.next_once(
+  +bs: List<&2, RRounds.Ballot>,
+  +ds: List<&2, String>,
+  +k: Nat,
+  +name: String,
+  +t: Nat,
+  +x: Types.Cast,
+  m: RRounds.Seen
+) -> {
+  Pass.next(
+    bs,
+    ds,
+    k,
+    name,
+    RRounds.Reach{t, m}
+  )
+    == Some{RRounds.Draft{t, x}}: Maybe<&2, RRounds.Draft>
+} -> {Pass.after(bs, ds, k, name, t, m, x) == None{}: Maybe<&2, RRounds.Draft>}:
+  match m:
+    case RRounds.Seen{+fl, +vs}:
+      Lists.Bool.by(
+        z => {
+          RRounds.Slot.pass.of(
+            t,
+            fl,
+            RRounds.Rounds.top(bs),
+            z,
+            u => RRounds.Rounds.mine(
+              List.length(&2, String, ds),
+              ds,
+              k,
+              name,
+              RRounds.Rounds.top(bs)
+            )
+          )
+            == Some{RRounds.Draft{t, x}}: Maybe<&2, RRounds.Draft>
+        } -> {
+          Pass.after(
+            bs,
+            ds,
+            k,
+            name,
+            t,
+            RRounds.Seen{fl, vs},
+            x
+          )
+            == None{}: Maybe<&2, RRounds.Draft>
+        },
+        RRounds.Round.alive(bs, ds, k, name, RRounds.Rounds.top(bs)),
+        +et => Lists.Bool.by(
+          z => {
+            RRounds.Slot.pass.to(
+              t,
+              Shared.Maybe.when(Nat, z, u => Some{RRounds.Rounds.top(bs)})
+            )
+              == Some{RRounds.Draft{t, x}}: Maybe<&2, RRounds.Draft>
+          } -> {
+            Pass.after(
+              bs,
+              ds,
+              k,
+              name,
+              t,
+              RRounds.Seen{fl, vs},
+              x
+            )
+              == None{}: Maybe<&2, RRounds.Draft>
+          },
+          Nat.is_lt(fl, RRounds.Rounds.top(bs)),
+          el => e => Lists.Equal.to(
+            Types.Cast,
+            y => {
+              Pass.after(
+                bs,
+                ds,
+                k,
+                name,
+                t,
+                RRounds.Seen{fl, vs},
+                y
+              )
+                == None{}: Maybe<&2, RRounds.Draft>
+            },
+            Types.Cast.Pass{RRounds.Rounds.top(bs)},
+            x,
+            Draft.cast_of(t, t, Types.Cast.Pass{RRounds.Rounds.top(bs)}, x, e),
+            Pass.next_top(bs, ds, k, name, t, RRounds.Seen{fl, vs})(et)
+          ),
+          el => e => Empty.absurd(
+            {
+              Pass.after(
+                bs,
+                ds,
+                k,
+                name,
+                t,
+                RRounds.Seen{fl, vs},
+                x
+              )
+                == None{}: Maybe<&2, RRounds.Draft>
+            },
+            Shared.Maybe.none_ne_some(RRounds.Draft, RRounds.Draft{t, x}, e)
+          )
+        ),
+        ef => Lists.Maybe.by(
+          Nat,
+          z => {
+            RRounds.Slot.pass.to(t, z) == Some{RRounds.Draft{t, x}}: Maybe<&2, RRounds.Draft>
+          } -> {
+            Pass.after(
+              bs,
+              ds,
+              k,
+              name,
+              t,
+              RRounds.Seen{fl, vs},
+              x
+            )
+              == None{}: Maybe<&2, RRounds.Draft>
+          },
+          RRounds.Rounds.mine(List.length(&2, String, ds), ds, k, name, RRounds.Rounds.top(bs)),
+          en => e => Empty.absurd(
+            {
+              Pass.after(
+                bs,
+                ds,
+                k,
+                name,
+                t,
+                RRounds.Seen{fl, vs},
+                x
+              )
+                == None{}: Maybe<&2, RRounds.Draft>
+            },
+            Shared.Maybe.none_ne_some(RRounds.Draft, RRounds.Draft{t, x}, e)
+          ),
+          +to => +em => e => Lists.Equal.to(
+            Types.Cast,
+            y => {
+              Pass.after(
+                bs,
+                ds,
+                k,
+                name,
+                t,
+                RRounds.Seen{fl, vs},
+                y
+              )
+                == None{}: Maybe<&2, RRounds.Draft>
+            },
+            Types.Cast.Pass{to},
+            x,
+            Draft.cast_of(t, t, Types.Cast.Pass{to}, x, e),
+            Pass.next_own(bs, ds, k, name, t, RRounds.Seen{fl, vs}, to)(em)
+          )
+        )
+      )
+
+# a node passes once for the same ballots: after its pass x, read as its
+# next ballot, it casts no other pass, whatever the ballots are
+def Slot.pass_once(
+  +bs: List<&2, RRounds.Ballot>,
+  +ds: List<&2, String>,
+  +k: Nat,
+  +name: String,
+  +t: Nat,
+  +x: Types.Cast,
+  +m: RRounds.Seen
+) -> {
+  RRounds.Slot.pass(bs, ds, k, name) == Some{RRounds.Draft{t, x}}: Maybe<&2, RRounds.Draft>
+} -> {
+  RRounds.Chain.reach(bs, name) == RRounds.Reach{t, m}: RRounds.Reach
+} -> {
+  RRounds.Chain.reach(
+    RRounds.Ballot{name, t, x} <> bs,
+    name
+  )
+    == RRounds.Reach{1n+t, RRounds.Seen.step(m, x)}: RRounds.Reach
+} -> {
+  RRounds.Slot.pass(
+    RRounds.Ballot{name, t, x} <> bs,
+    ds,
+    k,
+    name
+  )
+    == None{}: Maybe<&2, RRounds.Draft>
+}:
+  ep => er => er2 => Lists.Equal.to(
+    RRounds.Reach,
+    z => {
+      Pass.next(
+        RRounds.Ballot{name, t, x} <> bs,
+        ds,
+        k,
+        name,
+        z
+      )
+        == None{}: Maybe<&2, RRounds.Draft>
+    },
+    RRounds.Reach{1n+t, RRounds.Seen.step(m, x)},
+    RRounds.Chain.reach(RRounds.Ballot{name, t, x} <> bs, name),
+    Equal.sym(
+      RRounds.Reach,
+      RRounds.Chain.reach(RRounds.Ballot{name, t, x} <> bs, name),
+      RRounds.Reach{1n+t, RRounds.Seen.step(m, x)},
+      er2
+    ),
+    Pass.next_once(
+      bs,
+      ds,
+      k,
+      name,
+      t,
+      x,
+      m
+    )(
+      Lists.Equal.to(
+        RRounds.Reach,
+        z => {Pass.next(bs, ds, k, name, z) == Some{RRounds.Draft{t, x}}: Maybe<&2, RRounds.Draft>},
+        RRounds.Chain.reach(bs, name),
+        RRounds.Reach{t, m},
+        er,
+        ep
+      )
+    )
+  )

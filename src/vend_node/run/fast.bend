@@ -3,7 +3,6 @@ import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
-import ../codes.bend as Coded
 import ../node.bend as Nodes
 import ../spec.bend as Spec
 import ../types.bend as Types
@@ -231,22 +230,34 @@ def Table.joined(+kn: Known.Known(), +s: Facts.Plain(), m: Maybe<&2, Types.Fact>
     case Some{f}:
       Known.Known.joined(kn, s, f)
 
-# the fast node of the state r, after it took in the request q, with the
-# table kn: if the table holds what a work reads (read), it learns what a
+# the table kn after a node took in the request q, where s is its facts
+# with it: if the table holds what a work reads (read), it learns what a
 # work reads for q; then the fact m, if any, joins the facts that a work may
 # act on
+def Table.asks(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  read: Bool,
+  q: Spec.Request,
+  m: Maybe<&2, Types.Fact>
+) -> Known.Known():
+  match read:
+    case False{}:
+      Table.joined(kn, s, m)
+    case True{}:
+      Table.joined(Learn.asked(kn, s, q), s, m)
+
+# the fast node of the state r, after it took in the request q, with the
+# table kn, which holds what a work reads or not (read), where the fact m,
+# if any, joins the facts that a work may act on
 def Fast.asked(
   +r: Nodes.Raw,
   kn: Known.Known(),
   read: Bool,
-  +q: Spec.Request,
+  q: Spec.Request,
   m: Maybe<&2, Types.Fact>
 ) -> Fast:
-  match read:
-    case False{}:
-      Fast{r, Table.joined(kn, Nodes.Raw.facts(r), m)}
-    case True{}:
-      Fast{r, Table.joined(Learn.asked(kn, Nodes.Raw.facts(r), q), Nodes.Raw.facts(r), m)}
+  Fast{r, Table.asks(kn, Nodes.Raw.facts(r), read, q, m)}
 
 # the state after the node takes in the ask a, when it may (go), as
 # Nodes.Raw.asks gives it
@@ -433,40 +444,129 @@ def Fast.works(
     case False{}:
       Fast.works.on(name, ws, ms, fs, ps, Learn.if(Table.read(kn), kn, fs))
 
-# the facts a and b are the same: fact by fact, in the same shape; the
-# facts are read only while each part before them is the same
-def Plain.same(a: Facts.Plain(), b: Facts.Plain()) -> Bool:
-  match a b:
-    case Crits.Crit.Tip{} Crits.Crit.Tip{}:
-      True{}
-    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Leaf{k2, v2}:
-      List.all.if(u => Coded.Fact.is_eq(v1, v2), Crits.Key.is_eq(k1, k2))
-    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
-      List.all.if(
-        u => List.all.if(
-          u2 => List.all.if(
-            u3 => List.all.if(u4 => Plain.same(o1, o2), Plain.same(z1, z2)),
-            Shared.Maybe.is_eq(~Types.Fact, ~Coded.Fact.is_eq, e1, e2)
-          ),
-          Nat.is_eq(p1, p2)
-        ),
-        Crits.Key.is_eq(r1, r2)
+# What a fast node takes in from another node
+# ------------------------------------------
+# A Sync takes in each fact of the other node, as Facts.Facts.take_all does,
+# but reads the facts once: a fact that the node holds costs one lookup, and
+# a new one joins the table as an ask or a ballot of the node itself does.
+
+# the facts and the table of a fast node, while it takes facts in
+type Taken is Data:
+  Taken{facts: Facts.Plain(), lines: Known.Known()}
+
+# the table kn after the ballot f of another voter v at the step st, where s
+# is the facts before and s2 the facts with it: as after a ballot of the
+# node itself, unless s holds a ballot of v at the step (v lied)
+def Table.heard(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +s2: Facts.Plain(),
+  v: String,
+  +st: Types.Step,
+  +f: Types.Fact
+) -> Known.Known():
+  Shared.Bool.when(
+    Known.Known(),
+    Seat.cast(kn, s, v, st),
+    u => Known.Known.none(),
+    u => Table.voted(kn, s2, st, f)
+  )
+
+# the facts s2, which are s with the ballot f of another voter v at the
+# step st, and the table that the ballot leaves of kn
+def Sync.vote.to(
+  +s2: Facts.Plain(),
+  s: Facts.Plain(),
+  kn: Known.Known(),
+  v: String,
+  st: Types.Step,
+  f: Types.Fact
+) -> Taken:
+  Taken{s2, Table.heard(kn, s, s2, v, st, f)}
+
+# what the node name, with the facts s and the table kn, has after it takes
+# in the vote of v at the step st that casts x, which s does not hold: as
+# Facts.Facts.take gives the facts; a vote under the name of the node leaves
+# no table
+def Sync.vote(
+  +name: String,
+  +s: Facts.Plain(),
+  kn: Known.Known(),
+  +v: String,
+  +st: Types.Step,
+  +x: Types.Cast
+) -> Taken:
+  Shared.Bool.when(
+    Taken,
+    String.eq(v, name),
+    u => Taken{Facts.Facts.take(name, s, Types.Fact.Vote{v, st, x}), Known.Known.none()},
+    u => Sync.vote.to(
+      Facts.Facts.add(s, Types.Fact.Vote{v, st, x}),
+      s,
+      kn,
+      v,
+      st,
+      Types.Fact.Vote{v, st, x}
+    )
+  )
+
+# the facts s2, which hold the ask a of a request that starts no store, and
+# the table that the ask leaves of kn
+def Sync.ask.to(+s2: Facts.Plain(), +kn: Known.Known(), +a: Types.Ask) -> Taken:
+  Taken{s2, Table.asks(kn, s2, Table.read(kn), Lines.Ask.request(a), Some{Types.Fact.Ask{a}})}
+
+# what the node name, with the facts s and the table kn, has after it takes
+# in the ask a, which s does not hold: as Facts.Facts.take gives the facts;
+# a request that starts a store leaves no table
+def Sync.ask(+name: String, +s: Facts.Plain(), kn: Known.Known(), +a: Types.Ask) -> Taken:
+  Shared.Bool.when(
+    Taken,
+    Facts.Request.is_start(Lines.Ask.request(a)),
+    u => Taken{Facts.Facts.take(name, s, Types.Fact.Ask{a}), Known.Known.none()},
+    u => Sync.ask.to(Facts.Facts.add(s, Types.Fact.Ask{a}), kn, a)
+  )
+
+# what the node name, with the facts s and the table kn, has after it takes
+# in the fact f, which s does not hold
+def Sync.new(+name: String, s: Facts.Plain(), kn: Known.Known(), f: Types.Fact) -> Taken:
+  match f:
+    case Types.Fact.Ask{a}:
+      Sync.ask(name, s, kn, a)
+    case Types.Fact.Vote{v, st, x}:
+      Sync.vote(name, s, kn, v, st, x)
+
+# what the node name has after it takes in the fact f: nothing changes when
+# it holds f
+def Sync.take(+name: String, t: Taken, +f: Types.Fact) -> Taken:
+  match t:
+    case Taken{+s, +kn}:
+      Shared.Bool.when(
+        Taken,
+        Facts.Facts.has(s, f),
+        u => Taken{s, kn},
+        u => Sync.new(name, s, kn, f)
       )
-    case _ _:
-      False{}
 
-# the table kn, when the facts are the same as before (same); else no table
-def Table.kept(kn: Known.Known(), same: Bool) -> Known.Known():
-  match same:
-    case True{}:
-      kn
-    case False{}:
-      Known.Known.none()
+# what the node name has after it takes in each of the facts fs
+def Sync.all(+name: String, fs: List<&2, Types.Fact>, t: Taken) -> Taken:
+  match fs:
+    case Nil{}:
+      t
+    case Con{f, rest}:
+      Sync.all(name, rest, Sync.take(name, t, f))
 
-# the fast node of the state r after a Sync, with the table kn of the facts
-# old that it held before: the table stays when the Sync added no fact
-def Fast.synced(+r: Nodes.Raw, kn: Known.Known(), old: Facts.Plain()) -> Fast:
-  Fast{r, Table.kept(kn, Plain.same(old, Nodes.Raw.facts(r)))}
+# the fast node after a Sync that left the facts and the table t
+def Fast.synced(
+  name: String,
+  ws: List<&2, String>,
+  ms: List<&2, Nodes.Mounted>,
+  st: Bool,
+  ps: Parts.Parts,
+  t: Taken
+) -> Fast:
+  match t:
+    case Taken{s, kn}:
+      Fast{Nodes.Raw{name, ws, ms, st, s, ps}, kn}
 
 # the fast node f after the deed a: its state is the state that
 # Nodes.Raw.does gives, read through the table; the table keeps the states
@@ -490,8 +590,18 @@ def Fast.does(f: Fast, a: Nodes.Act) -> Fast:
         q,
         Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
       )
-    case Fast{+r, kn} Nodes.Act.Sync{from}:
-      Fast.synced(Nodes.Raw.does(r, Nodes.Act.Sync{from}), kn, Nodes.Raw.facts(r))
+    case Fast{
+      Nodes.Raw{+name, ws, ms, st, fs, ps},
+      kn
+    } Nodes.Act.Sync{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}}:
+      Fast.synced(
+        name,
+        ws,
+        ms,
+        st,
+        Parts.Parts.join(ps, ps2),
+        Sync.all(name, Facts.Facts.list(fs2), Taken{fs, kn})
+      )
     case Fast{Nodes.Raw{+name, ws, ms, +st, +fs, ps}, +kn} Nodes.Act.Mount{+a, +b, +p, held}:
       Fast.asks.to(
         name,
