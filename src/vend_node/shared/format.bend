@@ -248,6 +248,7 @@ def Items.close(closed: Bool, cl: List<&2, U32>) -> List<&2, List<&2, U32>>:
     case False{}:
       []
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- it runs once for each piece of one file: the second call is the loop over the pieces
 # the items of the words ws in the format f, whose pieces are ps (Pieces.of):
 # the items of a leaf; the blocks of a language; and for an embedding the
 # items of each piece in its own format, with each marker as an item
@@ -273,6 +274,7 @@ def Items.go(
           Items.go(i, Pieces.of(i, c), c),
           List.append(&2, List<&2, U32>, Items.close(closed, cl), Items.go(f, rest, ws))
         )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # the words that the items of Items.go hold: ws, or for an embedding its
 # pieces ps, joined
@@ -483,6 +485,7 @@ def Format.items_whole(
 def Diff() -> Data:
   List<&2, Formats.Hunk>
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for hunks that do not fit, which then costs no more than hunks that fit, where both sides run
 # the hunks hs fit n items: each keeps and drops items that are there
 def Hunks.fit(hs: List<&2, Formats.Hunk>, +n: Nat) -> Bool:
   match hs:
@@ -491,6 +494,7 @@ def Hunks.fit(hs: List<&2, Formats.Hunk>, +n: Nat) -> Bool:
     case Con{Formats.Hunk{k, d, put}, rest}:
       +u = Nat.add(k, d)
       Bool.and(Nat.is_le(u, n), Hunks.fit(rest, Nat.sub(n, u)))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the hunks d from the items a to the items b when they fit a, else the one
 # hunk that drops all of a and puts b

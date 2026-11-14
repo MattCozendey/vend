@@ -1104,6 +1104,7 @@ def ValSet.fits.end(
     case Some{+v}:
       Shared.Bool.is_eq(ValSet.in(~A, ~key, p, v), ValSet.in(~A, ~key, q, v))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 # each value of n is held by both of p and q or by neither
 def ValSet.fits(
   ~A: Data,
@@ -1122,6 +1123,7 @@ def ValSet.fits(
         ValSet.fits.end(~A, ~key, e, p, q),
         Bool.and(ValSet.fits(~A, ~key, z, p, q), ValSet.fits(~A, ~key, o, p, q))
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # p and q, which hold the same values, both hold v or neither does
 def ValSet.fits_at(

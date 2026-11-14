@@ -92,12 +92,15 @@ def Files.code(t: Files) -> List<&2, U32>:
 def Files.hash(t: Files) -> Hashes.Hash:
   Hashes.Sha.hash(Files.code(t))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for files that differ, which then costs no more than equal files, where both sides run
 # the files a and b are the same: their paths and their words
 def Files.Item.same(a: Files.Item, b: Files.Item) -> Bool:
   match a b:
     case Files.Item{p, ws} Files.Item{q, vs}:
       Bool.and(String.eq(p, q), Crits.Key.is_eq(ws, vs))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for maps that differ, which then costs no more than equal maps, where both sides run
 # the maps a and b are the same: entry by entry, in the same shape
 def Files.Crit.same(a: Crits.Crit<Files.Item>, b: Crits.Crit<Files.Item>) -> Bool:
   match a b:
@@ -118,6 +121,7 @@ def Files.Crit.same(a: Crits.Crit<Files.Item>, b: Crits.Crit<Files.Item>) -> Boo
       )
     case _ _:
       False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the contents a and b are the same
 def Files.same(a: Files, b: Files) -> Bool:

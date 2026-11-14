@@ -457,7 +457,7 @@ def Store.first_opens.at(
     case Types.Ask{+i, +k, +r}:
       hs => e => (
         %Shared.Maybe.some_inj(Types.Entry, RLines.Entry.first(i, r, 0n), e0, e): Entry.Opens(_)
-        ({==}, Request.start_opens(r)(Shared.Bool.and_true_left(RFacts.Request.is_start(r), Hashes.Hash.is_eq(RFacts.Start.root(i, r), h))(hs))))
+        ({==}, Request.start_opens(r)(Shared.Bool.and_true_left(RFacts.Request.is_start(r), Hashes.Hash.is_eq(RFacts.Start.root(i, r), h))(Facts.Ask.starts_true(h, i, k, r)(hs)))))
 
 # Store.first_opens, from where version 0 comes from
 def Store.first_opens.of(

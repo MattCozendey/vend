@@ -3,14 +3,14 @@ import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../node.bend as Nodes
+import ../spec.bend as Spec
+import ../types.bend as Types
 import ./answers.bend as Answers
 import ./content.bend as Contents
 import ./facts.bend as Facts
 import ./known.bend as Known
 import ./parts.bend as Parts
 import ./work.bend as Works
-import ../spec.bend as Spec
-import ../types.bend as Types
 
 # The fast node
 # -------------

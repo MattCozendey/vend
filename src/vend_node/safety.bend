@@ -99,6 +99,7 @@ def Nat.above_ne(
 # Chains
 # ------
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 # the votes vs hold a vote of the round r for the pick p
 def Votes.has(vs: List<&2, RRounds.Voted>, +r: Nat, +p: Types.Pick) -> Bool:
   match vs:
@@ -106,6 +107,7 @@ def Votes.has(vs: List<&2, RRounds.Voted>, +r: Nat, +p: Types.Pick) -> Bool:
       False{}
     case Con{RRounds.Voted{r2, p2}, rest}:
       Bool.or(Bool.and(Nat.is_eq(r2, r), Coded.Pick.is_eq(p2, p)), Votes.has(rest, r, p))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # what stays true of a voter along its chain. Floor: it may vote in no round
 # below fl. Vote: it cast a counted vote of the round r for the pick p
@@ -125,6 +127,7 @@ def Seen.marks(g: Mark, m: Maybe<&2, RRounds.Seen>) -> Bool:
     case Mark.Vote{r, p} Some{RRounds.Seen{f, vs}}:
       Votes.has(vs, r, p)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # what is true of a voter stays true after its next ballot
 def Seen.marks_next(
   g: Mark,
@@ -215,6 +218,7 @@ def Seen.marks_next(
         et => h,
         ef => h
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # what is true of a voter before one of its ballots is true before each later
 # one
@@ -339,6 +343,149 @@ def Cast.is_some(
         Coded.Cast.is_eq_sound(y, x)(h)
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
+# the vote of w at the slot t, in the round r2 for p with basis, is of the
+# voter v and the round r, the chain of v takes it, and it is the cast of v
+# at t among bs
+def Vote.counts(
+  +bs: List<&2, RRounds.Ballot>,
+  +v: String,
+  r: Nat,
+  w: String,
+  +t: Nat,
+  +r2: Nat,
+  p: Types.Pick,
+  basis: List<&2, Types.Ref>
+) -> Bool:
+  Bool.and(
+    Bool.and(String.eq(w, v), Nat.is_eq(r2, r)),
+    Bool.and(
+      RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
+      RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
+    )
+  )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# the test that the code that runs makes of a vote is Vote.counts
+def Ballot.counts_and(
+  +bs: List<&2, RRounds.Ballot>,
+  +v: String,
+  +r: Nat,
+  +w: String,
+  +t: Nat,
+  +r2: Nat,
+  +p: Types.Pick,
+  +basis: List<&2, Types.Ref>
+) -> {
+  RRounds.Ballot.counts(
+    RRounds.Roll{bs, v, r},
+    RRounds.Ballot{w, t, Types.Cast.Vote{r2, p, basis}}
+  )
+    == Vote.counts(bs, v, r, w, t, r2, p, basis): Bool
+}:
+  %Lists.Bool.when_and(
+    RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
+    u => RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
+  ): {
+    RRounds.Ballot.counts(
+      RRounds.Roll{bs, v, r},
+      RRounds.Ballot{w, t, Types.Cast.Vote{r2, p, basis}}
+    )
+      == Bool.and(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), _): Bool
+  }
+  Lists.Bool.when_and(
+    Bool.and(String.eq(w, v), Nat.is_eq(r2, r)),
+    un => Shared.Bool.when(
+      Bool,
+      RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
+      u => RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t)),
+      u => False{}
+    )
+  )
+
+# Vote.counts is the test that the code that runs makes of a vote
+def Ballot.and_counts(
+  +bs: List<&2, RRounds.Ballot>,
+  +v: String,
+  +r: Nat,
+  +w: String,
+  +t: Nat,
+  +r2: Nat,
+  +p: Types.Pick,
+  +basis: List<&2, Types.Ref>
+) -> {
+  Vote.counts(
+    bs,
+    v,
+    r,
+    w,
+    t,
+    r2,
+    p,
+    basis
+  )
+    == RRounds.Ballot.counts(
+      RRounds.Roll{bs, v, r},
+      RRounds.Ballot{w, t, Types.Cast.Vote{r2, p, basis}}
+    ): Bool
+}:
+  Equal.sym(
+    Bool,
+    RRounds.Ballot.counts(
+      RRounds.Roll{bs, v, r},
+      RRounds.Ballot{w, t, Types.Cast.Vote{r2, p, basis}}
+    ),
+    Vote.counts(bs, v, r, w, t, r2, p, basis),
+    Ballot.counts_and(bs, v, r, w, t, r2, p, basis)
+  )
+
+# a vote that the code that runs counts: Vote.counts holds of it
+def Ballot.counts_true(
+  +bs: List<&2, RRounds.Ballot>,
+  +v: String,
+  +r: Nat,
+  +w: String,
+  +t: Nat,
+  +r2: Nat,
+  +p: Types.Pick,
+  +basis: List<&2, Types.Ref>
+) -> {
+  RRounds.Ballot.counts(
+    RRounds.Roll{bs, v, r},
+    RRounds.Ballot{w, t, Types.Cast.Vote{r2, p, basis}}
+  )
+    == True{}: Bool
+} -> {Vote.counts(bs, v, r, w, t, r2, p, basis) == True{}: Bool}:
+  h =>
+    %Ballot.counts_and(bs, v, r, w, t, r2, p, basis): {_ == True{}: Bool}
+    h
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# Ballot.counts_by, of Vote.counts
+def Ballot.counts_by.and(
+  -Q: Type,
+  +bs: List<&2, RRounds.Ballot>,
+  +v: String,
+  +r: Nat,
+  +w: String,
+  +t: Nat,
+  +r2: Nat,
+  +p: Types.Pick,
+  +basis: List<&2, Types.Ref>,
+  +h: {Vote.counts(bs, v, r, w, t, r2, p, basis) == True{}: Bool},
+  k: {
+    RRounds.Seen.takes(r, RRounds.Chain.seen(bs, v, t)) == True{}: Bool
+  } -> {
+    RRounds.Ballots.at(bs, v, t) == Some{Types.Cast.Vote{r, p, basis}}: Maybe<&2, Types.Cast>
+  } -> Q
+) -> Q:
+  k((
+      %Shared.Nat.is_eq_sound(r2, r)(Shared.Bool.and_true_right(String.eq(w, v), Nat.is_eq(r2, r))(Shared.Bool.and_true_left(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h))): {RRounds.Seen.takes(_, RRounds.Chain.seen(bs, v, t)) == True{}: Bool}
+      Shared.Bool.and_true_left(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t)))(Shared.Bool.and_true_right(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h))))((
+      %Shared.Nat.is_eq_sound(r2, r)(Shared.Bool.and_true_right(String.eq(w, v), Nat.is_eq(r2, r))(Shared.Bool.and_true_left(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h))): {RRounds.Ballots.at(bs, v, t) == Some{Types.Cast.Vote{_, p, basis}}: Maybe<&2, Types.Cast>}
+      Cast.is_some(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))(Shared.Bool.and_true_right(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t)))(Shared.Bool.and_true_right(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h)))))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
 # what follows from a vote that counts for the voter v in the round r: the
 # voter may vote in the round before the vote, and the ballots hold the vote
 def Ballot.counts_by(
@@ -351,7 +498,7 @@ def Ballot.counts_by(
   +r2: Nat,
   +p: Types.Pick,
   +basis: List<&2, Types.Ref>,
-  +h: {
+  h: {
     RRounds.Ballot.counts(
       RRounds.Roll{bs, v, r},
       RRounds.Ballot{w, t, Types.Cast.Vote{r2, p, basis}}
@@ -364,11 +511,19 @@ def Ballot.counts_by(
     RRounds.Ballots.at(bs, v, t) == Some{Types.Cast.Vote{r, p, basis}}: Maybe<&2, Types.Cast>
   } -> Q
 ) -> Q:
-  k((
-      %Shared.Nat.is_eq_sound(r2, r)(Shared.Bool.and_true_right(String.eq(w, v), Nat.is_eq(r2, r))(Shared.Bool.and_true_left(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h))): {RRounds.Seen.takes(_, RRounds.Chain.seen(bs, v, t)) == True{}: Bool}
-      Shared.Bool.and_true_left(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t)))(Shared.Bool.and_true_right(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h))))((
-      %Shared.Nat.is_eq_sound(r2, r)(Shared.Bool.and_true_right(String.eq(w, v), Nat.is_eq(r2, r))(Shared.Bool.and_true_left(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h))): {RRounds.Ballots.at(bs, v, t) == Some{Types.Cast.Vote{_, p, basis}}: Maybe<&2, Types.Cast>}
-      Cast.is_some(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))(Shared.Bool.and_true_right(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t)))(Shared.Bool.and_true_right(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h)))))
+  Ballot.counts_by.and(
+    Q,
+    bs,
+    v,
+    r,
+    w,
+    t,
+    r2,
+    p,
+    basis,
+    Ballot.counts_true(bs, v, r, w, t, r2, p, basis)(h),
+    k
+  )
 
 # What binds a lead
 # -----------------
@@ -557,6 +712,7 @@ def Voted.force_fits.at(
         ef => {==}
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- a proof does not run
 # what the votes vs leave a lead fits ms
 def Votes.force_fits(
   vs: List<&2, RRounds.Voted>,
@@ -573,6 +729,7 @@ def Votes.force_fits(
       )(
         Voted.force_fits.at(ms, r, p, List.get(&2, RRounds.Mind, ms, r))({==})
       )(Votes.force_fits(rest, ms))
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
 
 # what the promise m leaves a lead fits ms
 def Promise.force_fits(
@@ -604,6 +761,8 @@ def Lead.force_fits(
         Promise.force_fits(RRounds.Promise.read(g, d), RRounds.Lead.minds(g))
       )(Lead.force_fits(rest, g))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- a proof does not run
 # votes with a vote of the round r for the pick p, of the sound lead of the
 # round, bind a lead to r or above
 def Votes.force_above(
@@ -650,6 +809,8 @@ def Votes.force_above(
           r
         )(Votes.force_above(rest, ms, r, p)(h2)(hm))
       )(h)
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
 
 # Promises
 # --------
@@ -751,6 +912,7 @@ def Promise.own_floor(
         %Equal.sym(Bool, Nat.is_le(f, r2), True{}, ht): {Seen.marks(Mark.Floor{1n+r1}, Some{Bool.pick(RRounds.Seen, _, RRounds.Seen{1n+r2, RRounds.Voted{r2, p2} <> vs}, RRounds.Seen{f, vs})}) == True{}: Bool}
         Shared.Nat.le_succ(1n+r1, r2)(hl))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the own promise of a lead of the round r2, seen after its vote with a vote
 # of a round r1 below for the pick p, of the sound lead of the round, binds
 # it to r1 or above
@@ -789,6 +951,7 @@ def Promise.own_above(
             {==}))((
             %ht: {Seen.marks(Mark.Vote{r1, p}, Some{Bool.pick(RRounds.Seen, _, RRounds.Seen{1n+r2, RRounds.Voted{r2, p2} <> vs}, RRounds.Seen{f, vs})}) == True{}: Bool}
             hv)))(hm)
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # what a node d gave a lead of the round r2 binds the lead to r1 or above,
 # when d gave a promise and cast a counted vote of the round r1, below r2,

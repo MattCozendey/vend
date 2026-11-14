@@ -57,6 +57,7 @@ def Change.ballot(c: Types.Change) -> Maybe<&2, Spec.Ballot>:
     case Types.Change.Lie{v, st, one, two}:
       None{}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- each right side is one lookup in the set, or one compare of two casts
 # s holds the change c: the fact, or both votes of the lie, which differ
 def Facts.holds(+s: Plain(), c: Types.Change) -> Bool:
   match c:
@@ -70,6 +71,7 @@ def Facts.holds(+s: Plain(), c: Types.Change) -> Bool:
         ),
         Bool.not(Coded.Cast.is_eq(one, two))
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Liars
 # -----
@@ -78,11 +80,13 @@ def Facts.holds(+s: Plain(), c: Types.Change) -> Bool:
 def Words.is_eq(a: List<&2, U32>, b: List<&2, U32>) -> Bool:
   Shared.List.is_eq(~U32, ~U32.is_eq, a, b)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- each right side compares two short lists of words, and stops at the first difference
 # the ballots a and b contradict each other: one voter, one step, two choices
 def Ballot.clash(a: Spec.Ballot, b: Spec.Ballot) -> Bool:
   match a b:
     case Spec.Ballot{v, s, x} Spec.Ballot{w, t, y}:
       Bool.and(String.eq(v, w), Bool.and(Words.is_eq(s, t), Bool.not(Words.is_eq(x, y))))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the ballot m, if any, contradicts b
 def Fact.clashes.at(b: Spec.Ballot, m: Maybe<&2, Spec.Ballot>) -> Bool:
@@ -170,9 +174,11 @@ def Trust.two(name: String) -> Types.Fact:
 def Trust.break(s: Plain(), +name: String) -> Plain():
   Facts.add(Facts.add(s, Trust.one(name)), Trust.two(name))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the right side is one lookup in the set
 # s says that the trust of the node name broke
 def Trust.broken(+s: Plain(), +name: String) -> Bool:
   Bool.and(Facts.has(s, Trust.one(name)), Facts.has(s, Trust.two(name)))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Starts
 # ------
@@ -194,13 +200,20 @@ def Request.is_start(r: Spec.Request) -> Bool:
 def Ask.starts(+h: Hashes.Hash, a: Types.Ask) -> Bool:
   match a:
     case Types.Ask{+i, k, +r}:
-      Bool.and(Request.is_start(r), Hashes.Hash.is_eq(Start.root(i, r), h))
+      Shared.Bool.when(
+        Bool,
+        Request.is_start(r),
+        u => Hashes.Hash.is_eq(Start.root(i, r), h),
+        u => False{}
+      )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the right side compares two requests, and stops at the first difference
 # the asks a and b are of one id and one request
 def Ask.alike(a: Types.Ask, b: Types.Ask) -> Bool:
   match a b:
     case Types.Ask{i, k, r} Types.Ask{j, l, q}:
       Bool.and(Ledgers.Id.is_eq(i, j), Coded.Request.is_eq(r, q))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the root of the store that the ask a starts
 def Ask.root(a: Types.Ask) -> Hashes.Hash:
@@ -211,9 +224,16 @@ def Ask.root(a: Types.Ask) -> Hashes.Hash:
 # the ask a starts a store, and b starts the same store with another id or
 # request: SHA-256 is broken
 def Ask.collides(+a: Types.Ask, +b: Types.Ask) -> Bool:
-  Bool.and(
+  Shared.Bool.when(
+    Bool,
     Ask.starts(Ask.root(a), a),
-    Bool.and(Ask.starts(Ask.root(a), b), Bool.not(Ask.alike(a, b)))
+    un => Shared.Bool.when(
+      Bool,
+      Ask.starts(Ask.root(a), b),
+      u => Bool.not(Ask.alike(a, b)),
+      u => False{}
+    ),
+    un => False{}
   )
 
 # the fact f is an ask that collides with the ask a
@@ -247,15 +267,17 @@ def Facts.refuses(+name: String, s: Plain(), f: Types.Fact) -> Bool:
     case Types.Fact.Ask{a}:
       False{}
     case Types.Fact.Vote{+v, +st, +pk}:
-      Bool.and(
+      Shared.Bool.when(
+        Bool,
         String.eq(v, name),
-        Shared.List.some(
+        u => Shared.List.some(
           ~Types.Fact,
           ~Spec.Ballot,
           ~Fact.clashes,
           Facts.list(s),
           Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}
-        )
+        ),
+        u => False{}
       )
 
 # s with the fact f, as the node name takes it in: it does not take a vote
@@ -282,6 +304,7 @@ def Facts.take_all(+name: String, fs: List<&2, Types.Fact>, +s: Plain()) -> Plai
     case Con{f, rest}:
       Facts.take_all(name, rest, Facts.take(name, s, f))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side of the "and" fails only for a set that is not sound, which then costs no more than a sound set; the right side of the "or" is two lookups in the set
 # the facts s are sound for the node name: s does not name the node a liar,
 # and, if two asks of s start one store, s says that the trust of the node
 # broke
@@ -290,6 +313,7 @@ def Facts.ok(+name: String, +s: Plain()) -> Bool:
     Bool.not(List.contains(~String, ~String.eq, Facts.liars(s), name)),
     Bool.or(Bool.not(Facts.collide(s)), Trust.broken(s, name))
   )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Votes of the node
 # -----------------
@@ -298,6 +322,7 @@ def Facts.ok(+name: String, +s: Plain()) -> Bool:
 type Seat is Data:
   Seat{name: String, step: Types.Step}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the right side compares two steps: a few words
 # the fact f is a vote of the node of g for the step of g
 def Fact.is_cast(g: Seat, f: Types.Fact) -> Bool:
   match g f:
@@ -305,6 +330,7 @@ def Fact.is_cast(g: Seat, f: Types.Fact) -> Bool:
       Bool.and(String.eq(v, name), Coded.Step.is_eq(st2, st))
     case Seat{name, st} Types.Fact.Ask{a}:
       False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # s holds a vote of the node name for the step st
 def Facts.cast(s: Plain(), name: String, st: Types.Step) -> Bool:
@@ -347,9 +373,11 @@ def Facts.ask(+name: String, +s: Plain(), i: Ledgers.Id, r: Spec.Request) -> Pla
 def Fact.held(b: Plain(), f: Types.Fact) -> Bool:
   Facts.has(b, f)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a set that is not wider, which then costs no more than a wider set, where both sides run
 # b holds each fact of a, and a read of b may go as far as one of a
 def Facts.wider(+a: Plain(), +b: Plain()) -> Bool:
   Bool.and(
     Shared.List.holds(~Types.Fact, ~Plain(), ~Fact.held, Facts.list(a), b),
     Nat.is_le(Facts.fuel(a), Facts.fuel(b))
   )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information

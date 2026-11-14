@@ -29,6 +29,7 @@ def Slot.ballots(s: Facts.Facts(), +c: Ledgers.Line, +k: Nat) -> List<&2, RRound
 type Grow is Data:
   Grow{old: List<&2, RRounds.Ballot>, new: List<&2, RRounds.Ballot>}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 # the ballot b, when it is the one ballot of its voter with its number in the
 # old list of g, is that in the new list too
 def Ballot.sure(g: Grow, b: RRounds.Ballot) -> Bool:
@@ -38,6 +39,7 @@ def Ballot.sure(g: Grow, b: RRounds.Ballot) -> Bool:
         Bool.not(RRounds.Cast.is(x, RRounds.Ballots.at(bs, v, t))),
         RRounds.Cast.is(x, RRounds.Ballots.at(bs2, v, t))
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # each ballot that is read from bs is read from bs2
 def Ballots.grown(+bs: List<&2, RRounds.Ballot>, +bs2: List<&2, RRounds.Ballot>) -> Bool:
@@ -47,6 +49,7 @@ def Ballots.grown(+bs: List<&2, RRounds.Ballot>, +bs2: List<&2, RRounds.Ballot>)
 type Kept is Data:
   Kept{facts: RFacts.Plain(), line: Ledgers.Line, slot: Nat}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 # the fact f, when it is a ballot for the slot of g, is held by the facts of g
 def Fact.kept(g: Kept, f: Types.Fact) -> Bool:
   match g f:
@@ -57,6 +60,7 @@ def Fact.kept(g: Kept, f: Types.Fact) -> Bool:
       )
     case Kept{m, c, k} f2:
       True{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # s2 holds each ballot that s holds for the slot k of the line c
 def Slot.kept(s: Facts.Facts(), s2: Facts.Facts(), c: Ledgers.Line, k: Nat) -> Bool:
@@ -201,6 +205,7 @@ def Casts.agreed_in(
         )
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # Tally.voted_cast, once the vote m of the node is known
 def Tally.voted_cast.of(
   +bs: List<&2, RRounds.Ballot>,
@@ -269,8 +274,9 @@ def Tally.voted_cast.of(
     case Some{RRounds.Ballot{+v, +t, Types.Cast.Vote{+r2, +q, +basis}}}:
       +e => h => (t, (basis, (
             %Coded.Pick.is_eq_sound(q, pk)(h): {List.contains(~Types.Cast, ~Coded.Cast.is_eq, RRounds.Casts.of(bs, Types.Ref{d, t}), Types.Cast.Vote{r, _, basis}) == True{}: Bool}
-            %Shared.Nat.is_eq_sound(r2, r)(Shared.Bool.and_true_right(String.eq(v, d), Nat.is_eq(r2, r))(Shared.Bool.and_true_left(Bool.and(String.eq(v, d), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, d, t)), RRounds.Cast.is(Types.Cast.Vote{r2, q, basis}, RRounds.Ballots.at(bs, d, t))))(Lists.List.pick_hit(~RRounds.Ballot, ~RRounds.Roll, ~RRounds.Ballot.counts, bs, RRounds.Roll{bs, d, r}, RRounds.Ballot{v, t, Types.Cast.Vote{r2, q, basis}})(e)))): {List.contains(~Types.Cast, ~Coded.Cast.is_eq, RRounds.Casts.of(bs, Types.Ref{d, t}), Types.Cast.Vote{_, q, basis}) == True{}: Bool}
-            Casts.agreed_in(RRounds.Casts.of(bs, Types.Ref{d, t}), Types.Cast.Vote{r2, q, basis})(Cast.is_some(Types.Cast.Vote{r2, q, basis}, RRounds.Ballots.at(bs, d, t))(Shared.Bool.and_true_right(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, d, t)), RRounds.Cast.is(Types.Cast.Vote{r2, q, basis}, RRounds.Ballots.at(bs, d, t)))(Shared.Bool.and_true_right(Bool.and(String.eq(v, d), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, d, t)), RRounds.Cast.is(Types.Cast.Vote{r2, q, basis}, RRounds.Ballots.at(bs, d, t))))(Lists.List.pick_hit(~RRounds.Ballot, ~RRounds.Roll, ~RRounds.Ballot.counts, bs, RRounds.Roll{bs, d, r}, RRounds.Ballot{v, t, Types.Cast.Vote{r2, q, basis}})(e))))))))
+            %Shared.Nat.is_eq_sound(r2, r)(Shared.Bool.and_true_right(String.eq(v, d), Nat.is_eq(r2, r))(Shared.Bool.and_true_left(Bool.and(String.eq(v, d), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, d, t)), RRounds.Cast.is(Types.Cast.Vote{r2, q, basis}, RRounds.Ballots.at(bs, d, t))))(Safeties.Ballot.counts_true(bs, d, r, v, t, r2, q, basis)(Lists.List.pick_hit(~RRounds.Ballot, ~RRounds.Roll, ~RRounds.Ballot.counts, bs, RRounds.Roll{bs, d, r}, RRounds.Ballot{v, t, Types.Cast.Vote{r2, q, basis}})(e))))): {List.contains(~Types.Cast, ~Coded.Cast.is_eq, RRounds.Casts.of(bs, Types.Ref{d, t}), Types.Cast.Vote{_, q, basis}) == True{}: Bool}
+            Casts.agreed_in(RRounds.Casts.of(bs, Types.Ref{d, t}), Types.Cast.Vote{r2, q, basis})(Cast.is_some(Types.Cast.Vote{r2, q, basis}, RRounds.Ballots.at(bs, d, t))(Shared.Bool.and_true_right(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, d, t)), RRounds.Cast.is(Types.Cast.Vote{r2, q, basis}, RRounds.Ballots.at(bs, d, t)))(Shared.Bool.and_true_right(Bool.and(String.eq(v, d), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, d, t)), RRounds.Cast.is(Types.Cast.Vote{r2, q, basis}, RRounds.Ballots.at(bs, d, t))))(Safeties.Ballot.counts_true(bs, d, r, v, t, r2, q, basis)(Lists.List.pick_hit(~RRounds.Ballot, ~RRounds.Roll, ~RRounds.Ballot.counts, bs, RRounds.Roll{bs, d, r}, RRounds.Ballot{v, t, Types.Cast.Vote{r2, q, basis}})(e)))))))))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the ballots hold a vote of a node that voted for a pick in a round: of the
 # round, for the pick
@@ -556,6 +562,7 @@ def Rounds.won_cast.fin(
   (+b, h) = w2
   (v, (t, (r, (b, h))))
 
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- a proof does not run
 # the ballots hold a vote for the pick that one of the rounds from r on
 # decided
 def Rounds.won_cast(
@@ -667,6 +674,64 @@ def Rounds.won_cast(
           )
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
+
+# a round that the code that runs finds backed by a sound lead for q: q is
+# the pick pk, and each of os voted for it
+def Round.backs_true(
+  +bs: List<&2, RRounds.Ballot>,
+  +os: List<&2, String>,
+  +pk: Types.Pick,
+  +r: Nat,
+  +q: Types.Pick
+) -> {
+  RRounds.Round.backs(bs, os, pk, r, RRounds.Mind.Sound{q}) == True{}: Bool
+} -> {
+  Bool.and(
+    Coded.Pick.is_eq(q, pk),
+    Shared.List.holds(~String, ~RRounds.Tally, ~RRounds.Tally.voted, os, RRounds.Tally{bs, r, pk})
+  )
+    == True{}: Bool
+}:
+  h =>
+    %Lists.Bool.when_and(
+      Coded.Pick.is_eq(q, pk),
+      u => Shared.List.holds(
+        ~String,
+        ~RRounds.Tally,
+        ~RRounds.Tally.voted,
+        os,
+        RRounds.Tally{bs, r, pk}
+      )
+    ): {_ == True{}: Bool}
+    h
+
+# Round.backs_true, from right to left
+def Round.backs_of(
+  +bs: List<&2, RRounds.Ballot>,
+  +os: List<&2, String>,
+  +pk: Types.Pick,
+  +r: Nat,
+  +q: Types.Pick
+) -> {
+  Bool.and(
+    Coded.Pick.is_eq(q, pk),
+    Shared.List.holds(~String, ~RRounds.Tally, ~RRounds.Tally.voted, os, RRounds.Tally{bs, r, pk})
+  )
+    == True{}: Bool
+} -> {RRounds.Round.backs(bs, os, pk, r, RRounds.Mind.Sound{q}) == True{}: Bool}:
+  h =>
+    %Lists.Bool.and_when(
+      Coded.Pick.is_eq(q, pk),
+      u => Shared.List.holds(
+        ~String,
+        ~RRounds.Tally,
+        ~RRounds.Tally.voted,
+        os,
+        RRounds.Tally{bs, r, pk}
+      )
+    ): {_ == True{}: Bool}
+    h
 
 # Round.backs_cast, with the vote
 def Round.backs_cast.fin(
@@ -775,7 +840,7 @@ def Round.backs_cast(
         ),
         Shared.Bool.false_ne_true(h)
       )
-    case RRounds.Mind.Sound{q}:
+    case RRounds.Mind.Sound{+q}:
       h => hin => Round.backs_cast.fin(
         bs,
         r,
@@ -806,7 +871,9 @@ def Round.backs_cast(
                 os,
                 RRounds.Tally{bs, r, pk}
               )
-            )(h)
+            )(
+              %Lists.Bool.when_and(Coded.Pick.is_eq(q, pk), u => Shared.List.holds(~String, ~RRounds.Tally, ~RRounds.Tally.voted, os, RRounds.Tally{bs, r, pk})): {_ == True{}: Bool}
+              h)
           )(hin)
         )
       )
@@ -1122,6 +1189,7 @@ def Seen.takes_grows(
       h)
   )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # a vote that counts among the ballots counts among the ballots that they
 # grew to
 def Ballot.counts_grows(
@@ -1138,80 +1206,84 @@ def Ballot.counts_grows(
     case RRounds.Ballot{w, t, Types.Cast.Pass{r2}}:
       h => h
     case RRounds.Ballot{+w, +t, Types.Cast.Vote{+r2, +p, +basis}}:
-      +h => Shared.Bool.and_both(
-        Bool.and(String.eq(w, v), Nat.is_eq(r2, r)),
-        Bool.and(
-          RRounds.Seen.takes(r2, RRounds.Chain.seen(bs2, v, t)),
-          RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs2, v, t))
-        )
-      )(
-        Shared.Bool.and_true_left(
+      h0 =>
+        +h = Safeties.Ballot.counts_true(bs, v, r, w, t, r2, p, basis)(h0)
+        %Safeties.Ballot.and_counts(bs2, v, r, w, t, r2, p, basis): {_ == True{}: Bool}
+        Shared.Bool.and_both(
           Bool.and(String.eq(w, v), Nat.is_eq(r2, r)),
           Bool.and(
-            RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
-            RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
+            RRounds.Seen.takes(r2, RRounds.Chain.seen(bs2, v, t)),
+            RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs2, v, t))
           )
-        )(h)
-      )(
-        Shared.Bool.and_both(
-          RRounds.Seen.takes(r2, RRounds.Chain.seen(bs2, v, t)),
-          RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs2, v, t))
         )(
-          Seen.takes_grows(
-            bs,
-            bs2,
-            v,
-            t,
-            r2,
-            hg
-          )(
-            Shared.Bool.and_true_left(
+          Shared.Bool.and_true_left(
+            Bool.and(String.eq(w, v), Nat.is_eq(r2, r)),
+            Bool.and(
               RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
               RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
-            )(
-              Shared.Bool.and_true_right(
-                Bool.and(String.eq(w, v), Nat.is_eq(r2, r)),
-                Bool.and(
-                  RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
-                  RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
-                )
-              )(h)
             )
-          )
+          )(h)
         )(
-          Cast.is_of(
-            Types.Cast.Vote{r2, p, basis},
-            RRounds.Ballots.at(bs2, v, t),
-            Ballots.at_grows(
+          Shared.Bool.and_both(
+            RRounds.Seen.takes(r2, RRounds.Chain.seen(bs2, v, t)),
+            RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs2, v, t))
+          )(
+            Seen.takes_grows(
               bs,
               bs2,
               v,
               t,
-              Types.Cast.Vote{r2, p, basis}
-            )(
+              r2,
               hg
             )(
-              Cast.is_some(
-                Types.Cast.Vote{r2, p, basis},
-                RRounds.Ballots.at(bs, v, t)
+              Shared.Bool.and_true_left(
+                RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
+                RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
               )(
                 Shared.Bool.and_true_right(
-                  RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
-                  RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
+                  Bool.and(String.eq(w, v), Nat.is_eq(r2, r)),
+                  Bool.and(
+                    RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
+                    RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
+                  )
+                )(h)
+              )
+            )
+          )(
+            Cast.is_of(
+              Types.Cast.Vote{r2, p, basis},
+              RRounds.Ballots.at(bs2, v, t),
+              Ballots.at_grows(
+                bs,
+                bs2,
+                v,
+                t,
+                Types.Cast.Vote{r2, p, basis}
+              )(
+                hg
+              )(
+                Cast.is_some(
+                  Types.Cast.Vote{r2, p, basis},
+                  RRounds.Ballots.at(bs, v, t)
                 )(
                   Shared.Bool.and_true_right(
-                    Bool.and(String.eq(w, v), Nat.is_eq(r2, r)),
-                    Bool.and(
-                      RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
-                      RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
-                    )
-                  )(h)
+                    RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
+                    RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
+                  )(
+                    Shared.Bool.and_true_right(
+                      Bool.and(String.eq(w, v), Nat.is_eq(r2, r)),
+                      Bool.and(
+                        RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)),
+                        RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))
+                      )
+                    )(h)
+                  )
                 )
               )
             )
           )
         )
-      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Rounds that decide
 # ------------------
@@ -1992,6 +2064,7 @@ def Chain.voted_last(
     RRounds.Chain.seen(bs, v, Nat.add(d, 1n+t))
   )(Chain.seen_above(d, bs, v, 1n+t, 1n+r)(Chain.voted_above(bs, v, t, r, p, b)(h)(e)))(h2)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # what holds of each vote of the voter v in the round r that counts among bs
 # holds of the ballot b, when it counts: it is such a vote
 def Ballot.counts_by(
@@ -2018,7 +2091,8 @@ def Ballot.counts_by(
         Shared.Bool.false_ne_true(h)
       )
     case RRounds.Ballot{+w, +t, Types.Cast.Vote{+r2, +p, +basis}}:
-      +h => k => (
+      h0 => k => (
+        +h = Safeties.Ballot.counts_true(bs, v, r, w, t, r2, p, basis)(h0)
         %Equal.sym(String, w, v, Texts.String.eq_sound(w, v)(Shared.Bool.and_true_left(String.eq(w, v), Nat.is_eq(r2, r))(Shared.Bool.and_true_left(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h)))): Q(RRounds.Ballot{_, t, Types.Cast.Vote{r2, p, basis}})
         %Equal.sym(Nat, r2, r, Shared.Nat.is_eq_sound(r2, r)(Shared.Bool.and_true_right(String.eq(w, v), Nat.is_eq(r2, r))(Shared.Bool.and_true_left(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h)))): Q(RRounds.Ballot{v, t, Types.Cast.Vote{_, p, basis}})
         k(t)(p)(basis)((
@@ -2026,6 +2100,7 @@ def Ballot.counts_by(
           Shared.Bool.and_true_left(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t)))(Shared.Bool.and_true_right(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h))))((
           %Shared.Nat.is_eq_sound(r2, r)(Shared.Bool.and_true_right(String.eq(w, v), Nat.is_eq(r2, r))(Shared.Bool.and_true_left(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h))): {RRounds.Ballots.at(bs, v, t) == Some{Types.Cast.Vote{_, p, basis}}: Maybe<&2, Types.Cast>}
           Cast.is_some(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))(Shared.Bool.and_true_right(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t)))(Shared.Bool.and_true_right(Bool.and(String.eq(w, v), Nat.is_eq(r2, r)), Bool.and(RRounds.Seen.takes(r2, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r2, p, basis}, RRounds.Ballots.at(bs, v, t))))(h))))))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # two votes of a voter in a round that count are one ballot
 def Vote.one(
@@ -2466,13 +2541,16 @@ def Tally.holds_grows(
         )
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 # the tallies g1 and g2 are of one round and one pick, and the ballots of g2
 # grew from those of g1
 def Tally.grew(g1: RRounds.Tally, g2: RRounds.Tally) -> Bool:
   match g1 g2:
     case RRounds.Tally{+bs, r, p} RRounds.Tally{+bs2, r2, p2}:
       Bool.and(Ballots.grown(bs, bs2), Bool.and(Nat.is_eq(r, r2), Coded.Pick.is_eq(p, p2)))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # a node that voted in a tally voted in one that it grew to
 def Tally.voted_imp(
   g1: RRounds.Tally,
@@ -2488,6 +2566,7 @@ def Tally.voted_imp(
         %Shared.Nat.is_eq_sound(r, r2)(Shared.Bool.and_true_left(Nat.is_eq(r, r2), Coded.Pick.is_eq(p, p2))(Shared.Bool.and_true_right(Ballots.grown(bs, bs2), Bool.and(Nat.is_eq(r, r2), Coded.Pick.is_eq(p, p2)))(h))): ({RRounds.Tally.voted(RRounds.Tally{bs, r, p}, x) == True{}: Bool} -> {RRounds.Tally.voted(RRounds.Tally{bs2, _, p2}, x) == True{}: Bool})
         %Coded.Pick.is_eq_sound(p, p2)(Shared.Bool.and_true_right(Nat.is_eq(r, r2), Coded.Pick.is_eq(p, p2))(Shared.Bool.and_true_right(Ballots.grown(bs, bs2), Bool.and(Nat.is_eq(r, r2), Coded.Pick.is_eq(p, p2)))(h))): ({RRounds.Tally.voted(RRounds.Tally{bs, r, p}, x) == True{}: Bool} -> {RRounds.Tally.voted(RRounds.Tally{bs2, r, _}, x) == True{}: Bool})
         Tally.voted_grows(bs, bs2, r, p, x, Shared.Bool.and_true_left(Ballots.grown(bs, bs2), Bool.and(Nat.is_eq(r, r2), Coded.Pick.is_eq(p, p2)))(h)))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # What is known stays known
 # ------------------------
@@ -2722,6 +2801,7 @@ def Voted.force_cap(
         p
       )(Shared.List.tail_eq(RRounds.Mind, Mind.cap(x, y), x, Minds.cap(xr, yr), xr, h))
 
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- a proof does not run
 # what some votes leave a lead stays, when the leads of the rounds before do
 def Votes.force_cap(
   vs: List<&2, RRounds.Voted>,
@@ -2745,6 +2825,7 @@ def Votes.force_cap(
         RRounds.Voted.force.at(r, p, List.get(&2, RRounds.Mind, ms2, r)),
         RRounds.Votes.force(ms2, rest)
       )(Voted.force_cap(ms, ms2, r, r, p)(hms))(Votes.force_cap(rest, ms, ms2, hms))
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
 
 # b, or open when a is
 def Promise.cap(a: RRounds.Promise, b: RRounds.Promise) -> RRounds.Promise:
@@ -3563,7 +3644,7 @@ def Round.backs_grows.of(
     case RRounds.Mind.Sound{+q}:
       hc => +h => (
         %Equal.sym(RRounds.Mind, m2, RRounds.Mind.Sound{q}, hc): {RRounds.Round.backs(bs2, os, pk, r, _) == True{}: Bool}
-        Shared.Bool.and_both(Coded.Pick.is_eq(q, pk), Shared.List.holds(~String, ~RRounds.Tally, ~RRounds.Tally.voted, os, RRounds.Tally{bs2, r, pk}))(Shared.Bool.and_true_left(Coded.Pick.is_eq(q, pk), Shared.List.holds(~String, ~RRounds.Tally, ~RRounds.Tally.voted, os, RRounds.Tally{bs, r, pk}))(h))(Tally.holds_grows(os, bs, bs2, r, pk, hg)(Shared.Bool.and_true_right(Coded.Pick.is_eq(q, pk), Shared.List.holds(~String, ~RRounds.Tally, ~RRounds.Tally.voted, os, RRounds.Tally{bs, r, pk}))(h))))
+        Round.backs_of(bs2, os, pk, r, q)(Shared.Bool.and_both(Coded.Pick.is_eq(q, pk), Shared.List.holds(~String, ~RRounds.Tally, ~RRounds.Tally.voted, os, RRounds.Tally{bs2, r, pk}))(Shared.Bool.and_true_left(Coded.Pick.is_eq(q, pk), Shared.List.holds(~String, ~RRounds.Tally, ~RRounds.Tally.voted, os, RRounds.Tally{bs, r, pk}))(Round.backs_true(bs, os, pk, r, q)(h)))(Tally.holds_grows(os, bs, bs2, r, pk, hg)(Shared.Bool.and_true_right(Coded.Pick.is_eq(q, pk), Shared.List.holds(~String, ~RRounds.Tally, ~RRounds.Tally.voted, os, RRounds.Tally{bs, r, pk}))(Round.backs_true(bs, os, pk, r, q)(h))))))
 
 # the nodes that decided a pick in a round still did as the ballots grow
 def Round.backs_grows(
@@ -3789,6 +3870,7 @@ def Round.mind_grows(
     Round.mind(bs2, ds, k, r)
   )(Round.mind_stays(bs, bs2, ds, k, r, hg))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # more than half of the nodes voted for a pick in a round, with votes that
 # count, among the ballots that grew, when they did before
 def Tally.most_grows(
@@ -3831,6 +3913,7 @@ def Tally.most_grows(
       )
     )
   )(hm)
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Round.won_grows, once what is known of the lead before (m) and after (m2)
 # is known
@@ -5362,6 +5445,7 @@ def Vote.of_counted.fin(
     )
   )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the vote of a voter in a round that counts is its ballot that casts a vote
 # of the round, where a vote of the round counts
 def Vote.of_counted(
@@ -5381,32 +5465,10 @@ def Vote.of_counted(
   )
     == Some{RRounds.Ballot{v, t, Types.Cast.Vote{r, p, basis}}}: Maybe<&2, RRounds.Ballot>
 }:
-  Vote.of_counted.fin(
-    bs,
-    v,
-    r,
-    t,
-    p,
-    basis,
-    ha,
-    Shared.Bool.and_both(
-      Bool.and(String.eq(v, v), Nat.is_eq(r, r)),
-      Bool.and(
-        RRounds.Seen.takes(r, RRounds.Chain.seen(bs, v, t)),
-        RRounds.Cast.is(Types.Cast.Vote{r, p, basis}, RRounds.Ballots.at(bs, v, t))
-      )
-    )(
-      Shared.Bool.and_both(
-        String.eq(v, v),
-        Nat.is_eq(r, r)
-      )(Texts.String.eq_refl(v))(Shared.Nat.is_eq_refl(r))
-    )(
-      Shared.Bool.and_both(
-        RRounds.Seen.takes(r, RRounds.Chain.seen(bs, v, t)),
-        RRounds.Cast.is(Types.Cast.Vote{r, p, basis}, RRounds.Ballots.at(bs, v, t))
-      )(hk)(Cast.is_of(Types.Cast.Vote{r, p, basis}, RRounds.Ballots.at(bs, v, t), ha))
-    )
-  )
+  Vote.of_counted.fin(bs, v, r, t, p, basis, ha, (
+      %Safeties.Ballot.and_counts(bs, v, r, v, t, r, p, basis): {_ == True{}: Bool}
+      Shared.Bool.and_both(Bool.and(String.eq(v, v), Nat.is_eq(r, r)), Bool.and(RRounds.Seen.takes(r, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r, p, basis}, RRounds.Ballots.at(bs, v, t))))(Shared.Bool.and_both(String.eq(v, v), Nat.is_eq(r, r))(Texts.String.eq_refl(v))(Shared.Nat.is_eq_refl(r)))(Shared.Bool.and_both(RRounds.Seen.takes(r, RRounds.Chain.seen(bs, v, t)), RRounds.Cast.is(Types.Cast.Vote{r, p, basis}, RRounds.Ballots.at(bs, v, t)))(hk)(Cast.is_of(Types.Cast.Vote{r, p, basis}, RRounds.Ballots.at(bs, v, t), ha)))))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Chain.quiet, for one more ballot of the node, which casts x after it is
 # seen as m0

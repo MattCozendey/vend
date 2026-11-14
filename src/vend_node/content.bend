@@ -259,6 +259,7 @@ def Content.first_sound(
     case Some{e}:
       FileLaws.Files.new_wf()
 
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
 # the content of a version, as the code that runs reads it from a map of
 # facts, is well formed
 def Content.at_sound(
@@ -301,6 +302,7 @@ def Content.at_sound(
           Spec.Point.n(RContents.Entry.taken(c, RLines.Line.at(s, c, 1n+j)))
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
 
 # the files that are the content of a version are well formed
 def Content.at_wf(

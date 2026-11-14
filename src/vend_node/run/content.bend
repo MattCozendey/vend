@@ -95,6 +95,7 @@ def Way.hop(
 ) -> Bool:
   Way.hop.of(c, k, w, Knowns.Known.at(kn, s, c, k))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a way that does not hold, which then costs no more than a way that holds, where both sides run
 # ws is a way from version k of the line c back to the point a
 def Way.ok(
   +kn: Knowns.Known(),
@@ -131,6 +132,7 @@ def Merge.fits.of(
         Way.ok(kn, s, a, ours, c, j),
         Way.ok(kn, s, a, theirs, Spec.Point.line(t), Spec.Point.n(t))
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the ways that the entry e pins to its base
 def Entry.ours(e: Types.Entry) -> List<&2, Spec.Point>:
@@ -442,6 +444,7 @@ def Kept.ok(+s: Facts.Plain(), e: Knowns.Kept) -> Bool:
     case Knowns.Made{c, x}:
       Knowns.Made.fits(Lines.Line.state(s, c), x)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a table that is wrong, which then costs no more than a right table, where both sides run
 # the table kn is right for the facts s: each state and each content that it
 # holds is what s gives
 def Known.ok(kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
@@ -450,6 +453,7 @@ def Known.ok(kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
       True{}
     case Con{e, rest}:
       Bool.and(Kept.ok(s, e), Known.ok(rest, s))
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # What a node learns of the contents
 # ----------------------------------

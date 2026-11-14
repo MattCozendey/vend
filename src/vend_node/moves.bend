@@ -208,7 +208,7 @@ def Ask.starts_start(
       e => Shared.Bool.and_true_left(
         RFacts.Request.is_start(r),
         Hashes.Hash.is_eq(RFacts.Start.root(i, r), h)
-      )(e)
+      )(Facts.Ask.starts_true(h, i, k, r)(e))
 
 # after the node adds a d that starts no store, the facts hold the asks that
 # start a store as before

@@ -40,6 +40,7 @@ type Raw is Data:
     parts: Parts.Parts
   }
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a state that is no node, which then costs no more than a node, where both sides run
 # the map fs is a set of facts (it is well formed, and each fact sits under
 # its own key), and the map of the parts ps is well formed. The code that runs
 # keeps this and builds no proof of it; impl.bend proves that each deed keeps
@@ -61,6 +62,7 @@ def Raw.sound(+name: String, +fs: Facts.Plain(), ps: Parts.Parts) -> Bool:
     Raw.set(fs, ps),
     Bool.and(Facts.Facts.ok(name, fs), Bool.not(Facts.Trust.reserved(name)))
   )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # r can be a node: its facts are a set and are sound for its name, its parts
 # are a well formed map, and its name is not reserved, so the name under
@@ -205,6 +207,7 @@ def Raw.works(
     case False{}:
       Raw{name, ws, ms, False{}, Works.Work.does(Known.Known.none(), fs, name), ps}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the right side is one walk of the mounts, once for a Stop deed
 # the state r after the deed a
 def Raw.does(r: Raw, a: Act) -> Raw:
   match r a:
@@ -266,6 +269,7 @@ def Raw.does(r: Raw, a: Act) -> Raw:
         fs,
         ps
       }
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # What a node shows
 # -----------------

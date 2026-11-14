@@ -604,7 +604,6 @@ def Fit.when(
     case False{}:
       hf => Fit.none(q, r)
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the reply of the voters of a version fits a question that names fit
 def Fit.owners(
   q: Spec.Question,
@@ -628,14 +627,21 @@ def Fit.owners(
     case Some{Types.Entry{+pk, +k}} Some{RLines.Rule{g, +ns}}:
       f => Fit.when(
         q,
-        Bool.and(
+        Shared.Bool.when(
+          Bool,
           Bool.not(List.is_empty(&2, String, ns)),
-          RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
+          un => RRounds.Slot.backed(
+            Rounds.Slot.ballots(s, c, k),
+            ns,
+            k,
+            Lists.List.lead(String, ns),
+            pk
+          ),
+          un => False{}
         ),
         Spec.Reply.Names{Lists.List.lead(String, ns)},
         r
       )(f(Lists.List.lead(String, ns)))
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Fit.affects, once the reached paths seen are known
 def Fit.affects.at(
@@ -2078,6 +2084,7 @@ def Core.majority_decides.vote(
     (h, (Coded.Step.words(Types.Step.At{c, k, t}), (Coded.Cast.words(x), {==})))
   )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the first majority of the nodes ns that all voted for the pick pk at the
 # slot k of the line c is a majority that decides
 def Core.majority_decides.by(
@@ -2090,9 +2097,17 @@ def Core.majority_decides.by(
   +ns: List<&2, String>,
   eg: {ns == gs: List<&2, String>},
   w: {
-    Bool.and(
+    Shared.Bool.when(
+      Bool,
       Bool.not(List.is_empty(&2, String, ns)),
-      RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
+      un => RRounds.Slot.backed(
+        Rounds.Slot.ballots(s, c, k),
+        ns,
+        k,
+        Lists.List.lead(String, ns),
+        pk
+      ),
+      un => False{}
     )
       == True{}: Bool
   }
@@ -2103,7 +2118,38 @@ def Core.majority_decides.by(
         == Some{Spec.Reply.Names{os}}: Maybe<&2, Spec.Reply>
     }
 ) -> Core.Majority(s, os, gs):
-  (+hb, hn) = w
+  (hw, hn) = w
+  +hb = Equal.trans(
+    Bool,
+    Bool.and(
+      Bool.not(List.is_empty(&2, String, ns)),
+      RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
+    ),
+    Shared.Bool.when(
+      Bool,
+      Bool.not(List.is_empty(&2, String, ns)),
+      un => RRounds.Slot.backed(
+        Rounds.Slot.ballots(s, c, k),
+        ns,
+        k,
+        Lists.List.lead(String, ns),
+        pk
+      ),
+      un => False{}
+    ),
+    True{},
+    Lists.Bool.and_when(
+      Bool.not(List.is_empty(&2, String, ns)),
+      un => RRounds.Slot.backed(
+        Rounds.Slot.ballots(s, c, k),
+        ns,
+        k,
+        Lists.List.lead(String, ns),
+        pk
+      )
+    ),
+    hw
+  )
   Core.cast(
     List<&2, String>,
     x => Core.Majority(s, x, gs),
@@ -2175,8 +2221,8 @@ def Core.majority_decides.by(
       )
     )
   )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # Core.majority_decides, once the entry of the version (m) and its rule (u)
 # are known
 def Core.majority_decides.of(
@@ -2237,21 +2283,22 @@ def Core.majority_decides.of(
           h2
         ),
         When.some(
-          Bool.and(
+          Shared.Bool.when(
+            Bool,
             Bool.not(List.is_empty(&2, String, ns)),
-            RRounds.Slot.backed(
+            un => RRounds.Slot.backed(
               Rounds.Slot.ballots(s, c, k),
               ns,
               k,
               Lists.List.lead(String, ns),
               pk
-            )
+            ),
+            un => False{}
           ),
           Spec.Reply.Names{Lists.List.lead(String, ns)},
           Spec.Reply.Names{os}
         )(h1)
       )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # A version is decided by a majority of the nodes of its owner group, each by
 # a ballot that the node holds.

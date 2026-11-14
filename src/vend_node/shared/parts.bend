@@ -999,6 +999,7 @@ def Parts.uniq_distinct(
         )
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 # the entry b counts, and its hash is h
 def Parts.holds(h: Hashes.Hash, b: Crits.Bind<List<&2, U32>>) -> Bool:
   match b:
@@ -1007,6 +1008,7 @@ def Parts.holds(h: Hashes.Hash, b: Crits.Bind<List<&2, U32>>) -> Bool:
         Crits.Key.is_eq(k, Run.Parts.key(Hashes.Sha.hash(ws))),
         Hashes.Hash.is_eq(Hashes.Sha.hash(ws), h)
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # an entry under the key of h whose hash x is h counts
 def Parts.holds_self(
@@ -2046,6 +2048,7 @@ def Parts.find.if(
     case False{}:
       rest
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- only proofs use it; no program runs it
 # the words of the first of the entries es that counts for the hash h: a clear def, for the laws
 def Parts.find(
   es: List<&2, Crits.Bind<List<&2, U32>>>,
@@ -2063,6 +2066,7 @@ def Parts.find(
         ws,
         Parts.find(r, h)
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # a put, then what follows, is what was held, else the put, else what follows
 def Parts.or_put(
@@ -2841,7 +2845,7 @@ def Parts.of_crit(
 # the words of a hash in the parts are those that the code that runs reads
 def Parts.get_runs(
   d: Parts,
-  +h: Hashes.Hash
+  h: Hashes.Hash
 ) -> {Parts.get(d, h) == Run.Parts.get(Parts.crit(d), h): Maybe<&2, List<&2, U32>>}:
   match d:
     case Parts{Tuple{m, w}}:
@@ -2851,9 +2855,9 @@ def Parts.get_runs(
 # runs gives
 def Parts.uniq.seen_runs(
   was: Bool,
-  +m: Crits.Crit<Unit>,
+  m: Crits.Crit<Unit>,
   w: {Crits.Crit.wf(~Unit, m, 0n) == True{}: Bool},
-  +k: List<&2, U32>
+  k: List<&2, U32>
 ) -> {
   Crits.Dict.crit(
     Unit,
@@ -2867,6 +2871,7 @@ def Parts.uniq.seen_runs(
     case False{}:
       {==}
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- a proof does not run
 # the hashes, each once, are those that the code that runs gives
 def Parts.uniq_runs(
   hs: List<&2, Hashes.Hash>,
@@ -2877,7 +2882,7 @@ def Parts.uniq_runs(
   match hs seen:
     case Nil{} seen:
       {==}
-    case Con{+h, +r} Tuple{+m, +w}:
+    case Con{+h, r} Tuple{+m, +w}:
       %Parts.uniq.seen_runs(
         Crits.Crit.has(Unit, m, Run.Parts.key(h)),
         m,
@@ -2926,13 +2931,14 @@ def Parts.uniq_runs(
           Parts.uniq.seen(Crits.Crit.has(Unit, m, Run.Parts.key(h)), Tuple{m, w}, Run.Parts.key(h))
         )
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the hashes held in the parts are those that the code that runs lists
 def Parts.list_runs(
   d: Parts
 ) -> {Parts.list(d) == Run.Parts.list(Parts.crit(d)): List<&2, Hashes.Hash>}:
   match d:
-    case Parts{Tuple{+m, w}}:
+    case Parts{Tuple{m, w}}:
       Parts.uniq_runs(
         Run.Parts.list.go(Crits.Crit.entries(List<&2, U32>, m)),
         Crits.Dict.new(~Unit)
@@ -2946,22 +2952,22 @@ def Plain.new_wf() -> {Run.Parts.wf(Run.Parts.new()) == True{}: Bool}:
 def Plain.put.if_wf(
   held: Bool,
   d: Run.Parts,
-  +h: Hashes.Hash,
-  +ws: List<&2, U32>
+  h: Hashes.Hash,
+  ws: List<&2, U32>
 ) -> {
   Run.Parts.wf(d) == True{}: Bool
 } -> {Run.Parts.wf(Run.Parts.put.if(held, d, h, ws)) == True{}: Bool}:
   match held d:
     case True{} d:
       w => w
-    case False{} Run.Parts{+t}:
+    case False{} Run.Parts{t}:
       w => Crits.Crit.upsert_wf(~List<&2, U32>, ~(a => b => b), t, Run.Parts.key(h), ws)(w)
 
 # words put under their hash keep the parts well formed
 def Plain.put.at_wf(
   +d: Run.Parts,
   +h: Hashes.Hash,
-  +ws: List<&2, U32>
+  ws: List<&2, U32>
 ) -> {
   Run.Parts.wf(d) == True{}: Bool
 } -> {Run.Parts.wf(Run.Parts.put.at(d, h, ws)) == True{}: Bool}:
@@ -2969,7 +2975,7 @@ def Plain.put.at_wf(
 
 # words put under their hash keep the parts well formed
 def Plain.put_wf(
-  +d: Run.Parts,
+  d: Run.Parts,
   +ws: List<&2, U32>
 ) -> {Run.Parts.wf(d) == True{}: Bool} -> {Run.Parts.wf(Run.Parts.put(d, ws)) == True{}: Bool}:
   w => Plain.put.at_wf(d, Hashes.Sha.hash(ws), ws)(w)
@@ -2977,9 +2983,9 @@ def Plain.put_wf(
 # words joined under their hash, when hit, keep the parts well formed
 def Plain.join.add_wf(
   hit: Bool,
-  +a: Run.Parts,
-  +h: Hashes.Hash,
-  +ws: List<&2, U32>
+  a: Run.Parts,
+  h: Hashes.Hash,
+  ws: List<&2, U32>
 ) -> {
   Run.Parts.wf(a) == True{}: Bool
 } -> {Run.Parts.wf(Run.Parts.join.add(hit, a, h, ws)) == True{}: Bool}:
@@ -3017,7 +3023,7 @@ def Plain.join.go_wf(
 
 # the parts of b joined to a keep the parts well formed
 def Plain.join_wf(
-  +a: Run.Parts,
+  a: Run.Parts,
   b: Run.Parts
 ) -> {Run.Parts.wf(a) == True{}: Bool} -> {Run.Parts.wf(Run.Parts.join(a, b)) == True{}: Bool}:
   match b:
@@ -3027,7 +3033,7 @@ def Plain.join_wf(
 # words kept under a hash, if any, keep the parts well formed
 def Plain.only.add_wf(
   m: Maybe<&2, List<&2, U32>>,
-  +h: Hashes.Hash,
+  h: Hashes.Hash,
   acc: Run.Parts
 ) -> {
   Run.Parts.wf(acc) == True{}: Bool
@@ -3035,7 +3041,7 @@ def Plain.only.add_wf(
   match m acc:
     case None{} acc:
       w => w
-    case Some{+ws} Run.Parts{+t}:
+    case Some{ws} Run.Parts{t}:
       w => Crits.Crit.upsert_wf(~List<&2, U32>, ~(a => b => b), t, Run.Parts.key(h), ws)(w)
 
 # the parts kept of d, those of the hashes hs, are well formed
@@ -3051,7 +3057,7 @@ def Plain.only.go_wf(
 
 # the parts kept of d, those of the hashes hs, are well formed
 def Plain.only_wf(
-  +d: Run.Parts,
+  d: Run.Parts,
   hs: List<&2, Hashes.Hash>
 ) -> {Run.Parts.wf(Run.Parts.only(d, hs)) == True{}: Bool}:
   Plain.only.go_wf(hs, d)

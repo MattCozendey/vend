@@ -90,6 +90,7 @@ def Node.tree(n: Spec.VendNode) -> RFacts.Plain():
     case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
       fs
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # the map fs of a sound state passes the two checks of a set
 def Node.set_ok(
   +name: String,
@@ -135,6 +136,7 @@ def Node.parts_wf(
       Bool.and(RFacts.Facts.ok(name, fs), Bool.not(RFacts.Trust.reserved(name)))
     )(ok)
   )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the proofs that the map fs of a sound state is a set, from the check that
 # the state passes (ok)
@@ -355,6 +357,7 @@ def Node.free(
     )(ok)
   )
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
 # a map m that is the map of facts gs, sound for a name name that is not
 # reserved, can be the map of a node of that name, with parts qs that are
 # well formed: the proofs that m is a set are those of gs
@@ -393,6 +396,7 @@ def Node.join(
       Bool.not(RFacts.Trust.reserved(name))
     )(sound)(free)
   )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # a node of the name name keeps its proof when its map goes from fs to m and
 # its parts from ps to qs, if qs are well formed and m is the map of facts gs

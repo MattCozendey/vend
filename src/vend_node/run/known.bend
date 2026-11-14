@@ -269,18 +269,18 @@ def Known.made(kn: Known(), +c: Ledgers.Line, vs: List<&2, Types.Entry>, i: Ledg
 def Known.root(c: Ledgers.Line) -> Ledgers.Line:
   Ledgers.Line{Lines.Line.root(c), None{}}
 
-# the state of the line c, when the state of its store is R and k
+# the state of the line c, when the state of its store is rs and k
 def Known.fresh.at(
   +s: Facts.Plain(),
   c: Ledgers.Line,
-  R: List<&2, Types.Entry>,
+  rs: List<&2, Types.Entry>,
   k: Nat
 ) -> Maybe<&2, Lines.State>:
   match c:
     case Ledgers.Line{h, None{}}:
-      Some{Lines.State{R, k}}
+      Some{Lines.State{rs, k}}
     case Ledgers.Line{h, Some{b}}:
-      Lines.Branch.state(s, Ledgers.Line{h, Some{b}}, Some{R})
+      Lines.Branch.state(s, Ledgers.Line{h, Some{b}}, Some{rs})
 
 # the state of the line c in the facts s: with the state m of its store if
 # the table holds it
@@ -338,18 +338,18 @@ def Known.store(
 ) -> Maybe<&2, List<&2, Types.Entry>>:
   Known.versions(kn, s, Ledgers.Line{h, None{}})
 
-# the rule after the versions vs of the line c, with the versions R of its
+# the rule after the versions vs of the line c, with the versions rs of its
 # store
 def Known.rule.at(
   c: Ledgers.Line,
   +vs: List<&2, Types.Entry>,
-  R: List<&2, Types.Entry>
+  rs: List<&2, Types.Entry>
 ) -> Maybe<&2, Lines.Rule>:
   match c:
     case Ledgers.Line{h, None{}}:
       Lines.Line.rule(None{}, Ledgers.Line{h, None{}}, vs)
     case Ledgers.Line{h, Some{b}}:
-      Lines.Line.rule(Some{R}, Ledgers.Line{h, Some{b}}, vs)
+      Lines.Line.rule(Some{rs}, Ledgers.Line{h, Some{b}}, vs)
 
 # the rule after the versions vs of the line c: with the state m of its
 # store if the table holds it, else as the facts s give it
@@ -511,6 +511,7 @@ def Entry.same(a: Types.Entry, b: Types.Entry) -> Bool:
     case Types.Entry{p1, k1} Types.Entry{p2, k2}:
       Bool.and(Coded.Pick.is_eq(p1, p2), Nat.is_eq(k1, k2))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for versions that differ, which then costs no more than equal versions, where both sides run
 # the versions xs and ys are the same
 def Entries.same(xs: List<&2, Types.Entry>, ys: List<&2, Types.Entry>) -> Bool:
   match xs ys:
@@ -520,6 +521,7 @@ def Entries.same(xs: List<&2, Types.Entry>, ys: List<&2, Types.Entry>) -> Bool:
       Bool.and(Entry.same(x, y), Entries.same(xr, yr))
     case _ _:
       False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the states a and b are the same
 def State.same(a: Lines.State, b: Lines.State) -> Bool:
@@ -527,6 +529,7 @@ def State.same(a: Lines.State, b: Lines.State) -> Bool:
     case Lines.State{v1, k1} Lines.State{v2, k2}:
       Bool.and(Entries.same(v1, v2), Nat.is_eq(k1, k2))
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for rules that differ, which then costs no more than equal rules, where both sides run
 # the rules a and b are the same
 def Rule.same(a: Lines.Rule, b: Lines.Rule) -> Bool:
   match a b:
@@ -535,6 +538,7 @@ def Rule.same(a: Lines.Rule, b: Lines.Rule) -> Bool:
         Shared.Maybe.is_eq(~String, ~String.eq, g1, g2),
         Shared.List.is_eq(~String, ~String.eq, n1, n2)
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # m is the rule u
 def Rule.fits(m: Maybe<&2, Lines.Rule>, u: Lines.Rule) -> Bool:
@@ -556,6 +560,7 @@ def State.fits(m: Maybe<&2, Lines.State>, st: Lines.State) -> Bool:
 def Bucket.same(a: List<&2, Ledgers.Id>, b: List<&2, Ledgers.Id>) -> Bool:
   Shared.List.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, a, b)
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for sets that differ, which then costs no more than equal sets, where both sides run
 # the sets a and b are the same: key by key, in the same shape
 def Ids.same(a: Ids(), b: Ids()) -> Bool:
   match a b:
@@ -576,6 +581,7 @@ def Ids.same(a: Ids(), b: Ids()) -> Bool:
       )
     case _ _:
       False{}
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # m is a state whose versions have the ids x
 def Made.fits(m: Maybe<&2, Lines.State>, x: Ids()) -> Bool:

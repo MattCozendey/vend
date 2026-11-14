@@ -835,15 +835,17 @@ def Rule.voters_stay(
         b => {
           Shared.Maybe.when(
             Spec.Reply,
-            Bool.and(
+            Shared.Bool.when(
+              Bool,
               b,
-              RRounds.Slot.backed(
+              un => RRounds.Slot.backed(
                 Rounds.Slot.ballots(s, c, k),
                 ns,
                 k,
                 Lists.List.lead(String, ns),
                 pk
-              )
+              ),
+              un => False{}
             ),
             u2 => Some{Spec.Reply.Names{Lists.List.lead(String, ns)}}
           )
@@ -881,15 +883,17 @@ def Rule.voters_stay(
             b => {
               Shared.Maybe.when(
                 Spec.Reply,
-                Bool.and(
+                Shared.Bool.when(
+                  Bool,
                   b,
-                  RRounds.Slot.backed(
+                  un => RRounds.Slot.backed(
                     Rounds.Slot.ballots(s2, c, k),
                     ns,
                     k,
                     Lists.List.lead(String, ns),
                     pk
-                  )
+                  ),
+                  un => False{}
                 ),
                 u2 => Some{Spec.Reply.Names{Lists.List.lead(String, ns)}}
               )

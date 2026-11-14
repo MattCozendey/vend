@@ -721,15 +721,24 @@ def Collided.none(
               rest,
               Types.Ask{i, k, r}
             ),
-            Bool.and(
-              Bool.and(
+            Shared.Bool.when(
+              Bool,
+              Shared.Bool.when(
+                Bool,
                 _,
-                Hashes.Hash.is_eq(RFacts.Start.root(i, r), RFacts.Ask.root(Types.Ask{i, k, r}))
+                u => Hashes.Hash.is_eq(
+                  RFacts.Start.root(i, r),
+                  RFacts.Ask.root(Types.Ask{i, k, r})
+                ),
+                u => False{}
               ),
-              Bool.and(
+              un => Shared.Bool.when(
+                Bool,
                 RFacts.Ask.starts(RFacts.Ask.root(Types.Ask{i, k, r}), b),
-                Bool.not(RFacts.Ask.alike(Types.Ask{i, k, r}, b))
-              )
+                u => Bool.not(RFacts.Ask.alike(Types.Ask{i, k, r}, b)),
+                u => False{}
+              ),
+              un => False{}
             )
           )
             == False{}: Bool

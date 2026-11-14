@@ -184,12 +184,16 @@ type Roll is Data:
 def Ballot.counts(g: Roll, b: Ballot) -> Bool:
   match g b:
     case Roll{+bs, +v, r} Ballot{w, +t, Types.Cast.Vote{+r2, p, basis}}:
-      Bool.and(
+      Shared.Bool.when(
+        Bool,
         Bool.and(String.eq(w, v), Nat.is_eq(r2, r)),
-        Bool.and(
+        un => Shared.Bool.when(
+          Bool,
           Seen.takes(r2, Chain.seen(bs, v, t)),
-          Cast.is(Types.Cast.Vote{r2, p, basis}, Ballots.at(bs, v, t))
-        )
+          u => Cast.is(Types.Cast.Vote{r2, p, basis}, Ballots.at(bs, v, t)),
+          u => False{}
+        ),
+        un => False{}
       )
     case Roll{bs, v, r} Ballot{w, t, Types.Cast.Pass{r2}}:
       False{}
@@ -285,6 +289,7 @@ def Force.join(a: Force, b: Force) -> Force:
     case Force.Bound{+r, p} Force.Bound{+r2, p2}:
       Bool.pick(Force, Nat.is_lt(r, r2), Force.Bound{r2, p2}, Force.Bound{r, p})
 
+# bend-lint: expect-begin bend-lint-rules/performance/list_index_loop@warning -- ms holds one lead for each round of one slot, and a slot takes a new round only when a lead fails: the list stays short
 # what the votes vs leave a lead, with the leads ms of the rounds before it
 def Votes.force(+ms: List<&2, Mind>, vs: List<&2, Voted>) -> Force:
   match vs:
@@ -292,6 +297,7 @@ def Votes.force(+ms: List<&2, Mind>, vs: List<&2, Voted>) -> Force:
       Force.Free{}
     case Con{x, rest}:
       Force.join(Voted.force(ms, x), Votes.force(ms, rest))
+# bend-lint: expect-end bend-lint-rules/performance/list_index_loop@warning
 
 # what a node gave a lead. Open: not known yet. None: nothing. Held: a
 # promise to vote in no round below, and the votes that it cast before
@@ -515,9 +521,11 @@ def Round.backs(
 ) -> Bool:
   match m:
     case Mind.Sound{q}:
-      Bool.and(
+      Shared.Bool.when(
+        Bool,
         Coded.Pick.is_eq(q, pk),
-        Shared.List.holds(~String, ~Tally, ~Tally.voted, os, Tally{bs, r, pk})
+        u => Shared.List.holds(~String, ~Tally, ~Tally.voted, os, Tally{bs, r, pk}),
+        u => False{}
       )
     case _:
       False{}

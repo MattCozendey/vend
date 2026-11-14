@@ -1840,6 +1840,16 @@ def Facts.refuses_other(
   String.eq(v, name) == False{}: Bool
 } -> {Facts.refuses(name, s, Types.Fact.Vote{v, st, pk}) == False{}: Bool}:
   h =>
+    %Lists.Bool.and_when(
+      String.eq(v, name),
+      u => Shared.List.some(
+        ~Types.Fact,
+        ~Spec.Ballot,
+        ~RFacts.Fact.clashes,
+        Facts.list(s),
+        Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}
+      )
+    ): {_ == False{}: Bool}
     %Equal.sym(
       Bool,
       String.eq(v, name),
@@ -1894,6 +1904,16 @@ def Facts.refuses_of(
       )
     case Types.Fact.Vote{+v, +st1, +pk}:
       ef => hg => eg => hn =>
+        %Lists.Bool.and_when(
+          String.eq(v, name),
+          u => Shared.List.some(
+            ~Types.Fact,
+            ~Spec.Ballot,
+            ~RFacts.Fact.clashes,
+            Facts.list(s),
+            Spec.Ballot{v, Coded.Step.words(st1), Coded.Cast.words(pk)}
+          )
+        ): {_ == True{}: Bool}
         %Equal.sym(
           Spec.Ballot,
           Spec.Ballot{v, Coded.Step.words(st1), Coded.Cast.words(pk)},
@@ -2252,6 +2272,29 @@ def Trust.broken_never(
 # Laws of the starts
 # ------------------
 
+# an ask that starts the store of the root h: its request starts a store,
+# and its root is h
+def Ask.starts_true(
+  +h: Hashes.Hash,
+  +i: Ledgers.Id,
+  +k: Nat,
+  +r: Spec.Request
+) -> {
+  RFacts.Ask.starts(h, Types.Ask{i, k, r}) == True{}: Bool
+} -> {
+  Bool.and(
+    RFacts.Request.is_start(r),
+    Hashes.Hash.is_eq(RFacts.Start.root(i, r), h)
+  )
+    == True{}: Bool
+}:
+  hs =>
+    %Lists.Bool.when_and(
+      RFacts.Request.is_start(r),
+      u => Hashes.Hash.is_eq(RFacts.Start.root(i, r), h)
+    ): {_ == True{}: Bool}
+    hs
+
 # the root of an ask that starts the store of a root is that root
 def Ask.starts_root(
   +h: Hashes.Hash,
@@ -2266,7 +2309,7 @@ def Ask.starts_root(
         Shared.Bool.and_true_right(
           RFacts.Request.is_start(r),
           Hashes.Hash.is_eq(RFacts.Start.root(i, r), h)
-        )(hs)
+        )(Ask.starts_true(h, i, k, r)(hs))
       )
 
 # an ask that starts a store starts the store of its root
@@ -2339,11 +2382,37 @@ def Ask.alike_sym(
           Coded.Request.is_eq(q, q)
         )(Ledgers.Id.is_eq_refl(j))(Coded.Request.is_eq_refl(q))
 
-# an ask that collides with another: the other collides with it
-def Ask.collides_sym(
+# the asks a and b start the store of the root of a, and differ
+def Ask.clash(+a: Types.Ask, +b: Types.Ask) -> Bool:
+  Bool.and(
+    RFacts.Ask.starts(RFacts.Ask.root(a), a),
+    Bool.and(RFacts.Ask.starts(RFacts.Ask.root(a), b), Bool.not(RFacts.Ask.alike(a, b)))
+  )
+
+# the test of a collision that the code that runs makes is Ask.clash
+def Ask.collides_and(
   +a: Types.Ask,
   +b: Types.Ask
-) -> {RFacts.Ask.collides(a, b) == True{}: Bool} -> {RFacts.Ask.collides(b, a) == True{}: Bool}:
+) -> {RFacts.Ask.collides(a, b) == Ask.clash(a, b): Bool}:
+  %Lists.Bool.when_and(
+    RFacts.Ask.starts(RFacts.Ask.root(a), b),
+    u => Bool.not(RFacts.Ask.alike(a, b))
+  ): {RFacts.Ask.collides(a, b) == Bool.and(RFacts.Ask.starts(RFacts.Ask.root(a), a), _): Bool}
+  Lists.Bool.when_and(
+    RFacts.Ask.starts(RFacts.Ask.root(a), a),
+    un => Shared.Bool.when(
+      Bool,
+      RFacts.Ask.starts(RFacts.Ask.root(a), b),
+      u => Bool.not(RFacts.Ask.alike(a, b)),
+      u => False{}
+    )
+  )
+
+# Ask.collides_sym, of Ask.clash
+def Ask.collides_sym.and(
+  +a: Types.Ask,
+  +b: Types.Ask
+) -> {Ask.clash(a, b) == True{}: Bool} -> {Ask.clash(b, a) == True{}: Bool}:
   +h =>
     %Equal.sym(
       Hashes.Hash,
@@ -2409,6 +2478,22 @@ def Ask.collides_sym(
         )
       )
     )
+
+# an ask that collides with another: the other collides with it
+def Ask.collides_sym(
+  +a: Types.Ask,
+  +b: Types.Ask
+) -> {RFacts.Ask.collides(a, b) == True{}: Bool} -> {RFacts.Ask.collides(b, a) == True{}: Bool}:
+  h =>
+    %Equal.sym(
+      Bool,
+      RFacts.Ask.collides(b, a),
+      Ask.clash(b, a),
+      Ask.collides_and(b, a)
+    ): {_ == True{}: Bool}
+    Ask.collides_sym.and(a, b)(
+      %Ask.collides_and(a, b): {_ == True{}: Bool}
+      h)
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # no ask collides with itself
@@ -2423,7 +2508,9 @@ def Ask.collides_self(+a: Types.Ask) -> {RFacts.Ask.collides(a, a) == True{}: Bo
         RFacts.Ask.starts(RFacts.Ask.root(a), a),
         RFacts.Ask.starts(RFacts.Ask.root(a), a),
         Bool.not(RFacts.Ask.alike(a, a))
-      )(h)
+      )(
+        %Ask.collides_and(a, a): {_ == True{}: Bool}
+        h)
     ),
     Ask.alike_refl(a)
   )
@@ -2863,27 +2950,9 @@ def Facts.honest_starts(
           )
         )
       ),
-      Facts.collide_in(
-        s,
-        a,
-        b
-      )(
-        ha
-      )(
-        hb
-      )(
-        Shared.Bool.and_both(
-          RFacts.Ask.starts(RFacts.Ask.root(a), a),
-          Bool.and(RFacts.Ask.starts(RFacts.Ask.root(a), b), Bool.not(RFacts.Ask.alike(a, b)))
-        )(
-          Ask.starts_self(h, a)(sa)
-        )(
-          Shared.Bool.and_both(
-            RFacts.Ask.starts(RFacts.Ask.root(a), b),
-            Bool.not(RFacts.Ask.alike(a, b))
-          )(Ask.starts_to(h, a, b)(sa)(sb))(Case.not_of(RFacts.Ask.alike(a, b))(ef))
-        )
-      )
+      Facts.collide_in(s, a, b)(ha)(hb)(
+        %Equal.sym(Bool, RFacts.Ask.collides(a, b), Ask.clash(a, b), Ask.collides_and(a, b)): {_ == True{}: Bool}
+        Shared.Bool.and_both(RFacts.Ask.starts(RFacts.Ask.root(a), a), Bool.and(RFacts.Ask.starts(RFacts.Ask.root(a), b), Bool.not(RFacts.Ask.alike(a, b))))(Ask.starts_self(h, a)(sa))(Shared.Bool.and_both(RFacts.Ask.starts(RFacts.Ask.root(a), b), Bool.not(RFacts.Ask.alike(a, b)))(Ask.starts_to(h, a, b)(sa)(sb))(Case.not_of(RFacts.Ask.alike(a, b))(ef))))
     )
   )
 
@@ -3178,6 +3247,16 @@ def Facts.cast_refuses(
   Facts.cast(s, name, st) == False{}: Bool
 } -> {Facts.refuses(name, s, Types.Fact.Vote{name, st, pk}) == False{}: Bool}:
   hc =>
+    %Lists.Bool.and_when(
+      String.eq(name, name),
+      u => Shared.List.some(
+        ~Types.Fact,
+        ~Spec.Ballot,
+        ~RFacts.Fact.clashes,
+        Facts.list(s),
+        Spec.Ballot{name, Coded.Step.words(st), Coded.Cast.words(pk)}
+      )
+    ): {_ == False{}: Bool}
     %Equal.sym(
       Bool,
       Shared.List.some(

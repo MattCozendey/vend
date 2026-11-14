@@ -137,6 +137,7 @@ def Clashes.at(
     case _ _ _ _:
       None{}
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- for an entry that is no merge, Merge.fits finds no base and stops
 # the paths that clash in the merge e, version k of the line c
 def Clashes.of(
   +kn: Known.Known(),
@@ -158,6 +159,7 @@ def Clashes.of(
         Contents.Content.of(kn, s, c, j),
         Contents.Content.of(kn, s, Spec.Point.line(t), Spec.Point.n(t))
       )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the base of the merge e, version k of the line c, when its ways lead to it
 def Base.of(
@@ -304,9 +306,11 @@ def Rule.voters(
       +os = Lists.List.lead(String, ns)
       Shared.Maybe.when(
         Spec.Reply,
-        Bool.and(
+        Shared.Bool.when(
+          Bool,
           Bool.not(List.is_empty(&2, String, ns)),
-          Rounds.Slot.backed(Rounds.Slot.ballots(Facts.Facts.list(s), c, k), ns, k, os, pk)
+          un => Rounds.Slot.backed(Rounds.Slot.ballots(Facts.Facts.list(s), c, k), ns, k, os, pk),
+          un => False{}
         ),
         u2 => Some{Spec.Reply.Names{os}}
       )

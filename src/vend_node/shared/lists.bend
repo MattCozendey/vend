@@ -480,6 +480,28 @@ def List.take_ext(-A: Data, +xs: List<&2, A>, +n: Nat) -> List.Ext(A, List.take(
 # Cases
 # -----
 
+# a test b that goes on to k only when it holds is: b, and k
+def Bool.when_and(
+  b: Bool,
+  k: Unit -> Bool
+) -> {Shared.Bool.when(Bool, b, k, u => False{}) == Bool.and(b, k(Unit{})): Bool}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# b, and k, is the test b that goes on to k only when it holds
+def Bool.and_when(
+  b: Bool,
+  k: Unit -> Bool
+) -> {Bool.and(b, k(Unit{})) == Shared.Bool.when(Bool, b, k, u => False{}): Bool}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
 # what holds of True when b is True, and of False when b is False, holds of b
 def Bool.by(
   -P: Bool -> Type,
