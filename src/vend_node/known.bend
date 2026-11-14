@@ -5448,8 +5448,8 @@ def Work.pass.at_ok.id(
     ): Maybe<&2, RWorks.Plan>
 }:
   +ok => +o => (
-    %Work.ballots_ok(kn, s, c, k2)(ok)(Slot.waits_at(s, c, vs, k2)(o)): {RWorks.Work.pass.at(kn, s, name, c, None{}, Some{id}, Some{RWorks.Open{vs, k2, ns}}) == Shared.Maybe.when(RWorks.Plan, Bool.not(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, id)), u => RWorks.Plan.of(c, k2, RRounds.Slot.pass(_, name))): Maybe<&2, RWorks.Plan>}
-    Equal.cong(Bool, Maybe<&2, RWorks.Plan>, b => Shared.Maybe.when(RWorks.Plan, Bool.not(b), u => RWorks.Plan.of(c, k2, RRounds.Slot.pass(RWorks.Work.ballots(kn, s, c, k2), name))), RKnown.Known.made(kn, c, vs, id), Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, id), Known.made_ok(kn, s, c, vs, k2, id)(Fit.ok(kn, s)(ok))(o)))
+    %Work.ballots_ok(kn, s, c, k2)(ok)(Slot.waits_at(s, c, vs, k2)(o)): {RWorks.Work.pass.at(kn, s, name, c, None{}, Some{id}, Some{RWorks.Open{vs, k2, ns}}) == Shared.Maybe.when(RWorks.Plan, Bool.not(Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, id)), u => RWorks.Plan.of(c, k2, RRounds.Slot.pass(_, ns, k2, name))): Maybe<&2, RWorks.Plan>}
+    Equal.cong(Bool, Maybe<&2, RWorks.Plan>, b => Shared.Maybe.when(RWorks.Plan, Bool.not(b), u => RWorks.Plan.of(c, k2, RRounds.Slot.pass(RWorks.Work.ballots(kn, s, c, k2), ns, k2, name))), RKnown.Known.made(kn, c, vs, id), Shared.List.some(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs, id), Known.made_ok(kn, s, c, vs, k2, id)(Fit.ok(kn, s)(ok))(o)))
 
 # a right table changes no pass at the next slot of a line that is read from
 # the state that the facts give the line
@@ -5490,7 +5490,7 @@ def Work.pass.at_ok(
         bs => Shared.Maybe.when(
           RWorks.Plan,
           Nat.is_eq(k2, k1),
-          u => RWorks.Plan.of(c, k2, RRounds.Slot.pass(bs, name))
+          u => RWorks.Plan.of(c, k2, RRounds.Slot.pass(bs, ns, k2, name))
         ),
         RWorks.Work.ballots(kn, s, c, k2),
         RWorks.Work.ballots(RKnown.Known.none(), s, c, k2),
@@ -5503,7 +5503,7 @@ def Work.pass.at_ok(
         bs => Shared.Maybe.when(
           RWorks.Plan,
           Nat.is_eq(k2, k1),
-          u => RWorks.Plan.of(c, k2, RRounds.Slot.pass(bs, name))
+          u => RWorks.Plan.of(c, k2, RRounds.Slot.pass(bs, ns, k2, name))
         ),
         RWorks.Work.ballots(kn, s, c, k2),
         RWorks.Work.ballots(RKnown.Known.none(), s, c, k2),
@@ -6104,7 +6104,7 @@ def Pass.slot_dead(
         u => RWorks.Plan.of(
           c,
           k2,
-          RRounds.Slot.pass(RWorks.Work.ballots(RKnown.Known.none(), s, c, k2), name)
+          RRounds.Slot.pass(RWorks.Work.ballots(RKnown.Known.none(), s, c, k2), ns, k2, name)
         )
       )(Nat.nle_ne(k2, k)((
             %o: {RKnown.Slot.waits(_, k) == False{}: Bool}
@@ -6145,7 +6145,7 @@ def Pass.id_dead(
         u => RWorks.Plan.of(
           c,
           k2,
-          RRounds.Slot.pass(RWorks.Work.ballots(RKnown.Known.none(), s, c, k2), name)
+          RRounds.Slot.pass(RWorks.Work.ballots(RKnown.Known.none(), s, c, k2), ns, k2, name)
         )
       )(
         %o: {RKnown.Id.waits(_, RKnown.Known.none(), c, i) == False{}: Bool}

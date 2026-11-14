@@ -445,17 +445,17 @@ def Work.pass.at(
   match k i m:
     case _ _ None{}:
       None{}
-    case Some{k1} _ Some{Open{vs, +k2, ns}}:
+    case Some{k1} _ Some{Open{vs, +k2, +ns}}:
       Shared.Maybe.when(
         Plan,
         Nat.is_eq(k2, k1),
-        u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(kn, s, c, k2), name))
+        u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(kn, s, c, k2), ns, k2, name))
       )
-    case None{} Some{id} Some{Open{vs, +k2, ns}}:
+    case None{} Some{id} Some{Open{vs, +k2, +ns}}:
       Shared.Maybe.when(
         Plan,
         Bool.not(Known.Known.made(kn, c, vs, id)),
-        u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(kn, s, c, k2), name))
+        u => Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(kn, s, c, k2), ns, k2, name))
       )
     case None{} None{} _:
       None{}
