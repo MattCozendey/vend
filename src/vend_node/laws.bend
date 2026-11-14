@@ -10,11 +10,11 @@ import ./facts.bend as Facts
 import ./groups.bend as Groups
 import ./lines.bend as Lines
 import ./mirror.bend as Mirror
+import ./rounds.bend as Rounds
 import ./run/answers.bend as RAnswers
 import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
 import ./run/files.bend as Files
-import ./rounds.bend as Rounds
 import ./run/lines.bend as RLines
 import ./run/rounds.bend as RRounds
 import ./shared/lists.bend as Lists
@@ -108,7 +108,12 @@ def Line.find_at(
 } -> {
   List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>
 } -> {
-  Answers.Line.find(s, c, RLines.Entry.id(e)) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+  Answers.Line.find(
+    s,
+    c,
+    RLines.Entry.id(e)
+  )
+    == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
 }:
   +hv => +hg =>
     %Equal.sym(
@@ -191,7 +196,9 @@ def Core.made_at.of(
           e => {
             Lines.Line.at(s, c, k) == Some{e}: Maybe<&2, Types.Entry>
           }
-            & ({RLines.Entry.id(e) == i: Ledgers.Id} & {RAnswers.Entry.request(e) == r: Spec.Request})
+            & (
+              {RLines.Entry.id(e) == i: Ledgers.Id} & {RAnswers.Entry.request(e) == r: Spec.Request}
+            )
         ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Id{i}, hv)
       )
@@ -203,7 +210,10 @@ def Core.made_at.of(
             Lines.Line.at(s, c, k) == Some{e2}: Maybe<&2, Types.Entry>
           }
             & (
-              {RLines.Entry.id(e2) == i: Ledgers.Id} & {RAnswers.Entry.request(e2) == r: Spec.Request}
+              {
+                RLines.Entry.id(e2) == i: Ledgers.Id
+              }
+                & {RAnswers.Entry.request(e2) == r: Spec.Request}
             )
         ),
         Shared.Maybe.none_ne_some(Types.Entry, e, em)
@@ -1380,7 +1390,9 @@ def Core.mark_names.by(
     List.get(&2, Types.Entry, vs, n),
     Some{e},
     hg
-  ): {RAnswers.Reply.number(RAnswers.Mark.in(_)) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>}
+  ): {
+    RAnswers.Reply.number(RAnswers.Mark.in(_)) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>
+  }
   %Equal.sym(
     Spec.Request,
     RAnswers.Entry.request(e),
@@ -1417,7 +1429,10 @@ def Core.mark_names.of(
 } -> {
   RAnswers.Reply.ask(f) == Some{Spec.Reply.Ask{Spec.Request.Mark{c, m, v}}}: Maybe<&2, Spec.Reply>
 } -> {
-  RAnswers.Reply.number(RAnswers.Mark.of(m, vv)) == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>
+  RAnswers.Reply.number(
+    RAnswers.Mark.of(m, vv)
+  )
+    == Some{Spec.Reply.Number{v}}: Maybe<&2, Spec.Reply>
 }:
   match vv f:
     case None{} None{}:
@@ -2052,9 +2067,7 @@ def Core.majority_decides.vote(
       List<&2, U32>,
       st => Exists(
         List<&2, U32>,
-        x => {
-          RFacts.Change.ballot(ch) == Some{Spec.Ballot{v, st, x}}: Maybe<&2, Spec.Ballot>
-        }
+        x => {RFacts.Change.ballot(ch) == Some{Spec.Ballot{v, st, x}}: Maybe<&2, Spec.Ballot>}
       )
     )
 ):
@@ -2122,7 +2135,13 @@ def Core.majority_decides.by(
             )(
               Shared.Bool.and_true_left(
                 Bool.not(List.is_empty(&2, String, ns)),
-                RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
+                RRounds.Slot.backed(
+                  Rounds.Slot.ballots(s, c, k),
+                  ns,
+                  k,
+                  Lists.List.lead(String, ns),
+                  pk
+                )
               )(hb)
             )
           ),
@@ -2142,7 +2161,13 @@ def Core.majority_decides.by(
             )(
               Shared.Bool.and_true_right(
                 Bool.not(List.is_empty(&2, String, ns)),
-                RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
+                RRounds.Slot.backed(
+                  Rounds.Slot.ballots(s, c, k),
+                  ns,
+                  k,
+                  Lists.List.lead(String, ns),
+                  pk
+                )
               )(hb)
             )(hin)
           )
@@ -2214,7 +2239,13 @@ def Core.majority_decides.of(
         When.some(
           Bool.and(
             Bool.not(List.is_empty(&2, String, ns)),
-            RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
+            RRounds.Slot.backed(
+              Rounds.Slot.ballots(s, c, k),
+              ns,
+              k,
+              Lists.List.lead(String, ns),
+              pk
+            )
           ),
           Spec.Reply.Names{Lists.List.lead(String, ns)},
           Spec.Reply.Names{os}

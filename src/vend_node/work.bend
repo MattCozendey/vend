@@ -1,10 +1,7 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/shared.bend as Shared
-import ./content.bend as Contents
 import ./facts.bend as Facts
-import ./lines.bend as Lines
-import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
 import ./run/known.bend as RKnown
 import ./run/lines.bend as RLines
@@ -86,11 +83,23 @@ def Work.offer.on(
 
 # the vote that the node name may cast for the ask a
 def Work.offer(+s: Facts.Facts(), +name: String, +a: Types.Ask) -> Maybe<&2, RWorks.Plan>:
-  RWorks.Work.offer(RKnown.Known.none(), Facts.Facts.crit(s), RFacts.Facts.list(Facts.Facts.crit(s)), name, a)
+  RWorks.Work.offer(
+    RKnown.Known.none(),
+    Facts.Facts.crit(s),
+    RFacts.Facts.list(Facts.Facts.crit(s)),
+    name,
+    a
+  )
 
 # the asks among fs that the node name may vote for
 def Work.ready(+s: Facts.Facts(), +name: String, fs: List<&2, Types.Fact>) -> List<&2, Types.Ask>:
-  RWorks.Work.ready(fs, RKnown.Known.none(), Facts.Facts.crit(s), RFacts.Facts.list(Facts.Facts.crit(s)), name)
+  RWorks.Work.ready(
+    fs,
+    RKnown.Known.none(),
+    Facts.Facts.crit(s),
+    RFacts.Facts.list(Facts.Facts.crit(s)),
+    name
+  )
 
 # the vote of the node name for the ask m, if any
 def Work.propose.of(
@@ -98,7 +107,13 @@ def Work.propose.of(
   +name: String,
   m: Maybe<&2, Types.Ask>
 ) -> Maybe<&2, RWorks.Plan>:
-  RWorks.Work.propose.of(m, RKnown.Known.none(), Facts.Facts.crit(s), RFacts.Facts.list(Facts.Facts.crit(s)), name)
+  RWorks.Work.propose.of(
+    m,
+    RKnown.Known.none(),
+    Facts.Facts.crit(s),
+    RFacts.Facts.list(Facts.Facts.crit(s)),
+    name
+  )
 
 # the vote that the node name proposes: for the ask that it took in last,
 # among those that it may vote for
@@ -138,7 +153,10 @@ def Work.cast_crit(
   +name: String,
   m: Maybe<&2, RWorks.Plan>
 ) -> {
-  Facts.Facts.crit(Work.cast(s, name, m)) == RWorks.Work.cast(Facts.Facts.crit(s), name, m): RFacts.Plain()
+  Facts.Facts.crit(
+    Work.cast(s, name, m)
+  )
+    == RWorks.Work.cast(Facts.Facts.crit(s), name, m): RFacts.Plain()
 }:
   match m:
     case None{}:
@@ -171,6 +189,9 @@ def Work.does_crit(
   +s: Facts.Facts(),
   +name: String
 ) -> {
-  Facts.Facts.crit(Work.does(s, name)) == RWorks.Work.does(RKnown.Known.none(), Facts.Facts.crit(s), name): RFacts.Plain()
+  Facts.Facts.crit(
+    Work.does(s, name)
+  )
+    == RWorks.Work.does(RKnown.Known.none(), Facts.Facts.crit(s), name): RFacts.Plain()
 }:
   Work.cast_crit(s, name, Work.plan(s, name))

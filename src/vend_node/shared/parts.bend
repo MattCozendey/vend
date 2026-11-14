@@ -60,7 +60,10 @@ def Parts.uniq(hs: List<&2, Hashes.Hash>, +seen: Crits.Dict(Unit)) -> List<&2, H
       Run.Parts.uniq.cons(
         Crits.Dict.has(Unit, seen, Run.Parts.key(h)),
         h,
-        Parts.uniq(r, Parts.uniq.seen(Crits.Dict.has(Unit, seen, Run.Parts.key(h)), seen, Run.Parts.key(h)))
+        Parts.uniq(
+          r,
+          Parts.uniq.seen(Crits.Dict.has(Unit, seen, Run.Parts.key(h)), seen, Run.Parts.key(h))
+        )
       )
 
 # the hashes held in d, each once
@@ -932,7 +935,9 @@ def Parts.uniq_distinct.at(
   Crits.Dict.has(Unit, seen, Run.Parts.key(x)) == b: Bool
 } -> Parts.Distinct(
   Parts.uniq(r, Parts.uniq.seen(b, seen, Run.Parts.key(x)))
-) -> Parts.Distinct(Run.Parts.uniq.cons(b, x, Parts.uniq(r, Parts.uniq.seen(b, seen, Run.Parts.key(x))))):
+) -> Parts.Distinct(
+  Run.Parts.uniq.cons(b, x, Parts.uniq(r, Parts.uniq.seen(b, seen, Run.Parts.key(x))))
+):
   match b:
     case True{}:
       eb => ih => ih
@@ -948,14 +953,22 @@ def Parts.uniq_distinct.at(
           ),
           Bool.and(
             Bool.not(
-              Crits.Dict.has(Unit, Crits.Dict.set(~Unit, seen, Run.Parts.key(x), Unit{}), Run.Parts.key(x))
+              Crits.Dict.has(
+                Unit,
+                Crits.Dict.set(~Unit, seen, Run.Parts.key(x), Unit{}),
+                Run.Parts.key(x)
+              )
             ),
             List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, r, x)
           ),
           False{},
           Parts.uniq_contains(r, Crits.Dict.set(~Unit, seen, Run.Parts.key(x), Unit{}), x),
           Parts.seen_false(
-            Crits.Dict.has(Unit, Crits.Dict.set(~Unit, seen, Run.Parts.key(x), Unit{}), Run.Parts.key(x)),
+            Crits.Dict.has(
+              Unit,
+              Crits.Dict.set(~Unit, seen, Run.Parts.key(x), Unit{}),
+              Run.Parts.key(x)
+            ),
             List.contains(~Hashes.Hash, ~Hashes.Hash.is_eq, r, x)
           )(Parts.has_set_same(seen, Run.Parts.key(x)))
         ),
@@ -1002,11 +1015,19 @@ def Parts.holds_self(
 ) -> {
   x == h: Hashes.Hash
 } -> {
-  Bool.and(Crits.Key.is_eq(Run.Parts.key(h), Run.Parts.key(x)), Hashes.Hash.is_eq(x, h)) == True{}: Bool
+  Bool.and(
+    Crits.Key.is_eq(Run.Parts.key(h), Run.Parts.key(x)),
+    Hashes.Hash.is_eq(x, h)
+  )
+    == True{}: Bool
 }:
   e =>
     %e: {
-      Bool.and(Crits.Key.is_eq(Run.Parts.key(_), Run.Parts.key(x)), Hashes.Hash.is_eq(x, _)) == True{}: Bool
+      Bool.and(
+        Crits.Key.is_eq(Run.Parts.key(_), Run.Parts.key(x)),
+        Hashes.Hash.is_eq(x, _)
+      )
+        == True{}: Bool
     }
     %Equal.sym(
       Bool,
@@ -1215,7 +1236,9 @@ def Parts.look_at(
   Crits.Crit.lookup(List<&2, U32>, m, k) == Some{ws}: Maybe<&2, List<&2, U32>>
 } -> {Crits.Crit.lookup(List<&2, U32>, m, Run.Parts.key(h)) == Some{ws}: Maybe<&2, List<&2, U32>>}:
   e1 => e2 => lk =>
-    %e2: {Crits.Crit.lookup(List<&2, U32>, m, Run.Parts.key(_)) == Some{ws}: Maybe<&2, List<&2, U32>>}
+    %e2: {
+      Crits.Crit.lookup(List<&2, U32>, m, Run.Parts.key(_)) == Some{ws}: Maybe<&2, List<&2, U32>>
+    }
     %e1: {Crits.Crit.lookup(List<&2, U32>, m, _) == Some{ws}: Maybe<&2, List<&2, U32>>}
     lk
 
@@ -1389,7 +1412,10 @@ def Parts.held(
         == List.contains(
           ~Hashes.Hash,
           ~Hashes.Hash.is_eq,
-          Parts.uniq(Run.Parts.list.go(Crits.Crit.entries(List<&2, U32>, m)), Crits.Dict.new(~Unit)),
+          Parts.uniq(
+            Run.Parts.list.go(Crits.Crit.entries(List<&2, U32>, m)),
+            Crits.Dict.new(~Unit)
+          ),
           h
         ): Bool
     }
@@ -1445,7 +1471,10 @@ def Parts.held(
         List.contains(
           ~Hashes.Hash,
           ~Hashes.Hash.is_eq,
-          Parts.uniq(Run.Parts.list.go(Crits.Crit.entries(List<&2, U32>, m)), Crits.Dict.new(~Unit)),
+          Parts.uniq(
+            Run.Parts.list.go(Crits.Crit.entries(List<&2, U32>, m)),
+            Crits.Dict.new(~Unit)
+          ),
           h
         ),
         List.contains(
@@ -2456,7 +2485,11 @@ def Parts.find_get.of(
 } -> {
   Parts.find(Crits.Crit.entries(List<&2, U32>, m), h) == fv: Maybe<&2, List<&2, U32>>
 } -> {
-  fv == Run.Parts.get.of(Crits.Crit.lookup(List<&2, U32>, m, Run.Parts.key(h)), h): Maybe<&2, List<&2, U32>>
+  fv
+    == Run.Parts.get.of(
+      Crits.Crit.lookup(List<&2, U32>, m, Run.Parts.key(h)),
+      h
+    ): Maybe<&2, List<&2, U32>>
 }:
   match fv:
     case Some{ws}:
@@ -2529,7 +2562,10 @@ def Parts.find_get(
     Crits.Crit.entries(List<&2, U32>, m),
     h
   )
-    == Run.Parts.get.of(Crits.Crit.get(List<&2, U32>, m, Run.Parts.key(h)), h): Maybe<&2, List<&2, U32>>
+    == Run.Parts.get.of(
+      Crits.Crit.get(List<&2, U32>, m, Run.Parts.key(h)),
+      h
+    ): Maybe<&2, List<&2, U32>>
 }:
   +w =>
     %Equal.sym(
@@ -2819,8 +2855,11 @@ def Parts.uniq.seen_runs(
   w: {Crits.Crit.wf(~Unit, m, 0n) == True{}: Bool},
   +k: List<&2, U32>
 ) -> {
-  Crits.Dict.crit(Unit, Parts.uniq.seen(was, Tuple{m, w}, k)) == Run.Parts.uniq.seen(was, m, k): Crits.Crit<
-    Unit>
+  Crits.Dict.crit(
+    Unit,
+    Parts.uniq.seen(was, Tuple{m, w}, k)
+  )
+    == Run.Parts.uniq.seen(was, m, k): Crits.Crit<Unit>
 }:
   match was:
     case True{}:
@@ -2850,13 +2889,18 @@ def Parts.uniq_runs(
           h,
           Parts.uniq(
             r,
-            Parts.uniq.seen(Crits.Crit.has(Unit, m, Run.Parts.key(h)), Tuple{m, w}, Run.Parts.key(h))
+            Parts.uniq.seen(
+              Crits.Crit.has(Unit, m, Run.Parts.key(h)),
+              Tuple{m, w},
+              Run.Parts.key(h)
+            )
           )
-        ) == Run.Parts.uniq.cons(
-          Crits.Crit.has(Unit, m, Run.Parts.key(h)),
-          h,
-          Run.Parts.uniq(r, _)
-        ): List<&2, Hashes.Hash>
+        )
+          == Run.Parts.uniq.cons(
+            Crits.Crit.has(Unit, m, Run.Parts.key(h)),
+            h,
+            Run.Parts.uniq(r, _)
+          ): List<&2, Hashes.Hash>
       }
       Equal.cong(
         List<&2, Hashes.Hash>,
@@ -2870,7 +2914,11 @@ def Parts.uniq_runs(
           r,
           Crits.Dict.crit(
             Unit,
-            Parts.uniq.seen(Crits.Crit.has(Unit, m, Run.Parts.key(h)), Tuple{m, w}, Run.Parts.key(h))
+            Parts.uniq.seen(
+              Crits.Crit.has(Unit, m, Run.Parts.key(h)),
+              Tuple{m, w},
+              Run.Parts.key(h)
+            )
           )
         ),
         Parts.uniq_runs(
@@ -2917,12 +2965,7 @@ def Plain.put.at_wf(
 ) -> {
   Run.Parts.wf(d) == True{}: Bool
 } -> {Run.Parts.wf(Run.Parts.put.at(d, h, ws)) == True{}: Bool}:
-  w => Plain.put.if_wf(
-    Maybe.is_some(&2, List<&2, U32>, Run.Parts.get(d, h)),
-    d,
-    h,
-    ws
-  )(w)
+  w => Plain.put.if_wf(Maybe.is_some(&2, List<&2, U32>, Run.Parts.get(d, h)), d, h, ws)(w)
 
 # words put under their hash keep the parts well formed
 def Plain.put_wf(
@@ -2950,9 +2993,7 @@ def Plain.join.add_wf(
 def Plain.join.go_wf(
   es: List<&2, Crits.Bind<List<&2, U32>>>,
   +a: Run.Parts
-) -> {
-  Run.Parts.wf(a) == True{}: Bool
-} -> {Run.Parts.wf(Run.Parts.join.go(es, a)) == True{}: Bool}:
+) -> {Run.Parts.wf(a) == True{}: Bool} -> {Run.Parts.wf(Run.Parts.join.go(es, a)) == True{}: Bool}:
   match es:
     case Nil{}:
       w => w
@@ -3006,11 +3047,7 @@ def Plain.only.go_wf(
     case Nil{}:
       Crits.Crit.new_wf(~List<&2, U32>)
     case Con{+h, +r}:
-      Plain.only.add_wf(
-        Run.Parts.get(d, h),
-        h,
-        Run.Parts.only.go(r, d)
-      )(Plain.only.go_wf(r, d))
+      Plain.only.add_wf(Run.Parts.get(d, h), h, Run.Parts.only.go(r, d))(Plain.only.go_wf(r, d))
 
 # the parts kept of d, those of the hashes hs, are well formed
 def Plain.only_wf(

@@ -1,7 +1,6 @@
 import Base
 import ../../shared/shared/shared/shared/code.bend as Codes
 import ../../shared/shared/shared/shared/crit.bend as Crits
-import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../../shared/shared/shared/text.bend as Texts
 import ../run/files.bend as Run
@@ -373,7 +372,9 @@ def Files.key_ne(
   h => Files.key_ne.at(p, q, Crits.Key.is_eq(Run.Files.key(q), Run.Files.key(p)))({==})(h)
 
 # no file holds no path
-def Files.get_new(+p: String) -> {Run.Files.get(Run.Files.new(), p) == None{}: Maybe<&2, List<&2, U32>>}:
+def Files.get_new(
+  +p: String
+) -> {Run.Files.get(Run.Files.new(), p) == None{}: Maybe<&2, List<&2, U32>>}:
   {==}
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
@@ -390,7 +391,11 @@ def Files.get_set_same(
       +wf =>
       %Equal.sym(
         Maybe<&2, Run.Files.Item>,
-        Crits.Dict.get(Run.Files.Item, Crits.Dict.drop(~Run.Files.Item, Tuple{m, wf}, Run.Files.key(p)), Run.Files.key(p)),
+        Crits.Dict.get(
+          Run.Files.Item,
+          Crits.Dict.drop(~Run.Files.Item, Tuple{m, wf}, Run.Files.key(p)),
+          Run.Files.key(p)
+        ),
         Bool.pick(
           Maybe<&2, Run.Files.Item>,
           Crits.Key.is_eq(Run.Files.key(p), Run.Files.key(p)),
@@ -406,7 +411,12 @@ def Files.get_set_same(
         Crits.Key.is_eq_refl(Run.Files.key(p))
       ): {
         Run.Files.get.of(
-          Bool.pick(Maybe<&2, Run.Files.Item>, _, None{}, Crits.Dict.get(Run.Files.Item, Tuple{m, wf}, Run.Files.key(p))),
+          Bool.pick(
+            Maybe<&2, Run.Files.Item>,
+            _,
+            None{},
+            Crits.Dict.get(Run.Files.Item, Tuple{m, wf}, Run.Files.key(p))
+          ),
           p
         )
           == None{}: Maybe<&2, List<&2, U32>>
@@ -427,7 +437,13 @@ def Files.get_set_same(
           Some{Run.Files.Item{p, ws}},
           Crits.Dict.get(Run.Files.Item, Tuple{m, wf}, Run.Files.key(p))
         ),
-        Crits.Dict.get_set(~Run.Files.Item, Tuple{m, wf}, Run.Files.key(p), Run.Files.Item{p, ws}, Run.Files.key(p))
+        Crits.Dict.get_set(
+          ~Run.Files.Item,
+          Tuple{m, wf},
+          Run.Files.key(p),
+          Run.Files.Item{p, ws},
+          Run.Files.key(p)
+        )
       ): {Run.Files.get.of(_, p) == Some{ws}: Maybe<&2, List<&2, U32>>}
       %Equal.sym(
         Bool,
@@ -478,7 +494,11 @@ def Files.get_set_other(
       h => +wf =>
         %Equal.sym(
           Maybe<&2, Run.Files.Item>,
-          Crits.Dict.get(Run.Files.Item, Crits.Dict.drop(~Run.Files.Item, Tuple{m, wf}, Run.Files.key(p)), Run.Files.key(q)),
+          Crits.Dict.get(
+            Run.Files.Item,
+            Crits.Dict.drop(~Run.Files.Item, Tuple{m, wf}, Run.Files.key(p)),
+            Run.Files.key(q)
+          ),
           Bool.pick(
             Maybe<&2, Run.Files.Item>,
             Crits.Key.is_eq(Run.Files.key(q), Run.Files.key(p)),
@@ -532,7 +552,13 @@ def Files.get_set_other(
             Some{Run.Files.Item{p, ws}},
             Crits.Dict.get(Run.Files.Item, Tuple{m, wf}, Run.Files.key(q))
           ),
-          Crits.Dict.get_set(~Run.Files.Item, Tuple{m, wf}, Run.Files.key(p), Run.Files.Item{p, ws}, Run.Files.key(q))
+          Crits.Dict.get_set(
+            ~Run.Files.Item,
+            Tuple{m, wf},
+            Run.Files.key(p),
+            Run.Files.Item{p, ws},
+            Run.Files.key(q)
+          )
         ): {
           Run.Files.get.of(
             _,

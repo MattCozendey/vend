@@ -585,7 +585,12 @@ def Line.find_at(
 } -> {
   List.get(&2, Types.Entry, vs, k) == Some{e}: Maybe<&2, Types.Entry>
 } -> {
-  Answers.Line.find(s, c, RLines.Entry.id(e)) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+  Answers.Line.find(
+    s,
+    c,
+    RLines.Entry.id(e)
+  )
+    == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
 }:
   +hv => +hg =>
     %Equal.sym(
@@ -724,7 +729,9 @@ def Made.at.of(
         ha,
         Eq.to(
           Ledgers.Id,
-          y => {Answers.Line.find(s, c, y) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>},
+          y => {
+            Answers.Line.find(s, c, y) == Some{RAnswers.Found{k, e}}: Maybe<&2, RAnswers.Found>
+          },
           RLines.Entry.id(e),
           i,
           hi,
@@ -1138,7 +1145,12 @@ def Write.other(
                 Files.Files.set(prev, p, ws),
                 t,
                 hs,
-                FileLaws.Files.get_set_other(prev, p, ws, q)(hne)(Contents.Content.of_wf(s, c, k, prev)(hp))
+                FileLaws.Files.get_set_other(
+                  prev,
+                  p,
+                  ws,
+                  q
+                )(hne)(Contents.Content.of_wf(s, c, k, prev)(hp))
               )
             )
           )
@@ -2557,7 +2569,9 @@ def Merge.fold_keep(
         RContents.Merge.put(acc, q, RContents.Merge.at(b, o, t, q)),
         p,
         x
-      )(Contents.Merge.put_wf(acc, q, RContents.Merge.at(b, o, t, q))(wa))(hm)(Merge.put_keep(b, o, t, acc, q, p, x)(wa)(hm)(ha))
+      )(
+        Contents.Merge.put_wf(acc, q, RContents.Merge.at(b, o, t, q))(wa)
+      )(hm)(Merge.put_keep(b, o, t, acc, q, p, x)(wa)(hm)(ha))
 
 # after the merges of the paths ps, one of them reads its merge
 def Merge.fold_in(
@@ -2607,7 +2621,9 @@ def Merge.fold_in(
           RContents.Merge.put(acc, q, RContents.Merge.at(b, o, t, q)),
           p,
           x
-        )(Contents.Merge.put_wf(acc, q, RContents.Merge.at(b, o, t, q))(wa))(hm)(Merge.put_hit(b, o, t, acc, q, p, x)(wa)(hm)(et)),
+        )(
+          Contents.Merge.put_wf(acc, q, RContents.Merge.at(b, o, t, q))(wa)
+        )(hm)(Merge.put_hit(b, o, t, acc, q, p, x)(wa)(hm)(et)),
         ef => hc2 => Merge.fold_in(
           b,
           o,
@@ -3267,18 +3283,18 @@ def Merge.fin(
         theirs,
         p,
         Contents.Content.of_wf(
-                s,
-                Spec.Point.line(RContents.Point.or(c, RContents.Entry.base(e))),
-                Spec.Point.n(RContents.Point.or(c, RContents.Entry.base(e))),
-                bs0
-              )(h_b),
+          s,
+          Spec.Point.line(RContents.Point.or(c, RContents.Entry.base(e))),
+          Spec.Point.n(RContents.Point.or(c, RContents.Entry.base(e))),
+          bs0
+        )(h_b),
         Contents.Content.of_wf(s, c, k, ours)(h_o),
         Contents.Content.of_wf(
-                s,
-                Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
-                Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e))),
-                theirs
-              )(h_t),
+          s,
+          Spec.Point.line(RContents.Point.or(c, RContents.Entry.takes(e))),
+          Spec.Point.n(RContents.Point.or(c, RContents.Entry.takes(e))),
+          theirs
+        )(h_t),
         Equal.trans(
           Maybe<&2, Maybe<&2, List<&2, U32>>>,
           RContents.Merge.at(bs0, ours, theirs, p),

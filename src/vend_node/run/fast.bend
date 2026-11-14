@@ -7,7 +7,6 @@ import ./answers.bend as Answers
 import ./content.bend as Contents
 import ./facts.bend as Facts
 import ./known.bend as Known
-import ./lines.bend as Lines
 import ./parts.bend as Parts
 import ./work.bend as Works
 import ../spec.bend as Spec
@@ -139,12 +138,7 @@ def Table.voted(+kn: Known.Known(), +s: Facts.Plain(), st: Types.Step) -> Known.
 # the table kn after the node takes in the request r: no state if r starts a
 # store, else as before (a request that starts no store changes no state)
 def Table.asked(kn: Known.Known(), r: Spec.Request) -> Known.Known():
-  Shared.Bool.when(
-    Known.Known(),
-    Facts.Request.is_start(r),
-    u => Known.Known.none(),
-    u => kn
-  )
+  Shared.Bool.when(Known.Known(), Facts.Request.is_start(r), u => Known.Known.none(), u => kn)
 
 # What a fast node takes in
 # -------------------------
@@ -187,7 +181,14 @@ def Fast.asks(
     case False{}:
       Nodes.Raw{name, ws, ms, st, fs, ps}
     case True{}:
-      Nodes.Raw{name, ws, ms, st, Asked.take(name, fs, i, r), Nodes.Kept.with(ps, Nodes.Request.content(r))}
+      Nodes.Raw{
+        name,
+        ws,
+        ms,
+        st,
+        Asked.take(name, fs, i, r),
+        Nodes.Kept.with(ps, Nodes.Request.content(r))
+      }
 
 # What a fast node casts
 # ----------------------
@@ -388,7 +389,12 @@ def Fast.read(f: Fast, c: Ledgers.Line, k: Nat, p: String) -> Maybe<&2, Maybe<&2
 
 # the words of the resource at the path p of the branch b, as the fast node
 # f shows them to the writer w
-def Fast.view(f: Fast, w: String, b: Ledgers.Line, p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
+def Fast.view(
+  f: Fast,
+  w: String,
+  b: Ledgers.Line,
+  p: String
+) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   match f:
     case Fast{r, kn, ld}:
       Answers.View.at(kn, Nodes.Raw.facts(r), w, b, p)

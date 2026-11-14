@@ -2,7 +2,6 @@ import Base
 import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
-import ../shared/shared/shared/text.bend as Texts
 import ./codes.bend as Coded
 import ./facts.bend as Facts
 import ./lines.bend as Lines
@@ -125,7 +124,9 @@ def Step.at_by(
       RLines.Rule.nodes(u)
     )
       == Some{pk}: Maybe<&2, Types.Pick>
-  } -> {RLines.State.put(RLines.State.versions(a), RLines.State.slot(a), pk) == b: RLines.State} -> Q
+  } -> {
+    RLines.State.put(RLines.State.versions(a), RLines.State.slot(a), pk) == b: RLines.State
+  } -> Q
 ) -> Q:
   (u, w) = r
   (eu, w2) = w
@@ -137,7 +138,9 @@ def Step.at_by(
 # that it holds of, holds of the state after a run
 def Run.keeps(
   ~V: Data,
-  ~P: V -> Facts.Facts() -> Maybe<&2, List<&2, Types.Entry>> -> Ledgers.Line -> RLines.State -> Type,
+  ~P: V -> Facts.Facts() -> Maybe<
+    &2,
+    List<&2, Types.Entry>> -> Ledgers.Line -> RLines.State -> Type,
   ~step: @+g: V -> @+s: Facts.Facts() -> @+r: Maybe<
     &2,
     List<
@@ -154,7 +157,9 @@ def Run.keeps(
       == Some{pk}: Maybe<&2, Types.Pick>
   } -> P(
     g
-  )(s)(r)(c)(a) -> P(g)(s)(r)(c)(RLines.State.put(RLines.State.versions(a), RLines.State.slot(a), pk)),
+  )(
+    s
+  )(r)(c)(a) -> P(g)(s)(r)(c)(RLines.State.put(RLines.State.versions(a), RLines.State.slot(a), pk)),
   f: Nat,
   +g: V,
   +s: Facts.Facts(),
@@ -627,7 +632,13 @@ def Line.state_inv(
       Lists.Maybe.by(
         Types.Entry,
         m => {
-          Lines.Line.from(s, None{}, Ledgers.Line{h, None{}}, m) == Some{st}: Maybe<&2, RLines.State>
+          Lines.Line.from(
+            s,
+            None{},
+            Ledgers.Line{h, None{}},
+            m
+          )
+            == Some{st}: Maybe<&2, RLines.State>
         } -> Exists(
           Maybe<&2, List<&2, Types.Entry>>,
           R => Exists(Types.Entry, e0 => Line.Rooted(s, Ledgers.Line{h, None{}}, st, R, e0))
@@ -1754,7 +1765,13 @@ def Starts.in_of(
         hin,
         e => Empty.absurd(
           {
-            List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(rest, h), a) == True{}: Bool
+            List.contains(
+              ~Types.Ask,
+              ~Coded.Ask.is_eq,
+              RLines.Starts.of(rest, h),
+              a
+            )
+              == True{}: Bool
           },
           Shared.Bool.false_ne_true(
             Equal.cong(
@@ -2523,7 +2540,9 @@ def Votes.decided_lt.of(
     k,
     t,
     Types.Cast.Vote{r, pk, b}
-  )(Facts.Facts.has_in(s, Types.Fact.Vote{v, Types.Step.At{c, k, t}, Types.Cast.Vote{r, pk, b}})(hv))
+  )(
+    Facts.Facts.has_in(s, Types.Fact.Vote{v, Types.Step.At{c, k, t}, Types.Cast.Vote{r, pk, b}})(hv)
+  )
 
 # a decided slot of a line is below the bound of the line
 def Votes.decided_lt(

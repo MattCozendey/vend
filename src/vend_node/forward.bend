@@ -9,10 +9,10 @@ import ./facts.bend as Facts
 import ./groups.bend as Groups
 import ./lines.bend as Lines
 import ./reads.bend as Reads
+import ./rounds.bend as Rounds
 import ./run/answers.bend as RAnswers
 import ./run/content.bend as RContents
 import ./run/files.bend as Files
-import ./rounds.bend as Rounds
 import ./run/lines.bend as RLines
 import ./run/rounds.bend as RRounds
 import ./shared/lists.bend as Lists
@@ -582,7 +582,9 @@ def Find.ext(
 ) -> {RAnswers.Versions.find(vs2, i) == Some{RAnswers.Found{j, x}}: Maybe<&2, RAnswers.Found>}:
   Eq.up(
     Maybe<&2, Nat>,
-    m => {RAnswers.Versions.find.at(vs2, m) == Some{RAnswers.Found{j, x}}: Maybe<&2, RAnswers.Found>},
+    m => {
+      RAnswers.Versions.find.at(vs2, m) == Some{RAnswers.Found{j, x}}: Maybe<&2, RAnswers.Found>
+    },
     Lists.List.index(~Types.Entry, ~Ledgers.Id, ~RLines.Entry.is_of, vs2, i),
     Some{j},
     Lists.List.index_ext(
@@ -835,7 +837,13 @@ def Rule.voters_stay(
             Spec.Reply,
             Bool.and(
               b,
-              RRounds.Slot.backed(Rounds.Slot.ballots(s, c, k), ns, k, Lists.List.lead(String, ns), pk)
+              RRounds.Slot.backed(
+                Rounds.Slot.ballots(s, c, k),
+                ns,
+                k,
+                Lists.List.lead(String, ns),
+                pk
+              )
             ),
             u2 => Some{Spec.Reply.Names{Lists.List.lead(String, ns)}}
           )
@@ -875,7 +883,13 @@ def Rule.voters_stay(
                 Spec.Reply,
                 Bool.and(
                   b,
-                  RRounds.Slot.backed(Rounds.Slot.ballots(s2, c, k), ns, k, Lists.List.lead(String, ns), pk)
+                  RRounds.Slot.backed(
+                    Rounds.Slot.ballots(s2, c, k),
+                    ns,
+                    k,
+                    Lists.List.lead(String, ns),
+                    pk
+                  )
                 ),
                 u2 => Some{Spec.Reply.Names{Lists.List.lead(String, ns)}}
               )
@@ -894,9 +908,23 @@ def Rule.voters_stay(
                 )
                   == Some{a}: Maybe<&2, Spec.Reply>
               },
-              RRounds.Slot.backed(Rounds.Slot.ballots(s2, c, k), ns, k, Lists.List.lead(String, ns), pk),
+              RRounds.Slot.backed(
+                Rounds.Slot.ballots(s2, c, k),
+                ns,
+                k,
+                Lists.List.lead(String, ns),
+                pk
+              ),
               True{},
-              Rounds.Votes.backed_stays(s, s2, c, k, ns, Lists.List.lead(String, ns), pk)(hw)(hl)(eh),
+              Rounds.Votes.backed_stays(
+                s,
+                s2,
+                c,
+                k,
+                ns,
+                Lists.List.lead(String, ns),
+                pk
+              )(hw)(hl)(eh),
               ha
             )
           ),
@@ -1582,7 +1610,11 @@ def Status.mark_follows.of(
     Lists.List.index(~Types.Entry, ~String, ~RAnswers.Entry.marks, vs, m) == Some{j}: Maybe<&2, Nat>
   }
 ) -> {
-  Spec.Status.follows(RAnswers.Status.mark(vs, m, k), RAnswers.Status.mark(vs2, m, k)) == True{}: Bool
+  Spec.Status.follows(
+    RAnswers.Status.mark(vs, m, k),
+    RAnswers.Status.mark(vs2, m, k)
+  )
+    == True{}: Bool
 }:
   Eq.up(
     Maybe<&2, Nat>,
@@ -1665,7 +1697,11 @@ def Status.mark_follows(
     }
   )
 ) -> {
-  Spec.Status.follows(RAnswers.Status.mark(vs, m, k), RAnswers.Status.mark(vs2, m, k)) == True{}: Bool
+  Spec.Status.follows(
+    RAnswers.Status.mark(vs, m, k),
+    RAnswers.Status.mark(vs2, m, k)
+  )
+    == True{}: Bool
 }:
   (j, ej) = r
   Status.mark_follows.of(vs, vs2, zs, ez, m, k, j, ej)
@@ -2432,7 +2468,9 @@ def Case.mark(
             a,
             Eq.up(
               Maybe<&2, List<&2, Types.Entry>>,
-              v => {RAnswers.Reply.number(RAnswers.Mark.of(m, v)) == Some{a}: Maybe<&2, Spec.Reply>},
+              v => {
+                RAnswers.Reply.number(RAnswers.Mark.of(m, v)) == Some{a}: Maybe<&2, Spec.Reply>
+              },
               Lines.Line.versions(s2, c),
               Some{vs2},
               e2,
@@ -2454,7 +2492,9 @@ def Case.mark(
                 )((zs, ez))(ej),
                 Eq.up(
                   Maybe<&2, Types.Entry>,
-                  y => {RAnswers.Reply.number(RAnswers.Mark.in(y)) == Some{a}: Maybe<&2, Spec.Reply>},
+                  y => {
+                    RAnswers.Reply.number(RAnswers.Mark.in(y)) == Some{a}: Maybe<&2, Spec.Reply>
+                  },
                   List.get(&2, Types.Entry, vs2, j),
                   Some{e},
                   Lists.List.ext_get(Types.Entry, vs, vs2, j, e)((zs, ez))(eg),
@@ -2575,7 +2615,9 @@ def Case.request(
           a,
           Eq.up(
             Maybe<&2, List<&2, Types.Entry>>,
-            v => {RAnswers.Reply.ask(RAnswers.Line.find.of(i, v)) == Some{a}: Maybe<&2, Spec.Reply>},
+            v => {
+              RAnswers.Reply.ask(RAnswers.Line.find.of(i, v)) == Some{a}: Maybe<&2, Spec.Reply>
+            },
             Lines.Line.versions(s2, c),
             Some{vs2},
             e2,

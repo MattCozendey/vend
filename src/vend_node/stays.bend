@@ -2,7 +2,6 @@ import Base
 import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
-import ../shared/shared/shared/text.bend as Texts
 import ./codes.bend as Coded
 import ./facts.bend as Facts
 import ./groups.bend as Groups
@@ -180,7 +179,9 @@ def Rule.at_append.of(
     c,
     m,
     et
-  ): {RLines.Rule.of(List.append(&2, Types.Entry, r, zs), c, m, _) == Some{u}: Maybe<&2, RLines.Rule>}
+  ): {
+    RLines.Rule.of(List.append(&2, Types.Entry, r, zs), c, m, _) == Some{u}: Maybe<&2, RLines.Rule>
+  }
   %Rule.of_append(
     r,
     List.append(&2, Types.Entry, r, zs),
@@ -238,7 +239,9 @@ def Rule.at_append(
       e
     ),
     ef => e => Empty.absurd(
-      {RLines.Rule.at(List.append(&2, Types.Entry, r, zs), c, m) == Some{u}: Maybe<&2, RLines.Rule>},
+      {
+        RLines.Rule.at(List.append(&2, Types.Entry, r, zs), c, m) == Some{u}: Maybe<&2, RLines.Rule>
+      },
       Shared.Maybe.none_ne_some(RLines.Rule, u, e)
     )
   )
@@ -523,7 +526,14 @@ def Line.bound_mono(
   +s2: Facts.Facts(),
   +c: Ledgers.Line
 ) -> {
-  Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, fs, Facts.Facts.crit(s2)) == True{}: Bool
+  Shared.List.holds(
+    ~Types.Fact,
+    ~RFacts.Plain(),
+    ~RFacts.Fact.held,
+    fs,
+    Facts.Facts.crit(s2)
+  )
+    == True{}: Bool
 } -> {
   Nat.is_le(RLines.Line.bound(fs, c), RLines.Line.bound(Facts.Facts.list(s2), c)) == True{}: Bool
 }:
@@ -538,7 +548,13 @@ def Line.bound_mono(
       )(
         All.tail(
           Facts.Facts.has(s2, Types.Fact.Ask{a}),
-          u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s2))
+          u => Shared.List.holds(
+            ~Types.Fact,
+            ~RFacts.Plain(),
+            ~RFacts.Fact.held,
+            rest,
+            Facts.Facts.crit(s2)
+          )
         )(h)
       )
     case Con{Types.Fact.Vote{+v, Types.Step.Broken{}, +pk}, +rest}:
@@ -549,7 +565,13 @@ def Line.bound_mono(
       )(
         All.tail(
           Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.Broken{}, pk}),
-          u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s2))
+          u => Shared.List.holds(
+            ~Types.Fact,
+            ~RFacts.Plain(),
+            ~RFacts.Fact.held,
+            rest,
+            Facts.Facts.crit(s2)
+          )
         )(h)
       )
     case Con{Types.Fact.Vote{+v, Types.Step.At{+c2, +k, +t}, +pk}, +rest}:
@@ -587,7 +609,13 @@ def Line.bound_mono(
         )(
           All.tail(
             Facts.Facts.has(s2, Types.Fact.Vote{v, Types.Step.At{c2, k, t}, pk}),
-            u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s2))
+            u => Shared.List.holds(
+              ~Types.Fact,
+              ~RFacts.Plain(),
+              ~RFacts.Fact.held,
+              rest,
+              Facts.Facts.crit(s2)
+            )
           )(h)
         )
       )
@@ -754,7 +782,13 @@ def Starts.in(
         ~Coded.Fact.is_eq,
         ~Coded.Fact.laws(),
         {
-          List.contains(~Types.Ask, ~Coded.Ask.is_eq, RLines.Starts.of(g <> r, h), a) == True{}: Bool
+          List.contains(
+            ~Types.Ask,
+            ~Coded.Ask.is_eq,
+            RLines.Starts.of(g <> r, h),
+            a
+          )
+            == True{}: Bool
         },
         g,
         r,
@@ -904,7 +938,14 @@ def Starts.led(
 } -> {
   RFacts.Ask.starts(h, a) == True{}: Bool
 } -> {
-  Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, fs, Facts.Facts.crit(s)) == True{}: Bool
+  Shared.List.holds(
+    ~Types.Fact,
+    ~RFacts.Plain(),
+    ~RFacts.Fact.held,
+    fs,
+    Facts.Facts.crit(s)
+  )
+    == True{}: Bool
 } -> {RLines.Ask.leads(RLines.Starts.of(fs, h), a) == True{}: Bool}:
   match fs:
     case Nil{}:
@@ -927,7 +968,13 @@ def Starts.led(
       )(
         All.tail(
           Facts.Facts.has(s, Types.Fact.Vote{v, st, pk}),
-          u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s))
+          u => Shared.List.holds(
+            ~Types.Fact,
+            ~RFacts.Plain(),
+            ~RFacts.Fact.held,
+            rest,
+            Facts.Facts.crit(s)
+          )
         )(hh)
       )
     case Con{Types.Fact.Ask{+b}, +rest}:
@@ -965,7 +1012,13 @@ def Starts.led(
         )(
           All.tail(
             Facts.Facts.has(s, Types.Fact.Ask{b}),
-            u => Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, rest, Facts.Facts.crit(s))
+            u => Shared.List.holds(
+              ~Types.Fact,
+              ~RFacts.Plain(),
+              ~RFacts.Fact.held,
+              rest,
+              Facts.Facts.crit(s)
+            )
           )(hh)
         )
       )({==})
@@ -1280,7 +1333,11 @@ def Branch.first_append(
     j => {
       RLines.Branch.first.at(r, j) == Some{e0}: Maybe<&2, Types.Entry>
     } -> {
-      RLines.Branch.first(List.append(&2, Types.Entry, r, zs), c) == Some{e0}: Maybe<&2, Types.Entry>
+      RLines.Branch.first(
+        List.append(&2, Types.Entry, r, zs),
+        c
+      )
+        == Some{e0}: Maybe<&2, Types.Entry>
     },
     Lists.List.index(~Types.Entry, ~Ledgers.Line, ~RLines.Entry.owns, r, c),
     en => x => Empty.absurd(
@@ -1728,7 +1785,9 @@ def Rule.after_stays.of(
     }
       & Lists.List.Ext(Types.Entry, store, R2)
   ),
-  e: {RLines.Line.rule(Some{store}, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>}
+  e: {
+    RLines.Line.rule(Some{store}, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>
+  }
 ) -> {Lines.Rule.after(s2, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>}:
   (+R2, p) = r
   (e2, x) = p
@@ -1772,7 +1831,9 @@ def Rule.after_stays(
         List<&2, Types.Entry>,
         m => {
           RLines.Rule.after.of(Ledgers.Line{h, Some{b}}, vs, m) == Some{u}: Maybe<&2, RLines.Rule>
-        } -> {Lines.Rule.after(s2, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>},
+        } -> {
+          Lines.Rule.after(s2, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>
+        },
         Lines.Store.versions(s, h),
         en => x => Empty.absurd(
           {Lines.Rule.after(s2, Ledgers.Line{h, Some{b}}, vs) == Some{u}: Maybe<&2, RLines.Rule>},

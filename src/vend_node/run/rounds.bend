@@ -3,7 +3,6 @@ import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../codes.bend as Coded
 import ../shared/lists.bend as Lists
-import ../spec.bend as Spec
 import ../types.bend as Types
 
 # Rounds
@@ -442,12 +441,7 @@ def Lead.mind(
 
 # what is known of the leads of the rounds below n of the slot k among bs,
 # where the nodes ds decide
-def Rounds.minds(
-  +bs: List<&2, Ballot>,
-  +ds: List<&2, String>,
-  +k: Nat,
-  n: Nat
-) -> List<&2, Mind>:
+def Rounds.minds(+bs: List<&2, Ballot>, +ds: List<&2, String>, +k: Nat, n: Nat) -> List<&2, Mind>:
   match n:
     case 0n:
       []
@@ -460,7 +454,12 @@ def Rounds.minds(
 
 # the pick that the round r decides, where m is what is known of its lead:
 # more than half of the nodes ds cast a sound vote for it
-def Round.won(+bs: List<&2, Ballot>, +ds: List<&2, String>, +r: Nat, m: Mind) -> Maybe<&2, Types.Pick>:
+def Round.won(
+  +bs: List<&2, Ballot>,
+  +ds: List<&2, String>,
+  +r: Nat,
+  m: Mind
+) -> Maybe<&2, Types.Pick>:
   match m:
     case Mind.Sound{+p}:
       Shared.Maybe.when(Types.Pick, Tally.most(bs, ds, r, p), u => Some{p})
@@ -626,11 +625,7 @@ type Chance is Data:
 def Slot.chance.of(+g: Lead, +ds: List<&2, String>) -> Maybe<&2, Chance>:
   match g:
     case Lead{bs, r, h, t, basis, ms}:
-      Shared.Maybe.when(
-        Chance,
-        Lead.most(g, ds),
-        u => Some{Chance{t, r, basis, Lead.force(g, ds)}}
-      )
+      Shared.Maybe.when(Chance, Lead.most(g, ds), u => Some{Chance{t, r, basis, Lead.force(g, ds)}})
 
 # the chance of the node name, whose next ballot is of the number t, to lead
 # the round r of the slot k among bs, where the nodes ds decide: when the

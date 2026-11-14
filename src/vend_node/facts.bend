@@ -77,7 +77,9 @@ def Facts.liars(s: Facts()) -> List<&2, String>:
 # a node says that its trust broke is never the name of a node.
 
 # the name under which a node says that its trust broke is reserved
-def Trust.voter_reserved(name: String) -> {RFacts.Trust.reserved(RFacts.Trust.voter(name)) == True{}: Bool}:
+def Trust.voter_reserved(
+  name: String
+) -> {RFacts.Trust.reserved(RFacts.Trust.voter(name)) == True{}: Bool}:
   {==}
 
 # s, where the trust of the node name broke
@@ -341,7 +343,16 @@ def Facts.all_in(
       List.contains(~Types.Fact, ~Coded.Fact.is_eq, xs, x) == True{}: Bool
     } -> {Facts.has(b, x) == True{}: Bool}
   )
-) -> {Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, xs, Facts.crit(b)) == True{}: Bool}:
+) -> {
+  Shared.List.holds(
+    ~Types.Fact,
+    ~RFacts.Plain(),
+    ~RFacts.Fact.held,
+    xs,
+    Facts.crit(b)
+  )
+    == True{}: Bool
+}:
   match xs:
     case Nil{}:
       {==}
@@ -384,7 +395,13 @@ def Facts.wider_has(
     f
   )(
     Shared.Bool.and_true_left(
-      Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, Facts.list(a), Facts.crit(b)),
+      Shared.List.holds(
+        ~Types.Fact,
+        ~RFacts.Plain(),
+        ~RFacts.Fact.held,
+        Facts.list(a),
+        Facts.crit(b)
+      ),
       Nat.is_le(Facts.fuel(a), Facts.fuel(b))
     )(hw)
   )(Facts.has_in(a, f)(hf))
@@ -397,14 +414,26 @@ def Facts.wider_fuel(
   Facts.wider(a, b) == True{}: Bool
 } -> {Nat.is_le(Facts.fuel(a), Facts.fuel(b)) == True{}: Bool}:
   hw => Shared.Bool.and_true_right(
-    Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, Facts.list(a), Facts.crit(b)),
+    Shared.List.holds(
+      ~Types.Fact,
+      ~RFacts.Plain(),
+      ~RFacts.Fact.held,
+      Facts.list(a),
+      Facts.crit(b)
+    ),
     Nat.is_le(Facts.fuel(a), Facts.fuel(b))
   )(hw)
 
 # a set is wider than itself
 def Facts.wider_refl(+s: Facts()) -> {Facts.wider(s, s) == True{}: Bool}:
   Shared.Bool.and_both(
-    Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, Facts.list(s), Facts.crit(s)),
+    Shared.List.holds(
+      ~Types.Fact,
+      ~RFacts.Plain(),
+      ~RFacts.Fact.held,
+      Facts.list(s),
+      Facts.crit(s)
+    ),
     Nat.is_le(Facts.fuel(s), Facts.fuel(s))
   )(
     Facts.all_in(Facts.list(s), s, x => c => Facts.in_has(s, x)(c))
@@ -419,7 +448,13 @@ def Facts.wider_trans(
   Facts.wider(a, b) == True{}: Bool
 } -> {Facts.wider(b, c) == True{}: Bool} -> {Facts.wider(a, c) == True{}: Bool}:
   +hab => +hbc => Shared.Bool.and_both(
-    Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, Facts.list(a), Facts.crit(c)),
+    Shared.List.holds(
+      ~Types.Fact,
+      ~RFacts.Plain(),
+      ~RFacts.Fact.held,
+      Facts.list(a),
+      Facts.crit(c)
+    ),
     Nat.is_le(Facts.fuel(a), Facts.fuel(c))
   )(
     Facts.all_in(
@@ -441,7 +476,13 @@ def Facts.add_wider(
   +f: Types.Fact
 ) -> {Facts.wider(s, Facts.add(s, f)) == True{}: Bool}:
   Shared.Bool.and_both(
-    Shared.List.holds(~Types.Fact, ~RFacts.Plain(), ~RFacts.Fact.held, Facts.list(s), Facts.crit(Facts.add(s, f))),
+    Shared.List.holds(
+      ~Types.Fact,
+      ~RFacts.Plain(),
+      ~RFacts.Fact.held,
+      Facts.list(s),
+      Facts.crit(Facts.add(s, f))
+    ),
     Nat.is_le(Facts.fuel(s), Facts.fuel(Facts.add(s, f)))
   )(
     Facts.all_in(
@@ -558,9 +599,14 @@ def Words.ne(
   +x: List<&2, U32>,
   +y: List<&2, U32>
 ) -> {Bool.not(RFacts.Words.is_eq(x, y)) == True{}: Bool} -> {x == y: List<&2, U32>} -> Empty:
-  h => e => Lists.Bool.clash(Empty, RFacts.Words.is_eq(x, y), Shared.Bool.not_true(RFacts.Words.is_eq(x, y))(h), (
+  h => e => Lists.Bool.clash(
+    Empty,
+    RFacts.Words.is_eq(x, y),
+    Shared.Bool.not_true(RFacts.Words.is_eq(x, y))(h),
+    (
       %e: {RFacts.Words.is_eq(x, _) == True{}: Bool}
-      Words.is_eq_refl(x)))
+      Words.is_eq_refl(x))
+  )
 
 # words that are not equal are not the same
 def Words.ne_not(
@@ -575,7 +621,9 @@ def Words.ne_not(
 def Words.ne_sym(
   +x: List<&2, U32>,
   +y: List<&2, U32>
-) -> {Bool.not(RFacts.Words.is_eq(x, y)) == True{}: Bool} -> {Bool.not(RFacts.Words.is_eq(y, x)) == True{}: Bool}:
+) -> {
+  Bool.not(RFacts.Words.is_eq(x, y)) == True{}: Bool
+} -> {Bool.not(RFacts.Words.is_eq(y, x)) == True{}: Bool}:
   h => Words.ne_not(y, x)(e => Words.ne(x, y)(h)(Equal.sym(List<&2, U32>, y, x, e)))
 
 # a vote of the voter and the step of a ballot, for another choice,
@@ -700,7 +748,11 @@ def Fact.liar_of.at(
       List.contains(~Types.Fact, ~Coded.Fact.is_eq, all, g) == True{}: Bool
     }
       & {
-        RFacts.Fact.clashes(Spec.Ballot{w, Coded.Step.words(st), Coded.Cast.words(pk)}, g) == True{}: Bool
+        RFacts.Fact.clashes(
+          Spec.Ballot{w, Coded.Step.words(st), Coded.Cast.words(pk)},
+          g
+        )
+          == True{}: Bool
       }
   )
 ) -> Fact.Lied(all, v, Types.Fact.Vote{w, st, pk}):
@@ -1111,7 +1163,10 @@ def Facts.Lies(s: Facts(), v: String) -> Type:
                   }
                     & (
                       {
-                        RFacts.Change.ballot(b) == Some{Spec.Ballot{v, st, y}}: Maybe<&2, Spec.Ballot>
+                        RFacts.Change.ballot(
+                          b
+                        )
+                          == Some{Spec.Ballot{v, st, y}}: Maybe<&2, Spec.Ballot>
                       }
                         & ({x == y: List<&2, U32>} -> Empty)
                     )
@@ -1218,7 +1273,11 @@ def Facts.honest_one(
             Coded.Cast.words(q)
           )(
             hp
-          )(hq)({==})({==})(Case.not_of(RFacts.Words.is_eq(Coded.Cast.words(p), Coded.Cast.words(q)))(ef))
+          )(
+            hq
+          )(
+            {==}
+          )({==})(Case.not_of(RFacts.Words.is_eq(Coded.Cast.words(p), Coded.Cast.words(q)))(ef))
         )(hn)
       )
     )
@@ -1303,7 +1362,14 @@ def Seq.peak_ge(
         Shared.Bool.false_ne_true(hin)
       )
     case Con{Types.Fact.Ask{+a}, +rest}:
-      hin => Seq.peak_ge.at(Types.Fact.Ask{a}, rest, f, RFacts.Seq.peak(rest), hin, Seq.peak_ge(rest, f))
+      hin => Seq.peak_ge.at(
+        Types.Fact.Ask{a},
+        rest,
+        f,
+        RFacts.Seq.peak(rest),
+        hin,
+        Seq.peak_ge(rest, f)
+      )
     case Con{Types.Fact.Vote{+v, +st, Types.Cast.Vote{+r, Types.Pick{+a, +pins}, +b}}, +rest}:
       hin => Seq.peak_ge.at(
         Types.Fact.Vote{v, st, Types.Cast.Vote{r, Types.Pick{a, pins}, b}},
@@ -1364,7 +1430,9 @@ def Facts.take_by(
   pr: {Facts.refuses(name, s, f) == True{}: Bool} -> P(Trust.break(s, name)),
   pc: {
     Facts.refuses(name, s, f) == False{}: Bool
-  } -> {RFacts.Fact.collided(Facts.list(s), f) == True{}: Bool} -> P(Trust.break(Facts.add(s, f), name)),
+  } -> {
+    RFacts.Fact.collided(Facts.list(s), f) == True{}: Bool
+  } -> P(Trust.break(Facts.add(s, f), name)),
   pa: {
     Facts.refuses(name, s, f) == False{}: Bool
   } -> {RFacts.Fact.collided(Facts.list(s), f) == False{}: Bool} -> P(Facts.add(s, f))
@@ -1616,9 +1684,15 @@ def Facts.take_ask_votes(
         name,
         Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}
       )(
-        Fact.slot_differs(Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}, RFacts.Trust.one(name))({==})({==})
+        Fact.slot_differs(
+          Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk},
+          RFacts.Trust.one(name)
+        )({==})({==})
       )(
-        Fact.slot_differs(Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}, RFacts.Trust.two(name))({==})({==})
+        Fact.slot_differs(
+          Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk},
+          RFacts.Trust.two(name)
+        )({==})({==})
       ),
       Facts.add_same(
         s,
@@ -1635,7 +1709,12 @@ def Facts.take_ask_votes(
       s,
       Types.Fact.Ask{a},
       Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}
-    )(Fact.slot_differs(Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk}, Types.Fact.Ask{a})({==})({==}))
+    )(
+      Fact.slot_differs(
+        Types.Fact.Vote{v, Types.Step.At{c, k, n}, pk},
+        Types.Fact.Ask{a}
+      )({==})({==})
+    )
   )
 
 # a set that takes an ask in holds that ask, and the asks that it held
@@ -1804,7 +1883,9 @@ def Facts.refuses_of(
   Facts.has(s, g) == True{}: Bool
 } -> {
   RFacts.Fact.ballot(g) == Some{Spec.Ballot{name, st, y}}: Maybe<&2, Spec.Ballot>
-} -> {Bool.not(RFacts.Words.is_eq(x, y)) == True{}: Bool} -> {Facts.refuses(name, s, f) == True{}: Bool}:
+} -> {
+  Bool.not(RFacts.Words.is_eq(x, y)) == True{}: Bool
+} -> {Facts.refuses(name, s, f) == True{}: Bool}:
   match f:
     case Types.Fact.Ask{a}:
       ef => hg => eg => hn => Empty.absurd(
@@ -1933,7 +2014,12 @@ def Facts.add_no_liar.fin(
             Some{Spec.Ballot{name, st, x}},
             RFacts.Fact.ballot(f1),
             Some{Spec.Ballot{name, st, y}},
-            Equal.sym(Maybe<&2, Spec.Ballot>, RFacts.Fact.ballot(f1), Some{Spec.Ballot{name, st, x}}, e1),
+            Equal.sym(
+              Maybe<&2, Spec.Ballot>,
+              RFacts.Fact.ballot(f1),
+              Some{Spec.Ballot{name, st, x}},
+              e1
+            ),
             Equal.trans(
               Maybe<&2, Spec.Ballot>,
               RFacts.Fact.ballot(f1),
@@ -2091,7 +2177,12 @@ def Trust.wider_broken(
       RFacts.Trust.one(name)
     )(
       hw
-    )(Shared.Bool.and_true_left(Facts.has(a, RFacts.Trust.one(name)), Facts.has(a, RFacts.Trust.two(name)))(hb))
+    )(
+      Shared.Bool.and_true_left(
+        Facts.has(a, RFacts.Trust.one(name)),
+        Facts.has(a, RFacts.Trust.two(name))
+      )(hb)
+    )
   )(
     Facts.wider_has(
       a,
@@ -2099,13 +2190,21 @@ def Trust.wider_broken(
       RFacts.Trust.two(name)
     )(
       hw
-    )(Shared.Bool.and_true_right(Facts.has(a, RFacts.Trust.one(name)), Facts.has(a, RFacts.Trust.two(name)))(hb))
+    )(
+      Shared.Bool.and_true_right(
+        Facts.has(a, RFacts.Trust.one(name)),
+        Facts.has(a, RFacts.Trust.two(name))
+      )(hb)
+    )
   )
 
 # the two votes of a broken trust are for two choices
 def Trust.casts_differ() -> {
   Bool.not(
-    RFacts.Words.is_eq(Coded.Cast.words(RFacts.Trust.cast(0n)), Coded.Cast.words(RFacts.Trust.cast(1n)))
+    RFacts.Words.is_eq(
+      Coded.Cast.words(RFacts.Trust.cast(0n)),
+      Coded.Cast.words(RFacts.Trust.cast(1n))
+    )
   )
     == True{}: Bool
 }:
@@ -2127,9 +2226,15 @@ def Trust.broken_liar(
     Coded.Cast.words(RFacts.Trust.cast(0n)),
     Coded.Cast.words(RFacts.Trust.cast(1n))
   )(
-    Shared.Bool.and_true_left(Facts.has(s, RFacts.Trust.one(name)), Facts.has(s, RFacts.Trust.two(name)))(hb)
+    Shared.Bool.and_true_left(
+      Facts.has(s, RFacts.Trust.one(name)),
+      Facts.has(s, RFacts.Trust.two(name))
+    )(hb)
   )(
-    Shared.Bool.and_true_right(Facts.has(s, RFacts.Trust.one(name)), Facts.has(s, RFacts.Trust.two(name)))(hb)
+    Shared.Bool.and_true_right(
+      Facts.has(s, RFacts.Trust.one(name)),
+      Facts.has(s, RFacts.Trust.two(name))
+    )(hb)
   )({==})({==})(Trust.casts_differ())
 
 # no set that names no liar says that the trust of a node broke
@@ -2157,13 +2262,20 @@ def Ask.starts_root(
       hs => Hashes.Hash.is_eq_sound(
         RFacts.Start.root(i, r),
         h
-      )(Shared.Bool.and_true_right(RFacts.Request.is_start(r), Hashes.Hash.is_eq(RFacts.Start.root(i, r), h))(hs))
+      )(
+        Shared.Bool.and_true_right(
+          RFacts.Request.is_start(r),
+          Hashes.Hash.is_eq(RFacts.Start.root(i, r), h)
+        )(hs)
+      )
 
 # an ask that starts a store starts the store of its root
 def Ask.starts_self(
   +h: Hashes.Hash,
   +a: Types.Ask
-) -> {RFacts.Ask.starts(h, a) == True{}: Bool} -> {RFacts.Ask.starts(RFacts.Ask.root(a), a) == True{}: Bool}:
+) -> {
+  RFacts.Ask.starts(h, a) == True{}: Bool
+} -> {RFacts.Ask.starts(RFacts.Ask.root(a), a) == True{}: Bool}:
   +hs =>
     %Equal.sym(
       Hashes.Hash,
@@ -2181,7 +2293,9 @@ def Ask.starts_to(
   +b: Types.Ask
 ) -> {
   RFacts.Ask.starts(h, a) == True{}: Bool
-} -> {RFacts.Ask.starts(h, b) == True{}: Bool} -> {RFacts.Ask.starts(RFacts.Ask.root(a), b) == True{}: Bool}:
+} -> {
+  RFacts.Ask.starts(h, b) == True{}: Bool
+} -> {RFacts.Ask.starts(RFacts.Ask.root(a), b) == True{}: Bool}:
   ha => hb =>
     %Equal.sym(
       Hashes.Hash,
@@ -2590,13 +2704,23 @@ def Trust.add_broken(
       s,
       f,
       RFacts.Trust.one(name)
-    )(Shared.Bool.and_true_left(Facts.has(s, RFacts.Trust.one(name)), Facts.has(s, RFacts.Trust.two(name)))(h))
+    )(
+      Shared.Bool.and_true_left(
+        Facts.has(s, RFacts.Trust.one(name)),
+        Facts.has(s, RFacts.Trust.two(name))
+      )(h)
+    )
   )(
     Facts.add_keeps(
       s,
       f,
       RFacts.Trust.two(name)
-    )(Shared.Bool.and_true_right(Facts.has(s, RFacts.Trust.one(name)), Facts.has(s, RFacts.Trust.two(name)))(h))
+    )(
+      Shared.Bool.and_true_right(
+        Facts.has(s, RFacts.Trust.one(name)),
+        Facts.has(s, RFacts.Trust.two(name))
+      )(h)
+    )
   )
 
 # a set whose starts are sound stays so with a fact that collides with none
@@ -2966,7 +3090,11 @@ def Fact.clash_cast(
   +pk: Types.Cast,
   g: Types.Fact
 ) -> {
-  RFacts.Fact.clashes(Spec.Ballot{name, Coded.Step.words(st), Coded.Cast.words(pk)}, g) == True{}: Bool
+  RFacts.Fact.clashes(
+    Spec.Ballot{name, Coded.Step.words(st), Coded.Cast.words(pk)},
+    g
+  )
+    == True{}: Bool
 } -> {RFacts.Fact.is_cast(RFacts.Seat{name, st}, g) == True{}: Bool}:
   match g:
     case Types.Fact.Ask{a}:
@@ -3160,17 +3288,18 @@ def Facts.take_crit.of(
         u => Facts.add(s, f)
       )
     )
-  ) == Shared.Bool.when(
-    RFacts.Plain(),
-    b1,
-    u => RFacts.Trust.break(Facts.crit(s), name),
-    u => Shared.Bool.when(
+  )
+    == Shared.Bool.when(
       RFacts.Plain(),
-      b2,
-      u => RFacts.Trust.break(RFacts.Facts.add(Facts.crit(s), f), name),
-      u => RFacts.Facts.add(Facts.crit(s), f)
-    )
-  ): RFacts.Plain()
+      b1,
+      u => RFacts.Trust.break(Facts.crit(s), name),
+      u => Shared.Bool.when(
+        RFacts.Plain(),
+        b2,
+        u => RFacts.Trust.break(RFacts.Facts.add(Facts.crit(s), f), name),
+        u => RFacts.Facts.add(Facts.crit(s), f)
+      )
+    ): RFacts.Plain()
 }:
   match b1 b2:
     case True{} True{}:
@@ -3187,14 +3316,10 @@ def Facts.take_crit(
   +name: String,
   +s: Facts(),
   +f: Types.Fact
-) -> {Facts.crit(Facts.take(name, s, f)) == RFacts.Facts.take(name, Facts.crit(s), f): RFacts.Plain()}:
-  Facts.take_crit.of(
-    Facts.refuses(name, s, f),
-    RFacts.Fact.collided(Facts.list(s), f),
-    name,
-    s,
-    f
-  )
+) -> {
+  Facts.crit(Facts.take(name, s, f)) == RFacts.Facts.take(name, Facts.crit(s), f): RFacts.Plain()
+}:
+  Facts.take_crit.of(Facts.refuses(name, s, f), RFacts.Fact.collided(Facts.list(s), f), name, s, f)
 
 # the map of s after the node takes fs in is what the code that runs gives
 def Facts.take_all_crit(
@@ -3202,22 +3327,24 @@ def Facts.take_all_crit(
   fs: List<&2, Types.Fact>,
   +s: Facts()
 ) -> {
-  Facts.crit(Facts.take_all(name, fs, s)) == RFacts.Facts.take_all(
-    name,
-    fs,
-    Facts.crit(s)
-  ): RFacts.Plain()
+  Facts.crit(
+    Facts.take_all(name, fs, s)
+  )
+    == RFacts.Facts.take_all(name, fs, Facts.crit(s)): RFacts.Plain()
 }:
   match fs:
     case Nil{}:
       {==}
     case Con{+f, rest}:
-      %Facts.take_crit(name, s, f): {
-        Facts.crit(Facts.take_all(name, rest, Facts.take(name, s, f))) == RFacts.Facts.take_all(
-          name,
-          rest,
-          _
-        ): RFacts.Plain()
+      %Facts.take_crit(
+        name,
+        s,
+        f
+      ): {
+        Facts.crit(
+          Facts.take_all(name, rest, Facts.take(name, s, f))
+        )
+          == RFacts.Facts.take_all(name, rest, _): RFacts.Plain()
       }
       Facts.take_all_crit(name, rest, Facts.take(name, s, f))
 
@@ -3229,6 +3356,9 @@ def Facts.ask_crit(
   i: Ledgers.Id,
   r: Spec.Request
 ) -> {
-  Facts.crit(Facts.ask(name, s, i, r)) == RFacts.Facts.ask(name, Facts.crit(s), i, r): RFacts.Plain()
+  Facts.crit(
+    Facts.ask(name, s, i, r)
+  )
+    == RFacts.Facts.ask(name, Facts.crit(s), i, r): RFacts.Plain()
 }:
   Facts.take_crit(name, s, Types.Fact.Ask{Facts.asked(s, i, r)})

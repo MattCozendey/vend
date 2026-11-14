@@ -4,10 +4,10 @@ import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../codes.bend as Coded
+import ../types.bend as Types
 import ./facts.bend as Facts
 import ./files.bend as Files
 import ./lines.bend as Lines
-import ../types.bend as Types
 
 # Known states
 # ------------
@@ -174,7 +174,7 @@ def Id.mix(t: String, h: U32) -> U32:
     case SNil{}:
       h
     case SCon{Chr{x}, rest}:
-      Id.mix(rest, ((h * 31) + x : U32))
+      Id.mix(rest, ((h * 31) + x: U32))
 
 # a short key of the id i: one word; ids of one key share an entry of a set
 def Id.key(i: Ledgers.Id) -> List<&2, U32>:
@@ -653,7 +653,12 @@ def Known.next.of(
 # a ballot for the slot k of the line c continues the versions of c and
 # changes no other line: c is a branch, k is the next slot of its state m,
 # and the state ms of its store is known
-def Known.safe(c: Ledgers.Line, m: Maybe<&2, Lines.State>, ms: Maybe<&2, Lines.State>, k: Nat) -> Bool:
+def Known.safe(
+  c: Ledgers.Line,
+  m: Maybe<&2, Lines.State>,
+  ms: Maybe<&2, Lines.State>,
+  k: Nat
+) -> Bool:
   match c m ms:
     case Ledgers.Line{h, Some{b}} Some{st} Some{y}:
       Nat.is_eq(Lines.State.slot(st), k)
@@ -693,7 +698,12 @@ def Known.made.put(kn: Known(), c: Ledgers.Line, m: Maybe<&2, Ids()>) -> Known()
 
 # the table rest with the state m, if any, of the line c after a ballot, and
 # with the ids of its versions, continued from those that the table kn held
-def Known.cast.to(+kn: Known(), +c: Ledgers.Line, rest: Known(), +m: Maybe<&2, Lines.State>) -> Known():
+def Known.cast.to(
+  +kn: Known(),
+  +c: Ledgers.Line,
+  rest: Known(),
+  +m: Maybe<&2, Lines.State>
+) -> Known():
   Known.made.put(Known.put(rest, c, m), c, Made.next(m, Known.find(kn, c), Known.ids(kn, c)))
 
 # the table kn after a ballot for the slot k of the line c, where s is the

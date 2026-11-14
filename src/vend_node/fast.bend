@@ -12,7 +12,6 @@ import ./run/content.bend as RContents
 import ./run/facts.bend as RFacts
 import ./run/fast.bend as RFasts
 import ./run/known.bend as RKnown
-import ./run/lines.bend as RLines
 import ./run/parts.bend as RParts
 import ./run/work.bend as RWorks
 import ./shared/lists.bend as Lists
@@ -103,11 +102,19 @@ def Learn.facts_ok(
     case Con{Types.Fact.Vote{v, Types.Step.Broken{}, x}, rest}:
       ok => Learn.facts_ok(rest, kn, s, all)(ok)
     case Con{Types.Fact.Vote{v, Types.Step.At{+c, k, t}, x}, rest}:
-      ok => Learn.facts_ok(rest, RKnown.Known.learn(kn, s, c), s, all)(Knowns.Known.learn_ok(kn, s, c)(ok))
+      ok => Learn.facts_ok(
+        rest,
+        RKnown.Known.learn(kn, s, c),
+        s,
+        all
+      )(Knowns.Known.learn_ok(kn, s, c)(ok))
     case Con{Types.Fact.Ask{Types.Ask{i, n, +r}}, rest}:
-      ok => Learn.facts_ok(rest, RFasts.Learn.request(kn, s, all, r), s, all)(
-        Learn.request_ok(kn, s, all, r)(ok)
-      )
+      ok => Learn.facts_ok(
+        rest,
+        RFasts.Learn.request(kn, s, all, r),
+        s,
+        all
+      )(Learn.request_ok(kn, s, all, r)(ok))
 
 # a right table that learns the states of the lines that a work reads is
 # right
@@ -190,7 +197,12 @@ def Table.voted_ok(
       ok => Knowns.Known.learn_ok(
         RContents.Known.grow(
           kn,
-          RKnown.Known.cast(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c, k),
+          RKnown.Known.cast(
+            kn,
+            RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+            c,
+            k
+          ),
           RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
           c
         ),
@@ -199,7 +211,12 @@ def Table.voted_ok(
       )(
         Knowns.Known.grow_ok(
           kn,
-          RKnown.Known.cast(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c, k),
+          RKnown.Known.cast(
+            kn,
+            RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+            c,
+            k
+          ),
           RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
           c
         )(Knowns.Known.cast_ok(kn, name, s, c, k, t, x)(ok))
@@ -217,10 +234,13 @@ def Step.same_refl(a: Types.Step) -> {RFasts.Step.same(a, a) == True{}: Bool}:
       Shared.List.all.if_both(
         Nat.is_eq(k, k),
         u => List.all.if(u2 => Ledgers.Line.is_eq(c, c), Nat.is_eq(t, t))
-      )(Shared.Nat.is_eq_refl(k))(
-        Shared.List.all.if_both(Nat.is_eq(t, t), u2 => Ledgers.Line.is_eq(c, c))(Shared.Nat.is_eq_refl(t))(
-          Ledgers.Line.is_eq_refl(c)
-        )
+      )(
+        Shared.Nat.is_eq_refl(k)
+      )(
+        Shared.List.all.if_both(
+          Nat.is_eq(t, t),
+          u2 => Ledgers.Line.is_eq(c, c)
+        )(Shared.Nat.is_eq_refl(t))(Ledgers.Line.is_eq_refl(c))
       )
 
 # Step.same is True only for equal steps
@@ -232,27 +252,48 @@ def Step.same_sound(
     case Types.Step.Broken{} Types.Step.Broken{}:
       h => {==}
     case Types.Step.Broken{} Types.Step.At{c2, k2, t2}:
-      h => Empty.absurd({Types.Step.Broken{} == Types.Step.At{c2, k2, t2}: Types.Step}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Types.Step.Broken{} == Types.Step.At{c2, k2, t2}: Types.Step},
+        Shared.Bool.false_ne_true(h)
+      )
     case Types.Step.At{c1, k1, t1} Types.Step.Broken{}:
-      h => Empty.absurd({Types.Step.At{c1, k1, t1} == Types.Step.Broken{}: Types.Step}, Shared.Bool.false_ne_true(h))
+      h => Empty.absurd(
+        {Types.Step.At{c1, k1, t1} == Types.Step.Broken{}: Types.Step},
+        Shared.Bool.false_ne_true(h)
+      )
     case Types.Step.At{+c1, +k1, +t1} Types.Step.At{+c2, +k2, +t2}:
       +h =>
-        %Shared.Nat.is_eq_sound(k1, k2)(
+        %Shared.Nat.is_eq_sound(
+          k1,
+          k2
+        )(
           Shared.List.all.if_hit(
             Nat.is_eq(k1, k2),
             u => List.all.if(u2 => Ledgers.Line.is_eq(c1, c2), Nat.is_eq(t1, t2))
           )(h)
         ): {Types.Step.At{c1, k1, t1} == Types.Step.At{c2, _, t2}: Types.Step}
-        %Shared.Nat.is_eq_sound(t1, t2)(
-          Shared.List.all.if_hit(Nat.is_eq(t1, t2), u2 => Ledgers.Line.is_eq(c1, c2))(
+        %Shared.Nat.is_eq_sound(
+          t1,
+          t2
+        )(
+          Shared.List.all.if_hit(
+            Nat.is_eq(t1, t2),
+            u2 => Ledgers.Line.is_eq(c1, c2)
+          )(
             Shared.List.all.if_rest(
               Nat.is_eq(k1, k2),
               u => List.all.if(u2 => Ledgers.Line.is_eq(c1, c2), Nat.is_eq(t1, t2))
             )(h)
           )
         ): {Types.Step.At{c1, k1, t1} == Types.Step.At{c2, k1, _}: Types.Step}
-        %Ledgers.Line.is_eq_sound(c1, c2)(
-          Shared.List.all.if_rest(Nat.is_eq(t1, t2), u2 => Ledgers.Line.is_eq(c1, c2))(
+        %Ledgers.Line.is_eq_sound(
+          c1,
+          c2
+        )(
+          Shared.List.all.if_rest(
+            Nat.is_eq(t1, t2),
+            u2 => Ledgers.Line.is_eq(c1, c2)
+          )(
             Shared.List.all.if_rest(
               Nat.is_eq(k1, k2),
               u => List.all.if(u2 => Ledgers.Line.is_eq(c1, c2), Nat.is_eq(t1, t2))
@@ -266,28 +307,11 @@ def Step.same_eq(
   +a: Types.Step,
   +b: Types.Step
 ) -> {RFasts.Step.same(a, b) == Coded.Step.is_eq(a, b): Bool}:
-  Lists.Bool.by(
-    x => {x == Coded.Step.is_eq(a, b): Bool},
-    RFasts.Step.same(a, b),
-    et => (
+  Lists.Bool.by(x => {x == Coded.Step.is_eq(a, b): Bool}, RFasts.Step.same(a, b), et => (
       %Step.same_sound(a, b)(et): {True{} == Coded.Step.is_eq(a, _): Bool}
-      Equal.sym(Bool, Coded.Step.is_eq(a, a), True{}, Coded.Step.is_eq_refl(a))),
-    +ef => Lists.Bool.by(
-      y => {False{} == y: Bool},
-      Coded.Step.is_eq(a, b),
-      et2 => Equal.trans(
-        Bool,
-        False{},
-        RFasts.Step.same(a, b),
-        True{},
-        Equal.sym(Bool, RFasts.Step.same(a, b), False{}, ef),
-        (
+      Equal.sym(Bool, Coded.Step.is_eq(a, a), True{}, Coded.Step.is_eq_refl(a))), +ef => Lists.Bool.by(y => {False{} == y: Bool}, Coded.Step.is_eq(a, b), et2 => Equal.trans(Bool, False{}, RFasts.Step.same(a, b), True{}, Equal.sym(Bool, RFasts.Step.same(a, b), False{}, ef), (
           %Coded.Step.is_eq_sound(a, b)(et2): {RFasts.Step.same(a, _) == True{}: Bool}
-          Step.same_refl(a))
-      ),
-      ef2 => {==}
-    )
-  )
+          Step.same_refl(a))), ef2 => {==}))
 
 # Fact.sits is Fact.is_cast
 def Fact.sits_cast(
@@ -297,7 +321,13 @@ def Fact.sits_cast(
   match g f:
     case RFacts.Seat{+name, +st} Types.Fact.Vote{+v, +st2, pk}:
       Lists.Bool.by(
-        x => {List.all.if(u => RFasts.Step.same(st2, st), x) == Bool.and(x, Coded.Step.is_eq(st2, st)): Bool},
+        x => {
+          List.all.if(
+            u => RFasts.Step.same(st2, st),
+            x
+          )
+            == Bool.and(x, Coded.Step.is_eq(st2, st)): Bool
+        },
         String.eq(v, name),
         et => Step.same_eq(st2, st),
         ef => {==}
@@ -310,16 +340,33 @@ def Seats.cast_eq(
   fs: List<&2, Types.Fact>,
   +g: RFacts.Seat
 ) -> {
-  Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, fs, g)
+  Shared.List.some(
+    ~Types.Fact,
+    ~RFacts.Seat,
+    ~RFasts.Fact.sits,
+    fs,
+    g
+  )
     == Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFacts.Fact.is_cast, fs, g): Bool
 }:
   match fs:
     case Nil{}:
       {==}
     case Con{+f, +rest}:
-      %Equal.sym(Bool, RFasts.Fact.sits(g, f), RFacts.Fact.is_cast(g, f), Fact.sits_cast(g, f)): {
-        List.any.if(u => Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, rest, g), _)
-          == List.any.if(u => Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFacts.Fact.is_cast, rest, g), RFacts.Fact.is_cast(g, f)): Bool
+      %Equal.sym(
+        Bool,
+        RFasts.Fact.sits(g, f),
+        RFacts.Fact.is_cast(g, f),
+        Fact.sits_cast(g, f)
+      ): {
+        List.any.if(
+          u => Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFasts.Fact.sits, rest, g),
+          _
+        )
+          == List.any.if(
+            u => Shared.List.some(~Types.Fact, ~RFacts.Seat, ~RFacts.Fact.is_cast, rest, g),
+            RFacts.Fact.is_cast(g, f)
+          ): Bool
       }
       Equal.cong(
         Bool,
@@ -366,7 +413,12 @@ def Cast.read(+s: RFacts.Plain(), +name: String, m: Maybe<&2, RWorks.Plan>) -> B
     case None{}:
       True{}
     case Some{RWorks.Plan{+st, x}}:
-      Shared.Bool.when(Bool, RFacts.Facts.cast(s, name, st), u => True{}, u => RFasts.Step.spares(st))
+      Shared.Bool.when(
+        Bool,
+        RFacts.Facts.cast(s, name, st),
+        u => True{},
+        u => RFasts.Step.spares(st)
+      )
 
 # the fast node after a work that plans the ballot m: its facts are those
 # that RWorks.Work.cast gives, and its table is Table.cast
@@ -379,7 +431,15 @@ def Fast.works_at_eq(
   +kn: RKnown.Known(),
   m: Maybe<&2, RWorks.Plan>
 ) -> {
-  RFasts.Fast.works.at(name, ws, ms, fs, ps, kn, m)
+  RFasts.Fast.works.at(
+    name,
+    ws,
+    ms,
+    fs,
+    ps,
+    kn,
+    m
+  )
     == RFasts.Fast{
       Nodes.Raw{name, ws, ms, False{}, RWorks.Work.cast(fs, name, m), ps},
       Table.cast(kn, fs, name, m),
@@ -390,17 +450,49 @@ def Fast.works_at_eq(
     case None{}:
       {==}
     case Some{RWorks.Plan{+st, +x}}:
-      %Equal.sym(Bool, RFasts.Seat.cast(fs, name, st), RFacts.Facts.cast(fs, name, st), Seat.cast_eq(fs, name, st)): {
-        RFasts.Fast.casts.if(_, name, ws, ms, fs, ps, kn, st, x)
+      %Equal.sym(
+        Bool,
+        RFasts.Seat.cast(fs, name, st),
+        RFacts.Facts.cast(fs, name, st),
+        Seat.cast_eq(fs, name, st)
+      ): {
+        RFasts.Fast.casts.if(
+          _,
+          name,
+          ws,
+          ms,
+          fs,
+          ps,
+          kn,
+          st,
+          x
+        )
           == RFasts.Fast{
-            Nodes.Raw{name, ws, ms, False{}, RWorks.Work.cast(fs, name, Some{RWorks.Plan{st, x}}), ps},
+            Nodes.Raw{
+              name,
+              ws,
+              ms,
+              False{},
+              RWorks.Work.cast(fs, name, Some{RWorks.Plan{st, x}}),
+              ps
+            },
             Table.cast(kn, fs, name, Some{RWorks.Plan{st, x}}),
             Cast.read(fs, name, Some{RWorks.Plan{st, x}})
           }: RFasts.Fast
       }
       Lists.Bool.by(
         b => {
-          RFasts.Fast.casts.if(b, name, ws, ms, fs, ps, kn, st, x)
+          RFasts.Fast.casts.if(
+            b,
+            name,
+            ws,
+            ms,
+            fs,
+            ps,
+            kn,
+            st,
+            x
+          )
             == RFasts.Fast{
               Nodes.Raw{
                 name,
@@ -542,7 +634,13 @@ def Needs.of_ok(
 ) -> {
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {
-  Nodes.Needs.of(kn, s, name, ms) == Nodes.Needs.of(RKnown.Known.none(), s, name, ms): List<&2, Hashes.Hash>
+  Nodes.Needs.of(
+    kn,
+    s,
+    name,
+    ms
+  )
+    == Nodes.Needs.of(RKnown.Known.none(), s, name, ms): List<&2, Hashes.Hash>
 }:
   match ms:
     case Nil{}:
@@ -593,7 +691,14 @@ def Collided.none(
 ) -> {
   RFacts.Request.is_start(r) == False{}: Bool
 } -> {
-  Shared.List.some(~Types.Fact, ~Types.Ask, ~RFacts.Fact.collides, all, Types.Ask{i, k, r}) == False{}: Bool
+  Shared.List.some(
+    ~Types.Fact,
+    ~Types.Ask,
+    ~RFacts.Fact.collides,
+    all,
+    Types.Ask{i, k, r}
+  )
+    == False{}: Bool
 }:
   match all:
     case Nil{}:
@@ -602,11 +707,25 @@ def Collided.none(
       e => Collided.none(rest, i, k, r)(e)
     case Con{Types.Fact.Ask{+b}, +rest}:
       +e =>
-        %Equal.sym(Bool, RFacts.Request.is_start(r), False{}, e): {
+        %Equal.sym(
+          Bool,
+          RFacts.Request.is_start(r),
+          False{},
+          e
+        ): {
           List.any.if(
-            u => Shared.List.some(~Types.Fact, ~Types.Ask, ~RFacts.Fact.collides, rest, Types.Ask{i, k, r}),
+            u => Shared.List.some(
+              ~Types.Fact,
+              ~Types.Ask,
+              ~RFacts.Fact.collides,
+              rest,
+              Types.Ask{i, k, r}
+            ),
             Bool.and(
-              Bool.and(_, Hashes.Hash.is_eq(RFacts.Start.root(i, r), RFacts.Ask.root(Types.Ask{i, k, r}))),
+              Bool.and(
+                _,
+                Hashes.Hash.is_eq(RFacts.Start.root(i, r), RFacts.Ask.root(Types.Ask{i, k, r}))
+              ),
               Bool.and(
                 RFacts.Ask.starts(RFacts.Ask.root(Types.Ask{i, k, r}), b),
                 Bool.not(RFacts.Ask.alike(Types.Ask{i, k, r}, b))
@@ -647,7 +766,10 @@ def Asked.take_raw(
         b => Shared.Bool.when(
           RFacts.Plain(),
           b,
-          u => RFacts.Trust.break(RFacts.Facts.add(s, Types.Fact.Ask{RFacts.Facts.asked(s, i, r)}), name),
+          u => RFacts.Trust.break(
+            RFacts.Facts.add(s, Types.Fact.Ask{RFacts.Facts.asked(s, i, r)}),
+            name
+          ),
           u => RFacts.Facts.add(s, Types.Fact.Ask{RFacts.Facts.asked(s, i, r)})
         ),
         Shared.List.some(
@@ -676,7 +798,18 @@ def Fast.asks_raw(
   +i: Ledgers.Id,
   +r: Spec.Request
 ) -> {
-  RFasts.Fast.asks(name, ws, ms, st, fs, ps, i, r, go) == Nodes.Raw.asks(name, ws, ms, st, fs, ps, i, r, go): Nodes.Raw
+  RFasts.Fast.asks(
+    name,
+    ws,
+    ms,
+    st,
+    fs,
+    ps,
+    i,
+    r,
+    go
+  )
+    == Nodes.Raw.asks(name, ws, ms, st, fs, ps, i, r, go): Nodes.Raw
 }:
   match go:
     case False{}:
@@ -719,12 +852,7 @@ def Fast.asks_ok(
       ok => Table.asked_same(kn, fs, r)(ok)
     case True{}:
       ok => (
-        %Equal.sym(
-          RFacts.Plain(),
-          RFasts.Asked.take(name, fs, i, r),
-          RFacts.Facts.ask(name, fs, i, r),
-          Asked.take_raw(name, fs, i, r)
-        ): {RContents.Known.ok(RFasts.Table.asked(kn, r), _) == True{}: Bool}
+        %Equal.sym(RFacts.Plain(), RFasts.Asked.take(name, fs, i, r), RFacts.Facts.ask(name, fs, i, r), Asked.take_raw(name, fs, i, r)): {RContents.Known.ok(RFasts.Table.asked(kn, r), _) == True{}: Bool}
         Table.asked_ok(kn, name, Impl.Node.set(name, fs, ps, okr), i, r)(ok))
 
 # the table of a fast node stays right after a work
@@ -746,21 +874,8 @@ def Fast.works_ok(
       ok => ok
     case False{}:
       ok => (
-        %Fast.works_at_sym(
-          name,
-          ws,
-          ms,
-          fs,
-          ps,
-          RFasts.Learn.if(ld, kn, fs),
-          RWorks.Work.plan(RFasts.Learn.if(ld, kn, fs), fs, name)
-        ): {RFasts.Fast.ok(_) == True{}: Bool}
-        Table.cast_ok(
-          RFasts.Learn.if(ld, kn, fs),
-          name,
-          Impl.Node.set(name, fs, ps, okr),
-          RWorks.Work.plan(RFasts.Learn.if(ld, kn, fs), fs, name)
-        )(Learn.if_ok(ld, kn, fs)(ok)))
+        %Fast.works_at_sym(name, ws, ms, fs, ps, RFasts.Learn.if(ld, kn, fs), RWorks.Work.plan(RFasts.Learn.if(ld, kn, fs), fs, name)): {RFasts.Fast.ok(_) == True{}: Bool}
+        Table.cast_ok(RFasts.Learn.if(ld, kn, fs), name, Impl.Node.set(name, fs, ps, okr), RWorks.Work.plan(RFasts.Learn.if(ld, kn, fs), fs, name))(Learn.if_ok(ld, kn, fs)(ok)))
 
 # the table of a fast node whose state can be a node stays right after any
 # deed
@@ -810,7 +925,11 @@ def Fast.does_ok(
       )
     case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn, +ld} Nodes.Act.Sync{from}:
       okr => ok => {==}
-    case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn, +ld} Nodes.Act.Mount{+a, +b, +p, +held}:
+    case RFasts.Fast{
+      Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
+      +kn,
+      +ld
+    } Nodes.Act.Mount{+a, +b, +p, +held}:
       +okr => ok => Fast.asked_ok(
         RFasts.Fast.asks(
           name,
@@ -864,13 +983,16 @@ def Fast.works_raw(
 ) -> {
   RContents.Known.ok(kn, fs) == True{}: Bool
 } -> {
-  RFasts.Fast.raw(RFasts.Fast.works(name, ws, ms, st, fs, ps, kn, ld)) == Nodes.Raw.works(name, ws, ms, st, fs, ps): Nodes.Raw
+  RFasts.Fast.raw(
+    RFasts.Fast.works(name, ws, ms, st, fs, ps, kn, ld)
+  )
+    == Nodes.Raw.works(name, ws, ms, st, fs, ps): Nodes.Raw
 }:
   match st:
     case True{}:
       ok => {==}
     case False{}:
-      ok => 
+      ok =>
         %Fast.works_at_sym(
           name,
           ws,
@@ -881,13 +1003,13 @@ def Fast.works_raw(
           RWorks.Work.plan(RFasts.Learn.if(ld, kn, fs), fs, name)
         ): {RFasts.Fast.raw(_) == Nodes.Raw.works(name, ws, ms, False{}, fs, ps): Nodes.Raw}
         Equal.cong(
-        Maybe<&2, RWorks.Plan>,
-        Nodes.Raw,
-        m => Nodes.Raw{name, ws, ms, False{}, RWorks.Work.cast(fs, name, m), ps},
-        RWorks.Work.plan(RFasts.Learn.if(ld, kn, fs), fs, name),
-        RWorks.Work.plan(RKnown.Known.none(), fs, name),
-        Knowns.Work.plan_ok(RFasts.Learn.if(ld, kn, fs), fs, name)(Learn.if_ok(ld, kn, fs)(ok))
-      )
+          Maybe<&2, RWorks.Plan>,
+          Nodes.Raw,
+          m => Nodes.Raw{name, ws, ms, False{}, RWorks.Work.cast(fs, name, m), ps},
+          RWorks.Work.plan(RFasts.Learn.if(ld, kn, fs), fs, name),
+          RWorks.Work.plan(RKnown.Known.none(), fs, name),
+          Knowns.Work.plan_ok(RFasts.Learn.if(ld, kn, fs), fs, name)(Learn.if_ok(ld, kn, fs)(ok))
+        )
 
 # the state of a fast node with a right table after a deed is the state that
 # Nodes.Raw.does gives: a fast node does what a node does
@@ -896,9 +1018,7 @@ def Fast.does_raw(
   a: Nodes.Act
 ) -> {
   RFasts.Fast.ok(f) == True{}: Bool
-} -> {
-  RFasts.Fast.raw(RFasts.Fast.does(f, a)) == Nodes.Raw.does(RFasts.Fast.raw(f), a): Nodes.Raw
-}:
+} -> {RFasts.Fast.raw(RFasts.Fast.does(f, a)) == Nodes.Raw.does(RFasts.Fast.raw(f), a): Nodes.Raw}:
   match f a:
     case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn, +ld} Nodes.Act.Connect{w}:
       ok => {==}
@@ -907,22 +1027,24 @@ def Fast.does_raw(
     case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn, +ld} Nodes.Act.Ask{+i, +q}:
       ok => Equal.trans(
         Nodes.Raw,
-        RFasts.Fast.raw(RFasts.Fast.asked(
-        RFasts.Fast.asks(
-          name,
-          ws,
-          ms,
-          st,
-          fs,
-          ps,
-          i,
-          q,
-          Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+        RFasts.Fast.raw(
+          RFasts.Fast.asked(
+            RFasts.Fast.asks(
+              name,
+              ws,
+              ms,
+              st,
+              fs,
+              ps,
+              i,
+              q,
+              Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+            ),
+            RFasts.Table.asked(kn, q),
+            ld,
+            q
+          )
         ),
-        RFasts.Table.asked(kn, q),
-        ld,
-        q
-        )),
         RFasts.Fast.asks(
           name,
           ws,
@@ -946,20 +1068,20 @@ def Fast.does_raw(
           Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
         ),
         Fast.asked_raw(
-        RFasts.Fast.asks(
-          name,
-          ws,
-          ms,
-          st,
-          fs,
-          ps,
-          i,
-          q,
-          Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
-        ),
-        RFasts.Table.asked(kn, q),
-        ld,
-        q
+          RFasts.Fast.asks(
+            name,
+            ws,
+            ms,
+            st,
+            fs,
+            ps,
+            i,
+            q,
+            Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+          ),
+          RFasts.Table.asked(kn, q),
+          ld,
+          q
         ),
         Fast.asks_raw(
           Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))),
@@ -975,25 +1097,31 @@ def Fast.does_raw(
       )
     case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn, +ld} Nodes.Act.Sync{from}:
       ok => {==}
-    case RFasts.Fast{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +kn, +ld} Nodes.Act.Mount{+a, +b, +p, +held}:
+    case RFasts.Fast{
+      Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps},
+      +kn,
+      +ld
+    } Nodes.Act.Mount{+a, +b, +p, +held}:
       ok => Equal.trans(
         Nodes.Raw,
-        RFasts.Fast.raw(RFasts.Fast.asked(
-        RFasts.Fast.asks(
-          name,
-          ws,
-          Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
-          st,
-          fs,
-          ps,
-          Nodes.Mount.id(name, a),
-          Spec.Request.Write{b, p, Some{held}},
-          Bool.not(st)
+        RFasts.Fast.raw(
+          RFasts.Fast.asked(
+            RFasts.Fast.asks(
+              name,
+              ws,
+              Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+              st,
+              fs,
+              ps,
+              Nodes.Mount.id(name, a),
+              Spec.Request.Write{b, p, Some{held}},
+              Bool.not(st)
+            ),
+            kn,
+            ld,
+            Spec.Request.Write{b, p, None{}}
+          )
         ),
-        kn,
-        ld,
-        Spec.Request.Write{b, p, None{}}
-        )),
         RFasts.Fast.asks(
           name,
           ws,
@@ -1017,20 +1145,20 @@ def Fast.does_raw(
           Bool.not(st)
         ),
         Fast.asked_raw(
-        RFasts.Fast.asks(
-          name,
-          ws,
-          Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
-          st,
-          fs,
-          ps,
-          Nodes.Mount.id(name, a),
-          Spec.Request.Write{b, p, Some{held}},
-          Bool.not(st)
-        ),
-        kn,
-        ld,
-        Spec.Request.Write{b, p, None{}}
+          RFasts.Fast.asks(
+            name,
+            ws,
+            Nodes.Mounted{a, b, p} <> Nodes.Mounts.remove(ms, a),
+            st,
+            fs,
+            ps,
+            Nodes.Mount.id(name, a),
+            Spec.Request.Write{b, p, Some{held}},
+            Bool.not(st)
+          ),
+          kn,
+          ld,
+          Spec.Request.Write{b, p, None{}}
         ),
         Fast.asks_raw(
           Bool.not(st),
@@ -1077,12 +1205,16 @@ def Fast.learn_raw(
 def Fast.learn_ok(
   f: RFasts.Fast,
   +c: Ledgers.Line
-) -> {RFasts.Fast.ok(f) == True{}: Bool} -> {RFasts.Fast.ok(RFasts.Fast.learn(f, c)) == True{}: Bool}:
+) -> {
+  RFasts.Fast.ok(f) == True{}: Bool
+} -> {RFasts.Fast.ok(RFasts.Fast.learn(f, c)) == True{}: Bool}:
   match f:
     case RFasts.Fast{+r, +kn, ld}:
-      ok => Knowns.Known.warm_ok(RKnown.Known.learn(kn, Nodes.Raw.facts(r), c), Nodes.Raw.facts(r), c)(
-        Knowns.Known.learn_ok(kn, Nodes.Raw.facts(r), c)(ok)
-      )
+      ok => Knowns.Known.warm_ok(
+        RKnown.Known.learn(kn, Nodes.Raw.facts(r), c),
+        Nodes.Raw.facts(r),
+        c
+      )(Knowns.Known.learn_ok(kn, Nodes.Raw.facts(r), c)(ok))
 
 # What a fast node shows
 # ----------------------
@@ -1093,9 +1225,7 @@ def Fast.answer_raw(
   +q: Spec.Question
 ) -> {
   RFasts.Fast.ok(f) == True{}: Bool
-} -> {
-  RFasts.Fast.answer(f, q) == Nodes.Raw.answer(RFasts.Fast.raw(f), q): Maybe<&2, Spec.Reply>
-}:
+} -> {RFasts.Fast.answer(f, q) == Nodes.Raw.answer(RFasts.Fast.raw(f), q): Maybe<&2, Spec.Reply>}:
   match f:
     case RFasts.Fast{+r, +kn, ld}:
       ok => Knowns.Answer.of_ok(kn, Nodes.Raw.facts(r), q)(ok)
@@ -1109,7 +1239,13 @@ def Fast.read_raw(
 ) -> {
   RFasts.Fast.ok(f) == True{}: Bool
 } -> {
-  RFasts.Fast.read(f, c, k, p) == Nodes.Raw.read(RFasts.Fast.raw(f), c, k, p): Maybe<&2, Maybe<&2, List<&2, U32>>>
+  RFasts.Fast.read(
+    f,
+    c,
+    k,
+    p
+  )
+    == Nodes.Raw.read(RFasts.Fast.raw(f), c, k, p): Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   match f:
     case RFasts.Fast{+r, +kn, ld}:
@@ -1124,7 +1260,13 @@ def Fast.view_raw(
 ) -> {
   RFasts.Fast.ok(f) == True{}: Bool
 } -> {
-  RFasts.Fast.view(f, w, b, p) == Nodes.Raw.view(RFasts.Fast.raw(f), w, b, p): Maybe<&2, Maybe<&2, List<&2, U32>>>
+  RFasts.Fast.view(
+    f,
+    w,
+    b,
+    p
+  )
+    == Nodes.Raw.view(RFasts.Fast.raw(f), w, b, p): Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   match f:
     case RFasts.Fast{+r, +kn, ld}:

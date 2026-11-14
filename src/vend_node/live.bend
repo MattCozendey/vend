@@ -10,9 +10,9 @@ import ./moves.bend as Moves
 import ./rounds.bend as Rounds
 import ./run/answers.bend as RAnswers
 import ./run/facts.bend as RFacts
+import ./run/known.bend as RKnown
 import ./run/lines.bend as RLines
 import ./run/rounds.bend as RRounds
-import ./run/known.bend as RKnown
 import ./run/work.bend as RWorks
 import ./shared/lists.bend as Lists
 import ./spec.bend as Spec
@@ -375,7 +375,13 @@ def Writes.of_in(
         ~Coded.Fact.is_eq,
         ~Coded.Fact.laws(),
         {
-          List.contains(~Types.Ask, ~Coded.Ask.is_eq, RAnswers.Writes.of(rest, g), a) == True{}: Bool
+          List.contains(
+            ~Types.Ask,
+            ~Coded.Ask.is_eq,
+            RAnswers.Writes.of(rest, g),
+            a
+          )
+            == True{}: Bool
         },
         Types.Fact.Vote{v, st, pk},
         rest,
@@ -666,9 +672,27 @@ def View.fresh.at(
             e
           )(hv)(hg)
         )
-      )(Shared.List.all.if_rest(Ledgers.Id.is_eq(RLines.Ask.id(RLines.Entry.ask(e)), RLines.Ask.id(a)), u => Coded.Ask.is_eq(RLines.Entry.ask(e), a))(he))
+      )(
+        Shared.List.all.if_rest(
+          Ledgers.Id.is_eq(RLines.Ask.id(RLines.Entry.ask(e)), RLines.Ask.id(a)),
+          u => Coded.Ask.is_eq(RLines.Entry.ask(e), a)
+        )(he)
+      )
     case 1n+(+j):
-      hlt => hv => hg => he => Ask.fresh.vote(name, s, a, c, e)(hlt)(Shared.List.all.if_rest(Ledgers.Id.is_eq(RLines.Ask.id(RLines.Entry.ask(e)), RLines.Ask.id(a)), u => Coded.Ask.is_eq(RLines.Entry.ask(e), a))(he))(
+      hlt => hv => hg => he => Ask.fresh.vote(
+        name,
+        s,
+        a,
+        c,
+        e
+      )(
+        hlt
+      )(
+        Shared.List.all.if_rest(
+          Ledgers.Id.is_eq(RLines.Ask.id(RLines.Entry.ask(e)), RLines.Ask.id(a)),
+          u => Coded.Ask.is_eq(RLines.Entry.ask(e), a)
+        )(he)
+      )(
         Versions.Line.versions_voted(
           Facts.Facts.take(name, s, Types.Fact.Ask{a}),
           c,
@@ -1168,7 +1192,11 @@ def Work.offer_alone(
   +r: Nat,
   +b: List<&2, Types.Ref>
 ) -> {
-  RWorks.Request.line(Facts.Facts.list(s), RLines.Ask.request(a)) == Some{c}: Maybe<&2, Ledgers.Line>
+  RWorks.Request.line(
+    Facts.Facts.list(s),
+    RLines.Ask.request(a)
+  )
+    == Some{c}: Maybe<&2, Ledgers.Line>
 } -> {
   Works.Work.open(s, name, c) == Some{RWorks.Open{vs, k, ns}}: Maybe<&2, RWorks.Open>
 } -> {
@@ -1181,10 +1209,29 @@ def Work.offer_alone(
   )
     == False{}: Bool
 } -> {
-  RRounds.Slot.chance(Rounds.Slot.ballots(s, c, k), ns, k, name)
+  RRounds.Slot.chance(
+    Rounds.Slot.ballots(s, c, k),
+    ns,
+    k,
+    name
+  )
     == Some{RRounds.Chance{t, r, b, RRounds.Force.Free{}}}: Maybe<&2, RRounds.Chance>
 } -> {
-  Works.Work.offer(s, name, a) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>
+  Works.Work.offer(
+    s,
+    name,
+    a
+  )
+    == Some{
+      RWorks.Plan{
+        Types.Step.At{c, k, t},
+        Types.Cast.Vote{
+          r,
+          Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
+          b
+        }
+      }
+    }: Maybe<&2, RWorks.Plan>
 }:
   hl => ho => hn => hch => (
     %Equal.sym(Maybe<&2, Ledgers.Line>, RWorks.Request.line(Facts.Facts.list(s), RLines.Ask.request(a)), Some{c}, hl): {Works.Work.offer.on(s, name, a, _) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>}
@@ -1218,7 +1265,6 @@ def Work.does_alone(
     %Equal.sym(Maybe<&2, RWorks.Plan>, Works.Work.offer(s, name, a), Some{RWorks.Plan{st, x}}, ho): {Works.Work.cast(s, name, RWorks.Work.follow.or(_, u => RWorks.Work.follow.or(RWorks.Work.follow(RKnown.Known.none(), Facts.Facts.crit(s), name, Facts.Facts.list(s)), u2 => RWorks.Work.pass(Facts.Facts.list(s), RKnown.Known.none(), Facts.Facts.crit(s), Facts.Facts.list(s), name)))) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}
     %Equal.sym(Bool, Facts.Facts.cast(s, name, st), False{}, hc): {Shared.Bool.when(Facts.Facts(), _, u => s, u => Facts.Facts.add(s, Types.Fact.Vote{name, st, x})) == Facts.Facts.add(s, Types.Fact.Vote{name, st, x}): Facts.Facts()}
     {==})
-
 
 # taking in an ask that starts no store leaves the rule after the versions of
 # every line as it was
@@ -1284,15 +1330,41 @@ def Work.alone_does.end(
     Lines.Votes.decided(
       Facts.Facts.add(
         s,
-        Types.Fact.Vote{name, Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}
+        Types.Fact.Vote{
+          name,
+          Types.Step.At{c, k, t},
+          Types.Cast.Vote{
+            r,
+            Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
+            b
+          }
+        }
       ),
       c,
       k,
       [name]
     )
-      == Some{Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}}: Maybe<&2, Types.Pick>
+      == Some{
+        Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}
+      }: Maybe<&2, Types.Pick>
   },
-  +ho: {Works.Work.offer(s, name, a) == Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}: Maybe<&2, RWorks.Plan>},
+  +ho: {
+    Works.Work.offer(
+      s,
+      name,
+      a
+    )
+      == Some{
+        RWorks.Plan{
+          Types.Step.At{c, k, t},
+          Types.Cast.Vote{
+            r,
+            Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
+            b
+          }
+        }
+      }: Maybe<&2, RWorks.Plan>
+  },
   ht: {
     Maybe.is_some(&2, RWorks.Plan, Works.Work.offer(s, name, a)) == True{}: Bool
   } -> {
@@ -1328,37 +1400,49 @@ def Work.alone_does.end(
     Works.Work.does(s, name),
     Facts.Facts.add(
       s,
-      Types.Fact.Vote{name, Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}
+      Types.Fact.Vote{
+        name,
+        Types.Step.At{c, k, t},
+        Types.Cast.Vote{
+          r,
+          Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
+          b
+        }
+      }
     ),
     Work.does_alone(
       s,
       name,
       a,
       Types.Step.At{c, k, t},
-      Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}
+      Types.Cast.Vote{
+        r,
+        Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
+        b
+      }
     )(ht((
           %Equal.sym(Maybe<&2, RWorks.Plan>, Works.Work.offer(s, name, a), Some{RWorks.Plan{Types.Step.At{c, k, t}, Types.Cast.Vote{r, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, b}}}, ho): {Maybe.is_some(&2, RWorks.Plan, _) == True{}: Bool}
           {==})))(ho)(hc)
   ): Exists(
-  List<&2, Types.Entry>,
-  vs2 => {
-    Lines.Line.versions(_, c) == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
-  }
-    & {
-      List.get(
-        &2,
-        Types.Entry,
-        vs2,
-        List.length(&2, Types.Entry, vs)
-      )
-        == Some{
-          Types.Entry{
-            Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
-            k
-          }
-        }: Maybe<&2, Types.Entry>
+    List<&2, Types.Entry>,
+    vs2 => {
+      Lines.Line.versions(_, c) == Some{vs2}: Maybe<&2, List<&2, Types.Entry>>
     }
-)
+      & {
+        List.get(
+          &2,
+          Types.Entry,
+          vs2,
+          List.length(&2, Types.Entry, vs)
+        )
+          == Some{
+            Types.Entry{
+              Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
+              k
+            }
+          }: Maybe<&2, Types.Entry>
+      }
+  )
   Moves.Line.voted_alone(
     s,
     name,
@@ -1412,7 +1496,19 @@ def Work.alone_does.fin(
     Nat,
     t => Exists(
       Nat,
-      r => Exists(List<&2, Types.Ref>, b => Rounds.Slot.Alone(s, name, c, k, Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))}, t, r, b))
+      r => Exists(
+        List<&2, Types.Ref>,
+        b => Rounds.Slot.Alone(
+          s,
+          name,
+          c,
+          k,
+          Types.Pick{a, Works.Pins.for(s, c, vs, Works.Era.now(s, c), RLines.Ask.request(a))},
+          t,
+          r,
+          b
+        )
+      )
     )
   )
 ) -> Exists(
@@ -1456,7 +1552,18 @@ def Work.alone_does.fin(
     hn,
     hc,
     hd,
-    Work.offer_alone(s, name, c, a, vs, k, [name], t, r, b)(hl)(Work.open_alone(s, name, c, vs, k, g)(hst)(hr))(hn)(hch),
+    Work.offer_alone(
+      s,
+      name,
+      c,
+      a,
+      vs,
+      k,
+      [name],
+      t,
+      r,
+      b
+    )(hl)(Work.open_alone(s, name, c, vs, k, g)(hst)(hr))(hn)(hch),
     ht
   )
 
@@ -1478,7 +1585,11 @@ def Work.alone_does(
 } -> {
   Lines.Rule.after(s, c, vs) == Some{RLines.Rule{g, [name]}}: Maybe<&2, RLines.Rule>
 } -> {
-  RWorks.Request.line(Facts.Facts.list(s), RLines.Ask.request(a)) == Some{c}: Maybe<&2, Ledgers.Line>
+  RWorks.Request.line(
+    Facts.Facts.list(s),
+    RLines.Ask.request(a)
+  )
+    == Some{c}: Maybe<&2, Ledgers.Line>
 } -> {
   Shared.List.some(
     ~Types.Entry,
@@ -1542,7 +1653,6 @@ def Work.alone_does(
           %hr: {Lines.Line.step.at(s, c, RLines.State{vs, k}, _) == None{}: Maybe<&2, RLines.State>}
           Versions.Line.state_open(s, c, RLines.State{vs, k})(hst))))
   )
-
 
 # the status of a write that made a version of its branch is Written
 def Status.written(
@@ -1691,7 +1801,9 @@ def Group.last(
       hv => h => Empty.absurd(
         Exists(
           String,
-          g => {Lines.Rule.after(s, c, []) == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>}
+          g => {
+            Lines.Rule.after(s, c, []) == Some{RLines.Rule{Some{g}, ns}}: Maybe<&2, RLines.Rule>
+          }
         ),
         Shared.Maybe.none_ne_some(Spec.Reply, Spec.Reply.Names{ns}, h)
       )
@@ -2220,7 +2332,11 @@ def Work.decides.at(
                 name,
                 s,
                 Types.Fact.Ask{
-                  Types.Ask{i, 1n+RFacts.Seq.peak(Facts.Facts.list(s)), Spec.Request.Write{b, p, ws}}
+                  Types.Ask{
+                    i,
+                    1n+RFacts.Seq.peak(Facts.Facts.list(s)),
+                    Spec.Request.Write{b, p, ws}
+                  }
                 }
               ),
               name

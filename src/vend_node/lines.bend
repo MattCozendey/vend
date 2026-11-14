@@ -1,14 +1,8 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/hash.bend as Hashes
-import ../shared/shared/shared/shared/shared.bend as Shared
-import ./codes.bend as Coded
 import ./facts.bend as Facts
-import ./groups.bend as Groups
-import ./run/facts.bend as RFacts
 import ./run/lines.bend as RLines
-import ./shared/lists.bend as Lists
-import ./spec.bend as Spec
 import ./types.bend as Types
 
 # Lines
@@ -128,7 +122,11 @@ def Line.at(+s: Facts.Facts(), +c: Ledgers.Line, k: Nat) -> Maybe<&2, Types.Entr
 # ----------------------------
 
 # the rule of the version of the line c that comes after the versions vs
-def Rule.after(+s: Facts.Facts(), +c: Ledgers.Line, +vs: List<&2, Types.Entry>) -> Maybe<&2, RLines.Rule>:
+def Rule.after(
+  +s: Facts.Facts(),
+  +c: Ledgers.Line,
+  +vs: List<&2, Types.Entry>
+) -> Maybe<&2, RLines.Rule>:
   RLines.Rule.after(Facts.Facts.crit(s), c, vs)
 
 # the state of the line c after the next slot of st

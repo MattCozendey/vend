@@ -3,17 +3,17 @@ import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../codes.bend as Coded
-import ./content.bend as Contents
-import ./facts.bend as Facts
-import ./known.bend as Known
 import ../groups.bend as Groups
-import ./lines.bend as Lines
-import ./rounds.bend as Rounds
-import ./files.bend as Files
 import ../shared/format.bend as Formats
 import ../shared/lists.bend as Lists
 import ../spec.bend as Spec
 import ../types.bend as Types
+import ./content.bend as Contents
+import ./facts.bend as Facts
+import ./files.bend as Files
+import ./known.bend as Known
+import ./lines.bend as Lines
+import ./rounds.bend as Rounds
 
 # Answers
 # -------
@@ -160,12 +160,22 @@ def Clashes.of(
       )
 
 # the base of the merge e, version k of the line c, when its ways lead to it
-def Base.of(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, k: Nat, +e: Types.Entry) -> Maybe<&2, Spec.Point>:
+def Base.of(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  k: Nat,
+  +e: Types.Entry
+) -> Maybe<&2, Spec.Point>:
   match k:
     case 0n:
       None{}
     case 1n+j:
-      Shared.Maybe.when(Spec.Point, Contents.Merge.fits(kn, s, c, j, e), u => Contents.Entry.base(e))
+      Shared.Maybe.when(
+        Spec.Point,
+        Contents.Merge.fits(kn, s, c, j, e),
+        u => Contents.Entry.base(e)
+      )
 
 # the status of the request r of the id i, version k among vs, with the
 # paths cs that clash in it if it is a merge and the node knows them
@@ -215,7 +225,12 @@ def Line.before.of(
 
 # the versions of the line c before its version 1+j, when the line has that
 # many, or one less (the version that comes next)
-def Line.before(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +j: Nat) -> Maybe<&2, List<&2, Types.Entry>>:
+def Line.before(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +j: Nat
+) -> Maybe<&2, List<&2, Types.Entry>>:
   Line.before.of(j, Known.Known.versions(kn, s, c))
 
 # Rule.for, once the versions m before the version are known
@@ -232,7 +247,12 @@ def Rule.for.of(
       Known.Known.rule(kn, s, c, vs)
 
 # the rule of version k of the line c: of the versions before it
-def Rule.for(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, k: Nat) -> Maybe<&2, Lines.Rule>:
+def Rule.for(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  k: Nat
+) -> Maybe<&2, Lines.Rule>:
   match k:
     case 0n:
       None{}
@@ -245,7 +265,13 @@ def Era.for(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, k: Nat) -> 
     case 0n:
       None{}
     case 1n+j:
-      Maybe.map(&2, List<&2, Types.Entry>, Nat, vs => Lines.Line.era(c, vs), Line.before(kn, s, c, j))
+      Maybe.map(
+        &2,
+        List<&2, Types.Entry>,
+        Nat,
+        vs => Lines.Line.era(c, vs),
+        Line.before(kn, s, c, j)
+      )
 
 # the reply of the names of the nodes of the rule u, when the store named its
 # owner group
@@ -535,7 +561,12 @@ def Line.find.of(i: Ledgers.Id, m: Maybe<&2, List<&2, Types.Entry>>) -> Maybe<&2
       Versions.find(vs, i)
 
 # the entry of the id i in the line c, and its version
-def Line.find(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, i: Ledgers.Id) -> Maybe<&2, Found>:
+def Line.find(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  i: Ledgers.Id
+) -> Maybe<&2, Found>:
   Line.find.of(i, Known.Known.versions(kn, s, c))
 
 # the reply of the status of the found entry m of the line c, with the
@@ -720,7 +751,8 @@ def View.at(
   +p: String
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   View.of(
-    kn, s,
+    kn,
+    s,
     b,
     p,
     Lists.List.top(~Types.Ask, ~Facts.Ask.seq, Writes.of(Facts.Facts.list(s), Place{w, b, p}))

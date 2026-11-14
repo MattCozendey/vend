@@ -1,5 +1,6 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
+import ../shared/shared/shared/shared/crit.bend as Crits
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
 import ../shared/shared/shared/text.bend as Texts
@@ -19,19 +20,18 @@ import ./reads.bend as Reads
 import ./run/answers.bend as RAnswers
 import ./run/facts.bend as RFacts
 import ./run/known.bend as RKnown
-import ./run/parts.bend as RParts
 import ./run/lines.bend as RLines
+import ./run/parts.bend as RParts
+import ./run/set.bend as Checks
+import ./run/work.bend as RWorks
 import ./shared/format.bend as Formats
 import ./shared/lists.bend as Lists
 import ./shared/parts.bend as Parts
+import ./shared/set.bend as Sets
 import ./spec.bend as Spec
 import ./types.bend as Types
 import ./versions.bend as Versions
 import ./work.bend as Works
-import ../shared/shared/shared/shared/crit.bend as Crits
-import ./run/set.bend as Checks
-import ./shared/set.bend as Sets
-import ./run/work.bend as RWorks
 
 # A Vend Node
 # -----------
@@ -100,7 +100,8 @@ def Node.set_ok(
   Bool.and(
     Crits.Crit.wf(~Types.Fact, fs, 0n),
     Checks.ValSet.ok(~Types.Fact, ~Coded.Fact.words, fs)
-  ) == True{}: Bool
+  )
+    == True{}: Bool
 }:
   Shared.Bool.and_true_left(
     Bool.and(
@@ -249,9 +250,13 @@ def Node.read_runs(
   k: Nat,
   p: String
 ) -> {
-  Spec.VendNode.read(n, c, k, p) == Nodes.Raw.read(Node.raw(n), c, k, p): Maybe<
-    &2,
-    Maybe<&2, List<&2, U32>>>
+  Spec.VendNode.read(
+    n,
+    c,
+    k,
+    p
+  )
+    == Nodes.Raw.read(Node.raw(n), c, k, p): Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   match n:
     case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
@@ -264,9 +269,13 @@ def Node.view_runs(
   b: Ledgers.Line,
   p: String
 ) -> {
-  Spec.VendNode.view(n, w, b, p) == Nodes.Raw.view(Node.raw(n), w, b, p): Maybe<
-    &2,
-    Maybe<&2, List<&2, U32>>>
+  Spec.VendNode.view(
+    n,
+    w,
+    b,
+    p
+  )
+    == Nodes.Raw.view(Node.raw(n), w, b, p): Maybe<&2, Maybe<&2, List<&2, U32>>>
 }:
   match n:
     case Tuple{Nodes.Raw{name, ws, ms, st, fs, +ps}, ok}:
@@ -304,7 +313,10 @@ def Node.part_runs(
 ) -> {Spec.VendNode.part(n, h) == Nodes.Raw.part(Node.raw(n), h): Maybe<&2, List<&2, U32>>}:
   match n:
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, RParts.Parts{+m}}, +ok}:
-      Parts.Parts.get_runs(Node.kept(Tuple{Nodes.Raw{name, ws, ms, st, fs, RParts.Parts{m}}, ok}), h)
+      Parts.Parts.get_runs(
+        Node.kept(Tuple{Nodes.Raw{name, ws, ms, st, fs, RParts.Parts{m}}, ok}),
+        h
+      )
 
 # What a node does
 # ----------------
@@ -359,10 +371,7 @@ def Node.join(
   %e: {Nodes.Raw.sound(name, _, qs) == True{}: Bool}
   Shared.Bool.and_both(
     Nodes.Raw.set(Facts.Facts.crit(gs), qs),
-    Bool.and(
-      RFacts.Facts.ok(name, Facts.Facts.crit(gs)),
-      Bool.not(RFacts.Trust.reserved(name))
-    )
+    Bool.and(RFacts.Facts.ok(name, Facts.Facts.crit(gs)), Bool.not(RFacts.Trust.reserved(name)))
   )(
     Shared.Bool.and_both(
       Bool.and(
@@ -402,16 +411,7 @@ def Node.resound(
     Facts.Facts.ok(name, Node.set(name, fs, ps, ok)) == True{}: Bool
   } -> {Facts.Facts.ok(name, gs) == True{}: Bool}
 ) -> {Nodes.Raw.sound(name, m, qs) == True{}: Bool}:
-  Node.join(
-    name,
-    m,
-    qs,
-    gs,
-    e,
-    pw,
-    step(Node.sound(name, fs, ps, ok)),
-    Node.free(name, fs, ps, ok)
-  )
+  Node.join(name, m, qs, gs, e, pw, step(Node.sound(name, fs, ps, ok)), Node.free(name, fs, ps, ok))
 
 # the parts ps with the words m, if any, are well formed
 def Node.kept_wf(
@@ -451,9 +451,7 @@ def Node.set_eq(
 def Node.facts_eq(
   n: Spec.VendNode,
   +gs: Facts.Facts()
-) -> {
-  Facts.Facts.crit(gs) == Node.tree(n): RFacts.Plain()
-} -> {Node.facts(n) == gs: Facts.Facts()}:
+) -> {Facts.Facts.crit(gs) == Node.tree(n): RFacts.Plain()} -> {Node.facts(n) == gs: Facts.Facts()}:
   match n:
     case Tuple{Nodes.Raw{+name, ws, ms, st, +fs, +ps}, +ok}:
       e => Node.set_eq(name, fs, ps, ok, gs)(e)
@@ -718,9 +716,13 @@ def Node.asks_facts(
   +i: Ledgers.Id,
   +r: Spec.Request
 ) -> {
-  Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r) == Node.facts(
-    Node.asks(name, ws, ms, st, fs, ps, ok, i, r, True{})
-  ): Facts.Facts()
+  Facts.Facts.ask(
+    name,
+    Node.set(name, fs, ps, ok),
+    i,
+    r
+  )
+    == Node.facts(Node.asks(name, ws, ms, st, fs, ps, ok, i, r, True{})): Facts.Facts()
 }:
   Equal.sym(
     Facts.Facts(),
@@ -741,9 +743,11 @@ def Node.works_facts(
   +ps: RParts.Parts,
   +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
 ) -> {
-  Works.Work.does(Node.set(name, fs, ps, ok), name) == Node.facts(
-    Node.works(name, ws, ms, False{}, fs, ps, ok)
-  ): Facts.Facts()
+  Works.Work.does(
+    Node.set(name, fs, ps, ok),
+    name
+  )
+    == Node.facts(Node.works(name, ws, ms, False{}, fs, ps, ok)): Facts.Facts()
 }:
   Equal.sym(
     Facts.Facts(),
@@ -765,7 +769,8 @@ def Node.syncs_facts(
     Spec.VendNode.name(n),
     Facts.Facts.list(Node.facts(m)),
     Node.facts(n)
-  ) == Node.facts(Spec.VendNode.does(n, Spec.Deed.Sync{m})): Facts.Facts()
+  )
+    == Node.facts(Spec.VendNode.does(n, Spec.Deed.Sync{m})): Facts.Facts()
 }:
   match n m:
     case Tuple{
@@ -1518,10 +1523,22 @@ def Node.asks_wider(
     case False{}:
       Facts.Facts.wider_refl(Node.set(name, fs, ps, ok))
     case True{}:
-      %Node.asks_facts(name, ws, ms, st, fs, ps, ok, i, r): {
-        Facts.Facts.wider(Node.set(name, fs, ps, ok), _) == True{}: Bool
-      }
-      Facts.Facts.take_wider(name, Node.set(name, fs, ps, ok), Types.Fact.Ask{Facts.Facts.asked(Node.set(name, fs, ps, ok), i, r)})
+      %Node.asks_facts(
+        name,
+        ws,
+        ms,
+        st,
+        fs,
+        ps,
+        ok,
+        i,
+        r
+      ): {Facts.Facts.wider(Node.set(name, fs, ps, ok), _) == True{}: Bool}
+      Facts.Facts.take_wider(
+        name,
+        Node.set(name, fs, ps, ok),
+        Types.Fact.Ask{Facts.Facts.asked(Node.set(name, fs, ps, ok), i, r)}
+      )
 
 # the facts of a node that works are wider
 def Node.works_wider(
@@ -1532,14 +1549,25 @@ def Node.works_wider(
   +fs: RFacts.Plain(),
   +ps: RParts.Parts,
   +ok: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
-) -> {Facts.Facts.wider(Node.set(name, fs, ps, ok), Node.facts(Node.works(name, ws, ms, st, fs, ps, ok))) == True{}: Bool}:
+) -> {
+  Facts.Facts.wider(
+    Node.set(name, fs, ps, ok),
+    Node.facts(Node.works(name, ws, ms, st, fs, ps, ok))
+  )
+    == True{}: Bool
+}:
   match st:
     case True{}:
       Facts.Facts.wider_refl(Node.set(name, fs, ps, ok))
     case False{}:
-      %Node.works_facts(name, ws, ms, fs, ps, ok): {
-        Facts.Facts.wider(Node.set(name, fs, ps, ok), _) == True{}: Bool
-      }
+      %Node.works_facts(
+        name,
+        ws,
+        ms,
+        fs,
+        ps,
+        ok
+      ): {Facts.Facts.wider(Node.set(name, fs, ps, ok), _) == True{}: Bool}
       Live.Work.does_wider(name, Node.set(name, fs, ps, ok))
 
 # the facts of a node are wider after any deed
@@ -1573,7 +1601,11 @@ def Node.does_wider(
         Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok},
         Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}
       ): {Facts.Facts.wider(Node.set(name, fs, ps, ok), _) == True{}: Bool}
-      Facts.Facts.take_all_wider(name, Facts.Facts.list(Node.set(name2, fs2, ps2, ok2)), Node.set(name, fs, ps, ok))
+      Facts.Facts.take_all_wider(
+        name,
+        Facts.Facts.list(Node.set(name2, fs2, ps2, ok2)),
+        Node.set(name, fs, ps, ok)
+      )
     case Tuple{Nodes.Raw{+name, +ws, +ms, +st, +fs, +ps}, +ok} Spec.Deed.Mount{+a, +b, +p, +held}:
       Node.asks_wider(
         name,
@@ -1624,13 +1656,13 @@ def Spec.VendNode.sync_joins(n, m, c):
           Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok},
           Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}
         ): {Facts.Facts.holds(_, c) == True{}: Bool}
-        Facts.Facts.take_all_holds(name, Node.set(name2, fs2, ps2, ok2), Node.set(name, fs, ps, ok), c)((
-            %Equal.sym(
-              Facts.Facts(),
-              Facts.Facts.take_all(name, Facts.Facts.list(Node.set(name2, fs2, ps2, ok2)), Node.set(name, fs, ps, ok)),
-              Node.facts(Spec.VendNode.does(Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}, Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}})),
-              Node.syncs_facts(Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}, Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2})
-            ): {Facts.Facts.liars(_) == []: List<&2, String>}
+        Facts.Facts.take_all_holds(
+          name,
+          Node.set(name2, fs2, ps2, ok2),
+          Node.set(name, fs, ps, ok),
+          c
+        )((
+            %Equal.sym(Facts.Facts(), Facts.Facts.take_all(name, Facts.Facts.list(Node.set(name2, fs2, ps2, ok2)), Node.set(name, fs, ps, ok)), Node.facts(Spec.VendNode.does(Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}, Spec.Deed.Sync{Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2}})), Node.syncs_facts(Tuple{Nodes.Raw{name, ws, ms, st, fs, ps}, ok}, Tuple{Nodes.Raw{name2, ws2, ms2, st2, fs2, ps2}, ok2})): {Facts.Facts.liars(_) == []: List<&2, String>}
             hn))(hc)
 
 # hashes that differ in the words of the parts differ in the words of the spec
@@ -1743,21 +1775,34 @@ def Node.asks_works_facts(
   +i: Ledgers.Id,
   +r: Spec.Request
 ) -> {
-  Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name) == Node.facts(
-    Spec.VendNode.does(Node.asks(name, ws, ms, False{}, fs, ps, ok, i, r, True{}), Spec.Deed.Work{})
-  ): Facts.Facts()
+  Works.Work.does(
+    Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r),
+    name
+  )
+    == Node.facts(
+      Spec.VendNode.does(
+        Node.asks(name, ws, ms, False{}, fs, ps, ok, i, r, True{}),
+        Spec.Deed.Work{}
+      )
+    ): Facts.Facts()
 }:
   Equal.sym(
     Facts.Facts(),
-    Node.facts(Spec.VendNode.does(Node.asks(name, ws, ms, False{}, fs, ps, ok, i, r, True{}), Spec.Deed.Work{})),
+    Node.facts(
+      Spec.VendNode.does(
+        Node.asks(name, ws, ms, False{}, fs, ps, ok, i, r, True{}),
+        Spec.Deed.Work{}
+      )
+    ),
     Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name),
     Node.facts_eq(
-      Spec.VendNode.does(Node.asks(name, ws, ms, False{}, fs, ps, ok, i, r, True{}), Spec.Deed.Work{}),
+      Spec.VendNode.does(
+        Node.asks(name, ws, ms, False{}, fs, ps, ok, i, r, True{}),
+        Spec.Deed.Work{}
+      ),
       Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)
     )((
-        %Facts.Facts.ask_crit(name, Node.set(name, fs, ps, ok), i, r): {
-          Facts.Facts.crit(Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)) == RWorks.Work.does(RKnown.Known.none(), _, name): RFacts.Plain()
-        }
+        %Facts.Facts.ask_crit(name, Node.set(name, fs, ps, ok), i, r): {Facts.Facts.crit(Works.Work.does(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)) == RWorks.Work.does(RKnown.Known.none(), _, name): RFacts.Plain()}
         Works.Work.does_crit(Facts.Facts.ask(name, Node.set(name, fs, ps, ok), i, r), name)))
   )
 
@@ -1974,7 +2019,16 @@ def Node.mount_records(
         Bool.not(st)
       )(
         Node.gate_not(st)(hs)
-      )(Live.View.reads_own(name, Node.set(name, fs, ps, ok), Nodes.Mount.id(name, a), b, p, Some{ws}))
+      )(
+        Live.View.reads_own(
+          name,
+          Node.set(name, fs, ps, ok),
+          Nodes.Mount.id(name, a),
+          b,
+          p,
+          Some{ws}
+        )
+      )
 
 def Spec.VendNode.mount_records(n, a, b, p, ws):
   Node.mount_records(n, a, b, p, ws)
@@ -2059,7 +2113,17 @@ def Node.decides_alone(
               hs
             )(
               Node.gate(st, List.contains(~String, ~String.eq, wrs, Spec.Id.writer(i)))(hs)(hw)
-            )(Live.Work.decides(name, Node.set(name, fs, ps, ok), b, k, i, p, ws)(Node.sound(name, fs, ps, ok))(h1)(h2)(h3))
+            )(
+              Live.Work.decides(
+                name,
+                Node.set(name, fs, ps, ok),
+                b,
+                k,
+                i,
+                p,
+                ws
+              )(Node.sound(name, fs, ps, ok))(h1)(h2)(h3)
+            )
           )
         )
       )

@@ -1682,7 +1682,10 @@ def At.of_made(
       Own.cast(
         Maybe<&2, List<&2, Types.Entry>>,
         w => {
-          RAnswers.Reply.id(RLines.Line.at.of(w, j)) == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
+          RAnswers.Reply.id(
+            RLines.Line.at.of(w, j)
+          )
+            == Some{Spec.Reply.Id{i}}: Maybe<&2, Spec.Reply>
         },
         Lines.Store.versions(s, h),
         Some{store},
@@ -2176,7 +2179,9 @@ def Rule.of_some.at(
   p: {
     name == g: String
   }
-    & {Groups.Groups.nodes(r, RLines.Line.root(c), name, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+    & {
+      Groups.Groups.nodes(r, RLines.Line.root(c), name, m) == Some{ns}: Maybe<&2, List<&2, String>>
+    }
 ) -> {
   Some{name} == Some{g}: Maybe<&2, String>
 }
@@ -2356,7 +2361,9 @@ def Rule.at_take.of(
     {
       Groups.Groups.owner(vs, c, m) == Some{g}: Maybe<&2, String>
     }
-      & {Groups.Groups.nodes(vs, RLines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+      & {
+        Groups.Groups.nodes(vs, RLines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>
+      }
   ):
   (+lt, q) = p
   (eo, en) = q
@@ -2455,7 +2462,9 @@ def Rule.at_take(
     {
       Groups.Groups.owner(vs, c, m) == Some{g}: Maybe<&2, String>
     }
-      & {Groups.Groups.nodes(vs, RLines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>}
+      & {
+        Groups.Groups.nodes(vs, RLines.Line.root(c), g, m) == Some{ns}: Maybe<&2, List<&2, String>>
+      }
   ):
   Rule.at_take.of(
     vs,

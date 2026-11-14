@@ -1,14 +1,14 @@
 import Base
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/shared.bend as Shared
+import ../shared/lists.bend as Lists
+import ../spec.bend as Spec
+import ../types.bend as Types
 import ./content.bend as Contents
 import ./facts.bend as Facts
 import ./known.bend as Known
 import ./lines.bend as Lines
 import ./rounds.bend as Rounds
-import ../shared/lists.bend as Lists
-import ../spec.bend as Spec
-import ../types.bend as Types
 
 # Work
 # ----
@@ -152,7 +152,8 @@ def Pins.merge(
 # the pins that the node gives the request r for the line c, of the versions
 # vs, at the era m
 def Pins.for(
-  +kn: Known.Known(), +s: Facts.Plain(),
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
   +c: Ledgers.Line,
   +vs: List<&2, Types.Entry>,
   m: Nat,
@@ -193,7 +194,8 @@ type Open is Data:
 
 # the rule of the next version of the line c, in the state m
 def Work.rule(
-  +kn: Known.Known(), +s: Facts.Plain(),
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
   +c: Ledgers.Line,
   m: Maybe<&2, Lines.State>
 ) -> Maybe<&2, Lines.Rule>:
@@ -237,7 +239,12 @@ def Work.rule.or(
 
 # the next slot of the line c, when the node name is one of the nodes that
 # decide it
-def Work.open(+kn: Known.Known(), +s: Facts.Plain(), +name: String, +c: Ledgers.Line) -> Maybe<&2, Open>:
+def Work.open(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String,
+  +c: Ledgers.Line
+) -> Maybe<&2, Open>:
   +st = Known.Known.state(kn, s, c)
   Work.open.at(name, st, Work.rule.or(Known.Known.ruled(kn, c), kn, s, c, st))
 
@@ -266,7 +273,8 @@ def Work.offer.of(pk: Unit -> Types.Pick, m: Maybe<&2, Rounds.Chance>) -> Maybe<
 # when it is its turn, the votes of the rounds before leave it free, and the
 # request made no version of the line yet
 def Work.offer.at(
-  +kn: Known.Known(), +s: Facts.Plain(),
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
   +name: String,
   +c: Ledgers.Line,
   +a: Types.Ask,
@@ -291,7 +299,8 @@ def Work.offer.at(
 
 # the vote of the node name for the ask a, on the line m that it is for
 def Work.offer.on(
-  +kn: Known.Known(), +s: Facts.Plain(),
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
   +name: String,
   +a: Types.Ask,
   m: Maybe<&2, Ledgers.Line>
@@ -305,7 +314,8 @@ def Work.offer.on(
 # the vote that the node name may cast for the ask a, where all is the facts
 # of s
 def Work.offer(
-  +kn: Known.Known(), +s: Facts.Plain(),
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
   all: List<&2, Types.Fact>,
   +name: String,
   +a: Types.Ask
@@ -316,7 +326,8 @@ def Work.offer(
 # of s
 def Work.ready(
   fs: List<&2, Types.Fact>,
-  +kn: Known.Known(), +s: Facts.Plain(),
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
   +all: List<&2, Types.Fact>,
   +name: String
 ) -> List<&2, Types.Ask>:
@@ -337,7 +348,8 @@ def Work.ready(
 # s
 def Work.propose.of(
   m: Maybe<&2, Types.Ask>,
-  +kn: Known.Known(), +s: Facts.Plain(),
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
   all: List<&2, Types.Fact>,
   +name: String
 ) -> Maybe<&2, Plan>:
@@ -353,7 +365,8 @@ def Work.propose(+kn: Known.Known(), +s: Facts.Plain(), +name: String) -> Maybe<
   +all = Facts.Facts.list(s)
   Work.propose.of(
     Lists.List.top(~Types.Ask, ~Facts.Ask.seq, Work.ready(all, kn, s, all, name)),
-    kn, s,
+    kn,
+    s,
     all,
     name
   )
@@ -379,7 +392,12 @@ def Work.follow.at(
       )
 
 # the vote of the node name at the slot of the fact f, if f is a ballot
-def Work.follow.of(+kn: Known.Known(), +s: Facts.Plain(), +name: String, f: Types.Fact) -> Maybe<&2, Plan>:
+def Work.follow.of(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String,
+  f: Types.Fact
+) -> Maybe<&2, Plan>:
   match f:
     case Types.Fact.Vote{v, Types.Step.At{+c, +k, t}, x}:
       Work.follow.at(s, name, c, k, Work.open(kn, s, name, c))
@@ -395,7 +413,12 @@ def Work.follow.or(m: Maybe<&2, Plan>, rest: Unit -> Maybe<&2, Plan>) -> Maybe<&
       rest(Unit{})
 
 # the first vote that the node name may cast at the slot of a ballot among fs
-def Work.follow(+kn: Known.Known(), +s: Facts.Plain(), +name: String, fs: List<&2, Types.Fact>) -> Maybe<&2, Plan>:
+def Work.follow(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String,
+  fs: List<&2, Types.Fact>
+) -> Maybe<&2, Plan>:
   match fs:
     case Nil{}:
       None{}
@@ -435,7 +458,8 @@ def Work.pass.at(
 # the pass of the node name for the request of the id i, on the line m that
 # it is for
 def Work.pass.on(
-  +kn: Known.Known(), +s: Facts.Plain(),
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
   +name: String,
   i: Ledgers.Id,
   m: Maybe<&2, Ledgers.Line>
@@ -451,7 +475,8 @@ def Work.pass.on(
 # the facts of s
 def Work.pass.of(
   f: Types.Fact,
-  +kn: Known.Known(), +s: Facts.Plain(),
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
   all: List<&2, Types.Fact>,
   +name: String
 ) -> Maybe<&2, Plan>:
@@ -467,7 +492,8 @@ def Work.pass.of(
 # where all is the facts of s
 def Work.pass(
   fs: List<&2, Types.Fact>,
-  +kn: Known.Known(), +s: Facts.Plain(),
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
   +all: List<&2, Types.Fact>,
   +name: String
 ) -> Maybe<&2, Plan>:
@@ -479,7 +505,12 @@ def Work.pass(
 
 # the first pass that the node name may cast at the slot of a fact of s, the
 # facts all
-def Work.pass.all(+all: List<&2, Types.Fact>, +kn: Known.Known(), +s: Facts.Plain(), +name: String) -> Maybe<&2, Plan>:
+def Work.pass.all(
+  +all: List<&2, Types.Fact>,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String
+) -> Maybe<&2, Plan>:
   Work.pass(all, kn, s, all, name)
 
 # the ballot that the node name casts next: the vote that it proposes, else
