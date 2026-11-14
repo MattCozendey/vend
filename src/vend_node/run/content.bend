@@ -387,13 +387,16 @@ def Content.read(
 # ---------------------
 
 # the entry e is right: its state is the state that the facts s give its
-# line, or its content is what a read of the facts s with its fuel gives
+# line, or its content is what a read of the facts s with its fuel gives, or
+# its rule is the rule of the next version of its line in the facts s
 def Kept.ok(+s: Facts.Plain(), e: Knowns.Kept) -> Bool:
   match e:
     case Knowns.Kept{c, st}:
       Knowns.State.fits(Lines.Line.state(s, c), st)
     case Knowns.Held{c, k, d, x}:
       Files.Files.fits(Content.at(d, Knowns.Known.none(), s, c, k), x)
+    case Knowns.Ruled{+c, u}:
+      Knowns.Rule.fits(Knowns.Known.rule.next(Knowns.Known.none(), s, c, Lines.Line.state(s, c)), u)
 
 # the table kn is right for the facts s: each state and each content that it
 # holds is what s gives

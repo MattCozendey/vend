@@ -86,11 +86,11 @@ def Work.offer.on(
 
 # the vote that the node name may cast for the ask a
 def Work.offer(+s: Facts.Facts(), +name: String, +a: Types.Ask) -> Maybe<&2, RWorks.Plan>:
-  RWorks.Work.offer(RKnown.Known.none(), Facts.Facts.crit(s), name, a)
+  RWorks.Work.offer(RKnown.Known.none(), Facts.Facts.crit(s), RFacts.Facts.list(Facts.Facts.crit(s)), name, a)
 
 # the asks among fs that the node name may vote for
 def Work.ready(+s: Facts.Facts(), +name: String, fs: List<&2, Types.Fact>) -> List<&2, Types.Ask>:
-  RWorks.Work.ready(RKnown.Known.none(), Facts.Facts.crit(s), name, fs)
+  RWorks.Work.ready(fs, RKnown.Known.none(), Facts.Facts.crit(s), RFacts.Facts.list(Facts.Facts.crit(s)), name)
 
 # the vote of the node name for the ask m, if any
 def Work.propose.of(
@@ -98,7 +98,7 @@ def Work.propose.of(
   +name: String,
   m: Maybe<&2, Types.Ask>
 ) -> Maybe<&2, RWorks.Plan>:
-  RWorks.Work.propose.of(RKnown.Known.none(), Facts.Facts.crit(s), name, m)
+  RWorks.Work.propose.of(m, RKnown.Known.none(), Facts.Facts.crit(s), RFacts.Facts.list(Facts.Facts.crit(s)), name)
 
 # the vote that the node name proposes: for the ask that it took in last,
 # among those that it may vote for

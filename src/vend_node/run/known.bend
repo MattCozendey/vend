@@ -24,10 +24,12 @@ import ../types.bend as Types
 # A read of a content with at least that fuel takes the files from the table.
 
 # what a node keeps: a line and its state, or a version of a line and its
-# content, which a read with the fuel depth gives
+# content, which a read with the fuel depth gives, or a line and the rule of
+# its next version
 type Kept is Data:
   Kept{line: Ledgers.Line, state: Lines.State}
   Held{line: Ledgers.Line, version: Nat, depth: Nat, files: Files.Files()}
+  Ruled{line: Ledgers.Line, rule: Lines.Rule}
 
 # what a node keeps: the newest entry of a line first; the states before the
 # contents
@@ -52,6 +54,25 @@ def Known.find(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.State>:
       )
     case Con{Held{c2, k, d, x}, rest}:
       Known.find(rest, c)
+    case Con{Ruled{c2, u}, rest}:
+      Known.find(rest, c)
+
+# the rule of the next version of the line c that the table kn holds, if any
+def Known.ruled(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.Rule>:
+  match kn:
+    case Nil{}:
+      None{}
+    case Con{Kept{c2, st}, rest}:
+      Known.ruled(rest, c)
+    case Con{Held{c2, k, d, x}, rest}:
+      Known.ruled(rest, c)
+    case Con{Ruled{c2, u}, rest}:
+      Shared.Bool.when(
+        Maybe<&2, Lines.Rule>,
+        Ledgers.Line.is_eq(c2, c),
+        u2 => Some{u},
+        u2 => Known.ruled(rest, c)
+      )
 
 # the content of version k of the line c that the table kn holds, with the
 # fuel that reads it
@@ -68,6 +89,8 @@ def Known.held(kn: Known(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Kept>:
         u => Some{Held{c2, k2, d, x}},
         u => Known.held(rest, c, k)
       )
+    case Con{Ruled{c2, u}, rest}:
+      Known.held(rest, c, k)
 
 # the files of the entry m, if it is a content that a read with the fuel f
 # gives
@@ -104,6 +127,8 @@ def Known.hold(kn: Known(), e: Kept) -> Known():
       [e]
     case Con{Kept{c, st}, rest}:
       Kept{c, st} <> Known.hold(rest, e)
+    case Con{Ruled{c, u}, rest}:
+      Ruled{c, u} <> Known.hold(rest, e)
     case Con{Held{c, k, d, x}, rest}:
       e <> Held{c, k, d, x} <> rest
 
@@ -116,6 +141,8 @@ def Known.contents(kn: Known()) -> Known():
       Known.contents(rest)
     case Con{Held{c, k, d, x}, rest}:
       Held{c, k, d, x} <> Known.contents(rest)
+    case Con{Ruled{c, u}, rest}:
+      Known.contents(rest)
 
 # the store of the line c
 def Known.root(c: Ledgers.Line) -> Ledgers.Line:
@@ -227,6 +254,20 @@ def Known.rule(
 ) -> Maybe<&2, Lines.Rule>:
   Known.rule.of(Known.find(kn, Known.root(c)), s, c, vs)
 
+# the rule of the next version of the line c in the state m, read through
+# the table kn
+def Known.rule.next(
+  kn: Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  m: Maybe<&2, Lines.State>
+) -> Maybe<&2, Lines.Rule>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Lines.State{vs, k}}:
+      Known.rule(kn, s, c, vs)
+
 # What a node learns
 # ------------------
 
@@ -256,9 +297,32 @@ def Known.learn.of(
 def Known.learn.one(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
   Known.learn.of(kn, s, c, Known.find(kn, c))
 
-# the table kn with the states of the line c and of its store in the facts s
+# the table kn with the rule m, if any, of the next version of the line c
+def Known.rule.put(kn: Known(), c: Ledgers.Line, m: Maybe<&2, Lines.Rule>) -> Known():
+  match m:
+    case None{}:
+      kn
+    case Some{u}:
+      Ruled{c, u} <> kn
+
+# the table kn with the rule of the next version of the line c, after the
+# state that kn holds for c, unless the table holds the rule (old)
+def Known.rule.learn.if(old: Bool, +kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
+  match old:
+    case True{}:
+      kn
+    case False{}:
+      Known.rule.put(kn, c, Known.rule.next(kn, s, c, Known.find(kn, c)))
+
+# the table kn with the rule of the next version of the line c, after the
+# state that kn holds for c
+def Known.rule.learn(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
+  Known.rule.learn.if(Maybe.is_some(&2, Lines.Rule, Known.ruled(kn, c)), kn, s, c)
+
+# the table kn with the states of the line c and of its store in the facts s,
+# and with the rule of the next version of c
 def Known.learn(kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
-  Known.learn.one(Known.learn.one(kn, s, Known.root(c)), s, c)
+  Known.rule.learn(Known.learn.one(Known.learn.one(kn, s, Known.root(c)), s, c), s, c)
 
 # What a vote forgets
 # -------------------
@@ -269,17 +333,19 @@ def Known.hit(c: Ledgers.Line, +c2: Ledgers.Line) -> Bool:
   +c = c
   Bool.or(Ledgers.Line.is_eq(c2, c), Ledgers.Line.is_eq(Known.root(c2), c))
 
-# the entry e before rest, when it is a state that a vote for the line c
-# cannot change
+# the entry e before rest, when it is a state or a rule that a vote for the
+# line c cannot change
 def Known.voted.put(c: Ledgers.Line, e: Kept, rest: Known()) -> Known():
   match e:
     case Kept{+c2, +st}:
       List.filter.put(Kept, Kept{c2, st}, rest, Bool.not(Known.hit(c, c2)))
     case Held{c2, k, d, x}:
       rest
+    case Ruled{+c2, +u}:
+      List.filter.put(Kept, Ruled{c2, u}, rest, Bool.not(Known.hit(c, c2)))
 
-# the table kn after a vote for a slot of the line c: without the states that
-# the vote may change, and without the contents
+# the table kn after a vote for a slot of the line c: without the states and
+# the rules that the vote may change, and without the contents
 def Known.voted(kn: Known(), +c: Ledgers.Line) -> Known():
   match kn:
     case Nil{}:
@@ -311,6 +377,23 @@ def State.same(a: Lines.State, b: Lines.State) -> Bool:
   match a b:
     case Lines.State{v1, k1} Lines.State{v2, k2}:
       Bool.and(Entries.same(v1, v2), Nat.is_eq(k1, k2))
+
+# the rules a and b are the same
+def Rule.same(a: Lines.Rule, b: Lines.Rule) -> Bool:
+  match a b:
+    case Lines.Rule{g1, n1} Lines.Rule{g2, n2}:
+      Bool.and(
+        Shared.Maybe.is_eq(~String, ~String.eq, g1, g2),
+        Shared.List.is_eq(~String, ~String.eq, n1, n2)
+      )
+
+# m is the rule u
+def Rule.fits(m: Maybe<&2, Lines.Rule>, u: Lines.Rule) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{x}:
+      Rule.same(x, u)
 
 # m is the state st
 def State.fits(m: Maybe<&2, Lines.State>, st: Lines.State) -> Bool:
