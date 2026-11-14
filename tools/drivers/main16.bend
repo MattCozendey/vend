@@ -7,6 +7,7 @@ import ./node.bend as Nodes
 import ./run/fast.bend as Fasts
 import ./impl.bend as Impl
 import ./run/known.bend as Known
+import ./types.bend as Types
 
 # Scenario 4: two nodes a and b own one store; each writes on its own branch;
 # a ballot reaches the other node by a Sync. Every 50 writes a node asks for a
@@ -135,6 +136,16 @@ def fb(t: Two) -> Fasts.Fast:
     case Two{a, b}:
       b
 
+# a raw node that holds the facts of the fast node r and a late vote of a
+# voter that owns nothing, for slot 0 of the branch ba
+def ghost.of(r: Nodes.Raw) -> Nodes.Raw:
+  match r:
+    case Nodes.Raw{name, ws, ms, st, fs, ps}:
+      Nodes.Raw{"z", ws, ms, st, Facts.Facts.add(fs, Types.Fact.Vote{"z", Types.Step.At{line("ba"), 0n, 0n}, Types.Cast.Pass{0n}}), ps}
+
+def ghost(r: Fasts.Fast) -> Nodes.Raw:
+  ghost.of(Fasts.Fast.raw(r))
+
 def pend(t: Two) -> Two:
   aska(t, "last", Spec.Request.Write{line("ba"), "zz", words()})
 
@@ -155,7 +166,11 @@ def deed(mode: Nat, +t: Two) -> Nat:
       size(works(1n, sync(fb(t), fa(pend(t)))))
     case 6n:
       size2(store.if(True{}, t, 100000n))
-    case 7n+x:
+    case 7n:
+      size(Fasts.Fast.does(Fasts.Fast.does(fa(t), Nodes.Act.Ask{Ledgers.Id{"w", "s9"}, Spec.Request.Start{["a"]}}), Nodes.Act.Work{}))
+    case 8n:
+      size(Fasts.Fast.does(Fasts.Fast.does(fa(t), Nodes.Act.Sync{ghost(fa(t))}), Nodes.Act.Work{}))
+    case 9n+x:
       String.length(show(Fasts.Fast.answer(fa(t), Spec.Question.Status{line("ba"), Ledgers.Id{"w", "x1"}})))
 
 def deeds(n: Nat, +mode: Nat, +t: Two, acc: Nat) -> Nat:

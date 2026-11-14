@@ -1850,6 +1850,249 @@ def Run.votes(f: Nat, +fs: List<&2, Types.Fact>, +r: Maybe<&2, List<&2, Types.En
       }
       Run.votes(p, fs, r, c, st2, RLines.Line.step.in(fs, r, c, st2))
 
+# the number that a read of a count gives, if any
+def Slot.key_read(m: Maybe<&2, Codes.Read<Nat>>) -> Nat:
+  match m:
+    case None{}:
+      0n
+    case Some{Codes.Read{n, r}}:
+      n
+
+# two slots have the same key exactly when they are the same slot
+def Slot.key_eq(
+  +k: Nat,
+  +k2: Nat
+) -> {Crits.Key.is_eq(RLines.Slot.key(k), RLines.Slot.key(k2)) == Nat.is_eq(k, k2): Bool}:
+  Lists.Bool.by(
+    y => {Crits.Key.is_eq(RLines.Slot.key(k), RLines.Slot.key(k2)) == y: Bool},
+    Nat.is_eq(k, k2),
+    et => (
+      %Shared.Nat.is_eq_sound(k, k2)(et): {Crits.Key.is_eq(RLines.Slot.key(k), RLines.Slot.key(_)) == True{}: Bool}
+      Crits.Key.is_eq_refl(RLines.Slot.key(k))),
+    +ef => Lists.Bool.by(
+      x => {x == False{}: Bool},
+      Crits.Key.is_eq(RLines.Slot.key(k), RLines.Slot.key(k2)),
+      kt => Empty.absurd(
+        {True{} == False{}: Bool},
+        Shared.Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            Nat.is_eq(k, k2),
+            True{},
+            Equal.sym(Bool, Nat.is_eq(k, k2), False{}, ef),
+            (
+              %Equal.sym(Nat, k2, k, Equal.trans(
+                Nat,
+                k2,
+                Slot.key_read(Codes.Code.count.read(Codes.Code.count(k2, []))),
+                k,
+                Equal.sym(
+                  Nat,
+                  Slot.key_read(Codes.Code.count.read(Codes.Code.count(k2, []))),
+                  k2,
+                  Equal.cong(Maybe<&2, Codes.Read<Nat>>, Nat, m => Slot.key_read(m), Codes.Code.count.read(Codes.Code.count(k2, [])), Some{Codes.Read{k2, []}}, Codes.Code.count_read(k2, []))
+                ),
+                Equal.trans(
+                  Nat,
+                  Slot.key_read(Codes.Code.count.read(Codes.Code.count(k2, []))),
+                  Slot.key_read(Codes.Code.count.read(Codes.Code.count(k, []))),
+                  k,
+                  Equal.cong(
+                    List<&2, U32>,
+                    Nat,
+                    l => Slot.key_read(Codes.Code.count.read(l)),
+                    Codes.Code.count(k2, []),
+                    Codes.Code.count(k, []),
+                    Equal.sym(List<&2, U32>, Codes.Code.count(k, []), Codes.Code.count(k2, []), Crits.Key.is_eq_sound(RLines.Slot.key(k), RLines.Slot.key(k2))(kt))
+                  ),
+                  Equal.cong(Maybe<&2, Codes.Read<Nat>>, Nat, m => Slot.key_read(m), Codes.Code.count.read(Codes.Code.count(k, [])), Some{Codes.Read{k, []}}, Codes.Code.count_read(k, []))
+                )
+              )): {Nat.is_eq(k, _) == True{}: Bool}
+              Shared.Nat.is_eq_refl(k))
+          )
+        )
+      ),
+      kf => {==}
+    )
+  )
+
+# the map of the ballots by slot is well formed
+def Slots.wf(
+  fs: List<&2, Types.Fact>,
+  +c: Ledgers.Line
+) -> {Crits.Crit.wf(~List<&2, RRounds.Ballot>, RLines.Slots.of(fs, c), 0n) == True{}: Bool}:
+  match fs:
+    case Nil{}:
+      {==}
+    case Con{Types.Fact.Ask{a}, rest}:
+      Slots.wf(rest, c)
+    case Con{Types.Fact.Vote{v, Types.Step.Broken{}, x}, rest}:
+      Slots.wf(rest, c)
+    case Con{Types.Fact.Vote{+v, Types.Step.At{c2, +k, +t}, +x}, +rest}:
+      Lists.Bool.by(
+        y => {Crits.Crit.wf(~List<&2, RRounds.Ballot>, RLines.Slots.put(y, RLines.Slots.of(rest, c), k, RRounds.Ballot{v, t, x}), 0n) == True{}: Bool},
+        Ledgers.Line.is_eq(c2, c),
+        et => Crits.Crit.upsert_wf(~List<&2, RRounds.Ballot>, ~RLines.Ballots.join, RLines.Slots.of(rest, c), RLines.Slot.key(k), [RRounds.Ballot{v, t, x}])(Slots.wf(rest, c)),
+        ef => Slots.wf(rest, c)
+      )
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# the map of the ballots by slot holds the ballots of each slot, in the
+# order of the facts, as a lookup reads them
+def Slots.lookup_of(
+  fs: List<&2, Types.Fact>,
+  +c: Ledgers.Line,
+  +k: Nat
+) -> {
+  RLines.Slots.or(Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(fs, c), RLines.Slot.key(k)))
+    == RRounds.Slot.ballots(fs, c, k): List<&2, RRounds.Ballot>
+}:
+  match fs:
+    case Nil{}:
+      {==}
+    case Con{Types.Fact.Ask{a}, rest}:
+      Slots.lookup_of(rest, c, k)
+    case Con{Types.Fact.Vote{v, Types.Step.Broken{}, x}, rest}:
+      Slots.lookup_of(rest, c, k)
+    case Con{Types.Fact.Vote{+v, Types.Step.At{+c2, +k2, +t}, +x}, +rest}:
+      Lists.Bool.by(
+        y => {
+          RLines.Slots.or(Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.put(y, RLines.Slots.of(rest, c), k2, RRounds.Ballot{v, t, x}), RLines.Slot.key(k)))
+            == List.filter.put(RRounds.Ballot, RRounds.Ballot{v, t, x}, RRounds.Slot.ballots(rest, c, k), Bool.and(y, Nat.is_eq(k2, k))): List<&2, RRounds.Ballot>
+        },
+        Ledgers.Line.is_eq(c2, c),
+        et => (
+          %Equal.sym(Maybe<&2, List<&2, RRounds.Ballot>>, Crits.Crit.lookup(List<&2, RRounds.Ballot>, Crits.Crit.upsert(~List<&2, RRounds.Ballot>, ~RLines.Ballots.join, RLines.Slots.of(rest, c), RLines.Slot.key(k2), [RRounds.Ballot{v, t, x}]), RLines.Slot.key(k)), Bool.pick(Maybe<&2, List<&2, RRounds.Ballot>>, Crits.Key.is_eq(RLines.Slot.key(k), RLines.Slot.key(k2)), Some{Crits.Crit.merge(~List<&2, RRounds.Ballot>, ~RLines.Ballots.join, Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(rest, c), RLines.Slot.key(k2)), [RRounds.Ballot{v, t, x}])}, Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(rest, c), RLines.Slot.key(k))), Crits.Crit.upsert_lookup(~List<&2, RRounds.Ballot>, ~RLines.Ballots.join, RLines.Slots.of(rest, c), RLines.Slot.key(k2), [RRounds.Ballot{v, t, x}], RLines.Slot.key(k))(Slots.wf(rest, c))): {
+            RLines.Slots.or(_) == List.filter.put(RRounds.Ballot, RRounds.Ballot{v, t, x}, RRounds.Slot.ballots(rest, c, k), Nat.is_eq(k2, k)): List<&2, RRounds.Ballot>
+          }
+          %Equal.sym(Bool, Crits.Key.is_eq(RLines.Slot.key(k), RLines.Slot.key(k2)), Nat.is_eq(k2, k), Equal.trans(Bool, Crits.Key.is_eq(RLines.Slot.key(k), RLines.Slot.key(k2)), Nat.is_eq(k, k2), Nat.is_eq(k2, k), Slot.key_eq(k, k2), Shared.Nat.is_eq_comm(k, k2))): {
+            RLines.Slots.or(Bool.pick(Maybe<&2, List<&2, RRounds.Ballot>>, _, Some{Crits.Crit.merge(~List<&2, RRounds.Ballot>, ~RLines.Ballots.join, Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(rest, c), RLines.Slot.key(k2)), [RRounds.Ballot{v, t, x}])}, Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(rest, c), RLines.Slot.key(k)))) == List.filter.put(RRounds.Ballot, RRounds.Ballot{v, t, x}, RRounds.Slot.ballots(rest, c, k), Nat.is_eq(k2, k)): List<&2, RRounds.Ballot>
+          }
+          Lists.Bool.by(
+            z => {
+              RLines.Slots.or(Bool.pick(Maybe<&2, List<&2, RRounds.Ballot>>, z, Some{Crits.Crit.merge(~List<&2, RRounds.Ballot>, ~RLines.Ballots.join, Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(rest, c), RLines.Slot.key(k2)), [RRounds.Ballot{v, t, x}])}, Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(rest, c), RLines.Slot.key(k)))) == List.filter.put(RRounds.Ballot, RRounds.Ballot{v, t, x}, RRounds.Slot.ballots(rest, c, k), z): List<&2, RRounds.Ballot>
+            },
+            Nat.is_eq(k2, k),
+            ek => (
+              %Equal.sym(Nat, k2, k, Shared.Nat.is_eq_sound(k2, k)(ek)): {
+                RLines.Slots.or(Some{Crits.Crit.merge(~List<&2, RRounds.Ballot>, ~RLines.Ballots.join, Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(rest, c), RLines.Slot.key(_)), [RRounds.Ballot{v, t, x}])}) == RRounds.Ballot{v, t, x} <> RRounds.Slot.ballots(rest, c, k): List<&2, RRounds.Ballot>
+              }
+              Lists.Maybe.by(
+                List<&2, RRounds.Ballot>,
+                m => {RLines.Slots.or(m) == RRounds.Slot.ballots(rest, c, k): List<&2, RRounds.Ballot>} -> {
+                  RLines.Slots.or(Some{Crits.Crit.merge(~List<&2, RRounds.Ballot>, ~RLines.Ballots.join, m, [RRounds.Ballot{v, t, x}])}) == RRounds.Ballot{v, t, x} <> RRounds.Slot.ballots(rest, c, k): List<&2, RRounds.Ballot>
+                },
+                Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(rest, c), RLines.Slot.key(k)),
+                en => h => (
+                  %h: {[RRounds.Ballot{v, t, x}] == RRounds.Ballot{v, t, x} <> _: List<&2, RRounds.Ballot>}
+                  {==}),
+                old => eo => h => (
+                  %h: {RRounds.Ballot{v, t, x} <> old == RRounds.Ballot{v, t, x} <> _: List<&2, RRounds.Ballot>}
+                  {==})
+              )(Slots.lookup_of(rest, c, k))),
+            ef => Slots.lookup_of(rest, c, k)
+          )),
+        ef => Slots.lookup_of(rest, c, k)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# the map of the ballots by slot holds the ballots of each slot, in the
+# order of the facts
+def Slots.get_of(
+  +fs: List<&2, Types.Fact>,
+  +c: Ledgers.Line,
+  +k: Nat
+) -> {RLines.Slots.get(RLines.Slots.of(fs, c), k) == RRounds.Slot.ballots(fs, c, k): List<&2, RRounds.Ballot>}:
+  Equal.trans(
+    List<&2, RRounds.Ballot>,
+    RLines.Slots.get(RLines.Slots.of(fs, c), k),
+    RLines.Slots.or(Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(fs, c), RLines.Slot.key(k))),
+    RRounds.Slot.ballots(fs, c, k),
+    Equal.cong(
+      Maybe<&2, List<&2, RRounds.Ballot>>,
+      List<&2, RRounds.Ballot>,
+      m => RLines.Slots.or(m),
+      Crits.Crit.get(List<&2, RRounds.Ballot>, RLines.Slots.of(fs, c), RLines.Slot.key(k)),
+      Crits.Crit.lookup(List<&2, RRounds.Ballot>, RLines.Slots.of(fs, c), RLines.Slot.key(k)),
+      Crits.Crit.get_lookup(~List<&2, RRounds.Ballot>, RLines.Slots.of(fs, c), RLines.Slot.key(k))(Slots.wf(fs, c))
+    ),
+    Slots.lookup_of(fs, c, k)
+  )
+
+# a step read through the map of the ballots by slot, once the rule u of the
+# slot is known, is the step read from the facts
+def Step.at_ix_eq(
+  +fs: List<&2, Types.Fact>,
+  +c: Ledgers.Line,
+  +st: RLines.State,
+  u: Maybe<&2, RLines.Rule>
+) -> {
+  RLines.Line.step.at.ix(RLines.Slots.of(fs, c), st, u) == RLines.Line.step.at.in(fs, c, st, u): Maybe<&2, RLines.State>
+}:
+  match u:
+    case None{}:
+      {==}
+    case Some{rule}:
+      Equal.cong(
+        List<&2, RRounds.Ballot>,
+        Maybe<&2, RLines.State>,
+        bs => RLines.Line.step.of(st, RRounds.Slot.decided(bs, RLines.Rule.nodes(rule), RLines.State.slot(st))),
+        RLines.Slots.get(RLines.Slots.of(fs, c), RLines.State.slot(st)),
+        RRounds.Slot.ballots(fs, c, RLines.State.slot(st)),
+        Slots.get_of(fs, c, RLines.State.slot(st))
+      )
+
+# a step read through the map of the ballots by slot is the step read from
+# the facts
+def Step.ix_eq(
+  +fs: List<&2, Types.Fact>,
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: RLines.State
+) -> {
+  RLines.Line.step.ix(RLines.Slots.of(fs, c), r, c, st) == RLines.Line.step.in(fs, r, c, st): Maybe<&2, RLines.State>
+}:
+  Step.at_ix_eq(fs, c, st, RLines.Line.rule(r, c, RLines.State.versions(st)))
+
+# a run read through the map of the ballots by slot is the run read from the
+# facts
+def Run.ix_eq(
+  f: Nat,
+  +fs: List<&2, Types.Fact>,
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: RLines.State,
+  m: Maybe<&2, RLines.State>
+) -> {
+  RLines.Line.run.ix(f, RLines.Slots.of(fs, c), r, c, st, m) == RLines.Line.run.in(f, fs, r, c, st, m): RLines.State
+}:
+  match f m:
+    case 0n m:
+      {==}
+    case 1n+p None{}:
+      {==}
+    case 1n+p Some{+st2}:
+      %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.step.ix(RLines.Slots.of(fs, c), r, c, st2), RLines.Line.step.in(fs, r, c, st2), Step.ix_eq(fs, r, c, st2)): {
+        RLines.Line.run.ix(p, RLines.Slots.of(fs, c), r, c, st2, _) == RLines.Line.run.in(p, fs, r, c, st2, RLines.Line.step.in(fs, r, c, st2)): RLines.State
+      }
+      Run.ix_eq(p, fs, r, c, st2, RLines.Line.step.in(fs, r, c, st2))
+
+# a run of a line from st, read from its votes through the map of their
+# ballots by slot, is the run read from its votes
+def Start.ix_eq(
+  +fs: List<&2, Types.Fact>,
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: RLines.State
+) -> {
+  RLines.Line.start.ix(fs, r, c, st) == RLines.Line.start.in(fs, r, c, st): RLines.State
+}:
+  %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.step.ix(RLines.Slots.of(fs, c), r, c, st), RLines.Line.step.in(fs, r, c, st), Step.ix_eq(fs, r, c, st)): {
+    RLines.Line.run.ix(RLines.Line.bound(fs, c), RLines.Slots.of(fs, c), r, c, st, _) == RLines.Line.start.in(fs, r, c, st): RLines.State
+  }
+  Run.ix_eq(RLines.Line.bound(fs, c), fs, r, c, st, RLines.Line.step.in(fs, r, c, st))
+
 # a run of a line from st, read from its votes, is the run from st
 def Start.in_eq(+s: RFacts.Plain(), +r: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +st: RLines.State) -> {
   RLines.Line.start.in(RLines.Line.votes(RFacts.Facts.list(s), c), r, c, st) == RLines.Line.start(s, r, c, st): RLines.State
@@ -1877,23 +2120,44 @@ def Start.in_eq(+s: RFacts.Plain(), +r: Maybe<&2, List<&2, Types.Entry>>, +c: Le
     )
   )
 
-# the state of a branch read from its votes is its state
+# the state of a line from its version 0, read from its votes, is the state
+# from its version 0
+def Line.from_in(
+  +s: RFacts.Plain(),
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  m: Maybe<&2, Types.Entry>
+) -> {
+  RLines.Line.from.ix(RLines.Line.votes(RFacts.Facts.list(s), c), r, c, m) == RLines.Line.from(s, r, c, m): Maybe<&2, RLines.State>
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{+e}:
+      Equal.cong(
+        RLines.State,
+        Maybe<&2, RLines.State>,
+        z => Some{z},
+        RLines.Line.start.ix(RLines.Line.votes(RFacts.Facts.list(s), c), r, c, RLines.State{[e], 1n}),
+        RLines.Line.start(s, r, c, RLines.State{[e], 1n}),
+        Equal.trans(
+          RLines.State,
+          RLines.Line.start.ix(RLines.Line.votes(RFacts.Facts.list(s), c), r, c, RLines.State{[e], 1n}),
+          RLines.Line.start.in(RLines.Line.votes(RFacts.Facts.list(s), c), r, c, RLines.State{[e], 1n}),
+          RLines.Line.start(s, r, c, RLines.State{[e], 1n}),
+          Start.ix_eq(RLines.Line.votes(RFacts.Facts.list(s), c), r, c, RLines.State{[e], 1n}),
+          Start.in_eq(s, r, c, RLines.State{[e], 1n})
+        )
+      )
+
+# the state of a branch, its votes read once, is the state of the branch
 def Branch.state_in(+s: RFacts.Plain(), +c: Ledgers.Line, +rr: List<&2, Types.Entry>) -> {
   RLines.Branch.state.in(RFacts.Facts.list(s), c, rr) == RLines.Branch.state(s, c, Some{rr}): Maybe<&2, RLines.State>
 }:
-  Lists.Maybe.by(
-    Types.Entry,
-    m => {
-      RLines.Branch.state.of(RLines.Line.votes(RFacts.Facts.list(s), c), c, rr, m) == RLines.Line.from(s, Some{rr}, c, m): Maybe<&2, RLines.State>
-    },
-    RLines.Branch.first(rr, c),
-    en => {==},
-    e => ee => Equal.cong(
-      RLines.State,
-      Maybe<&2, RLines.State>,
-      z => Some{z},
-      RLines.Line.start.in(RLines.Line.votes(RFacts.Facts.list(s), c), Some{rr}, c, RLines.State{[e], 1n}),
-      RLines.Line.start(s, Some{rr}, c, RLines.State{[e], 1n}),
-      Start.in_eq(s, Some{rr}, c, RLines.State{[e], 1n})
-    )
-  )
+  Line.from_in(s, Some{rr}, c, RLines.Branch.first(rr, c))
+
+# the state of a store, its votes read once, is the state of the store
+def Store.state_in(+s: RFacts.Plain(), +h: Hashes.Hash) -> {
+  RLines.Store.state.in(RFacts.Facts.list(s), h) == RLines.Store.state(s, h): Maybe<&2, RLines.State>
+}:
+  Line.from_in(s, None{}, Ledgers.Line{h, None{}}, RLines.Store.first(RFacts.Facts.list(s), h))

@@ -1,5 +1,7 @@
 import Base
 import ../../shared/shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/shared/code.bend as Codes
+import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../groups.bend as Groups
@@ -391,6 +393,133 @@ def Line.start.in(
 ) -> State:
   Line.run.in(Line.bound(fs, c), fs, r, c, st, Line.step.in(fs, r, c, st))
 
+# Slots, read from a map of ballots
+# ---------------------------------
+# A run of a line from its votes reads the ballots of each slot once, from a
+# map by slot that one pass over the votes builds, not from all the votes at
+# each slot. seen.bend proves that it is the run over the votes.
+
+# the key of the slot k in a map of ballots
+def Slot.key(k: Nat) -> List<&2, U32>:
+  Codes.Code.count(k, [])
+
+# the ballots old of a slot, with the ballots new before them
+def Ballots.join(
+  old: List<&2, Rounds.Ballot>,
+  new: List<&2, Rounds.Ballot>
+) -> List<&2, Rounds.Ballot>:
+  List.append(&2, Rounds.Ballot, new, old)
+
+# the map m of the ballots of each slot, with the ballot b of the slot k
+# before the others of k, if the ballot is of the line (hit)
+def Slots.put(
+  hit: Bool,
+  +m: Crits.Crit<List<&2, Rounds.Ballot>>,
+  k: Nat,
+  b: Rounds.Ballot
+) -> Crits.Crit<List<&2, Rounds.Ballot>>:
+  match hit:
+    case True{}:
+      Crits.Crit.upsert(~List<&2, Rounds.Ballot>, ~Ballots.join, m, Slot.key(k), [b])
+    case False{}:
+      m
+
+# the ballots of each slot of the line c among the facts fs, in the order of
+# fs, under the key of the slot
+def Slots.of(fs: List<&2, Types.Fact>, +c: Ledgers.Line) -> Crits.Crit<List<&2, Rounds.Ballot>>:
+  match fs:
+    case Nil{}:
+      Crits.Crit.new(List<&2, Rounds.Ballot>)
+    case Con{Types.Fact.Ask{a}, rest}:
+      Slots.of(rest, c)
+    case Con{Types.Fact.Vote{v, Types.Step.Broken{}, x}, rest}:
+      Slots.of(rest, c)
+    case Con{Types.Fact.Vote{v, Types.Step.At{c2, k, t}, x}, rest}:
+      Slots.put(Ledgers.Line.is_eq(c2, c), Slots.of(rest, c), k, Rounds.Ballot{v, t, x})
+
+# the ballots that the map m holds, if any
+def Slots.or(m: Maybe<&2, List<&2, Rounds.Ballot>>) -> List<&2, Rounds.Ballot>:
+  match m:
+    case None{}:
+      []
+    case Some{bs}:
+      bs
+
+# the ballots of the slot k in the map m
+def Slots.get(m: Crits.Crit<List<&2, Rounds.Ballot>>, +k: Nat) -> List<&2, Rounds.Ballot>:
+  Slots.or(Crits.Crit.get(List<&2, Rounds.Ballot>, m, Slot.key(k)))
+
+# the pick that the nodes ds decided for the slot k, its ballots read from
+# the map m
+def Votes.decided.ix(
+  m: Crits.Crit<List<&2, Rounds.Ballot>>,
+  +k: Nat,
+  +ds: List<&2, String>
+) -> Maybe<&2, Types.Pick>:
+  Rounds.Slot.decided(Slots.get(m, k), ds, k)
+
+# the state after the next slot of st, its ballots read from the map m, once
+# the rule u of the slot is known
+def Line.step.at.ix(
+  m: Crits.Crit<List<&2, Rounds.Ballot>>,
+  +st: State,
+  u: Maybe<&2, Rule>
+) -> Maybe<&2, State>:
+  match u:
+    case None{}:
+      None{}
+    case Some{rule}:
+      Line.step.of(st, Votes.decided.ix(m, State.slot(st), Rule.nodes(rule)))
+
+# the state of the line c after the next slot of st, its ballots read from
+# the map m
+def Line.step.ix(
+  m: Crits.Crit<List<&2, Rounds.Ballot>>,
+  r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: State
+) -> Maybe<&2, State>:
+  Line.step.at.ix(m, st, Line.rule(r, c, State.versions(st)))
+
+# the state of the line c after each decided slot from st on, its ballots
+# read from the map m, at most fuel of them; n is the state after the next
+# slot of st, if it is decided
+def Line.run.ix(
+  fuel: Nat,
+  +m: Crits.Crit<List<&2, Rounds.Ballot>>,
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  st: State,
+  n: Maybe<&2, State>
+) -> State:
+  match fuel n:
+    case 0n _:
+      st
+    case 1n+f None{}:
+      st
+    case 1n+f Some{+st2}:
+      Line.run.ix(f, m, r, c, st2, Line.step.ix(m, r, c, st2))
+
+# Line.start.ix, with the bound of the slots and the map m
+def Line.start.of(
+  fuel: Nat,
+  +m: Crits.Crit<List<&2, Rounds.Ballot>>,
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: State
+) -> State:
+  Line.run.ix(fuel, m, r, c, st, Line.step.ix(m, r, c, st))
+
+# the state of the line c after each decided slot from st on, read from the
+# votes fs of c through the map of their ballots by slot
+def Line.start.ix(
+  +fs: List<&2, Types.Fact>,
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: State
+) -> State:
+  Line.start.of(Line.bound(fs, c), Slots.of(fs, c), r, c, st)
+
 # Version 0
 # ---------
 
@@ -428,6 +557,21 @@ def Ask.leads(all: List<&2, Types.Ask>, a: Types.Ask) -> Bool:
 def Store.first(fs: List<&2, Types.Fact>, +h: Hashes.Hash) -> Maybe<&2, Types.Entry>:
   +st = Starts.of(fs, h)
   Store.first.of(Lists.List.pick(~Types.Ask, ~List<&2, Types.Ask>, ~Ask.leads, st, st))
+
+# the request r of the id i, which starts a store or not (start), starts no
+# store that an ask among the facts s starts
+def Request.fresh.if(start: Bool, +s: Facts.Plain(), +i: Ledgers.Id, +r: Spec.Request) -> Bool:
+  match start:
+    case True{}:
+      List.is_empty(&2, Types.Ask, Starts.of(Facts.Facts.list(s), Facts.Start.root(i, r)))
+    case False{}:
+      True{}
+
+# the request r of the id i starts no store that an ask among the facts s
+# starts: a node that takes it in reads each line of a store that s start as
+# before
+def Request.fresh(+s: Facts.Plain(), +i: Ledgers.Id, +r: Spec.Request) -> Bool:
+  Request.fresh.if(Facts.Request.is_start(r), s, i, r)
 
 # the request r makes a group the owner of the line c
 def Request.owns(c: Ledgers.Line, r: Spec.Request) -> Bool:
@@ -509,19 +653,19 @@ def Branch.state(
     case Some{+R}:
       Line.from(s, Some{R}, c, Branch.first(R, c))
 
-# the state of the branch c from its version 0 m, if any, read from its
-# votes vs, once the versions R of its store are known
-def Branch.state.of(
+# the state of the line c from its version 0 m, if any, read from its votes
+# vs, with the versions r of its store (none for a store)
+def Line.from.ix(
   +vs: List<&2, Types.Fact>,
+  +r: Maybe<&2, List<&2, Types.Entry>>,
   +c: Ledgers.Line,
-  +rr: List<&2, Types.Entry>,
   m: Maybe<&2, Types.Entry>
 ) -> Maybe<&2, State>:
   match m:
     case None{}:
       None{}
     case Some{e}:
-      Some{Line.start.in(vs, Some{rr}, c, State{[e], 1n})}
+      Some{Line.start.ix(vs, r, c, State{[e], 1n})}
 
 # the state of the branch c, once the versions R of its store are known, its
 # votes read once from the facts fs: as Branch.state gives it
@@ -530,7 +674,17 @@ def Branch.state.in(
   +c: Ledgers.Line,
   +rr: List<&2, Types.Entry>
 ) -> Maybe<&2, State>:
-  Branch.state.of(Line.votes(fs, c), c, rr, Branch.first(rr, c))
+  Line.from.ix(Line.votes(fs, c), Some{rr}, c, Branch.first(rr, c))
+
+# the state of the store of the root h, its votes read once from the facts
+# fs: as Store.state gives it
+def Store.state.in(+fs: List<&2, Types.Fact>, +h: Hashes.Hash) -> Maybe<&2, State>:
+  Line.from.ix(
+    Line.votes(fs, Ledgers.Line{h, None{}}),
+    None{},
+    Ledgers.Line{h, None{}},
+    Store.first(fs, h)
+  )
 
 # the state of the line c in the facts s (nothing while s does not hold its
 # version 0)

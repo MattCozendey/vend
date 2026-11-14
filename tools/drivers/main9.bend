@@ -330,7 +330,7 @@ def one(mode: Nat, +b: Ledgers.Line, +kn: Known.Known(), +fs: Facts.Plain(), +m:
     case 8n:
       klen(Fasts.Learn.asked(kn, fs, Spec.Request.Write{b, "g", None{}}))
     case 9n:
-      List.length(&2, Types.Fact, Facts.Facts.list(Fasts.Asked.take("a", fs, Facts.Facts.asked(fs, id("q"), Spec.Request.Write{b, "g", None{}}))))
+      List.length(&2, Types.Fact, Facts.Facts.list(Fasts.Asked.take("a", fs, Facts.Facts.asked(fs, id("q"), Spec.Request.Write{b, "g", None{}}), True{})))
     case 10n:
       plen(Works.Work.follow(kn, fs, "a", Facts.Facts.list(fs)))
     case 11n:

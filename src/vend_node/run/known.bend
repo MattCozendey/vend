@@ -1232,9 +1232,29 @@ def Fact.merges(f: Types.Fact) -> Bool:
     case Types.Fact.Ask{Types.Ask{i, n, r}}:
       Request.merges(r)
 
+# the request r makes a fact among those that a work may act on wait no
+# more: a merge, which a request that resolves it waited on, or a start, which
+# gives the lines of its store their versions
+def Request.retests(r: Spec.Request) -> Bool:
+  match r:
+    case Spec.Request.Merge{f, x}:
+      True{}
+    case Spec.Request.Start{os}:
+      True{}
+    case _:
+      False{}
+
+# the fact f is the ask of a merge or of a start
+def Fact.retests(f: Types.Fact) -> Bool:
+  match f:
+    case Types.Fact.Vote{v, st, x}:
+      False{}
+    case Types.Fact.Ask{Types.Ask{i, n, r}}:
+      Request.retests(r)
+
 # the facts fs that a work may act on, with the fact f if a work may act on
-# it in the scene g: when f is the ask of a merge, a request among fs that
-# resolves it may wait no more, so each of fs is tested again
+# it in the scene g: when f is the ask of a merge or of a start, a fact among
+# fs may wait no more, so each of fs is tested again
 def Open.join(
   merges: Bool,
   +fs: List<&2, Types.Fact>,
@@ -1257,7 +1277,7 @@ def Known.shut(+kn: Known()) -> Known():
 def Known.sift.of(m: Maybe<&2, Kept>, +kn: Known(), +s: Facts.Plain(), +f: Types.Fact) -> Known():
   match m:
     case Some{Open{fs, n, tx, mx}}:
-      Known.reopen(kn, Open.join(Fact.merges(f), fs, f, Scene{kn, s}), n, tx, mx)
+      Known.reopen(kn, Open.join(Fact.retests(f), fs, f, Scene{kn, s}), n, tx, mx)
     case _:
       kn
 
@@ -1856,6 +1876,41 @@ def Seen.safe(c: Ledgers.Line, m: Maybe<&2, Seen>, ms: Maybe<&2, Seen>, k: Nat) 
 # changes no other line, as the table kn holds them
 def Known.sound(+kn: Known(), +c: Ledgers.Line, k: Nat) -> Bool:
   Seen.safe(c, Known.seen(kn, c), Known.seen(kn, Known.root(c)), k)
+
+# the state of the line c in the facts s, read again from its votes, with
+# the state ms of its store when c is a branch: none while ms is not known
+def Known.reread(
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  ms: Maybe<&2, Lines.State>
+) -> Maybe<&2, Lines.State>:
+  match c ms:
+    case Ledgers.Line{+h, None{}} ms:
+      Lines.Store.state.in(Facts.Facts.list(s), h)
+    case Ledgers.Line{h, Some{b}} None{}:
+      None{}
+    case Ledgers.Line{+h, Some{+b}} Some{Lines.State{rs, k}}:
+      Known.fresh.at(s, Ledgers.Line{h, Some{b}}, rs, k)
+
+# the facts s give the line c the state m that a node keeps of it, read
+# again with the state ms of its store
+def Known.kept.of(
+  m: Maybe<&2, Seen>,
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  ms: Maybe<&2, Lines.State>
+) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{x}:
+      State.fits(Known.reread(s, c, ms), Seen.state(x))
+
+# the facts s give the line c the state that the table kn holds of it: a
+# ballot for a slot of c that left the state of c as it was leaves each line
+# as it was
+def Known.kept(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Bool:
+  Known.kept.of(Known.seen(kn, c), s, c, Known.find(kn, Known.root(c)))
 
 # the contents of the table kn, when a ballot leaves them as they are (safe),
 # for the facts with the ballot, one more fact; else none

@@ -47,6 +47,40 @@ def Delta.ok(d: Delta) -> Bool:
     case Delta.Vote{name, c, k, n, pk}:
       True{}
 
+# d is no ask that starts the store of the root h
+def Delta.ok.at(d: Delta, +h: Hashes.Hash) -> Bool:
+  match d:
+    case Delta.Ask{name, a}:
+      Bool.not(RFacts.Ask.starts(h, a))
+    case Delta.Vote{name, c, k, n, pk}:
+      True{}
+
+# an ask of a request that starts no store starts no store of the root h
+def Ask.starts_not(
+  +h: Hashes.Hash,
+  a: Types.Ask
+) -> {
+  RFacts.Request.is_start(RLines.Ask.request(a)) == False{}: Bool
+} -> {RFacts.Ask.starts(h, a) == False{}: Bool}:
+  match a:
+    case Types.Ask{+i, k, +r}:
+      e => (
+        %Equal.sym(Bool, RFacts.Request.is_start(r), False{}, e): {Shared.Bool.when(Bool, _, u => Hashes.Hash.is_eq(RFacts.Start.root(i, r), h), u => False{}) == False{}: Bool}
+        {==})
+
+# a d that starts no store starts no store of the root h
+def Delta.ok_at(
+  d: Delta,
+  +h: Hashes.Hash
+) -> {Delta.ok(d) == True{}: Bool} -> {Delta.ok.at(d, h) == True{}: Bool}:
+  match d:
+    case Delta.Ask{name, +a}:
+      ok => (
+        %Equal.sym(Bool, RFacts.Ask.starts(h, a), False{}, Ask.starts_not(h, a)(Shared.Bool.not_true(RFacts.Request.is_start(RLines.Ask.request(a)))(ok))): {Bool.not(_) == True{}: Bool}
+        {==})
+    case Delta.Vote{name, c, k, n, pk}:
+      ok => ok
+
 # d is no vote for the slot j of the line c2
 def Delta.keeps(d: Delta, c2: Ledgers.Line, j: Nat) -> Bool:
   match d:
@@ -218,7 +252,7 @@ def Delta.asks(
   +h: Hashes.Hash,
   +b: Types.Ask
 ) -> {
-  Delta.ok(d) == True{}: Bool
+  Delta.ok.at(d, h) == True{}: Bool
 } -> {
   RFacts.Ask.starts(h, b) == True{}: Bool
 } -> {
@@ -249,11 +283,11 @@ def Delta.asks(
             )
               == Facts.Facts.has(s, Types.Fact.Ask{b}): Bool
           },
-          RFacts.Request.is_start(RLines.Ask.request(a)),
-          Shared.Bool.not_true(RFacts.Request.is_start(RLines.Ask.request(a)))(ok),
+          RFacts.Ask.starts(h, a),
+          Shared.Bool.not_true(RFacts.Ask.starts(h, a))(ok),
           (
-            %Coded.Ask.is_eq_sound(b, a)(et): {RFacts.Request.is_start(RLines.Ask.request(_)) == True{}: Bool}
-            Ask.starts_start(h, b)(st))
+            %Coded.Ask.is_eq_sound(b, a)(et): {RFacts.Ask.starts(h, _) == True{}: Bool}
+            st)
         ),
         ef => e => e
       )(Facts.Facts.take_ask_asks(name, s, a, b))
@@ -306,7 +340,7 @@ def Delta.asks_side(
   +h: Hashes.Hash,
   +b: Types.Ask
 ) -> {
-  Delta.ok(d) == True{}: Bool
+  Delta.ok.at(d, h) == True{}: Bool
 } -> {
   RFacts.Ask.starts(h, b) == True{}: Bool
 } -> {
@@ -1258,7 +1292,7 @@ def Starts.kept.of(
   +f: Bool,
   +h: Hashes.Hash,
   +x: Types.Ask,
-  ok: {Delta.ok(d) == True{}: Bool},
+  ok: {Delta.ok.at(d, h) == True{}: Bool},
   p: {
     List.contains(
       ~Types.Fact,
@@ -1342,7 +1376,7 @@ def Starts.kept(
   +h: Hashes.Hash,
   +x: Types.Ask
 ) -> {
-  Delta.ok(d) == True{}: Bool
+  Delta.ok.at(d, h) == True{}: Bool
 } -> {
   List.contains(
     ~Types.Ask,
@@ -1379,7 +1413,7 @@ def Starts.kept_back(
   +h: Hashes.Hash,
   +x: Types.Ask
 ) -> {
-  Delta.ok(d) == True{}: Bool
+  Delta.ok.at(d, h) == True{}: Bool
 } -> {
   List.contains(
     ~Types.Ask,
@@ -1413,7 +1447,7 @@ def Leads.kept.go(
   +h: Hashes.Hash,
   +x: Types.Ask
 ) -> {
-  Delta.ok(d) == True{}: Bool
+  Delta.ok.at(d, h) == True{}: Bool
 } -> {
   RLines.Ask.leads(RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h), x) == True{}: Bool
 } -> {
@@ -1509,7 +1543,7 @@ def Leads.kept(
   +h: Hashes.Hash,
   +x: Types.Ask
 ) -> {
-  Delta.ok(d) == True{}: Bool
+  Delta.ok.at(d, h) == True{}: Bool
 } -> {
   RLines.Ask.leads(RLines.Starts.of(Facts.Facts.list(Delta.side(d, s, f)), h), x) == True{}: Bool
 } -> {
@@ -1713,7 +1747,7 @@ def First.kept(
   +h: Hashes.Hash,
   +x: Types.Ask
 ) -> {
-  Delta.ok(d) == True{}: Bool
+  Delta.ok.at(d, h) == True{}: Bool
 } -> {
   Lists.List.pick(
     ~Types.Ask,
@@ -1783,7 +1817,7 @@ def First.same(
   +s: Facts.Facts(),
   +h: Hashes.Hash
 ) -> {
-  Delta.ok(d) == True{}: Bool
+  Delta.ok.at(d, h) == True{}: Bool
 } -> {
   RLines.Store.first(
     Facts.Facts.list(Delta.to(d, s)),
@@ -1986,7 +2020,7 @@ def Store.same(
   +s: Facts.Facts(),
   +h: Hashes.Hash
 ) -> {
-  Delta.ok(d) == True{}: Bool
+  Delta.ok.at(d, h) == True{}: Bool
 } -> {
   Delta.spares(d, Ledgers.Line{h, None{}}) == True{}: Bool
 } -> {Lines.Store.state(Delta.to(d, s), h) == Lines.Store.state(s, h): Maybe<&2, RLines.State>}:
@@ -2020,7 +2054,7 @@ def Branch.same(
   +h: Hashes.Hash,
   +b: String
 ) -> {
-  Delta.ok(d) == True{}: Bool
+  Delta.ok.at(d, h) == True{}: Bool
 } -> {
   Delta.spares(d, Ledgers.Line{h, None{}}) == True{}: Bool
 } -> {
@@ -2035,6 +2069,32 @@ def Branch.same(
   ok => sp => sb => (
     %Store.same(d, s, h)(ok)(sp): {Lines.Line.state(Delta.to(d, s), Ledgers.Line{h, Some{b}}) == Lines.Branch.state(s, Ledgers.Line{h, Some{b}}, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)): Maybe<&2, RLines.State>}
     Branch.same.at(d, s, Ledgers.Line{h, Some{b}}, Lines.Store.versions(Delta.to(d, s), h))(sb))
+
+# a node that takes in an ask that starts no store of the line c reads c as
+# before
+def Line.state_started(
+  +name: String,
+  +s: Facts.Facts(),
+  +a: Types.Ask,
+  +c: Ledgers.Line
+) -> {
+  RFacts.Ask.starts(RLines.Line.root(c), a) == False{}: Bool
+} -> {
+  Lines.Line.state(
+    Facts.Facts.take(name, s, Types.Fact.Ask{a}),
+    c
+  )
+    == Lines.Line.state(s, c): Maybe<&2, RLines.State>
+}:
+  match c:
+    case Ledgers.Line{+h, None{}}:
+      e => Store.same(Delta.Ask{name, a}, s, h)(
+        %Equal.sym(Bool, RFacts.Ask.starts(h, a), False{}, e): {Bool.not(_) == True{}: Bool}
+        {==})({==})
+    case Ledgers.Line{+h, Some{+b}}:
+      e => Branch.same(Delta.Ask{name, a}, s, h, b)(
+        %Equal.sym(Bool, RFacts.Ask.starts(h, a), False{}, e): {Bool.not(_) == True{}: Bool}
+        {==})({==})({==})
 
 # a node that takes in an ask that starts no store reads each line as before
 def Line.state_asked(
@@ -2051,15 +2111,45 @@ def Line.state_asked(
   )
     == Lines.Line.state(s, c): Maybe<&2, RLines.State>
 }:
-  match c:
-    case Ledgers.Line{+h, None{}}:
-      e => Store.same(Delta.Ask{name, a}, s, h)(
-        %Equal.sym(Bool, RFacts.Request.is_start(RLines.Ask.request(a)), False{}, e): {Bool.not(_) == True{}: Bool}
-        {==})({==})
-    case Ledgers.Line{+h, Some{+b}}:
-      e => Branch.same(Delta.Ask{name, a}, s, h, b)(
-        %Equal.sym(Bool, RFacts.Request.is_start(RLines.Ask.request(a)), False{}, e): {Bool.not(_) == True{}: Bool}
-        {==})({==})({==})
+  e => Line.state_started(name, s, a, c)(Ask.starts_not(RLines.Line.root(c), a)(e))
+
+# no ask among an empty list of starts
+def Starts.empty_nil(
+  xs: List<&2, Types.Ask>
+) -> {List.is_empty(&2, Types.Ask, xs) == True{}: Bool} -> {xs == []: List<&2, Types.Ask>}:
+  match xs:
+    case Nil{}:
+      e => {==}
+    case Con{x, rest}:
+      e => Empty.absurd({x <> rest == []: List<&2, Types.Ask>}, Shared.Bool.false_ne_true(e))
+
+# Line.state_fresh, with the starts of the store among the facts s, none
+def Line.state_fresh.of(
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  b: Maybe<&2, String>
+) -> {
+  RLines.Starts.of(Facts.Facts.list(s), h) == []: List<&2, Types.Ask>
+} -> {Lines.Line.state(s, Ledgers.Line{h, b}) == None{}: Maybe<&2, RLines.State>}:
+  match b:
+    case None{}:
+      e => (
+        %Equal.sym(List<&2, Types.Ask>, RLines.Starts.of(Facts.Facts.list(s), h), [], e): {RLines.Line.from(Facts.Facts.crit(s), None{}, Ledgers.Line{h, None{}}, RLines.Store.first.of(Lists.List.pick(~Types.Ask, ~List<&2, Types.Ask>, ~RLines.Ask.leads, _, _))) == None{}: Maybe<&2, RLines.State>}
+        {==})
+    case Some{+x}:
+      e => (
+        %Equal.sym(List<&2, Types.Ask>, RLines.Starts.of(Facts.Facts.list(s), h), [], e): {RLines.Branch.state(Facts.Facts.crit(s), Ledgers.Line{h, Some{x}}, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, RLines.Line.from(Facts.Facts.crit(s), None{}, Ledgers.Line{h, None{}}, RLines.Store.first.of(Lists.List.pick(~Types.Ask, ~List<&2, Types.Ask>, ~RLines.Ask.leads, _, _))))) == None{}: Maybe<&2, RLines.State>}
+        {==})
+
+# no line of a store that no ask among the facts s starts has a state
+def Line.state_fresh(
+  +s: Facts.Facts(),
+  +h: Hashes.Hash,
+  b: Maybe<&2, String>
+) -> {
+  List.is_empty(&2, Types.Ask, RLines.Starts.of(Facts.Facts.list(s), h)) == True{}: Bool
+} -> {Lines.Line.state(s, Ledgers.Line{h, b}) == None{}: Maybe<&2, RLines.State>}:
+  e => Line.state_fresh.of(s, h, b)(Starts.empty_nil(RLines.Starts.of(Facts.Facts.list(s), h))(e))
 
 # A vote of a node that decides alone
 # -----------------------------------

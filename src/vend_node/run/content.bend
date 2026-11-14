@@ -1,5 +1,6 @@
 import Base
 import ../../shared/shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/shared/code.bend as Codes
 import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/shared/crit_order.bend as Orders
 import ../../shared/shared/shared/shared/shared.bend as Shared
@@ -266,12 +267,13 @@ def Paths.same(
     case False{}:
       rest(Unit{})
 
-# the paths where the content of version k of the line c may differ from the
-# content of version i of c, through the contents that the table kn holds,
-# each near the version before it: none when the table does not hold one
-def Down.near(
+# Down.near, where q is the code of the line c (Ledgers.Line.code), built
+# once for the walk: each step reads the content of a version under the key
+# that Knowns.Held.key gives it
+def Down.near.go(
   +kn: Knowns.Known(),
   +c: Ledgers.Line,
+  +q: List<&2, U32>,
   +i: Nat,
   k: Nat
 ) -> Maybe<&2, List<&2, String>>:
@@ -283,10 +285,28 @@ def Down.near(
       Paths.same(
         Nat.is_eq(i, 1n+j),
         u => Paths.then(
-          Knowns.Known.near(kn, c, 1n+j, Spec.Point{c, j}),
-          u2 => Down.near(kn, c, i, j)
+          Knowns.Held.near(
+            Knowns.Held.of(
+              Crits.Crit.get(Knowns.Held, Knowns.Known.stock(kn), Codes.Code.count(1n+j, q)),
+              c,
+              1n+j
+            ),
+            Spec.Point{c, j}
+          ),
+          u2 => Down.near.go(kn, c, q, i, j)
         )
       )
+
+# the paths where the content of version k of the line c may differ from the
+# content of version i of c, through the contents that the table kn holds,
+# each near the version before it: none when the table does not hold one
+def Down.near(
+  +kn: Knowns.Known(),
+  +c: Ledgers.Line,
+  +i: Nat,
+  k: Nat
+) -> Maybe<&2, List<&2, String>>:
+  Down.near.go(kn, c, Ledgers.Line.code(c, []), i, k)
 
 # the paths where the content of version k of the line c may differ from the
 # content of version n of the line l, through the contents that the table kn

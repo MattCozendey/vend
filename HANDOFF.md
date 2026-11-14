@@ -95,8 +95,10 @@ Measured, native build, one node, one owner:
   (it needs "no two inputs with one hash").
 - A ballot on a store line keeps the table (every line's state only extends). Two nodes, Group
   + Own: 4.6 ms at 5 writes, 92 ms at 200 (was 13 and 1450); 84 of those 92 ms are its 12 Syncs,
-  linear in the facts of the other node. A Start and a late vote for a decided slot still drop
-  the table. In work.
+  linear in the facts of the other node. A Start keeps the table when no ask starts its store
+  (under 0.2 ms; was 15.6 ms at 50 writes); a ballot that leaves its line as it was (a late vote)
+  keeps it too. Still linear: the check that no ask starts the store, and the re-read of a line
+  after a late vote. In work.
 
 ## Lint
 

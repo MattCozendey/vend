@@ -152,6 +152,69 @@ def Table.moved(
     x
   )
 
+# the table kn after the ballot f for the slot k of the line c, where s is
+# the facts with the ballot, as Table.moved leaves it
+def Table.move(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +f: Types.Fact
+) -> Known.Known():
+  Table.moved(
+    kn,
+    s,
+    c,
+    k,
+    Known.Known.walk(kn, f),
+    Nat.max(Facts.Seq.of(f), Known.Shelf.top(Known.Known.shelf(kn))),
+    Known.Shelf.tops(Known.Known.shelf(kn)),
+    Known.Shelf.merges(Known.Known.shelf(kn))
+  )
+
+# the table kn after the ballot f for the slot k of the line c, where s is
+# the facts with the ballot: when the facts s give c the state that kn held
+# of it (kept), each line keeps its state and each content stays, and only
+# the facts that a work may act on are read again; else as Table.move
+# leaves it
+def Table.kept(
+  kept: Bool,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +f: Types.Fact
+) -> Known.Known():
+  match kept:
+    case True{}:
+      Known.Known.moved(
+        Known.Known.shut(kn),
+        s,
+        Known.Known.walk(kn, f),
+        Nat.max(Facts.Seq.of(f), Known.Shelf.top(Known.Known.shelf(kn))),
+        Known.Shelf.tops(Known.Known.shelf(kn)),
+        Known.Shelf.merges(Known.Known.shelf(kn))
+      )
+    case False{}:
+      Table.move(kn, s, c, k, f)
+
+# the table kn after the ballot f for the slot k of the line c, where s is
+# the facts with the ballot: as Table.move leaves it when the ballot only
+# continues the versions of each line (sound); else as Table.kept leaves it
+def Table.voted.at(
+  sound: Bool,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +f: Types.Fact
+) -> Known.Known():
+  match sound:
+    case True{}:
+      Table.move(kn, s, c, k, f)
+    case False{}:
+      Table.kept(Known.Known.kept(kn, s, c), kn, s, c, k, f)
+
 # the table kn after the ballot f is cast at the step st, where s is the
 # facts with the ballot: without the states that a vote for the line of st
 # may change, with the state of that line continued from its known state,
@@ -169,21 +232,17 @@ def Table.voted(
     case Types.Step.Broken{}:
       Known.Known.none()
     case Types.Step.At{+c, +k, t}:
-      Table.moved(
-        kn,
-        s,
-        c,
-        k,
-        Known.Known.walk(kn, f),
-        Nat.max(Facts.Seq.of(f), Known.Shelf.top(Known.Known.shelf(kn))),
-        Known.Shelf.tops(Known.Known.shelf(kn)),
-        Known.Shelf.merges(Known.Known.shelf(kn))
-      )
+      Table.voted.at(Known.Known.sound(kn, c, k), kn, s, c, k, f)
 
-# the table kn after the node takes in the request r: no state if r starts a
-# store, else as before (a request that starts no store changes no state)
-def Table.asked(kn: Known.Known(), r: Spec.Request) -> Known.Known():
-  Shared.Bool.when(Known.Known(), Facts.Request.is_start(r), u => Known.Known.none(), u => kn)
+# the table kn after the node takes in a request: as before when the request
+# starts no store that the facts start already (fresh), which changes no
+# state that the table holds; else no state
+def Table.asked(kn: Known.Known(), fresh: Bool) -> Known.Known():
+  match fresh:
+    case True{}:
+      kn
+    case False{}:
+      Known.Known.none()
 
 # What a fast node takes in
 # -------------------------
@@ -195,28 +254,23 @@ def Asked.ask(kn: Known.Known(), s: Facts.Plain(), i: Ledgers.Id, r: Spec.Reques
   Types.Ask{i, 1n+Known.Known.peak(kn, s), r}
 
 # the facts s after the node name takes in the ask a, as Facts.Facts.take
-# gives them: the ask of a request that starts no store collides with no
-# ask, so no fact is read for a second start
-def Asked.take(+name: String, +s: Facts.Plain(), +a: Types.Ask) -> Facts.Plain():
-  Shared.Bool.when(
-    Facts.Plain(),
-    Facts.Request.is_start(Lines.Ask.request(a)),
-    u => Facts.Facts.take(name, s, Types.Fact.Ask{a}),
-    u => Facts.Facts.add(s, Types.Fact.Ask{a})
-  )
+# gives them: a fresh ask (Lines.Request.fresh) collides with no ask, so no
+# fact is read for a second start
+def Asked.take(+name: String, +s: Facts.Plain(), +a: Types.Ask, fresh: Bool) -> Facts.Plain():
+  match fresh:
+    case True{}:
+      Facts.Facts.add(s, Types.Fact.Ask{a})
+    case False{}:
+      Facts.Facts.take(name, s, Types.Fact.Ask{a})
 
-# the ask a, as a fact that joins the facts of a node and leaves each line
-# as it is: when the node takes it in (go), and it starts no store
+# the ask a, as a fact that joins the facts of a node: when the node takes
+# it in (go)
 def Asked.fact(+a: Types.Ask, go: Bool) -> Maybe<&2, Types.Fact>:
   match go:
     case False{}:
       None{}
     case True{}:
-      Shared.Maybe.when(
-        Types.Fact,
-        Bool.not(Facts.Request.is_start(Lines.Ask.request(a))),
-        u => Some{Types.Fact.Ask{a}}
-      )
+      Some{Types.Fact.Ask{a}}
 
 # the table kn, when the fact m, if any, joins the facts and leaves each
 # line as it is; s is the facts with it
@@ -256,8 +310,18 @@ def Fast.asked(
 ) -> Fast:
   Fast{r, Table.asks(kn, Nodes.Raw.facts(r), read, q, m)}
 
+# the fast node of the state r, after it took in the request q, with the
+# table kn, where the fact m, if any, joins the facts that a work may act on
+def Fast.asked.to(
+  +r: Nodes.Raw,
+  +kn: Known.Known(),
+  q: Spec.Request,
+  m: Maybe<&2, Types.Fact>
+) -> Fast:
+  Fast.asked(r, kn, Table.read(kn), q, m)
+
 # the state after the node takes in the ask a, when it may (go), as
-# Nodes.Raw.asks gives it
+# Nodes.Raw.asks gives it; the ask is fresh or not
 def Fast.asks(
   +name: String,
   ws: List<&2, String>,
@@ -266,7 +330,8 @@ def Fast.asks(
   fs: Facts.Plain(),
   ps: Parts.Parts,
   +a: Types.Ask,
-  go: Bool
+  go: Bool,
+  fresh: Bool
 ) -> Nodes.Raw:
   match go:
     case False{}:
@@ -277,13 +342,14 @@ def Fast.asks(
         ws,
         ms,
         st,
-        Asked.take(name, fs, a),
+        Asked.take(name, fs, a, fresh),
         Nodes.Kept.with(ps, Nodes.Request.content(Lines.Ask.request(a)))
       }
 
 # the fast node after the node takes in the ask a, when it may (go), with
-# the table kn: it learns what a work reads for the request q, if the table
-# holds what a work reads, and a work may act on the ask
+# the table kn, which it keeps when the ask is fresh: it learns what a work
+# reads for the request q, if the table holds what a work reads, and a work
+# may act on the ask
 def Fast.asks.to(
   name: String,
   ws: List<&2, String>,
@@ -291,12 +357,18 @@ def Fast.asks.to(
   st: Bool,
   fs: Facts.Plain(),
   ps: Parts.Parts,
-  +kn: Known.Known(),
+  kn: Known.Known(),
   +a: Types.Ask,
   q: Spec.Request,
-  +go: Bool
+  +go: Bool,
+  +fresh: Bool
 ) -> Fast:
-  Fast.asked(Fast.asks(name, ws, ms, st, fs, ps, a, go), kn, Table.read(kn), q, Asked.fact(a, go))
+  Fast.asked.to(
+    Fast.asks(name, ws, ms, st, fs, ps, a, go, fresh),
+    Table.asked(kn, fresh),
+    q,
+    Asked.fact(a, go)
+  )
 
 # What a fast node casts
 # ----------------------
@@ -507,21 +579,26 @@ def Sync.vote(
     )
   )
 
-# the facts s2, which hold the ask a of a request that starts no store, and
-# the table that the ask leaves of kn
+# the facts s2, which hold the ask a, and the table that the ask leaves of
+# kn
 def Sync.ask.to(+s2: Facts.Plain(), +kn: Known.Known(), +a: Types.Ask) -> Taken:
   Taken{s2, Table.asks(kn, s2, Table.read(kn), Lines.Ask.request(a), Some{Types.Fact.Ask{a}})}
 
+# Sync.ask, where the ask a is fresh or not
+def Sync.ask.of(
+  +name: String,
+  +s: Facts.Plain(),
+  kn: Known.Known(),
+  +a: Types.Ask,
+  +fresh: Bool
+) -> Taken:
+  Sync.ask.to(Asked.take(name, s, a, fresh), Table.asked(kn, fresh), a)
+
 # what the node name, with the facts s and the table kn, has after it takes
 # in the ask a, which s does not hold: as Facts.Facts.take gives the facts;
-# a request that starts a store leaves no table
+# a request that starts a store that s start already leaves no table
 def Sync.ask(+name: String, +s: Facts.Plain(), kn: Known.Known(), +a: Types.Ask) -> Taken:
-  Shared.Bool.when(
-    Taken,
-    Facts.Request.is_start(Lines.Ask.request(a)),
-    u => Taken{Facts.Facts.take(name, s, Types.Fact.Ask{a}), Known.Known.none()},
-    u => Sync.ask.to(Facts.Facts.add(s, Types.Fact.Ask{a}), kn, a)
-  )
+  Sync.ask.of(name, s, kn, a, Lines.Request.fresh(s, Lines.Ask.id(a), Lines.Ask.request(a)))
 
 # what the node name, with the facts s and the table kn, has after it takes
 # in the fact f, which s does not hold
@@ -596,10 +673,11 @@ def Fast.does(f: Fast, a: Nodes.Act) -> Fast:
         st,
         fs,
         ps,
-        Table.asked(kn, q),
+        kn,
         Asked.ask(kn, fs, i, q),
         q,
-        Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i)))
+        Bool.and(Bool.not(st), List.contains(~String, ~String.eq, ws, Spec.Id.writer(i))),
+        Lines.Request.fresh(fs, i, q)
       )
     case Fast{
       Nodes.Raw{+name, ws, ms, st, fs, ps},
@@ -624,7 +702,8 @@ def Fast.does(f: Fast, a: Nodes.Act) -> Fast:
         kn,
         Asked.ask(kn, fs, Nodes.Mount.id(name, a), Spec.Request.Write{b, p, Some{held}}),
         Spec.Request.Write{b, p, None{}},
-        Bool.not(st)
+        Bool.not(st),
+        True{}
       )
     case Fast{r, kn} Nodes.Act.Unmount{a}:
       Fast{Nodes.Raw.does(r, Nodes.Act.Unmount{a}), kn}
