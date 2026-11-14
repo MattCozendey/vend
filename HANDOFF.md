@@ -48,8 +48,13 @@ Measured, native build, one node, one owner:
   version and the rule of each line, in a table. It is the same code with the table as a
   parameter; `known.bend` and `fast.bend` prove that it does and answers what `Raw` does. 80
   writes take 0.25 s, 320 take 6 s; a read of the newest version is one lookup.
-- In work: indexes, so that a deed costs about the size of its change (Work still scans all asks,
-  an ask scans all facts).
+- Indexes, part 1: an ask without a collision scan, one cheap test for "the node holds a ballot
+  at this step", the ids of the versions of a line in the table, a flag for "the table holds what
+  Work reads". 320 writes take 0.84 s, 640 take 3.4 s, 1280 take 15 s. At 640: an ask 0.44 ms, a
+  view 1.2 ms, an idle Work 11 ms.
+- Still linear in the history: Work walks all facts (an open-facts list needs a law of the order
+  of `Crit.entries`), a cast reads `Line.bound` and `Slot.ballots` from the facts, the table is an
+  association list. In work.
 
 ## Lint
 

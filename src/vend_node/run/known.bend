@@ -35,7 +35,7 @@ type Kept is Data:
   Kept{line: Ledgers.Line, state: Lines.State}
   Held{line: Ledgers.Line, version: Nat, depth: Nat, files: Files.Files()}
   Ruled{line: Ledgers.Line, rule: Lines.Rule}
-  Made{line: Ledgers.Line, ids: Crits.Crit<Unit>}
+  Made{line: Ledgers.Line, ids: Crits.Crit<List<&2, Ledgers.Id>>}
 
 # what a node keeps: the newest entry of a line first; the states before the
 # contents
@@ -163,14 +163,52 @@ def Known.contents(kn: Known()) -> Known():
 # Known ids
 # ---------
 
-# the ids of the requests that made the versions of a line: a set of their
-# keys
+# the ids of the requests that made the versions of a line, as a set: a map
+# from a short key (Id.key) to the ids of that key
 def Ids() -> Data:
-  Crits.Crit<Unit>
+  Crits.Crit<List<&2, Ledgers.Id>>
 
-# the key of the id i
+# the number h, mixed with the characters of t
+def Id.mix(t: String, h: U32) -> U32:
+  match t:
+    case SNil{}:
+      h
+    case SCon{Chr{x}, rest}:
+      Id.mix(rest, ((h * 31) + x : U32))
+
+# a short key of the id i: one word; ids of one key share an entry of a set
 def Id.key(i: Ledgers.Id) -> List<&2, U32>:
-  Ledgers.Id.code(i, [])
+  match i:
+    case Ledgers.Id{w, q}:
+      [Id.mix(q, Id.mix(w, 0))]
+
+# the ids new, then the ids old
+def Ids.join(old: List<&2, Ledgers.Id>, new: List<&2, Ledgers.Id>) -> List<&2, Ledgers.Id>:
+  List.append(&2, Ledgers.Id, new, old)
+
+# the id i is among the ids b
+def Ids.holds(b: List<&2, Ledgers.Id>, +i: Ledgers.Id) -> Bool:
+  match b:
+    case Nil{}:
+      False{}
+    case Con{j, rest}:
+      List.any.if(u => Ids.holds(rest, i), Ledgers.Id.is_eq(j, i))
+
+# the id i is among the ids m, if any
+def Ids.has.of(m: Maybe<&2, List<&2, Ledgers.Id>>, i: Ledgers.Id) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{b}:
+      Ids.holds(b, i)
+
+# the set x holds the id i
+def Ids.has(x: Crits.Crit<List<&2, Ledgers.Id>>, +i: Ledgers.Id) -> Bool:
+  Ids.has.of(Crits.Crit.get(List<&2, Ledgers.Id>, x, Id.key(i)), i)
+
+# the set acc with the id i
+def Ids.put(+acc: Ids(), +i: Ledgers.Id) -> Ids():
+  Crits.Crit.upsert(~List<&2, Ledgers.Id>, ~Ids.join, acc, Id.key(i), [i])
 
 # the set acc with the id of each of the versions vs
 def Ids.go(vs: List<&2, Types.Entry>, acc: Ids()) -> Ids():
@@ -178,11 +216,11 @@ def Ids.go(vs: List<&2, Types.Entry>, acc: Ids()) -> Ids():
     case Nil{}:
       acc
     case Con{e, rest}:
-      Ids.go(rest, Crits.Crit.set(~Unit, acc, Id.key(Lines.Entry.id(e)), Unit{}))
+      Ids.go(rest, Ids.put(acc, Lines.Entry.id(e)))
 
 # the ids of the versions vs
 def Ids.of(vs: List<&2, Types.Entry>) -> Ids():
-  Ids.go(vs, Crits.Crit.new(Unit))
+  Ids.go(vs, Crits.Crit.new(List<&2, Ledgers.Id>))
 
 # ys without as many of its first items as xs has
 def Entries.past(xs: List<&2, Types.Entry>, ys: List<&2, Types.Entry>) -> List<&2, Types.Entry>:
@@ -220,7 +258,7 @@ def Made.in(m: Maybe<&2, Ids()>, vs: List<&2, Types.Entry>, i: Ledgers.Id) -> Bo
     case None{}:
       Shared.List.some(~Types.Entry, ~Ledgers.Id, ~Lines.Entry.is_of, vs, i)
     case Some{x}:
-      Crits.Crit.has(Unit, x, Id.key(i))
+      Ids.has(x, i)
 
 # the request of the id i made one of the versions vs of the line c, read
 # through the table kn
@@ -514,9 +552,9 @@ def State.fits(m: Maybe<&2, Lines.State>, st: Lines.State) -> Bool:
     case Some{x}:
       State.same(x, st)
 
-# a and b are the same
-def Unit.same(a: Unit, b: Unit) -> Bool:
-  True{}
+# the ids a and b are the same
+def Bucket.same(a: List<&2, Ledgers.Id>, b: List<&2, Ledgers.Id>) -> Bool:
+  Shared.List.is_eq(~Ledgers.Id, ~Ledgers.Id.is_eq, a, b)
 
 # the sets a and b are the same: key by key, in the same shape
 def Ids.same(a: Ids(), b: Ids()) -> Bool:
@@ -524,14 +562,14 @@ def Ids.same(a: Ids(), b: Ids()) -> Bool:
     case Crits.Crit.Tip{} Crits.Crit.Tip{}:
       True{}
     case Crits.Crit.Leaf{k1, v1} Crits.Crit.Leaf{k2, v2}:
-      Bool.and(Crits.Key.is_eq(k1, k2), Unit.same(v1, v2))
+      Bool.and(Crits.Key.is_eq(k1, k2), Bucket.same(v1, v2))
     case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
       Bool.and(
         Crits.Key.is_eq(r1, r2),
         Bool.and(
           Nat.is_eq(p1, p2),
           Bool.and(
-            Shared.Maybe.is_eq(~Unit, ~Unit.same, e1, e2),
+            Shared.Maybe.is_eq(~List<&2, Ledgers.Id>, ~Bucket.same, e1, e2),
             Bool.and(Ids.same(z1, z2), Ids.same(o1, o2))
           )
         )
