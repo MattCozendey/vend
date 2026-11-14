@@ -33,8 +33,13 @@ of work". These are the decisions.
    and add a second trust break. The storage and wire code will keep one copy of a request for the
    votes that name it, when IO is built.
 6. Lint: the findings left in code that runs get a lemma each, after decision 2.
-7. `Drop` cannot drop the words of a write: the spec makes a request a change that a node holds for
-   good. To look at last, with the spec.
+7. `Drop` lets go of parts only (`Parts.only` of what the node reads), never of the words of a
+   write. The spec forces this: a `Change` is a request with its words, `keeps` holds it for good,
+   and `holds` is exact (it tells two writes with different words apart), so a node must keep
+   enough to rebuild the words. To drop them, the spec would have to state `holds` of a write over
+   the hash of its words; then every law that reads words needs "nobody finds two inputs with one
+   SHA-256" as a premise. That is a change of `spec.bend`: yours to make. In memory the words are
+   one value shared by the fact and the part; the storage code will keep one copy by hash.
 
 ## Speed
 
