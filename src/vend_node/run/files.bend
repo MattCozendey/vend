@@ -2,6 +2,7 @@ import Base
 import ../../shared/shared/shared/shared/code.bend as Codes
 import ../../shared/shared/shared/shared/crit.bend as Crits
 import ../../shared/shared/shared/shared/hash.bend as Hashes
+import ../../shared/shared/shared/shared/shared.bend as Shared
 
 # Files
 # -----
@@ -90,3 +91,44 @@ def Files.code(t: Files) -> List<&2, U32>:
 # the hash of t: the SHA-256 of its code
 def Files.hash(t: Files) -> Hashes.Hash:
   Hashes.Sha.hash(Files.code(t))
+
+# the files a and b are the same: their paths and their words
+def Files.Item.same(a: Files.Item, b: Files.Item) -> Bool:
+  match a b:
+    case Files.Item{p, ws} Files.Item{q, vs}:
+      Bool.and(String.eq(p, q), Crits.Key.is_eq(ws, vs))
+
+# the maps a and b are the same: entry by entry, in the same shape
+def Files.Crit.same(a: Crits.Crit<Files.Item>, b: Crits.Crit<Files.Item>) -> Bool:
+  match a b:
+    case Crits.Crit.Tip{} Crits.Crit.Tip{}:
+      True{}
+    case Crits.Crit.Leaf{k1, v1} Crits.Crit.Leaf{k2, v2}:
+      Bool.and(Crits.Key.is_eq(k1, k2), Files.Item.same(v1, v2))
+    case Crits.Crit.Fork{r1, p1, e1, z1, o1} Crits.Crit.Fork{r2, p2, e2, z2, o2}:
+      Bool.and(
+        Crits.Key.is_eq(r1, r2),
+        Bool.and(
+          Nat.is_eq(p1, p2),
+          Bool.and(
+            Shared.Maybe.is_eq(~Files.Item, ~Files.Item.same, e1, e2),
+            Bool.and(Files.Crit.same(z1, z2), Files.Crit.same(o1, o2))
+          )
+        )
+      )
+    case _ _:
+      False{}
+
+# the contents a and b are the same
+def Files.same(a: Files, b: Files) -> Bool:
+  match a b:
+    case Files{x} Files{y}:
+      Files.Crit.same(x, y)
+
+# m is the content x
+def Files.fits(m: Maybe<&2, Files>, x: Files) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{y}:
+      Files.same(y, x)

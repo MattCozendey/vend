@@ -2,7 +2,7 @@ import Base
 import ../../shared/shared/ledger.bend as Ledgers
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ./facts.bend as Facts
-import ./known.bend as Known
+import ./known.bend as Knowns
 import ./lines.bend as Lines
 import ./files.bend as Files
 import ../shared/format.bend as Formats
@@ -86,12 +86,12 @@ def Way.hop.of(c: Ledgers.Line, k: Nat, +w: Spec.Point, m: Maybe<&2, Types.Entry
       )
 
 # the point w is reached in one hop from version k of the line c
-def Way.hop(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat, w: Spec.Point) -> Bool:
-  Way.hop.of(c, k, w, Known.Known.at(kn, s, c, k))
+def Way.hop(+kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat, w: Spec.Point) -> Bool:
+  Way.hop.of(c, k, w, Knowns.Known.at(kn, s, c, k))
 
 # ws is a way from version k of the line c back to the point a
 def Way.ok(
-  +kn: Known.Known(),
+  +kn: Knowns.Known(),
   +s: Facts.Plain(),
   +a: Spec.Point,
   ws: List<&2, Spec.Point>,
@@ -107,7 +107,7 @@ def Way.ok(
 # the ways ours and theirs lead to the base m, if any, from version j of the
 # line c and from the point t
 def Merge.fits.of(
-  +kn: Known.Known(),
+  +kn: Knowns.Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   +j: Nat,
@@ -137,7 +137,7 @@ def Entry.theirs(e: Types.Entry) -> List<&2, Spec.Point>:
 
 # the entry e, version 1+j of the line c, pins a base that both merged
 # versions come from, or none
-def Merge.fits(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +j: Nat, +e: Types.Entry) -> Bool:
+def Merge.fits(+kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +j: Nat, +e: Types.Entry) -> Bool:
   Merge.fits.of(kn, s, c, j, Entry.base(e), Entry.ours(e), Entry.theirs(e), Point.or(c, Entry.takes(e)))
 
 # Merges
@@ -305,18 +305,30 @@ def Entry.based(c: Ledgers.Line, m: Maybe<&2, Types.Entry>) -> Spec.Point:
       Point.or(c, Entry.base(e))
 
 # the merge that the entry m, if any, is fits
-def Entry.fits(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +j: Nat, m: Maybe<&2, Types.Entry>) -> Bool:
+def Entry.fits(+kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +j: Nat, m: Maybe<&2, Types.Entry>) -> Bool:
   match m:
     case None{}:
       False{}
     case Some{e}:
       Merge.fits(kn, s, c, j, e)
 
+# the content m, or else the one that rest gives
+def Content.or(
+  m: Maybe<&2, Files.Files()>,
+  rest: Unit -> Maybe<&2, Files.Files()>
+) -> Maybe<&2, Files.Files()>:
+  match m:
+    case Some{x}:
+      Some{x}
+    case None{}:
+      rest(Unit{})
+
 # the content of version k of the line c in the facts s, read through at most
-# fuel versions (nothing while the node does not hold enough)
+# fuel versions (nothing while the node does not hold enough); a content that
+# the table kn holds is not read again
 def Content.at(
   +fuel: Nat,
-  +kn: Known.Known(),
+  +kn: Knowns.Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   +k: Nat
@@ -325,22 +337,33 @@ def Content.at(
     case 0n _:
       None{}
     case 1n+f 0n:
-      Content.first(Known.Known.at(kn, s, c, 0n))
+      Content.first(Knowns.Known.at(kn, s, c, 0n))
     case 1n+f 1n+j:
-      +e = Known.Known.at(kn, s, c, 1n+j)
+      +e = Knowns.Known.at(kn, s, c, 1n+j)
       +t = Entry.taken(c, e)
       +a = Entry.based(c, e)
       Content.next(
         e,
         Entry.fits(kn, s, c, j, e),
-        Content.at(f, kn, s, c, j),
-        Content.at(f, kn, s, Spec.Point.line(t), Spec.Point.n(t)),
-        Content.at(f, kn, s, Spec.Point.line(a), Spec.Point.n(a))
+        Content.or(Knowns.Known.files(kn, c, j, f), u => Content.at(f, kn, s, c, j)),
+        Content.or(
+          Knowns.Known.files(kn, Spec.Point.line(t), Spec.Point.n(t), f),
+          u => Content.at(f, kn, s, Spec.Point.line(t), Spec.Point.n(t))
+        ),
+        Content.or(
+          Knowns.Known.files(kn, Spec.Point.line(a), Spec.Point.n(a), f),
+          u => Content.at(f, kn, s, Spec.Point.line(a), Spec.Point.n(a))
+        )
       )
 
+# the content of version k of the line c in the facts s, read with the fuel g
+# unless the table kn holds it
+def Content.from(+g: Nat, +kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Files.Files()>:
+  Content.or(Knowns.Known.files(kn, c, k, g), u => Content.at(g, kn, s, c, k))
+
 # the content of version k of the line c in the facts s
-def Content.of(+kn: Known.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Files.Files()>:
-  Content.at(Facts.Facts.fuel(s), kn, s, c, k)
+def Content.of(+kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Files.Files()>:
+  Content.from(Facts.Facts.fuel(s), kn, s, c, k)
 
 # the words at the path p of the content m
 def Content.get(m: Maybe<&2, Files.Files()>, +p: String) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
@@ -352,10 +375,150 @@ def Content.get(m: Maybe<&2, Files.Files()>, +p: String) -> Maybe<&2, Maybe<&2, 
 
 # the words of the resource at the path p in version k of the line c
 def Content.read(
-  +kn: Known.Known(),
+  +kn: Knowns.Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
   +k: Nat,
   +p: String
 ) -> Maybe<&2, Maybe<&2, List<&2, U32>>>:
   Content.get(Content.of(kn, s, c, k), p)
+
+# A table that is right
+# ---------------------
+
+# the entry e is right: its state is the state that the facts s give its
+# line, or its content is what a read of the facts s with its fuel gives
+def Kept.ok(+s: Facts.Plain(), e: Knowns.Kept) -> Bool:
+  match e:
+    case Knowns.Kept{c, st}:
+      Knowns.State.fits(Lines.Line.state(s, c), st)
+    case Knowns.Held{c, k, d, x}:
+      Files.Files.fits(Content.at(d, Knowns.Known.none(), s, c, k), x)
+
+# the table kn is right for the facts s: each state and each content that it
+# holds is what s gives
+def Known.ok(kn: Knowns.Known(), +s: Facts.Plain()) -> Bool:
+  match kn:
+    case Nil{}:
+      True{}
+    case Con{e, rest}:
+      Bool.and(Kept.ok(s, e), Known.ok(rest, s))
+
+# What a node learns of the contents
+# ----------------------------------
+
+# one more than the fuels a, b and c of three contents, if the table holds
+# them; else the fuel g
+def Fill.fuel.of(a: Maybe<&2, Nat>, b: Maybe<&2, Nat>, c: Maybe<&2, Nat>, g: Nat) -> Nat:
+  match a b c:
+    case Some{x} Some{y} Some{z}:
+      1n+Nat.max(x, Nat.max(y, z))
+    case _ _ _:
+      g
+
+# a fuel that reads the content of version k of the line c, the entry e if the
+# node holds it, through the table kn: one more than the fuels of the contents
+# that the version reads, when the table holds them; else the fuel g
+def Fill.fuel(
+  k: Nat,
+  +kn: Knowns.Known(),
+  +c: Ledgers.Line,
+  +e: Maybe<&2, Types.Entry>,
+  g: Nat
+) -> Nat:
+  match k:
+    case 0n:
+      1n
+    case 1n+j:
+      +t = Entry.taken(c, e)
+      +a = Entry.based(c, e)
+      Fill.fuel.of(
+        Knowns.Known.depth(kn, c, j),
+        Knowns.Known.depth(kn, Spec.Point.line(t), Spec.Point.n(t)),
+        Knowns.Known.depth(kn, Spec.Point.line(a), Spec.Point.n(a)),
+        g
+      )
+
+# the table kn with the content m, if any, of version k of the line c, that a
+# read with the fuel d gives
+def Known.fill.of(kn: Knowns.Known(), c: Ledgers.Line, k: Nat, d: Nat, m: Maybe<&2, Files.Files()>) -> Knowns.Known():
+  match m:
+    case None{}:
+      kn
+    case Some{x}:
+      Knowns.Known.hold(kn, Knowns.Held{c, k, d, x})
+
+# the table kn with the content of version k of the line c in the facts s,
+# read with the fuel d
+def Known.fill.at(+d: Nat, +kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Knowns.Known():
+  Known.fill.of(kn, c, k, d, Content.at(d, kn, s, c, k))
+
+# the table kn with the content of version k of the line c in the facts s,
+# unless the table holds it (old)
+def Known.fill.if(old: Bool, +kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Knowns.Known():
+  match old:
+    case True{}:
+      kn
+    case False{}:
+      Known.fill.at(Fill.fuel(k, kn, c, Knowns.Known.at(kn, s, c, k), Facts.Facts.fuel(s)), kn, s, c, k)
+
+# the table kn with the content of version k of the line c in the facts s
+def Known.fill(+kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Knowns.Known():
+  Known.fill.if(Maybe.is_some(&2, Nat, Knowns.Known.depth(kn, c, k)), kn, s, c, k)
+
+# the table kn with the contents of the n versions of the line c from the
+# version k on, the oldest first: each is read from the one before
+def Known.warm.go(n: Nat, +k: Nat, kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Knowns.Known():
+  match n:
+    case 0n:
+      kn
+    case 1n+p:
+      Known.warm.go(p, 1n+k, Known.fill(kn, s, c, k), s, c)
+
+# the number of the versions m
+def Versions.count(m: Maybe<&2, List<&2, Types.Entry>>) -> Nat:
+  match m:
+    case None{}:
+      0n
+    case Some{vs}:
+      List.length(&2, Types.Entry, vs)
+
+# the table kn with the content of each version of the line c in the facts s
+def Known.warm(+kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Knowns.Known():
+  Known.warm.go(Versions.count(Knowns.Known.versions(kn, s, c)), 0n, kn, s, c)
+
+# the number of the versions of the state m, if any
+def State.count(m: Maybe<&2, Lines.State>) -> Nat:
+  Versions.count(Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, m))
+
+# the table kn with the contents of the versions of the line c in the facts
+# s from the version a on, up to b versions, when it holds the one before
+# (near); else with the content of each of the b versions
+def Known.grow.if(
+  near: Bool,
+  +a: Nat,
+  +b: Nat,
+  kn: Knowns.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line
+) -> Knowns.Known():
+  match near:
+    case True{}:
+      Known.warm.go(Nat.sub(b, a), a, kn, s, c)
+    case False{}:
+      Known.warm.go(b, 0n, kn, s, c)
+
+# the table kn with the content of each version of the line c in the facts s
+# that the table old did not know: those after the versions of the state that
+# old holds for c, if kn holds the content of the last of them; else all the
+# versions of the state that kn holds for c
+def Known.grow(old: Knowns.Known(), +kn: Knowns.Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Knowns.Known():
+  +a = State.count(Knowns.Known.find(old, c))
+  Known.grow.if(
+    Maybe.is_some(&2, Nat, Knowns.Known.depth(kn, c, Nat.sub(a, 1n))),
+    a,
+    State.count(Knowns.Known.find(kn, c)),
+    kn,
+    s,
+    c
+  )

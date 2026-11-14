@@ -37,8 +37,8 @@ def Learn.line_ok(
   +s: RFacts.Plain(),
   m: Maybe<&2, Ledgers.Line>
 ) -> {
-  RKnown.Known.ok(kn, s) == True{}: Bool
-} -> {RKnown.Known.ok(RFasts.Learn.line(kn, s, m), s) == True{}: Bool}:
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {RContents.Known.ok(RFasts.Learn.line(kn, s, m), s) == True{}: Bool}:
   match m:
     case None{}:
       ok => ok
@@ -52,8 +52,8 @@ def Learn.merge_ok(
   +s: RFacts.Plain(),
   r: Spec.Request
 ) -> {
-  RKnown.Known.ok(kn, s) == True{}: Bool
-} -> {RKnown.Known.ok(RFasts.Learn.merge(kn, s, r), s) == True{}: Bool}:
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {RContents.Known.ok(RFasts.Learn.merge(kn, s, r), s) == True{}: Bool}:
   match r:
     case Spec.Request.Merge{+f, x}:
       ok => Knowns.Known.learn_ok(kn, s, f)(ok)
@@ -79,8 +79,8 @@ def Learn.request_ok(
   +all: List<&2, Types.Fact>,
   +r: Spec.Request
 ) -> {
-  RKnown.Known.ok(kn, s) == True{}: Bool
-} -> {RKnown.Known.ok(RFasts.Learn.request(kn, s, all, r), s) == True{}: Bool}:
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {RContents.Known.ok(RFasts.Learn.request(kn, s, all, r), s) == True{}: Bool}:
   ok => Learn.merge_ok(
     RFasts.Learn.line(kn, s, RWorks.Request.line(all, r)),
     s,
@@ -94,8 +94,8 @@ def Learn.facts_ok(
   +s: RFacts.Plain(),
   +all: List<&2, Types.Fact>
 ) -> {
-  RKnown.Known.ok(kn, s) == True{}: Bool
-} -> {RKnown.Known.ok(RFasts.Learn.facts(fs, kn, s, all), s) == True{}: Bool}:
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {RContents.Known.ok(RFasts.Learn.facts(fs, kn, s, all), s) == True{}: Bool}:
   match fs:
     case Nil{}:
       ok => ok
@@ -114,8 +114,8 @@ def Learn.work_ok(
   +kn: RKnown.Known(),
   +s: RFacts.Plain()
 ) -> {
-  RKnown.Known.ok(kn, s) == True{}: Bool
-} -> {RKnown.Known.ok(RFasts.Learn.work(kn, s), s) == True{}: Bool}:
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {RContents.Known.ok(RFasts.Learn.work(kn, s), s) == True{}: Bool}:
   ok => Learn.facts_ok(RFacts.Facts.list(s), kn, s, RFacts.Facts.list(s))(ok)
 
 # What a deed leaves of the table
@@ -130,9 +130,9 @@ def Table.voted_ok(
   st: Types.Step,
   +x: Types.Cast
 ) -> {
-  RKnown.Known.ok(kn, Facts.Facts.crit(s)) == True{}: Bool
+  RContents.Known.ok(kn, Facts.Facts.crit(s)) == True{}: Bool
 } -> {
-  RKnown.Known.ok(
+  RContents.Known.ok(
     RFasts.Table.voted(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, st, x}), st),
     RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, st, x})
   )
@@ -142,7 +142,12 @@ def Table.voted_ok(
     case Types.Step.Broken{}:
       ok => {==}
     case Types.Step.At{+c, +k, +t}:
-      ok => Knowns.Known.cast_ok(kn, name, s, c, k, t, x)(ok)
+      ok => Knowns.Known.grow_ok(
+        kn,
+        RKnown.Known.cast(kn, RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}), c, k),
+        RFacts.Facts.add(Facts.Facts.crit(s), Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}),
+        c
+      )(Knowns.Known.cast_ok(kn, name, s, c, k, t, x)(ok))
 
 # the table that a work leaves of a right table is right for the facts after
 # the work
@@ -152,9 +157,9 @@ def Table.cast_ok(
   +s: Facts.Facts(),
   m: Maybe<&2, RWorks.Plan>
 ) -> {
-  RKnown.Known.ok(kn, Facts.Facts.crit(s)) == True{}: Bool
+  RContents.Known.ok(kn, Facts.Facts.crit(s)) == True{}: Bool
 } -> {
-  RKnown.Known.ok(
+  RContents.Known.ok(
     RFasts.Table.cast(kn, Facts.Facts.crit(s), name, m),
     RWorks.Work.cast(Facts.Facts.crit(s), name, m)
   )
@@ -166,7 +171,7 @@ def Table.cast_ok(
     case Some{RWorks.Plan{+st, +x}}:
       +ok => Lists.Bool.by(
         b => {
-          RKnown.Known.ok(
+          RContents.Known.ok(
             Shared.Bool.when(
               RKnown.Known(),
               b,
@@ -198,11 +203,11 @@ def Table.asked_same(
   +s: RFacts.Plain(),
   r: Spec.Request
 ) -> {
-  RKnown.Known.ok(kn, s) == True{}: Bool
-} -> {RKnown.Known.ok(RFasts.Table.asked(kn, r), s) == True{}: Bool}:
+  RContents.Known.ok(kn, s) == True{}: Bool
+} -> {RContents.Known.ok(RFasts.Table.asked(kn, r), s) == True{}: Bool}:
   ok => Lists.Bool.by(
     b => {
-      RKnown.Known.ok(
+      RContents.Known.ok(
         Shared.Bool.when(RKnown.Known(), b, u => RKnown.Known.none(), u => kn),
         s
       )
@@ -222,9 +227,9 @@ def Table.asked_ok(
   +i: Ledgers.Id,
   +r: Spec.Request
 ) -> {
-  RKnown.Known.ok(kn, Facts.Facts.crit(s)) == True{}: Bool
+  RContents.Known.ok(kn, Facts.Facts.crit(s)) == True{}: Bool
 } -> {
-  RKnown.Known.ok(
+  RContents.Known.ok(
     RFasts.Table.asked(kn, r),
     RFacts.Facts.ask(name, Facts.Facts.crit(s), i, r)
   )
@@ -232,7 +237,7 @@ def Table.asked_ok(
 }:
   +ok => Lists.Bool.by(
     b => {
-      RKnown.Known.ok(
+      RContents.Known.ok(
         Shared.Bool.when(RKnown.Known(), b, u => RKnown.Known.none(), u => kn),
         RFacts.Facts.ask(name, Facts.Facts.crit(s), i, r)
       )
@@ -241,7 +246,7 @@ def Table.asked_ok(
     RFacts.Request.is_start(r),
     et => {==},
     ef => (
-      %Facts.Facts.take_crit(name, s, Types.Fact.Ask{Facts.Facts.asked(s, i, r)}): {RKnown.Known.ok(kn, _) == True{}: Bool}
+      %Facts.Facts.take_crit(name, s, Types.Fact.Ask{Facts.Facts.asked(s, i, r)}): {RContents.Known.ok(kn, _) == True{}: Bool}
       Knowns.Known.asked_ok(kn, name, s, Facts.Facts.asked(s, i, r))(ef)(ok))
   )
 
@@ -255,7 +260,7 @@ def Needs.of_ok(
   +name: String,
   ms: List<&2, Nodes.Mounted>
 ) -> {
-  RKnown.Known.ok(kn, s) == True{}: Bool
+  RContents.Known.ok(kn, s) == True{}: Bool
 } -> {
   Nodes.Needs.of(kn, s, name, ms) == Nodes.Needs.of(RKnown.Known.none(), s, name, ms): List<&2, Hashes.Hash>
 }:
@@ -283,9 +288,9 @@ def Fast.asks_ok(
   +kn: RKnown.Known(),
   +okr: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
 ) -> {
-  RKnown.Known.ok(kn, fs) == True{}: Bool
+  RContents.Known.ok(kn, fs) == True{}: Bool
 } -> {
-  RKnown.Known.ok(
+  RContents.Known.ok(
     RFasts.Table.asked(kn, r),
     Nodes.Raw.facts(Nodes.Raw.asks(name, ws, ms, st, fs, ps, i, r, go))
   )
@@ -308,7 +313,7 @@ def Fast.works_ok(
   +kn: RKnown.Known(),
   +okr: {Nodes.Raw.sound(name, fs, ps) == True{}: Bool}
 ) -> {
-  RKnown.Known.ok(kn, fs) == True{}: Bool
+  RContents.Known.ok(kn, fs) == True{}: Bool
 } -> {RFasts.Fast.ok(RFasts.Fast.works(name, ws, ms, st, fs, ps, kn)) == True{}: Bool}:
   match st:
     case True{}:
@@ -386,7 +391,7 @@ def Fast.works_raw(
   +ps: RParts.Parts,
   +kn: RKnown.Known()
 ) -> {
-  RKnown.Known.ok(kn, fs) == True{}: Bool
+  RContents.Known.ok(kn, fs) == True{}: Bool
 } -> {
   RFasts.Fast.raw(RFasts.Fast.works(name, ws, ms, st, fs, ps, kn)) == Nodes.Raw.works(name, ws, ms, st, fs, ps): Nodes.Raw
 }:
@@ -460,7 +465,9 @@ def Fast.learn_ok(
 ) -> {RFasts.Fast.ok(f) == True{}: Bool} -> {RFasts.Fast.ok(RFasts.Fast.learn(f, c)) == True{}: Bool}:
   match f:
     case RFasts.Fast{+r, +kn}:
-      ok => Knowns.Known.learn_ok(kn, Nodes.Raw.facts(r), c)(ok)
+      ok => Knowns.Known.warm_ok(RKnown.Known.learn(kn, Nodes.Raw.facts(r), c), Nodes.Raw.facts(r), c)(
+        Knowns.Known.learn_ok(kn, Nodes.Raw.facts(r), c)(ok)
+      )
 
 # What a fast node shows
 # ----------------------

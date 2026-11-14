@@ -4,6 +4,7 @@ import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../codes.bend as Coded
 import ./facts.bend as Facts
+import ./files.bend as Files
 import ./lines.bend as Lines
 import ../types.bend as Types
 
@@ -18,11 +19,18 @@ import ../types.bend as Types
 # fast.bend proves that a table whose entries are what the facts give
 # (Known.ok) changes no read.
 
-# a line and its state
+# The node also keeps the content of versions that it has read (Held): the
+# files of a version, with the fuel that reads them from the facts (depth).
+# A read of a content with at least that fuel takes the files from the table.
+
+# what a node keeps: a line and its state, or a version of a line and its
+# content, which a read with the fuel depth gives
 type Kept is Data:
   Kept{line: Ledgers.Line, state: Lines.State}
+  Held{line: Ledgers.Line, version: Nat, depth: Nat, files: Files.Files()}
 
-# the states that a node keeps: the newest entry of a line first
+# what a node keeps: the newest entry of a line first; the states before the
+# contents
 def Known() -> Data:
   List<&2, Kept>
 
@@ -42,6 +50,72 @@ def Known.find(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.State>:
         u => Some{st},
         u => Known.find(rest, c)
       )
+    case Con{Held{c2, k, d, x}, rest}:
+      Known.find(rest, c)
+
+# the content of version k of the line c that the table kn holds, with the
+# fuel that reads it
+def Known.held(kn: Known(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Kept>:
+  match kn:
+    case Nil{}:
+      None{}
+    case Con{Kept{c2, st}, rest}:
+      Known.held(rest, c, k)
+    case Con{Held{+c2, +k2, +d, +x}, rest}:
+      Shared.Bool.when(
+        Maybe<&2, Kept>,
+        Bool.and(Nat.is_eq(k2, k), Ledgers.Line.is_eq(c2, c)),
+        u => Some{Held{c2, k2, d, x}},
+        u => Known.held(rest, c, k)
+      )
+
+# the files of the entry m, if it is a content that a read with the fuel f
+# gives
+def Known.files.of(m: Maybe<&2, Kept>, f: Nat) -> Maybe<&2, Files.Files()>:
+  match m:
+    case Some{Held{c, k, d, x}}:
+      Shared.Maybe.when(Files.Files(), Nat.is_le(d, f), u => Some{x})
+    case _:
+      None{}
+
+# the content of version k of the line c that the table kn holds, if a read
+# with the fuel f gives it
+def Known.files(kn: Known(), +c: Ledgers.Line, +k: Nat, f: Nat) -> Maybe<&2, Files.Files()>:
+  Known.files.of(Known.held(kn, c, k), f)
+
+# the fuel of the content m, if any
+def Known.depth.of(m: Maybe<&2, Kept>) -> Maybe<&2, Nat>:
+  match m:
+    case Some{Held{c, k, d, x}}:
+      Some{d}
+    case _:
+      None{}
+
+# the fuel that reads the content of version k of the line c that the table
+# kn holds
+def Known.depth(kn: Known(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Nat>:
+  Known.depth.of(Known.held(kn, c, k))
+
+# the table kn with the entry e, a content: after the states, before the
+# other contents
+def Known.hold(kn: Known(), e: Kept) -> Known():
+  match kn:
+    case Nil{}:
+      [e]
+    case Con{Kept{c, st}, rest}:
+      Kept{c, st} <> Known.hold(rest, e)
+    case Con{Held{c, k, d, x}, rest}:
+      e <> Held{c, k, d, x} <> rest
+
+# the contents that the table kn holds
+def Known.contents(kn: Known()) -> Known():
+  match kn:
+    case Nil{}:
+      []
+    case Con{Kept{c, st}, rest}:
+      Known.contents(rest)
+    case Con{Held{c, k, d, x}, rest}:
+      Held{c, k, d, x} <> Known.contents(rest)
 
 # the store of the line c
 def Known.root(c: Ledgers.Line) -> Ledgers.Line:
@@ -195,14 +269,17 @@ def Known.hit(c: Ledgers.Line, +c2: Ledgers.Line) -> Bool:
   +c = c
   Bool.or(Ledgers.Line.is_eq(c2, c), Ledgers.Line.is_eq(Known.root(c2), c))
 
-# the entry e before rest, unless a vote for the line c may change it
-def Known.voted.put(c: Ledgers.Line, +e: Kept, rest: Known()) -> Known():
+# the entry e before rest, when it is a state that a vote for the line c
+# cannot change
+def Known.voted.put(c: Ledgers.Line, e: Kept, rest: Known()) -> Known():
   match e:
-    case Kept{c2, st}:
-      List.filter.put(Kept, e, rest, Bool.not(Known.hit(c, c2)))
+    case Kept{+c2, +st}:
+      List.filter.put(Kept, Kept{c2, st}, rest, Bool.not(Known.hit(c, c2)))
+    case Held{c2, k, d, x}:
+      rest
 
 # the table kn after a vote for a slot of the line c: without the states that
-# the vote may change
+# the vote may change, and without the contents
 def Known.voted(kn: Known(), +c: Ledgers.Line) -> Known():
   match kn:
     case Nil{}:
@@ -210,8 +287,8 @@ def Known.voted(kn: Known(), +c: Ledgers.Line) -> Known():
     case Con{+e, rest}:
       Known.voted.put(c, e, Known.voted(rest, c))
 
-# A table that is right
-# ---------------------
+# Same states
+# -----------
 
 # the entries a and b are the same
 def Entry.same(a: Types.Entry, b: Types.Entry) -> Bool:
@@ -242,21 +319,6 @@ def State.fits(m: Maybe<&2, Lines.State>, st: Lines.State) -> Bool:
       False{}
     case Some{x}:
       State.same(x, st)
-
-# the entry e is right: its state is the state that the facts s give its line
-def Kept.ok(+s: Facts.Plain(), e: Kept) -> Bool:
-  match e:
-    case Kept{c, st}:
-      State.fits(Lines.Line.state(s, c), st)
-
-# the table kn is right for the facts s: each state that it holds is the
-# state that s gives the line
-def Known.ok(kn: Known(), +s: Facts.Plain()) -> Bool:
-  match kn:
-    case Nil{}:
-      True{}
-    case Con{e, rest}:
-      Bool.and(Kept.ok(s, e), Known.ok(rest, s))
 
 # What a vote continues
 # ---------------------
@@ -323,12 +385,37 @@ def Known.next.of(
     case _ _:
       None{}
 
+# a ballot for the slot k of the line c continues the versions of c and
+# changes no other line: c is a branch, k is the next slot of its state m,
+# and the state ms of its store is known
+def Known.safe(c: Ledgers.Line, m: Maybe<&2, Lines.State>, ms: Maybe<&2, Lines.State>, k: Nat) -> Bool:
+  match c m ms:
+    case Ledgers.Line{h, Some{b}} Some{st} Some{y}:
+      Nat.is_eq(Lines.State.slot(st), k)
+    case _ _ _:
+      False{}
+
+# the contents of the table kn, when a ballot leaves them as they are (safe);
+# else none
+def Known.spared(safe: Bool, kn: Known()) -> Known():
+  match safe:
+    case True{}:
+      Known.contents(kn)
+    case False{}:
+      []
+
 # the table kn after a ballot for the slot k of the line c, where s is the
-# facts with the ballot: without the states that the ballot may change, and
-# with the state of c continued from the state that kn holds for it
-def Known.cast(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, k: Nat) -> Known():
+# facts with the ballot: without the states that the ballot may change, with
+# the state of c continued from the state that kn holds for it, and with the
+# contents that the ballot leaves as they are
+def Known.cast(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, +k: Nat) -> Known():
   Known.put(
-    Known.voted(kn, c),
+    List.append(
+      &2,
+      Kept,
+      Known.voted(kn, c),
+      Known.spared(Known.safe(c, Known.find(kn, c), Known.find(kn, Known.root(c)), k), kn)
+    ),
     c,
     Known.next.of(s, c, k, Known.find(kn, c), Known.over(c, Known.find(kn, Known.root(c))))
   )

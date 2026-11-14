@@ -16,7 +16,7 @@ import ../types.bend as Types
 # The fast node
 # -------------
 # The state of a node (Nodes.Raw) with the table of the states of the lines
-# that it has read. It does what Nodes.Raw.does does, and answers what a
+# that it has read, and of the contents of their versions. It does what Nodes.Raw.does does, and answers what a
 # Nodes.Raw answers, but reads each line through the table, so it does not
 # read a line again from all the facts. This is code that runs: it builds no
 # proof. fast.bend proves that the state of a fast node is the state that
@@ -102,13 +102,15 @@ def Learn.work(kn: Known.Known(), +s: Facts.Plain()) -> Known.Known():
 
 # the table kn after a ballot is cast at the step st, where s is the facts
 # with the ballot: without the states that a vote for the line of st may
-# change, and with the state of that line continued from its known state
-def Table.voted(kn: Known.Known(), +s: Facts.Plain(), st: Types.Step) -> Known.Known():
+# change, with the state of that line continued from its known state, with
+# the contents that the ballot leaves as they are, and with the contents of
+# the new versions of the line
+def Table.voted(+kn: Known.Known(), +s: Facts.Plain(), st: Types.Step) -> Known.Known():
   match st:
     case Types.Step.Broken{}:
       Known.Known.none()
     case Types.Step.At{+c, k, t}:
-      Known.Known.cast(kn, s, c, k)
+      Contents.Known.grow(kn, Known.Known.cast(kn, s, c, k), s, c)
 
 # the table kn after a work of the node name on the facts s casts the ballot
 # m, if any (as Works.Work.cast does: not when s holds a ballot of the node
@@ -214,12 +216,16 @@ def Fast.does(f: Fast, a: Nodes.Act) -> Fast:
     case Fast{r, kn} Nodes.Act.Stop{force}:
       Fast{Nodes.Raw.does(r, Nodes.Act.Stop{force}), kn}
 
-# the fast node f with the states of the line c and of its store in its
-# table: a read of c does not read it again from all the facts
+# the fast node f with the states of the line c and of its store, and the
+# content of each version of c, in its table: a read of c does not read it
+# again from all the facts
 def Fast.learn(f: Fast, +c: Ledgers.Line) -> Fast:
   match f:
     case Fast{+r, kn}:
-      Fast{r, Known.Known.learn(kn, Nodes.Raw.facts(r), c)}
+      Fast{
+        r,
+        Contents.Known.warm(Known.Known.learn(kn, Nodes.Raw.facts(r), c), Nodes.Raw.facts(r), c)
+      }
 
 # What a fast node shows
 # ----------------------
@@ -260,9 +266,9 @@ def Fast.parts(f: Fast) -> List<&2, Hashes.Hash>:
 def Fast.part(f: Fast, h: Hashes.Hash) -> Maybe<&2, List<&2, U32>>:
   Nodes.Raw.part(Fast.raw(f), h)
 
-# the table of the fast node f is right: each state that it holds is the
-# state that the facts of f give the line
+# the table of the fast node f is right: each state and each content that it
+# holds is what the facts of f give
 def Fast.ok(f: Fast) -> Bool:
   match f:
     case Fast{r, kn}:
-      Known.Known.ok(kn, Nodes.Raw.facts(r))
+      Contents.Known.ok(kn, Nodes.Raw.facts(r))
