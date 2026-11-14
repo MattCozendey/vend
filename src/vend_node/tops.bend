@@ -54,6 +54,8 @@ def Place.key_inj(
           RKnown.Place.ask(RKnown.Place{w1, b1, p1}),
           RKnown.Place.ask(RKnown.Place{w2, b2, p2})
         )((
+            %Equal.sym(Bool, Coded.Ask.is_eq(RKnown.Place.ask(RKnown.Place{w1, b1, p1}), RKnown.Place.ask(RKnown.Place{w2, b2, p2})), Shared.List.is_eq(~U32, ~U32.is_eq, Coded.Ask.words(RKnown.Place.ask(RKnown.Place{w1, b1, p1})), Coded.Ask.words(RKnown.Place.ask(RKnown.Place{w2, b2, p2}))), Coded.Ask.is_eq_code(RKnown.Place.ask(RKnown.Place{w1, b1, p1}), RKnown.Place.ask(RKnown.Place{w2, b2, p2}))): {_ == True{}: Bool}
+            %Crits.Key.is_eq_list(Coded.Ask.words(RKnown.Place.ask(RKnown.Place{w1, b1, p1})), Coded.Ask.words(RKnown.Place.ask(RKnown.Place{w2, b2, p2}))): {_ == True{}: Bool}
             %Equal.cong(List<&2, U32>, List<&2, U32>, Words.tail, RKnown.Place.key(RKnown.Place{w1, b1, p1}), RKnown.Place.key(RKnown.Place{w2, b2, p2}), Crits.Key.is_eq_sound(RKnown.Place.key(RKnown.Place{w1, b1, p1}), RKnown.Place.key(RKnown.Place{w2, b2, p2}))(h)): {Crits.Key.is_eq(Coded.Ask.words(RKnown.Place.ask(RKnown.Place{w1, b1, p1})), _) == True{}: Bool}
             Crits.Key.is_eq_refl(Coded.Ask.words(RKnown.Place.ask(RKnown.Place{w1, b1, p1})))))
       )

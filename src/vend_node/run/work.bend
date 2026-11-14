@@ -87,6 +87,21 @@ def Takes.last(
     case Con{e, rest}:
       Takes.last(rest, c, 1n+k, Takes.pick(c, k, Contents.Entry.takes(e), found))
 
+# the newest version among the versions rev, the newest first, of which
+# there are n, that takes a version of the line c, as Takes.last gives it for
+# the versions the oldest first: a walk from the newest that stops at the
+# first such version; prev is what the versions before rev gave
+def Takes.seek(rev: List<&2, Types.Entry>, +c: Ledgers.Line, n: Nat, prev: Maybe<&2, Took>) -> Maybe<&2, Took>:
+  match rev n prev:
+    case rs n Some{t}:
+      Some{t}
+    case Nil{} n None{}:
+      None{}
+    case Con{e, rest} 0n None{}:
+      None{}
+    case Con{e, rest} 1n++j None{}:
+      Takes.seek(rest, c, j, Takes.pick(c, j, Contents.Entry.takes(e), None{}))
+
 # the pins of a merge of the line f into the line c: the newest version of f,
 # and as base the newest version of c that f took, else the newest version of
 # f that c took, else none
@@ -303,6 +318,32 @@ def Work.offer.at(
         )
       )
 
+# the pins of a merge of the line f into the line c, whose versions are rev,
+# the newest first, where m is what the table kn holds of f: read from the
+# newest versions of both lines, when it holds the versions of f
+def Pins.merge.seen(
+  m: Nat,
+  +c: Ledgers.Line,
+  +f: Ledgers.Line,
+  +rev: List<&2, Types.Entry>,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  sf: Maybe<&2, Known.Seen>
+) -> Types.Pins:
+  match sf:
+    case None{}:
+      Pins.merge(m, c, f, List.reverse(&2, Types.Entry, rev), Known.Known.versions(kn, s, f))
+    case Some{Known.Seen{+rf, nf, kf}}:
+      +lf = List.length(&2, Types.Entry, rf)
+      Pins.merge.of(
+        m,
+        c,
+        f,
+        Nat.sub(lf, 1n),
+        Takes.seek(rf, c, lf, None{}),
+        Takes.seek(rev, f, List.length(&2, Types.Entry, rev), None{})
+      )
+
 # the pins that the node gives the request r for the line c, of the versions
 # rev, the newest first, at the era m: the versions are read only for a
 # merge
@@ -316,7 +357,7 @@ def Pins.seen(
 ) -> Types.Pins:
   match r:
     case Spec.Request.Merge{+f, x}:
-      Pins.merge(m, c, f, List.reverse(&2, Types.Entry, rev), Known.Known.versions(kn, s, f))
+      Pins.merge.seen(m, c, f, rev, kn, s, Known.Known.seen(kn, f))
     case _:
       Lines.Pins.plain(m)
 

@@ -956,7 +956,9 @@ def Id.code_eq(
                 ~(a => r => Ledgers.Id.code_read(a, r)),
                 i,
                 j
-              )(e2),
+              )((
+                  %Crits.Key.is_eq_list(RKnown.Id.code(i), RKnown.Id.code(j)): {_ == True{}: Bool}
+                  e2)),
               ef
             )
           )

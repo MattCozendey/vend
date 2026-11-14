@@ -75,19 +75,22 @@ Measured, native build, one node, one owner:
 - The table is a record with a crit map by line, and every crit read and write passes whole
   words with one compare. 50 branches and two writers, 400 to 6400 writes: an ask 0.06 ms, a
   Work that casts 0.25 to 0.28 ms, a view, a status and a read under 0.035 ms.
-- The versions of a line are kept newest-first with their count (`seen.bend`): a Work that
-  casts is flat, 0.17 ms at 160 writes and 0.19 ms at 5120 (was 0.23 and 0.8).
-- Still growing: `Pins.merge` scans the versions of both lines, and a merge hint reverses the
-  line it takes from (a merge with its Work 0.36 ms at 40 writes, 0.87 at 320); a merge of
-  another shape walks every path.
+- The versions of a line are kept newest-first with their count (`seen.bend`). Equality of
+  requests, asks, steps, casts and facts compares part by part (proven equal to the equality of
+  their codes); crit reads and writes build no closures; a branch is read from its own votes.
+- One branch, per call, 160 to 5120 writes: an ask 26 to 30 us, a Work that casts 84 to 90 us,
+  a view 6 us, a status 12 us. Two branches with merges, 40 to 320 writes: a merge with its Work
+  0.16 to 0.31 ms, its status 50 to 90 us.
+- Still growing: a merge whose line never took the other walks every version; a merge hint
+  reverses the line it takes from; a merge of another shape walks every path.
 - Sync folds each fact of the other node into the table: a held fact is one lookup, a new one
   joins as an ask or a ballot does. Two nodes, both owners, 50 writes: a write pair (2 asks, 8
   Syncs, Works) 33 ms (was 2.7 s); a Sync that adds nothing 3.3 ms (was 261). It is linear in
   the facts of the other node (136 ms at 800 writes): the IO code should send only what the
   other side lacks. A hash per subtree in the core cannot be proven equal to the plain Sync
   (it needs "no two inputs with one hash").
-- A Start and a ballot on a store line drop the table: Group + Own takes 0.29 s at 50 writes
-  and 3.4 s at 200. In work.
+- A Start and a ballot on a store line drop the table: Group + Own takes 0.13 s at 50 writes
+  and 1.45 s at 200 (two nodes). In work.
 
 ## Lint
 

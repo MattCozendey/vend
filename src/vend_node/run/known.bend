@@ -862,7 +862,7 @@ def Known.fresh.at(
     case Ledgers.Line{h, None{}}:
       Some{Lines.State{rs, k}}
     case Ledgers.Line{h, Some{b}}:
-      Lines.Branch.state(s, Ledgers.Line{h, Some{b}}, Some{rs})
+      Lines.Branch.state.in(Facts.Facts.list(s), Ledgers.Line{h, Some{b}}, rs)
 
 # the state of the line c in the facts s: with the state m of its store if
 # the table holds it
@@ -1376,11 +1376,26 @@ def Known.ids.learn(+kn: Known(), +c: Ledgers.Line) -> Known():
 
 # the table kn with the states of the line c and of its store in the facts s,
 # with the rule of the next version of c, and with the ids of its versions
-def Known.learn(kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
+def Known.learn.all(kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
   Known.ids.learn(
     Known.rule.learn(Known.learn.one(Known.learn.one(kn, s, Known.root(c)), s, c), s, c),
     c
   )
+
+# the table kn as Known.learn.all leaves it, where j is what kn holds of the
+# line c and m the state that it holds of its store: kn, when it holds all
+def Known.learn.by(j: Info, m: Maybe<&2, Seen>, kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
+  match j m:
+    case Info{c2, Some{y}, Some{r}, Some{x}} Some{z}:
+      kn
+    case _ _:
+      Known.learn.all(kn, s, c)
+
+# the table kn with the states of the line c and of its store in the facts s,
+# with the rule of the next version of c, and with the ids of its versions:
+# two reads when the table holds them
+def Known.learn(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
+  Known.learn.by(Known.info(kn, c), Known.seen(kn, Known.root(c)), kn, s, c)
 
 # What a vote forgets
 # -------------------

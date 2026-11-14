@@ -364,6 +364,33 @@ def Line.run.in(
     case 1n+f Some{+st2}:
       Line.run.in(f, fs, r, c, st2, Line.step.in(fs, r, c, st2))
 
+# the votes among fs for the slots of the line c: all that a run of c reads
+def Line.votes(fs: List<&2, Types.Fact>, +c: Ledgers.Line) -> List<&2, Types.Fact>:
+  match fs:
+    case Nil{}:
+      []
+    case Con{Types.Fact.Ask{a}, rest}:
+      Line.votes(rest, c)
+    case Con{Types.Fact.Vote{v, Types.Step.Broken{}, x}, rest}:
+      Line.votes(rest, c)
+    case Con{Types.Fact.Vote{v, Types.Step.At{+c2, k, t}, x}, rest}:
+      List.filter.put(
+        Types.Fact,
+        Types.Fact.Vote{v, Types.Step.At{c2, k, t}, x},
+        Line.votes(rest, c),
+        Ledgers.Line.is_eq(c2, c)
+      )
+
+# the state of the line c after each decided slot from st on, read from the
+# votes fs of c
+def Line.start.in(
+  +fs: List<&2, Types.Fact>,
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: State
+) -> State:
+  Line.run.in(Line.bound(fs, c), fs, r, c, st, Line.step.in(fs, r, c, st))
+
 # Version 0
 # ---------
 
@@ -481,6 +508,29 @@ def Branch.state(
       None{}
     case Some{+R}:
       Line.from(s, Some{R}, c, Branch.first(R, c))
+
+# the state of the branch c from its version 0 m, if any, read from its
+# votes vs, once the versions R of its store are known
+def Branch.state.of(
+  +vs: List<&2, Types.Fact>,
+  +c: Ledgers.Line,
+  +rr: List<&2, Types.Entry>,
+  m: Maybe<&2, Types.Entry>
+) -> Maybe<&2, State>:
+  match m:
+    case None{}:
+      None{}
+    case Some{e}:
+      Some{Line.start.in(vs, Some{rr}, c, State{[e], 1n})}
+
+# the state of the branch c, once the versions R of its store are known, its
+# votes read once from the facts fs: as Branch.state gives it
+def Branch.state.in(
+  +fs: List<&2, Types.Fact>,
+  +c: Ledgers.Line,
+  +rr: List<&2, Types.Entry>
+) -> Maybe<&2, State>:
+  Branch.state.of(Line.votes(fs, c), c, rr, Branch.first(rr, c))
 
 # the state of the line c in the facts s (nothing while s does not hold its
 # version 0)

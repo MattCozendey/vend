@@ -88,6 +88,82 @@ def Eq.ne_flip(
 ) -> {same(y, x) == False{}: Bool}:
   Eq.ne_flip.at(~A, ~same, ~laws, same(y, x), x, y, no, {==})
 
+# f is False for x and y, by its laws lf, when g, by its laws lg, is
+def Eq.agree.no(
+  ~A: Data,
+  ~f: A -> A -> Bool,
+  ~g: A -> A -> Bool,
+  ~lf: Eq.Laws(A, f),
+  ~lg: Eq.Laws(A, g),
+  back: Bool,
+  +x: A,
+  +y: A,
+  no: {g(x, y) == False{}: Bool},
+  e: {f(x, y) == back: Bool}
+) -> {back == False{}: Bool}:
+  match back:
+    case False{}:
+      {==}
+    case True{}:
+      Empty.absurd(
+        {True{} == False{}: Bool},
+        Bool.false_ne_true(
+          Equal.trans(
+            Bool,
+            False{},
+            g(x, y),
+            True{},
+            Equal.sym(Bool, g(x, y), False{}, no),
+            Equal.trans(
+              Bool,
+              g(x, y),
+              g(x, x),
+              True{},
+              Equal.cong(
+                A,
+                Bool,
+                z => g(x, z),
+                y,
+                x,
+                Equal.sym(A, x, y, Eq.sound(~A, ~f, lf, x, y)(e))
+              ),
+              Eq.refl(~A, ~g, lg, x)
+            )
+          )
+        )
+      )
+
+# f is back for x and y, by its laws lf, when g, by its laws lg, is
+def Eq.agree.at(
+  ~A: Data,
+  ~f: A -> A -> Bool,
+  ~g: A -> A -> Bool,
+  ~lf: Eq.Laws(A, f),
+  ~lg: Eq.Laws(A, g),
+  back: Bool,
+  +x: A,
+  +y: A,
+  e: {g(x, y) == back: Bool}
+) -> {f(x, y) == back: Bool}:
+  match back:
+    case True{}:
+      %Eq.sound(~A, ~g, lg, x, y)(e): {f(x, _) == True{}: Bool}
+      Eq.refl(~A, ~f, lf, x)
+    case False{}:
+      Eq.agree.no(~A, ~f, ~g, ~lf, ~lg, f(x, y), x, y, e, {==})
+
+# two checks that both have the laws of an equality give the same answer
+def Eq.agree(
+  ~A: Data,
+  ~f: A -> A -> Bool,
+  ~g: A -> A -> Bool,
+  ~lf: Eq.Laws(A, f),
+  ~lg: Eq.Laws(A, g),
+  +x: A,
+  +y: A
+) -> {f(x, y) == g(x, y): Bool}:
+  Equal.sym(Bool, g(x, y), f(x, y), Eq.agree.at(~A, ~g, ~f, ~lg, ~lf, f(x, y), x, y, {==}))
+
 # a and False is False
 def Bool.and_false_right(a: Bool) -> {Bool.and(a, False{}) == False{}: Bool}:
   match a:

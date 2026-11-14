@@ -2648,6 +2648,7 @@ def Known.fresh_at_ok(
       )
     case Ledgers.Line{+h, Some{+b}}:
       e => (
+        %Equal.sym(Maybe<&2, RLines.State>, RLines.Branch.state.in(RFacts.Facts.list(s), Ledgers.Line{h, Some{b}}, rs), RLines.Branch.state(s, Ledgers.Line{h, Some{b}}, Some{rs}), Seens.Branch.state_in(s, Ledgers.Line{h, Some{b}}, rs)): {_ == RLines.Line.state(s, Ledgers.Line{h, Some{b}}): Maybe<&2, RLines.State>}
         %Equal.sym(Maybe<&2, RLines.State>, RLines.Store.state(s, h), Some{RLines.State{rs, k}}, e): {RLines.Branch.state(s, Ledgers.Line{h, Some{b}}, Some{rs}) == RLines.Branch.state(s, Ledgers.Line{h, Some{b}}, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, _)): Maybe<&2, RLines.State>}
         {==})
 
@@ -3019,6 +3020,72 @@ def Known.ids_learn_ok(
     )
   )
 
+# Known.learn.by is Known.learn.all, when j is what kn holds of the line c
+# and m the state that it holds of its store
+def Known.learn_by(
+  j: RKnown.Info,
+  m: Maybe<&2, RKnown.Seen>,
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line
+) -> {RKnown.Known.info(kn, c) == j: RKnown.Info} -> {RKnown.Known.seen(kn, RKnown.Known.root(c)) == m: Maybe<&2, RKnown.Seen>} -> {
+  RKnown.Known.learn.by(j, m, kn, s, c) == RKnown.Known.learn.all(kn, s, c): RKnown.Known()
+}:
+  match j:
+    case RKnown.Info{c2, ms, mr, mx}:
+      match ms mr mx m:
+        case None{} None{} None{} None{}:
+          ej => em => {==}
+        case None{} None{} None{} Some{z}:
+          ej => em => {==}
+        case None{} None{} Some{x} None{}:
+          ej => em => {==}
+        case None{} None{} Some{x} Some{z}:
+          ej => em => {==}
+        case None{} Some{r} None{} None{}:
+          ej => em => {==}
+        case None{} Some{r} None{} Some{z}:
+          ej => em => {==}
+        case None{} Some{r} Some{x} None{}:
+          ej => em => {==}
+        case None{} Some{r} Some{x} Some{z}:
+          ej => em => {==}
+        case Some{y} None{} None{} None{}:
+          ej => em => {==}
+        case Some{y} None{} None{} Some{z}:
+          ej => em => {==}
+        case Some{y} None{} Some{x} None{}:
+          ej => em => {==}
+        case Some{y} None{} Some{x} Some{z}:
+          ej => em => {==}
+        case Some{y} Some{r} None{} None{}:
+          ej => em => {==}
+        case Some{y} Some{r} None{} Some{z}:
+          ej => em => {==}
+        case Some{y} Some{r} Some{x} None{}:
+          ej => em => {==}
+        case Some{+y} Some{RKnown.Mark{+n0, +u0}} Some{+x} Some{+z}:
+          +ej => em =>
+            %Equal.sym(Maybe<&2, RKnown.Seen>, RKnown.Known.seen(kn, RKnown.Known.root(c)), Some{z}, em): {
+              kn == RKnown.Known.ids.learn(RKnown.Known.rule.learn(RKnown.Known.learn.one(RKnown.Known.learn.of(kn, s, RKnown.Known.root(c), _), s, c), s, c), c): RKnown.Known()
+            }
+            %Equal.sym(RKnown.Info, RKnown.Known.info(kn, c), RKnown.Info{c2, Some{y}, Some{RKnown.Mark{n0, u0}}, Some{x}}, ej): {
+              kn == RKnown.Known.ids.learn(RKnown.Known.rule.learn(RKnown.Known.learn.of(kn, s, c, RKnown.Info.seen(_)), s, c), c): RKnown.Known()
+            }
+            %Equal.sym(RKnown.Info, RKnown.Known.info(kn, c), RKnown.Info{c2, Some{y}, Some{RKnown.Mark{n0, u0}}, Some{x}}, ej): {
+              kn == RKnown.Known.ids.learn(RKnown.Known.rule.learn.if(Maybe.is_some(&2, RLines.Rule, RKnown.Mark.rule(RKnown.Info.mark(_))), kn, s, c), c): RKnown.Known()
+            }
+            %Equal.sym(RKnown.Info, RKnown.Known.info(kn, c), RKnown.Info{c2, Some{y}, Some{RKnown.Mark{n0, u0}}, Some{x}}, ej): {
+              kn == RKnown.Known.ids.learn.if(Maybe.is_some(&2, RKnown.Ids, RKnown.Info.ids(_)), kn, c): RKnown.Known()
+            }
+            {==}
+
+# Known.learn is Known.learn.all
+def Known.learn_all(+kn: RKnown.Known(), +s: RFacts.Plain(), +c: Ledgers.Line) -> {
+  RKnown.Known.learn(kn, s, c) == RKnown.Known.learn.all(kn, s, c): RKnown.Known()
+}:
+  Known.learn_by(RKnown.Known.info(kn, c), RKnown.Known.seen(kn, RKnown.Known.root(c)), kn, s, c)({==})({==})
+
 # a right table that learns the states of a line and of its store is right
 def Known.learn_ok(
   +kn: RKnown.Known(),
@@ -3027,7 +3094,9 @@ def Known.learn_ok(
 ) -> {
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {RContents.Known.ok(RKnown.Known.learn(kn, s, c), s) == True{}: Bool}:
-  ok => Known.ids_learn_ok(
+  ok =>
+    %Equal.sym(RKnown.Known(), RKnown.Known.learn(kn, s, c), RKnown.Known.learn.all(kn, s, c), Known.learn_all(kn, s, c)): {RContents.Known.ok(_, s) == True{}: Bool}
+    Known.ids_learn_ok(
     RKnown.Known.rule.learn(
       RKnown.Known.learn.one(RKnown.Known.learn.one(kn, s, RKnown.Known.root(c)), s, c),
       s,
@@ -11953,11 +12022,12 @@ def Known.learn_open(
 ) -> {
   RKnown.Known.shelf(kn) == RKnown.Known.shelf(RKnown.Known.learn(kn, s, c)): Maybe<&2, RKnown.Kept>
 }:
+  %Equal.sym(RKnown.Known(), RKnown.Known.learn(kn, s, c), RKnown.Known.learn.all(kn, s, c), Known.learn_all(kn, s, c)): {RKnown.Known.shelf(kn) == RKnown.Known.shelf(_): Maybe<&2, RKnown.Kept>}
   Equal.trans(
     Maybe<&2, RKnown.Kept>,
     RKnown.Known.shelf(kn),
     RKnown.Known.shelf(RKnown.Known.learn.one(kn, s, RKnown.Known.root(c))),
-    RKnown.Known.shelf(RKnown.Known.learn(kn, s, c)),
+    RKnown.Known.shelf(RKnown.Known.learn.all(kn, s, c)),
     Known.learn_of_open(kn, s, RKnown.Known.root(c), RKnown.Known.seen(kn, RKnown.Known.root(c))),
     Equal.trans(
       Maybe<&2, RKnown.Kept>,
@@ -11965,7 +12035,7 @@ def Known.learn_open(
       RKnown.Known.shelf(
         RKnown.Known.learn.one(RKnown.Known.learn.one(kn, s, RKnown.Known.root(c)), s, c)
       ),
-      RKnown.Known.shelf(RKnown.Known.learn(kn, s, c)),
+      RKnown.Known.shelf(RKnown.Known.learn.all(kn, s, c)),
       Known.learn_of_open(
         RKnown.Known.learn.one(kn, s, RKnown.Known.root(c)),
         s,
@@ -11984,7 +12054,7 @@ def Known.learn_open(
             c
           )
         ),
-        RKnown.Known.shelf(RKnown.Known.learn(kn, s, c)),
+        RKnown.Known.shelf(RKnown.Known.learn.all(kn, s, c)),
         Known.rule_learn_open(
           Maybe.is_some(
             &2,
@@ -16132,78 +16202,6 @@ def Voted.open(
 # A run from the state of a line reads only such slots: it ends at the same
 # state when it reads them from those facts, with a bound from those facts.
 
-# the next slot of a state, read from the facts of a node as a list, is the
-# one read from the facts, once the rule u of the slot is known
-def Step.at_in_eq(
-  +s: RFacts.Plain(),
-  +c: Ledgers.Line,
-  +st: RLines.State,
-  u: Maybe<&2, RLines.Rule>
-) -> {
-  RLines.Line.step.at(
-    s,
-    c,
-    st,
-    u
-  )
-    == RLines.Line.step.at.in(RFacts.Facts.list(s), c, st, u): Maybe<&2, RLines.State>
-}:
-  match u:
-    case None{}:
-      {==}
-    case Some{rule}:
-      {==}
-
-# the next slot of a state, read from the facts of a node as a list, is the
-# one read from the facts
-def Step.in_eq(
-  +s: RFacts.Plain(),
-  +r: Maybe<&2, List<&2, Types.Entry>>,
-  +c: Ledgers.Line,
-  +st: RLines.State
-) -> {
-  RLines.Line.step(
-    s,
-    r,
-    c,
-    st
-  )
-    == RLines.Line.step.in(RFacts.Facts.list(s), r, c, st): Maybe<&2, RLines.State>
-}:
-  Step.at_in_eq(s, c, st, RLines.Line.rule(r, c, RLines.State.versions(st)))
-
-# a run that reads the facts of a node as a list is the run that reads the
-# facts
-def Run.in_eq(
-  f: Nat,
-  +s: RFacts.Plain(),
-  +r: Maybe<&2, List<&2, Types.Entry>>,
-  +c: Ledgers.Line,
-  +st: RLines.State,
-  m: Maybe<&2, RLines.State>
-) -> {
-  RLines.Line.run(
-    f,
-    s,
-    r,
-    c,
-    st,
-    m
-  )
-    == RLines.Line.run.in(f, RFacts.Facts.list(s), r, c, st, m): RLines.State
-}:
-  match f m:
-    case 0n None{}:
-      {==}
-    case 0n Some{st2}:
-      {==}
-    case 1n+p None{}:
-      {==}
-    case 1n+p Some{+st2}:
-      (
-        %Step.in_eq(s, r, c, st2): {RLines.Line.run(p, s, r, c, st2, RLines.Line.step(s, r, c, st2)) == RLines.Line.run.in(p, RFacts.Facts.list(s), r, c, st2, _): RLines.State}
-        Run.in_eq(p, s, r, c, st2, RLines.Line.step(s, r, c, st2)))
-
 # a ballot for the slot after a slot that waits waits
 def Slot.waits_up(
   m: Maybe<&2, RLines.State>,
@@ -16729,8 +16727,8 @@ def Go.open(
           )
         ),
         (
-          %Step.in_eq(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), r, c, RLines.State{vs, k0}): {RLines.Line.run(1n+RLines.Line.bound(RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), c), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), r, c, RLines.State{vs, k0}, RLines.Line.step(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), r, c, RLines.State{vs, k0})) == RLines.Line.run.in(1n+RLines.Line.bound(RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), c), RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))), r, c, RLines.State{vs, k0}, _): RLines.State}
-          Run.in_eq(1n+RLines.Line.bound(RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), c), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), r, c, RLines.State{vs, k0}, RLines.Line.step(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), r, c, RLines.State{vs, k0})))
+          %Seens.Step.in_eq(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), r, c, RLines.State{vs, k0}): {RLines.Line.run(1n+RLines.Line.bound(RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), c), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), r, c, RLines.State{vs, k0}, RLines.Line.step(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), r, c, RLines.State{vs, k0})) == RLines.Line.run.in(1n+RLines.Line.bound(RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), c), RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))), r, c, RLines.State{vs, k0}, _): RLines.State}
+          Seens.Run.in_eq(1n+RLines.Line.bound(RKnown.Open.of(RFacts.Facts.list(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x}))), RKnown.Scene{RKnown.Known.none(), Facts.Facts.crit(s)}), c), Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), r, c, RLines.State{vs, k0}, RLines.Line.step(Facts.Facts.crit(Facts.Facts.add(s, Types.Fact.Vote{name, Types.Step.At{c, k, t}, x})), r, c, RLines.State{vs, k0})))
       ),
       Run.fuel(
         1n+RLines.Line.bound(

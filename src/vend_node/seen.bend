@@ -367,6 +367,147 @@ def Era.now_by(
 # What a work reads of what the node keeps
 # ----------------------------------------
 
+# Merges read from the newest versions
+# ------------------------------------
+
+# a pick of nothing so far, or else y, is the pick that leaves y
+def Takes.pick_or(+c: Ledgers.Line, +j: Nat, m: Maybe<&2, Spec.Point>, +y: Maybe<&2, RWorks.Took>) -> {
+  Maybe.or(&2, RWorks.Took, RWorks.Takes.pick(c, j, m, None{}), y) == RWorks.Takes.pick(c, j, m, y): Maybe<&2, RWorks.Took>
+}:
+  match m:
+    case None{}:
+      {==}
+    case Some{Spec.Point{+t, +v}}:
+      Lists.Bool.by(
+        d => {
+          Maybe.or(&2, RWorks.Took, Bool.pick(Maybe<&2, RWorks.Took>, d, Some{RWorks.Took{j, v}}, None{}), y)
+            == Bool.pick(Maybe<&2, RWorks.Took>, d, Some{RWorks.Took{j, v}}, y): Maybe<&2, RWorks.Took>
+        },
+        Ledgers.Line.is_eq(t, c),
+        et => {==},
+        ef => {==}
+      )
+
+# the newest version that takes a version of c, among some versions and one
+# more, is that one when it takes one, else the newest among the others
+def Takes.last_snoc(xs: List<&2, Types.Entry>, +e: Types.Entry, +c: Ledgers.Line, +k: Nat, +f: Maybe<&2, RWorks.Took>) -> {
+  RWorks.Takes.last(List.append(&2, Types.Entry, xs, [e]), c, k, f)
+    == RWorks.Takes.pick(c, Nat.add(List.length(&2, Types.Entry, xs), k), RContents.Entry.takes(e), RWorks.Takes.last(xs, c, k, f)): Maybe<&2, RWorks.Took>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+x, +r}:
+      Equal.trans(
+        Maybe<&2, RWorks.Took>,
+        RWorks.Takes.last(List.append(&2, Types.Entry, r, [e]), c, 1n+k, RWorks.Takes.pick(c, k, RContents.Entry.takes(x), f)),
+        RWorks.Takes.pick(c, Nat.add(List.length(&2, Types.Entry, r), 1n+k), RContents.Entry.takes(e), RWorks.Takes.last(r, c, 1n+k, RWorks.Takes.pick(c, k, RContents.Entry.takes(x), f))),
+        RWorks.Takes.pick(c, 1n+Nat.add(List.length(&2, Types.Entry, r), k), RContents.Entry.takes(e), RWorks.Takes.last(r, c, 1n+k, RWorks.Takes.pick(c, k, RContents.Entry.takes(x), f))),
+        Takes.last_snoc(r, e, c, 1n+k, RWorks.Takes.pick(c, k, RContents.Entry.takes(x), f)),
+        Equal.cong(
+          Nat,
+          Maybe<&2, RWorks.Took>,
+          z => RWorks.Takes.pick(c, z, RContents.Entry.takes(e), RWorks.Takes.last(r, c, 1n+k, RWorks.Takes.pick(c, k, RContents.Entry.takes(x), f))),
+          Nat.add(List.length(&2, Types.Entry, r), 1n+k),
+          1n+Nat.add(List.length(&2, Types.Entry, r), k),
+          Shared.Nat.add_succ(List.length(&2, Types.Entry, r), k)
+        )
+      )
+
+# a walk from the newest of the versions rev finds the newest version that
+# takes a version of c, as the walk from the oldest does, after prev
+def Takes.seek_last(rev: List<&2, Types.Entry>, +c: Ledgers.Line, prev: Maybe<&2, RWorks.Took>) -> {
+  RWorks.Takes.seek(rev, c, List.length(&2, Types.Entry, rev), prev)
+    == Maybe.or(&2, RWorks.Took, prev, RWorks.Takes.last(List.reverse(&2, Types.Entry, rev), c, 0n, None{})): Maybe<&2, RWorks.Took>
+}:
+  match rev prev:
+    case Nil{} None{}:
+      {==}
+    case Nil{} Some{t}:
+      {==}
+    case Con{e, r} Some{t}:
+      {==}
+    case Con{+e, +r} None{}:
+      Equal.trans(
+        Maybe<&2, RWorks.Took>,
+        RWorks.Takes.seek(r, c, List.length(&2, Types.Entry, r), RWorks.Takes.pick(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), None{})),
+        RWorks.Takes.pick(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{})),
+        RWorks.Takes.last(List.reverse(&2, Types.Entry, e <> r), c, 0n, None{}),
+        Equal.trans(
+          Maybe<&2, RWorks.Took>,
+          RWorks.Takes.seek(r, c, List.length(&2, Types.Entry, r), RWorks.Takes.pick(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), None{})),
+          Maybe.or(&2, RWorks.Took, RWorks.Takes.pick(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), None{}), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{})),
+          RWorks.Takes.pick(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{})),
+          Takes.seek_last(r, c, RWorks.Takes.pick(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), None{})),
+          Takes.pick_or(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{}))
+        ),
+        (
+          %Equal.sym(List<&2, Types.Entry>, List.reverse(&2, Types.Entry, e <> r), List.append(&2, Types.Entry, List.reverse(&2, Types.Entry, r), [e]), Rev.cons(e, r)): {
+            RWorks.Takes.pick(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{})) == RWorks.Takes.last(_, c, 0n, None{}): Maybe<&2, RWorks.Took>
+          }
+          %Equal.sym(Maybe<&2, RWorks.Took>, RWorks.Takes.last(List.append(&2, Types.Entry, List.reverse(&2, Types.Entry, r), [e]), c, 0n, None{}), RWorks.Takes.pick(c, Nat.add(List.length(&2, Types.Entry, List.reverse(&2, Types.Entry, r)), 0n), RContents.Entry.takes(e), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{})), Takes.last_snoc(List.reverse(&2, Types.Entry, r), e, c, 0n, None{})): {
+            RWorks.Takes.pick(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{})) == _: Maybe<&2, RWorks.Took>
+          }
+          %Equal.sym(Nat, Nat.add(List.length(&2, Types.Entry, List.reverse(&2, Types.Entry, r)), 0n), List.length(&2, Types.Entry, List.reverse(&2, Types.Entry, r)), Shared.Nat.add_zero(List.length(&2, Types.Entry, List.reverse(&2, Types.Entry, r)))): {
+            RWorks.Takes.pick(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{})) == RWorks.Takes.pick(c, _, RContents.Entry.takes(e), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{})): Maybe<&2, RWorks.Took>
+          }
+          %Equal.sym(Nat, List.length(&2, Types.Entry, List.reverse(&2, Types.Entry, r)), List.length(&2, Types.Entry, r), Rev.length(r)): {
+            RWorks.Takes.pick(c, List.length(&2, Types.Entry, r), RContents.Entry.takes(e), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{})) == RWorks.Takes.pick(c, _, RContents.Entry.takes(e), RWorks.Takes.last(List.reverse(&2, Types.Entry, r), c, 0n, None{})): Maybe<&2, RWorks.Took>
+          }
+          {==})
+      )
+
+# the pins of a merge read from the newest versions of both lines, when the
+# table holds the versions rf of the line f, are the pins read from all
+def Pins.merge_seen.of(
+  +m: Nat,
+  +c: Ledgers.Line,
+  +f: Ledgers.Line,
+  +rev: List<&2, Types.Entry>,
+  +kn: RKnown.Known(),
+  +s: RFacts.Plain(),
+  y: RKnown.Seen
+) -> {RKnown.Known.seen(kn, f) == Some{y}: Maybe<&2, RKnown.Seen>} -> {
+  RWorks.Pins.merge.seen(m, c, f, rev, kn, s, Some{y})
+    == RWorks.Pins.merge(m, c, f, List.reverse(&2, Types.Entry, rev), RKnown.Known.versions(kn, s, f)): Types.Pins
+}:
+  match y:
+    case RKnown.Seen{+rf, +nf, +kf}:
+      ey =>
+        %Equal.sym(Maybe<&2, RKnown.Seen>, RKnown.Known.seen(kn, f), Some{RKnown.Seen{rf, nf, kf}}, ey): {
+          RWorks.Pins.merge.seen(m, c, f, rev, kn, s, Some{RKnown.Seen{rf, nf, kf}})
+            == RWorks.Pins.merge(m, c, f, List.reverse(&2, Types.Entry, rev), Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, RKnown.Known.state.of(RKnown.Seen.state.of(_), kn, s, f))): Types.Pins
+        }
+        %Equal.sym(Nat, List.length(&2, Types.Entry, List.reverse(&2, Types.Entry, rf)), List.length(&2, Types.Entry, rf), Rev.length(rf)): {
+          RWorks.Pins.merge.seen(m, c, f, rev, kn, s, Some{RKnown.Seen{rf, nf, kf}})
+            == RWorks.Pins.merge.of(m, c, f, Nat.sub(_, 1n), RWorks.Takes.last(List.reverse(&2, Types.Entry, rf), c, 0n, None{}), RWorks.Takes.last(List.reverse(&2, Types.Entry, rev), f, 0n, None{})): Types.Pins
+        }
+        %Equal.sym(Maybe<&2, RWorks.Took>, RWorks.Takes.seek(rf, c, List.length(&2, Types.Entry, rf), None{}), Maybe.or(&2, RWorks.Took, None{}, RWorks.Takes.last(List.reverse(&2, Types.Entry, rf), c, 0n, None{})), Takes.seek_last(rf, c, None{})): {
+          RWorks.Pins.merge.of(m, c, f, Nat.sub(List.length(&2, Types.Entry, rf), 1n), _, RWorks.Takes.seek(rev, f, List.length(&2, Types.Entry, rev), None{}))
+            == RWorks.Pins.merge.of(m, c, f, Nat.sub(List.length(&2, Types.Entry, rf), 1n), RWorks.Takes.last(List.reverse(&2, Types.Entry, rf), c, 0n, None{}), RWorks.Takes.last(List.reverse(&2, Types.Entry, rev), f, 0n, None{})): Types.Pins
+        }
+        %Equal.sym(Maybe<&2, RWorks.Took>, RWorks.Takes.seek(rev, f, List.length(&2, Types.Entry, rev), None{}), Maybe.or(&2, RWorks.Took, None{}, RWorks.Takes.last(List.reverse(&2, Types.Entry, rev), f, 0n, None{})), Takes.seek_last(rev, f, None{})): {
+          RWorks.Pins.merge.of(m, c, f, Nat.sub(List.length(&2, Types.Entry, rf), 1n), RWorks.Takes.last(List.reverse(&2, Types.Entry, rf), c, 0n, None{}), _)
+            == RWorks.Pins.merge.of(m, c, f, Nat.sub(List.length(&2, Types.Entry, rf), 1n), RWorks.Takes.last(List.reverse(&2, Types.Entry, rf), c, 0n, None{}), RWorks.Takes.last(List.reverse(&2, Types.Entry, rev), f, 0n, None{})): Types.Pins
+        }
+        {==}
+
+# the pins of a merge read through the table are the pins read from all
+def Pins.merge_seen(+m: Nat, +c: Ledgers.Line, +f: Ledgers.Line, +rev: List<&2, Types.Entry>, +kn: RKnown.Known(), +s: RFacts.Plain()) -> {
+  RWorks.Pins.merge.seen(m, c, f, rev, kn, s, RKnown.Known.seen(kn, f))
+    == RWorks.Pins.merge(m, c, f, List.reverse(&2, Types.Entry, rev), RKnown.Known.versions(kn, s, f)): Types.Pins
+}:
+  Lists.Maybe.by(
+    RKnown.Seen,
+    x => {
+      RWorks.Pins.merge.seen(m, c, f, rev, kn, s, x)
+        == RWorks.Pins.merge(m, c, f, List.reverse(&2, Types.Entry, rev), RKnown.Known.versions(kn, s, f)): Types.Pins
+    },
+    RKnown.Known.seen(kn, f),
+    en => {==},
+    y => ey => Pins.merge_seen.of(m, c, f, rev, kn, s, y)(ey)
+  )
+
 # the pins that Pins.seen gives are those that Pins.for gives for the
 # versions, the oldest first
 def Pins.seen_eq(
@@ -384,8 +525,8 @@ def Pins.seen_eq(
       {==}
     case Spec.Request.Write{branch, path, words}:
       {==}
-    case Spec.Request.Merge{from, into}:
-      {==}
+    case Spec.Request.Merge{+from, into}:
+      Pins.merge_seen(m, c, from, rev, kn, s)
     case Spec.Request.Resolve{merge, path1, words1}:
       {==}
     case Spec.Request.Mark{branch1, name, version}:
@@ -945,7 +1086,7 @@ def Infos.with_of(
 } -> {
   RKnown.Info{c, m, r, x} == RKnown.Infos.of(RKnown.Infos.with(l, RKnown.Info{c, m, r, x}), c): RKnown.Info
 }:
-  x1 => (%Equal.sym(Maybe<&2, RKnown.Info>, Crits.Crit.get(RKnown.Info, Crits.Crit.set(RKnown.Info, l, Ledgers.Line.code(c, []), RKnown.Info{c, m, r, x}), Ledgers.Line.code(c, [])), Bool.pick(Maybe<&2, RKnown.Info>, Crits.Key.is_eq(Ledgers.Line.code(c, []), Ledgers.Line.code(c, [])), Some{RKnown.Info{c, m, r, x}}, Crits.Crit.get(RKnown.Info, l, Ledgers.Line.code(c, []))), Crits.Dict.get_set.at(~RKnown.Info, l, Ledgers.Line.code(c, []), RKnown.Info{c, m, r, x}, Ledgers.Line.code(c, []))(x1)) : {RKnown.Info{c, m, r, x} == RKnown.Info.or(_, c) : RKnown.Info}; (%Equal.sym(Bool, Crits.Key.is_eq(Ledgers.Line.code(c, []), Ledgers.Line.code(c, [])), True{}, Crits.Key.is_eq_refl(Ledgers.Line.code(c, []))) : {RKnown.Info{c, m, r, x} == RKnown.Info.or(Bool.pick(Maybe<&2, RKnown.Info>, _, Some{RKnown.Info{c, m, r, x}}, Crits.Crit.get.go(RKnown.Info, l, 0n, Crits.Cur{0n, Ledgers.Line.code(c, [])}, Ledgers.Line.code(c, []))), c) : RKnown.Info}; {==}))
+  x1 => (%Equal.sym(Maybe<&2, RKnown.Info>, Crits.Crit.get(RKnown.Info, Crits.Crit.set(RKnown.Info, l, Ledgers.Line.code(c, []), RKnown.Info{c, m, r, x}), Ledgers.Line.code(c, [])), Bool.pick(Maybe<&2, RKnown.Info>, Crits.Key.is_eq(Ledgers.Line.code(c, []), Ledgers.Line.code(c, [])), Some{RKnown.Info{c, m, r, x}}, Crits.Crit.get(RKnown.Info, l, Ledgers.Line.code(c, []))), Crits.Dict.get_set.at(~RKnown.Info, l, Ledgers.Line.code(c, []), RKnown.Info{c, m, r, x}, Ledgers.Line.code(c, []))(x1)) : {RKnown.Info{c, m, r, x} == RKnown.Info.or(_, c) : RKnown.Info}; (%Equal.sym(Bool, Crits.Key.is_eq(Ledgers.Line.code(c, []), Ledgers.Line.code(c, [])), True{}, Crits.Key.is_eq_refl(Ledgers.Line.code(c, []))) : {RKnown.Info{c, m, r, x} == RKnown.Info.or(Bool.pick(Maybe<&2, RKnown.Info>, _, Some{RKnown.Info{c, m, r, x}}, Crits.Crit.get(RKnown.Info, l, Ledgers.Line.code(c, []))), c) : RKnown.Info}; {==}))
 
 # a write of a line into well formed lines, and then a write of the same
 # line, is the second write
@@ -961,7 +1102,7 @@ def Infos.with_twice(
 } -> {
   RKnown.Infos.with(l, i2) == RKnown.Infos.with(RKnown.Infos.with(l, i), i2): Crits.Crit<RKnown.Info>
 }:
-  x => x1 => (%x1 : {Crits.Crit.put(RKnown.Info, w => x => x, l, 0n, Crits.Cur{0n, _}, _, i2, Crits.Crit.diff(_, Crits.Crit.near(RKnown.Info, l, 0n, Crits.Cur{0n, _}))) == Crits.Crit.put(RKnown.Info, w => x => x, Crits.Crit.put(RKnown.Info, w => x => x, l, 0n, Crits.Cur{0n, Ledgers.Line.code(RKnown.Info.line(i), [])}, Ledgers.Line.code(RKnown.Info.line(i), []), i, Crits.Crit.diff(Ledgers.Line.code(RKnown.Info.line(i), []), Crits.Crit.near(RKnown.Info, l, 0n, Crits.Cur{0n, Ledgers.Line.code(RKnown.Info.line(i), [])}))), 0n, Crits.Cur{0n, _}, _, i2, Crits.Crit.diff(_, Crits.Crit.near(RKnown.Info, Crits.Crit.put(RKnown.Info, w => x => x, l, 0n, Crits.Cur{0n, Ledgers.Line.code(RKnown.Info.line(i), [])}, Ledgers.Line.code(RKnown.Info.line(i), []), i, Crits.Crit.diff(Ledgers.Line.code(RKnown.Info.line(i), []), Crits.Crit.near(RKnown.Info, l, 0n, Crits.Cur{0n, Ledgers.Line.code(RKnown.Info.line(i), [])}))), 0n, Crits.Cur{0n, _}))) : Crits.Crit<RKnown.Info>}; Crit.set_twice(~RKnown.Info, l, Ledgers.Line.code(RKnown.Info.line(i), []), i, i2)(x))
+  x => x1 => (%x1 : {Crits.Crit.set(~RKnown.Info, l, _, i2) == Crits.Crit.set(~RKnown.Info, Crits.Crit.set(~RKnown.Info, l, RKnown.Info.key(i), i), _, i2) : Crits.Crit<RKnown.Info>}; Crit.set_twice(~RKnown.Info, l, Ledgers.Line.code(RKnown.Info.line(i), []), i, i2)(x))
 
 # what a node keeps of the state that it keeps, with the right count, is
 # what it keeps
@@ -1413,3 +1554,234 @@ def Merge.hint_seen(m: Maybe<&2, RKnown.Seen>, t: Spec.Point, a: Spec.Point) -> 
           )),
         ef => {==}
       )
+
+# the next slot of a state, read from the facts of a node as a list, is the
+# one read from the facts, once the rule u of the slot is known
+def Step.at_in_eq(
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +st: RLines.State,
+  u: Maybe<&2, RLines.Rule>
+) -> {
+  RLines.Line.step.at(
+    s,
+    c,
+    st,
+    u
+  )
+    == RLines.Line.step.at.in(RFacts.Facts.list(s), c, st, u): Maybe<&2, RLines.State>
+}:
+  match u:
+    case None{}:
+      {==}
+    case Some{rule}:
+      {==}
+
+# the next slot of a state, read from the facts of a node as a list, is the
+# one read from the facts
+def Step.in_eq(
+  +s: RFacts.Plain(),
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: RLines.State
+) -> {
+  RLines.Line.step(
+    s,
+    r,
+    c,
+    st
+  )
+    == RLines.Line.step.in(RFacts.Facts.list(s), r, c, st): Maybe<&2, RLines.State>
+}:
+  Step.at_in_eq(s, c, st, RLines.Line.rule(r, c, RLines.State.versions(st)))
+
+# a run that reads the facts of a node as a list is the run that reads the
+# facts
+def Run.in_eq(
+  f: Nat,
+  +s: RFacts.Plain(),
+  +r: Maybe<&2, List<&2, Types.Entry>>,
+  +c: Ledgers.Line,
+  +st: RLines.State,
+  m: Maybe<&2, RLines.State>
+) -> {
+  RLines.Line.run(
+    f,
+    s,
+    r,
+    c,
+    st,
+    m
+  )
+    == RLines.Line.run.in(f, RFacts.Facts.list(s), r, c, st, m): RLines.State
+}:
+  match f m:
+    case 0n None{}:
+      {==}
+    case 0n Some{st2}:
+      {==}
+    case 1n+p None{}:
+      {==}
+    case 1n+p Some{+st2}:
+      (
+        %Step.in_eq(s, r, c, st2): {RLines.Line.run(p, s, r, c, st2, RLines.Line.step(s, r, c, st2)) == RLines.Line.run.in(p, RFacts.Facts.list(s), r, c, st2, _): RLines.State}
+        Run.in_eq(p, s, r, c, st2, RLines.Line.step(s, r, c, st2)))
+
+
+# A run read from the votes of its line
+# -------------------------------------
+
+# the ballots of a slot of a line are those among the votes of the line
+def Ballots.votes(fs: List<&2, Types.Fact>, +c: Ledgers.Line, +k: Nat) -> {
+  RRounds.Slot.ballots(RLines.Line.votes(fs, c), c, k) == RRounds.Slot.ballots(fs, c, k): List<&2, RRounds.Ballot>
+}:
+  match fs:
+    case Nil{}:
+      {==}
+    case Con{Types.Fact.Ask{a}, rest}:
+      Ballots.votes(rest, c, k)
+    case Con{Types.Fact.Vote{v, Types.Step.Broken{}, x}, rest}:
+      Ballots.votes(rest, c, k)
+    case Con{Types.Fact.Vote{+v, Types.Step.At{+c2, +k2, +t}, +x}, +rest}:
+      Lists.Bool.by(
+        d => {
+          RRounds.Slot.ballots(List.filter.put(Types.Fact, Types.Fact.Vote{v, Types.Step.At{c2, k2, t}, x}, RLines.Line.votes(rest, c), d), c, k)
+            == List.filter.put(RRounds.Ballot, RRounds.Ballot{v, t, x}, RRounds.Slot.ballots(rest, c, k), Bool.and(d, Nat.is_eq(k2, k))): List<&2, RRounds.Ballot>
+        },
+        Ledgers.Line.is_eq(c2, c),
+        et => (
+          %Equal.sym(Bool, Ledgers.Line.is_eq(c2, c), True{}, et): {
+            List.filter.put(RRounds.Ballot, RRounds.Ballot{v, t, x}, RRounds.Slot.ballots(RLines.Line.votes(rest, c), c, k), Bool.and(_, Nat.is_eq(k2, k)))
+              == List.filter.put(RRounds.Ballot, RRounds.Ballot{v, t, x}, RRounds.Slot.ballots(rest, c, k), Nat.is_eq(k2, k)): List<&2, RRounds.Ballot>
+          }
+          Equal.cong(
+            List<&2, RRounds.Ballot>,
+            List<&2, RRounds.Ballot>,
+            z => List.filter.put(RRounds.Ballot, RRounds.Ballot{v, t, x}, z, Nat.is_eq(k2, k)),
+            RRounds.Slot.ballots(RLines.Line.votes(rest, c), c, k),
+            RRounds.Slot.ballots(rest, c, k),
+            Ballots.votes(rest, c, k)
+          )),
+        ef => Ballots.votes(rest, c, k)
+      )
+
+# the bound of a line is the bound of its votes
+def Bound.votes(fs: List<&2, Types.Fact>, +c: Ledgers.Line) -> {
+  RLines.Line.bound(RLines.Line.votes(fs, c), c) == RLines.Line.bound(fs, c): Nat
+}:
+  match fs:
+    case Nil{}:
+      {==}
+    case Con{Types.Fact.Ask{a}, rest}:
+      Bound.votes(rest, c)
+    case Con{Types.Fact.Vote{v, Types.Step.Broken{}, x}, rest}:
+      Bound.votes(rest, c)
+    case Con{Types.Fact.Vote{+v, Types.Step.At{+c2, +k2, +t}, +x}, +rest}:
+      Lists.Bool.by(
+        d => {
+          RLines.Line.bound(List.filter.put(Types.Fact, Types.Fact.Vote{v, Types.Step.At{c2, k2, t}, x}, RLines.Line.votes(rest, c), d), c)
+            == Nat.max(RLines.Line.bound.at(d, k2), RLines.Line.bound(rest, c)): Nat
+        },
+        Ledgers.Line.is_eq(c2, c),
+        et => (
+          %Equal.sym(Bool, Ledgers.Line.is_eq(c2, c), True{}, et): {
+            Nat.max(RLines.Line.bound.at(_, k2), RLines.Line.bound(RLines.Line.votes(rest, c), c))
+              == Nat.max(1n+k2, RLines.Line.bound(rest, c)): Nat
+          }
+          Equal.cong(
+            Nat,
+            Nat,
+            z => Nat.max(1n+k2, z),
+            RLines.Line.bound(RLines.Line.votes(rest, c), c),
+            RLines.Line.bound(rest, c),
+            Bound.votes(rest, c)
+          )),
+        ef => Bound.votes(rest, c)
+      )
+
+# a step of a line read from its votes, once the rule u of the slot is
+# known, is the step read from all the facts
+def Step.at_votes(+fs: List<&2, Types.Fact>, +c: Ledgers.Line, +st: RLines.State, u: Maybe<&2, RLines.Rule>) -> {
+  RLines.Line.step.at.in(RLines.Line.votes(fs, c), c, st, u) == RLines.Line.step.at.in(fs, c, st, u): Maybe<&2, RLines.State>
+}:
+  match u:
+    case None{}:
+      {==}
+    case Some{+rule}:
+      Equal.cong(
+        List<&2, RRounds.Ballot>,
+        Maybe<&2, RLines.State>,
+        z => RLines.Line.step.of(st, RRounds.Slot.decided(z, RLines.Rule.nodes(rule), RLines.State.slot(st))),
+        RRounds.Slot.ballots(RLines.Line.votes(fs, c), c, RLines.State.slot(st)),
+        RRounds.Slot.ballots(fs, c, RLines.State.slot(st)),
+        Ballots.votes(fs, c, RLines.State.slot(st))
+      )
+
+# a step of a line read from its votes is the step read from all the facts
+def Step.votes(+fs: List<&2, Types.Fact>, +r: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +st: RLines.State) -> {
+  RLines.Line.step.in(RLines.Line.votes(fs, c), r, c, st) == RLines.Line.step.in(fs, r, c, st): Maybe<&2, RLines.State>
+}:
+  Step.at_votes(fs, c, st, RLines.Line.rule(r, c, RLines.State.versions(st)))
+
+# a run of a line read from its votes is the run read from all the facts
+def Run.votes(f: Nat, +fs: List<&2, Types.Fact>, +r: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +st: RLines.State, m: Maybe<&2, RLines.State>) -> {
+  RLines.Line.run.in(f, RLines.Line.votes(fs, c), r, c, st, m) == RLines.Line.run.in(f, fs, r, c, st, m): RLines.State
+}:
+  match f m:
+    case 0n m:
+      {==}
+    case 1n+p None{}:
+      {==}
+    case 1n+p Some{+st2}:
+      %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.step.in(RLines.Line.votes(fs, c), r, c, st2), RLines.Line.step.in(fs, r, c, st2), Step.votes(fs, r, c, st2)): {
+        RLines.Line.run.in(p, RLines.Line.votes(fs, c), r, c, st2, _) == RLines.Line.run.in(p, fs, r, c, st2, RLines.Line.step.in(fs, r, c, st2)): RLines.State
+      }
+      Run.votes(p, fs, r, c, st2, RLines.Line.step.in(fs, r, c, st2))
+
+# a run of a line from st, read from its votes, is the run from st
+def Start.in_eq(+s: RFacts.Plain(), +r: Maybe<&2, List<&2, Types.Entry>>, +c: Ledgers.Line, +st: RLines.State) -> {
+  RLines.Line.start.in(RLines.Line.votes(RFacts.Facts.list(s), c), r, c, st) == RLines.Line.start(s, r, c, st): RLines.State
+}:
+  %Equal.sym(Nat, RLines.Line.bound(RLines.Line.votes(RFacts.Facts.list(s), c), c), RLines.Line.bound(RFacts.Facts.list(s), c), Bound.votes(RFacts.Facts.list(s), c)): {
+    RLines.Line.run.in(_, RLines.Line.votes(RFacts.Facts.list(s), c), r, c, st, RLines.Line.step.in(RLines.Line.votes(RFacts.Facts.list(s), c), r, c, st)) == RLines.Line.start(s, r, c, st): RLines.State
+  }
+  %Equal.sym(Maybe<&2, RLines.State>, RLines.Line.step.in(RLines.Line.votes(RFacts.Facts.list(s), c), r, c, st), RLines.Line.step.in(RFacts.Facts.list(s), r, c, st), Step.votes(RFacts.Facts.list(s), r, c, st)): {
+    RLines.Line.run.in(RLines.Line.bound(RFacts.Facts.list(s), c), RLines.Line.votes(RFacts.Facts.list(s), c), r, c, st, _) == RLines.Line.start(s, r, c, st): RLines.State
+  }
+  %Step.in_eq(s, r, c, st): {
+    RLines.Line.run.in(RLines.Line.bound(RFacts.Facts.list(s), c), RLines.Line.votes(RFacts.Facts.list(s), c), r, c, st, _) == RLines.Line.start(s, r, c, st): RLines.State
+  }
+  Equal.trans(
+    RLines.State,
+    RLines.Line.run.in(RLines.Line.bound(RFacts.Facts.list(s), c), RLines.Line.votes(RFacts.Facts.list(s), c), r, c, st, RLines.Line.step(s, r, c, st)),
+    RLines.Line.run.in(RLines.Line.bound(RFacts.Facts.list(s), c), RFacts.Facts.list(s), r, c, st, RLines.Line.step(s, r, c, st)),
+    RLines.Line.start(s, r, c, st),
+    Run.votes(RLines.Line.bound(RFacts.Facts.list(s), c), RFacts.Facts.list(s), r, c, st, RLines.Line.step(s, r, c, st)),
+    Equal.sym(
+      RLines.State,
+      RLines.Line.start(s, r, c, st),
+      RLines.Line.run.in(RLines.Line.bound(RFacts.Facts.list(s), c), RFacts.Facts.list(s), r, c, st, RLines.Line.step(s, r, c, st)),
+      Run.in_eq(RLines.Line.bound(RFacts.Facts.list(s), c), s, r, c, st, RLines.Line.step(s, r, c, st))
+    )
+  )
+
+# the state of a branch read from its votes is its state
+def Branch.state_in(+s: RFacts.Plain(), +c: Ledgers.Line, +rr: List<&2, Types.Entry>) -> {
+  RLines.Branch.state.in(RFacts.Facts.list(s), c, rr) == RLines.Branch.state(s, c, Some{rr}): Maybe<&2, RLines.State>
+}:
+  Lists.Maybe.by(
+    Types.Entry,
+    m => {
+      RLines.Branch.state.of(RLines.Line.votes(RFacts.Facts.list(s), c), c, rr, m) == RLines.Line.from(s, Some{rr}, c, m): Maybe<&2, RLines.State>
+    },
+    RLines.Branch.first(rr, c),
+    en => {==},
+    e => ee => Equal.cong(
+      RLines.State,
+      Maybe<&2, RLines.State>,
+      z => Some{z},
+      RLines.Line.start.in(RLines.Line.votes(RFacts.Facts.list(s), c), Some{rr}, c, RLines.State{[e], 1n}),
+      RLines.Line.start(s, Some{rr}, c, RLines.State{[e], 1n}),
+      Start.in_eq(s, Some{rr}, c, RLines.State{[e], 1n})
+    )
+  )

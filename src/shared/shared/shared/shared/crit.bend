@@ -47,9 +47,66 @@ def Key.bits(k: List<&2, U32>) -> List<&2, Bool>:
     case Con{U32{w}, r}:
       List.append(&2, Bool, Word.bits(32n, w), Key.bits(r))
 
+# a and b are the same key, when the words before them were the same (ok):
+# a walk that makes no closure
+def Key.is_eq.go(a: List<&2, U32>, b: List<&2, U32>, ok: Bool) -> Bool:
+  match a b ok:
+    case _ _ False{}:
+      False{}
+    case Nil{} Nil{} True{}:
+      True{}
+    case Con{x, ra} Con{y, rb} True{}:
+      Key.is_eq.go(ra, rb, U32.is_eq(x, y))
+    case _ _ True{}:
+      False{}
+
 # a and b are the same key
 def Key.is_eq(a: List<&2, U32>, b: List<&2, U32>) -> Bool:
-  Shared.List.is_eq(~U32, ~U32.is_eq, a, b)
+  Key.is_eq.go(a, b, True{})
+
+# Key.is_eq.go is the test of the lists, when the words before were the same
+def Key.is_eq_go(a: List<&2, U32>, b: List<&2, U32>, ok: Bool) -> {
+  Key.is_eq.go(a, b, ok) == List.all.if(u => Shared.List.is_eq(~U32, ~U32.is_eq, a, b), ok): Bool
+}:
+  match a:
+    case Nil{}:
+      match b:
+        case Nil{}:
+          match ok:
+            case False{}:
+              {==}
+            case True{}:
+              {==}
+        case Con{head, tail}:
+          match head:
+            case U32{data}:
+              match ok:
+                case False{}:
+                  {==}
+                case True{}:
+                  {==}
+    case Con{head, tail}:
+      match b:
+        case Nil{}:
+          match ok:
+            case False{}:
+              {==}
+            case True{}:
+              {==}
+        case Con{head1, tail1}:
+          match head1:
+            case U32{data}:
+              match ok:
+                case False{}:
+                  {==}
+                case True{}:
+                  Key.is_eq_go(tail, tail1, Cmp.is_eq(U32.cmp(head, U32{data})))
+
+# Key.is_eq is the test of the lists, word by word
+def Key.is_eq_list(a: List<&2, U32>, b: List<&2, U32>) -> {
+  Key.is_eq(a, b) == Shared.List.is_eq(~U32, ~U32.is_eq, a, b): Bool
+}:
+  Key.is_eq_go(a, b, True{})
 
 # the first position where the bits a and b differ, or one ends before the
 # other (none: they are equal)
@@ -116,9 +173,29 @@ def Key.diff.fast(a: List<&2, U32>, b: List<&2, U32>, +at: Nat) -> Maybe<&2, Nat
     case _ _:
       Some{at}
 
+# the first position where the keys a and b differ, after the words x and y
+# at the bit at, once it is known whether x and y are equal (eq): as
+# Key.diff.fast gives it, with no closure
+def Key.diff.step(a: List<&2, U32>, b: List<&2, U32>, +at: Nat, eq: Bool, x: U32, y: U32) -> Maybe<&2, Nat>:
+  match a b eq:
+    case ra rb False{}:
+      Key.diff.go(x <> ra, y <> rb, at)
+    case Nil{} Nil{} True{}:
+      None{}
+    case Con{+x2, ra} Con{+y2, rb} True{}:
+      Key.diff.step(ra, rb, Nat.add(at, 32n), U32.is_eq(x2, y2), x2, y2)
+    case _ _ True{}:
+      Some{Nat.add(at, 32n)}
+
 # the first position where the keys a and b differ (none: equal)
 def Key.diff(a: List<&2, U32>, b: List<&2, U32>) -> Maybe<&2, Nat>:
-  Key.diff.fast(a, b, 0n)
+  match a b:
+    case Nil{} Nil{}:
+      None{}
+    case Con{+x, ra} Con{+y, rb}:
+      Key.diff.step(ra, rb, 0n, U32.is_eq(x, y), x, y)
+    case _ _:
+      Some{0n}
 
 # Cursors
 # -------
@@ -271,9 +348,61 @@ def Crit.get.go(-V: Data, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32>) -> M
         )
       )
 
+# Reads with no closure
+# ---------------------
+# A read below picks the side of a fork that it goes on to, and calls itself
+# once on it; fuel bounds its steps: each fork reads at least one bit of the
+# key, so one more than the bits of the key is enough (the laws say so).
+
+# the count of the bits of the key k
+def Key.size(k: List<&2, U32>) -> Nat:
+  match k:
+    case Nil{}:
+      0n
+    case Con{w, r}:
+      Nat.add(32n, Key.size(r))
+
+# one more than the bits of the key k
+def Key.fuel(k: List<&2, U32>) -> Nat:
+  1n+Key.size(k)
+
+# the entry of a fork whose key ends there, as a map
+def Crit.ended.map(-V: Data, rep: List<&2, U32>, e: Maybe<&2, V>) -> Crit<V>:
+  match e:
+    case None{}:
+      Crit.Tip{}
+    case Some{v}:
+      Crit.Leaf{rep, v}
+
+# what a read goes on to at a fork with the entry e of the key rep, and the
+# sides z and o: the entry, if the key read ends there (done), else the side
+# of its next bit
+def Crit.side(-V: Data, done: Bool, bit: Bool, rep: List<&2, U32>, e: Maybe<&2, V>, z: Crit<V>, o: Crit<V>) -> Crit<V>:
+  match done bit:
+    case True{} _:
+      Crit.ended.map(V, rep, e)
+    case False{} True{}:
+      o
+    case False{} False{}:
+      z
+
+# the value of the key k in m, read from the cursor c at the bit at, in at
+# most n forks: as Crit.get.go gives it
+def Crit.get.fuel(-V: Data, n: Nat, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32>) -> Maybe<&2, V>:
+  match n m:
+    case n Crit.Tip{}:
+      None{}
+    case n Crit.Leaf{k2, v}:
+      Shared.Maybe.when(V, Key.is_eq(k2, k), u => Some{v})
+    case 0n Crit.Fork{rep, pos, e, z, o}:
+      None{}
+    case 1n+g Crit.Fork{rep, +pos, e, z, o}:
+      +c2 = Cur.skip(Nat.sub(pos, at), c)
+      Crit.get.fuel(V, g, Crit.side(V, Cur.done(c2), Cur.bit(c2), rep, e, z, o), 1n+pos, Cur.next(c2), k)
+
 # the value of the key k in m, if m holds k
 def Crit.get(-V: Data, m: Crit<V>, +k: List<&2, U32>) -> Maybe<&2, V>:
-  Crit.get.go(V, m, 0n, Cur.of(k), k)
+  Crit.get.fuel(V, Key.fuel(k), m, 0n, Cur.of(k), k)
 
 # what m holds under the key k, read through every entry: a clear def, for
 # the laws, that does not read bits
@@ -478,9 +607,153 @@ def Crit.diff(k: List<&2, U32>, n: Maybe<&2, List<&2, U32>>) -> Maybe<&2, Nat>:
     case Some{x}:
       Key.diff(k, x)
 
+# Writes with no closure
+# ----------------------
+
+# what a near read goes on to at a fork with the sides z and o: nothing, if
+# the key read ends there (done), else the side of its next bit
+def Crit.near.side(-V: Data, done: Bool, bit: Bool, z: Crit<V>, o: Crit<V>) -> Crit<V>:
+  match done bit:
+    case True{} _:
+      Crit.Tip{}
+    case False{} True{}:
+      o
+    case False{} False{}:
+      z
+
+# the key that Crit.near reaches in m from the cursor c at the bit at, or d
+# when m is empty, in at most n forks
+def Crit.near.fuel(-V: Data, n: Nat, m: Crit<V>, +at: Nat, +c: Cur, d: Maybe<&2, List<&2, U32>>) -> Maybe<&2, List<&2, U32>>:
+  match n m:
+    case n Crit.Tip{}:
+      d
+    case n Crit.Leaf{k, v}:
+      Some{k}
+    case 0n Crit.Fork{rep, pos, e, z, o}:
+      d
+    case 1n+g Crit.Fork{+rep, +pos, e, z, o}:
+      +c2 = Cur.skip(Nat.sub(pos, at), c)
+      Crit.near.fuel(V, g, Crit.near.side(V, Cur.done(c2), Cur.bit(c2), z, o), 1n+pos, Cur.next(c2), Some{rep})
+
+# what a write does at a fork: join a new entry above it, put the value
+# where the key ends, or go on to the side zero or one
+type Pick is Data:
+  Pick.Join{}
+  Pick.Here{}
+  Pick.Zero{}
+  Pick.One{}
+
+# what a write does at a fork, where its key differs above it (above), ends
+# there (done), or goes on with the bit bit
+def Pick.of(above: Bool, done: Bool, bit: Bool) -> Pick:
+  match above done bit:
+    case True{} _ _:
+      Pick.Join{}
+    case False{} True{} _:
+      Pick.Here{}
+    case False{} False{} True{}:
+      Pick.One{}
+    case False{} False{} False{}:
+      Pick.Zero{}
+
+# the side of a fork that a write p goes on to (none: it stops there)
+def Pick.side(-V: Data, p: Pick, z: Crit<V>, o: Crit<V>) -> Crit<V>:
+  match p:
+    case Pick.Join{}:
+      Crit.Tip{}
+    case Pick.Here{}:
+      Crit.Tip{}
+    case Pick.Zero{}:
+      z
+    case Pick.One{}:
+      o
+
+# the fork rep, pos, e, z, o after the write p of the key k and the value v,
+# where d is where k differs from the key a read reaches, and r is the side
+# that p went on to, after the write
+def Pick.back(
+  ~V: Data,
+  ~f: V -> V -> V,
+  p: Pick,
+  +k: List<&2, U32>,
+  +v: V,
+  +rep: List<&2, U32>,
+  +pos: Nat,
+  +e: Maybe<&2, V>,
+  +z: Crit<V>,
+  +o: Crit<V>,
+  d: Maybe<&2, Nat>,
+  r: Crit<V>
+) -> Crit<V>:
+  match p:
+    case Pick.Join{}:
+      Crit.join(V, Crit.Leaf{k, v}, Crit.Fork{rep, pos, e, z, o}, Maybe.default(&2, Nat, d, 0n))
+    case Pick.Here{}:
+      Crit.mk(V, k, pos, Some{Crit.merge(~V, ~f, e, v)}, z, o)
+    case Pick.Zero{}:
+      Crit.mk(V, rep, pos, e, r, o)
+    case Pick.One{}:
+      Crit.mk(V, rep, pos, e, z, r)
+
+# the entry k2, w after a write of the key k and the value v, as Crit.put
+# gives it, where same says that k is k2
+def Crit.put.leaf(
+  ~V: Data,
+  ~f: V -> V -> V,
+  same: Bool,
+  +k2: List<&2, U32>,
+  +w: V,
+  +k: List<&2, U32>,
+  +v: V,
+  d: Maybe<&2, Nat>
+) -> Crit<V>:
+  match same:
+    case True{}:
+      Crit.Leaf{k2, f(w, v)}
+    case False{}:
+      Crit.join(V, Crit.Leaf{k, v}, Crit.Leaf{k2, w}, Maybe.default(&2, Nat, d, 0n))
+
+# m after a write as Crit.put gives it, in at most n forks
+def Crit.put.fuel(
+  ~V: Data,
+  ~f: V -> V -> V,
+  n: Nat,
+  m: Crit<V>,
+  +at: Nat,
+  +c: Cur,
+  +k: List<&2, U32>,
+  +v: V,
+  +d: Maybe<&2, Nat>
+) -> Crit<V>:
+  match n m:
+    case n Crit.Tip{}:
+      Crit.Leaf{k, v}
+    case n Crit.Leaf{+k2, +w}:
+      Crit.put.leaf(~V, ~f, Maybe.is_none(&2, Nat, d), k2, w, k, v, d)
+    case 0n Crit.Fork{rep, pos, e, z, o}:
+      Crit.Fork{rep, pos, e, z, o}
+    case 1n+g Crit.Fork{+rep, +pos, +e, +z, +o}:
+      +c2 = Cur.skip(Nat.sub(pos, at), c)
+      +p = Pick.of(Crit.above(d, pos), Cur.done(c2), Cur.bit(c2))
+      Pick.back(
+        ~V,
+        ~f,
+        p,
+        k,
+        v,
+        rep,
+        pos,
+        e,
+        z,
+        o,
+        d,
+        Crit.put.fuel(~V, ~f, g, Pick.side(V, p, z, o), 1n+pos, Cur.next(c2), k, v, d)
+      )
+
 # m with the key k bound to v, or to f of the old value and v
 def Crit.upsert(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U32>, v: V) -> Crit<V>:
-  Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, m, 0n, Cur.of(k))))
+  +n = Key.fuel(k)
+  Crit.put.fuel(~V, ~f, n, m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near.fuel(V, n, m, 0n, Cur.of(k), None{})))
 
 # m with the key k bound to v
 def Crit.set(~V: Data, +m: Crit<V>, +k: List<&2, U32>, v: V) -> Crit<V>:
@@ -1110,6 +1383,545 @@ def Cur.skip_bits(n: Nat, c: Cur) -> {
 # bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
+# Laws of the reads and writes with no closure
+# --------------------------------------------
+# bend-lint: expect-begin bend-lint-rules/performance/missed_fork@hint -- a proof does not run
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
+
+# no number is below 0
+def Crit.lt_zero(a: Nat) -> {Nat.is_lt(a, 0n) == False{}: Bool}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
+
+# a number below b is below one more than b
+def Bits.lt_up(a: Nat, b: Nat) -> {Nat.is_lt(a, b) == True{}: Bool} -> {Nat.is_lt(a, 1n+b) == True{}: Bool}:
+  match a b:
+    case 0n 0n:
+      h => Empty.absurd({Nat.is_lt(0n, 1n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case 0n 1n+q:
+      h => {==}
+    case 1n+p 0n:
+      h => Empty.absurd({Nat.is_lt(1n+p, 1n) == True{}: Bool}, Shared.Bool.false_ne_true(h))
+    case 1n+p 1n+q:
+      h => Bits.lt_up(p, q)(h)
+
+# the length of two lists one after the other is the sum of their lengths
+def Bits.length_append(xs: List<&2, Bool>, +ys: List<&2, Bool>) -> {List.length(&2, Bool, List.append(&2, Bool, xs, ys)) == Nat.add(List.length(&2, Bool, xs), List.length(&2, Bool, ys)): Nat}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      Equal.cong(Nat, Nat, t => 1n+t, List.length(&2, Bool, List.append(&2, Bool, r, ys)), Nat.add(List.length(&2, Bool, r), List.length(&2, Bool, ys)), Bits.length_append(r, ys))
+
+# bits that, after the first n, are not all read, are fewer than f after
+# one more, when they were fewer than f and one
+def Bits.fuel_step(xs: List<&2, Bool>, n: Nat, +f: Nat) -> {
+  Nat.is_lt(List.length(&2, Bool, xs), 1n+f) == True{}: Bool
+} -> {List.is_empty(&2, Bool, List.drop(&2, Bool, xs, n)) == False{}: Bool} -> {
+  Nat.is_lt(List.length(&2, Bool, List.drop(&2, Bool, List.drop(&2, Bool, xs, n), 1n)), f) == True{}: Bool
+}:
+  match xs n:
+    case Nil{} n:
+      h => e => Empty.absurd({Nat.is_lt(0n, f) == True{}: Bool}, Shared.Bool.true_ne_false(e))
+    case Con{x, +r} 0n:
+      h => e =>
+        %Equal.sym(List<&2, Bool>, List.drop(&2, Bool, r, 0n), r, Shared.List.drop_zero(&2, Bool, r)): {Nat.is_lt(List.length(&2, Bool, _), f) == True{}: Bool}
+        h
+    case Con{x, +r} 1n+p:
+      h => e => Bits.fuel_step(r, p, f)(Bits.lt_up(List.length(&2, Bool, r), f)(h))(e)
+
+# a cursor that is not done after n more bits has fewer than f bits left
+# one bit on, when it had fewer than f and one
+def Cur.fuel_step(+n: Nat, +c: Cur, +f: Nat) -> {
+  Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), 1n+f) == True{}: Bool
+} -> {Cur.done(Cur.skip(n, c)) == False{}: Bool} -> {
+  Nat.is_lt(List.length(&2, Bool, Cur.bits(Cur.next(Cur.skip(n, c)))), f) == True{}: Bool
+}:
+  h => e =>
+    %Equal.sym(List<&2, Bool>, Cur.bits(Cur.next(Cur.skip(n, c))), List.drop(&2, Bool, Cur.bits(Cur.skip(n, c)), 1n), Cur.next_bits(Cur.skip(n, c))): {Nat.is_lt(List.length(&2, Bool, _), f) == True{}: Bool}
+    %Equal.sym(List<&2, Bool>, Cur.bits(Cur.skip(n, c)), List.drop(&2, Bool, Cur.bits(c), n), Cur.skip_bits(n, c)): {Nat.is_lt(List.length(&2, Bool, List.drop(&2, Bool, _, 1n)), f) == True{}: Bool}
+    Bits.fuel_step(Cur.bits(c), n, f)(h)(
+      Equal.trans(
+        Bool,
+        List.is_empty(&2, Bool, List.drop(&2, Bool, Cur.bits(c), n)),
+        Cur.done(Cur.skip(n, c)),
+        False{},
+        Equal.sym(
+          Bool,
+          Cur.done(Cur.skip(n, c)),
+          List.is_empty(&2, Bool, List.drop(&2, Bool, Cur.bits(c), n)),
+          Equal.trans(
+            Bool,
+            Cur.done(Cur.skip(n, c)),
+            List.is_empty(&2, Bool, Cur.bits(Cur.skip(n, c))),
+            List.is_empty(&2, Bool, List.drop(&2, Bool, Cur.bits(c), n)),
+            Cur.done_bits(Cur.skip(n, c)),
+            Equal.cong(List<&2, Bool>, Bool, xs => List.is_empty(&2, Bool, xs), Cur.bits(Cur.skip(n, c)), List.drop(&2, Bool, Cur.bits(c), n), Cur.skip_bits(n, c))
+          )
+        ),
+        e
+      )
+    )
+
+# the bits of a key are as many as its size says
+def Key.bits_size(k: List<&2, U32>) -> {List.length(&2, Bool, Key.bits(k)) == Key.size(k): Nat}:
+  match k:
+    case Nil{}:
+      {==}
+    case Con{U32{+w}, +r}:
+      %Equal.sym(Nat, List.length(&2, Bool, List.append(&2, Bool, Word.bits(32n, w), Key.bits(r))), Nat.add(List.length(&2, Bool, Word.bits(32n, w)), List.length(&2, Bool, Key.bits(r))), Bits.length_append(Word.bits(32n, w), Key.bits(r))): {_ == Key.size(U32{w} <> r): Nat}
+      %Equal.sym(Nat, List.length(&2, Bool, Word.bits(32n, w)), 32n, Word.bits_length(32n, w)): {Nat.add(_, List.length(&2, Bool, Key.bits(r))) == Key.size(U32{w} <> r): Nat}
+      %Equal.sym(Nat, List.length(&2, Bool, Key.bits(r)), Key.size(r), Key.bits_size(r)): {Nat.add(32n, _) == Key.size(U32{w} <> r): Nat}
+      {==}
+
+# the bits of a key are fewer than its fuel
+def Key.fuel_lt(+k: List<&2, U32>) -> {Nat.is_lt(List.length(&2, Bool, Key.bits(k)), Key.fuel(k)) == True{}: Bool}:
+  %Equal.sym(Nat, List.length(&2, Bool, Key.bits(k)), Key.size(k), Key.bits_size(k)): {Nat.is_lt(_, Key.fuel(k)) == True{}: Bool}
+  Shared.Nat.lt_succ(Key.size(k))
+
+# a fuel read of the end of a fork is the read of the key that ends there
+def Crit.ended_fuel(-V: Data, g: Nat, +rep: List<&2, U32>, e: Maybe<&2, V>, +at: Nat, +c: Cur, +k: List<&2, U32>) -> {
+  Crit.get.fuel(V, g, Crit.ended.map(V, rep, e), at, c, k) == Crit.ended(V, rep, e, k): Maybe<&2, V>
+}:
+  match g e:
+    case 0n None{}:
+      {==}
+    case 1n+q None{}:
+      {==}
+    case 0n Some{v}:
+      {==}
+    case 1n+q Some{v}:
+      {==}
+
+# a fuel read at a fork, once its end (d0) and next bit (b0) are known
+def Crit.get_fuel.fork(
+  -V: Data,
+  +g: Nat,
+  +rep: List<&2, U32>,
+  +pos: Nat,
+  +e: Maybe<&2, V>,
+  +z: Crit<V>,
+  +o: Crit<V>,
+  +at: Nat,
+  +c: Cur,
+  +k: List<&2, U32>,
+  d0: Bool,
+  b0: Bool,
+  ed: {Cur.done(Cur.skip(Nat.sub(pos, at), c)) == d0: Bool},
+  iz: {Nat.is_lt(List.length(&2, Bool, Cur.bits(Cur.next(Cur.skip(Nat.sub(pos, at), c)))), g) == True{}: Bool} -> {
+    Crit.get.fuel(V, g, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k) == Crit.get.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k): Maybe<&2, V>
+  },
+  io: {Nat.is_lt(List.length(&2, Bool, Cur.bits(Cur.next(Cur.skip(Nat.sub(pos, at), c)))), g) == True{}: Bool} -> {
+    Crit.get.fuel(V, g, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k) == Crit.get.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k): Maybe<&2, V>
+  },
+  h: {Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), 1n+g) == True{}: Bool}
+) -> {
+  Crit.get.fuel(V, g, Crit.side(V, d0, b0, rep, e, z, o), 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k)
+    == Shared.Bool.when(
+      Maybe<&2, V>,
+      d0,
+      u => Crit.ended(V, rep, e, k),
+      u => Shared.Bool.when(
+        Maybe<&2, V>,
+        b0,
+        u => Crit.get.go(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k),
+        u => Crit.get.go(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k)
+      )
+    ): Maybe<&2, V>
+}:
+  match d0 b0:
+    case True{} b0:
+      Crit.ended_fuel(V, g, rep, e, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k)
+    case False{} True{}:
+      io(Cur.fuel_step(Nat.sub(pos, at), c, g)(h)(ed))
+    case False{} False{}:
+      iz(Cur.fuel_step(Nat.sub(pos, at), c, g)(h)(ed))
+
+# a read with more fuel than the bits left is the read
+def Crit.get_fuel(-V: Data, n: Nat, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32>) -> {
+  Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), n) == True{}: Bool
+} -> {Crit.get.fuel(V, n, m, at, c, k) == Crit.get.go(V, m, at, c, k): Maybe<&2, V>}:
+  match n m:
+    case 0n x:
+      h => Empty.absurd(
+        {Crit.get.fuel(V, 0n, x, at, c, k) == Crit.get.go(V, x, at, c, k): Maybe<&2, V>},
+        Shared.Bool.true_ne_false(Equal.trans(Bool, True{}, Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), 0n), False{}, Equal.sym(Bool, Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), 0n), True{}, h), Crit.lt_zero(List.length(&2, Bool, Cur.bits(c)))))
+      )
+    case 1n++g Crit.Tip{}:
+      h => {==}
+    case 1n++g Crit.Leaf{k2, v}:
+      h => {==}
+    case 1n++g Crit.Fork{+rep, +pos, +e, +z, +o}:
+      h => Crit.get_fuel.fork(
+        V,
+        g,
+        rep,
+        pos,
+        e,
+        z,
+        o,
+        at,
+        c,
+        k,
+        Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+        Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+        {==},
+        Crit.get_fuel(V, g, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k),
+        Crit.get_fuel(V, g, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k),
+        h
+      )
+
+# a read is the read from the start of the key
+def Crit.get_go(-V: Data, m: Crit<V>, +k: List<&2, U32>) -> {
+  Crit.get(V, m, k) == Crit.get.go(V, m, 0n, Cur.of(k), k): Maybe<&2, V>
+}:
+  Crit.get_fuel(V, Key.fuel(k), m, 0n, Cur.of(k), k)(Key.fuel_lt(k))
+
+# an "or" whose first side ends in some value r is kept by one more
+def Crit.or_kept(x: Maybe<&2, List<&2, U32>>, -r: List<&2, U32>, -d: Maybe<&2, List<&2, U32>>) -> {
+  Maybe.or(&2, List<&2, U32>, Maybe.or(&2, List<&2, U32>, x, Some{r}), d) == Maybe.or(&2, List<&2, U32>, x, Some{r}): Maybe<&2, List<&2, U32>>
+}:
+  match x:
+    case None{}:
+      {==}
+    case Some{y}:
+      {==}
+
+# a fuel near read at a fork, once its end (d0) and next bit (b0) are known
+def Crit.near_fuel.fork(
+  -V: Data,
+  +g: Nat,
+  +rep: List<&2, U32>,
+  +pos: Nat,
+  +z: Crit<V>,
+  +o: Crit<V>,
+  +at: Nat,
+  +c: Cur,
+  +d: Maybe<&2, List<&2, U32>>,
+  d0: Bool,
+  b0: Bool,
+  ed: {Cur.done(Cur.skip(Nat.sub(pos, at), c)) == d0: Bool},
+  iz: {Nat.is_lt(List.length(&2, Bool, Cur.bits(Cur.next(Cur.skip(Nat.sub(pos, at), c)))), g) == True{}: Bool} -> {
+    Crit.near.fuel(V, g, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), Some{rep}) == Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}): Maybe<&2, List<&2, U32>>
+  },
+  io: {Nat.is_lt(List.length(&2, Bool, Cur.bits(Cur.next(Cur.skip(Nat.sub(pos, at), c)))), g) == True{}: Bool} -> {
+    Crit.near.fuel(V, g, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), Some{rep}) == Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}): Maybe<&2, List<&2, U32>>
+  },
+  h: {Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), 1n+g) == True{}: Bool}
+) -> {
+  Crit.near.fuel(V, g, Crit.near.side(V, d0, b0, z, o), 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), Some{rep})
+    == Maybe.or(
+      &2,
+      List<&2, U32>,
+      Shared.Bool.when(
+        Maybe<&2, List<&2, U32>>,
+        d0,
+        u => Some{rep},
+        u => Shared.Bool.when(
+          Maybe<&2, List<&2, U32>>,
+          b0,
+          u => Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+          u => Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep})
+        )
+      ),
+      d
+    ): Maybe<&2, List<&2, U32>>
+}:
+  match g d0 b0:
+    case 0n True{} b0:
+      {==}
+    case 1n+q True{} b0:
+      {==}
+    case g False{} True{}:
+      Equal.trans(
+        Maybe<&2, List<&2, U32>>,
+        Crit.near.fuel(V, g, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), Some{rep}),
+        Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+        Maybe.or(&2, List<&2, U32>, Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}), d),
+        io(Cur.fuel_step(Nat.sub(pos, at), c, g)(h)(ed)),
+        Equal.sym(
+          Maybe<&2, List<&2, U32>>,
+          Maybe.or(&2, List<&2, U32>, Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}), d),
+          Maybe.or(&2, List<&2, U32>, Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+          Crit.or_kept(Crit.near(V, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), rep, d)
+        )
+      )
+    case g False{} False{}:
+      Equal.trans(
+        Maybe<&2, List<&2, U32>>,
+        Crit.near.fuel(V, g, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), Some{rep}),
+        Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+        Maybe.or(&2, List<&2, U32>, Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}), d),
+        iz(Cur.fuel_step(Nat.sub(pos, at), c, g)(h)(ed)),
+        Equal.sym(
+          Maybe<&2, List<&2, U32>>,
+          Maybe.or(&2, List<&2, U32>, Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}), d),
+          Maybe.or(&2, List<&2, U32>, Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), Some{rep}),
+          Crit.or_kept(Crit.near(V, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c))), rep, d)
+        )
+      )
+
+# a near read with more fuel than the bits left is the near read, or d when
+# that reaches no key
+def Crit.near_fuel(-V: Data, n: Nat, m: Crit<V>, +at: Nat, +c: Cur, +d: Maybe<&2, List<&2, U32>>) -> {
+  Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), n) == True{}: Bool
+} -> {Crit.near.fuel(V, n, m, at, c, d) == Maybe.or(&2, List<&2, U32>, Crit.near(V, m, at, c), d): Maybe<&2, List<&2, U32>>}:
+  match n m:
+    case 0n x:
+      h => Empty.absurd(
+        {Crit.near.fuel(V, 0n, x, at, c, d) == Maybe.or(&2, List<&2, U32>, Crit.near(V, x, at, c), d): Maybe<&2, List<&2, U32>>},
+        Shared.Bool.true_ne_false(Equal.trans(Bool, True{}, Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), 0n), False{}, Equal.sym(Bool, Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), 0n), True{}, h), Crit.lt_zero(List.length(&2, Bool, Cur.bits(c)))))
+      )
+    case 1n++g Crit.Tip{}:
+      h => {==}
+    case 1n++g Crit.Leaf{k2, v}:
+      h => {==}
+    case 1n++g Crit.Fork{+rep, +pos, +e, +z, +o}:
+      h => Crit.near_fuel.fork(
+        V,
+        g,
+        rep,
+        pos,
+        z,
+        o,
+        at,
+        c,
+        d,
+        Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+        Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+        {==},
+        Crit.near_fuel(V, g, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), Some{rep}),
+        Crit.near_fuel(V, g, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), Some{rep}),
+        h
+      )
+
+# Crit.put.leaf is the choice that Crit.put makes at an entry
+def Crit.put.leaf_when(
+  ~V: Data,
+  ~f: V -> V -> V,
+  b: Bool,
+  +k2: List<&2, U32>,
+  +w: V,
+  +k: List<&2, U32>,
+  +v: V,
+  d: Maybe<&2, Nat>
+) -> {
+  Crit.put.leaf(~V, ~f, b, k2, w, k, v, d)
+    == Shared.Bool.when(
+      Crit<V>,
+      b,
+      u => Crit.Leaf{k2, f(w, v)},
+      u => Crit.join(V, Crit.Leaf{k, v}, Crit.Leaf{k2, w}, Maybe.default(&2, Nat, d, 0n))
+    ): Crit<V>
+}:
+  match b:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+# a fuel write at a fork, once the test of its key above it (a0), its end
+# (d0) and its next bit (b0) are known
+def Crit.put_fuel.fork(
+  ~V: Data,
+  ~f: V -> V -> V,
+  +g: Nat,
+  +rep: List<&2, U32>,
+  +pos: Nat,
+  +e: Maybe<&2, V>,
+  +z: Crit<V>,
+  +o: Crit<V>,
+  +at: Nat,
+  +c: Cur,
+  +k: List<&2, U32>,
+  +v: V,
+  +d: Maybe<&2, Nat>,
+  a0: Bool,
+  d0: Bool,
+  b0: Bool,
+  ed: {Cur.done(Cur.skip(Nat.sub(pos, at), c)) == d0: Bool},
+  iz: {Nat.is_lt(List.length(&2, Bool, Cur.bits(Cur.next(Cur.skip(Nat.sub(pos, at), c)))), g) == True{}: Bool} -> {
+    Crit.put.fuel(~V, ~f, g, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d) == Crit.put(~V, ~f, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d): Crit<V>
+  },
+  io: {Nat.is_lt(List.length(&2, Bool, Cur.bits(Cur.next(Cur.skip(Nat.sub(pos, at), c)))), g) == True{}: Bool} -> {
+    Crit.put.fuel(~V, ~f, g, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d) == Crit.put(~V, ~f, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d): Crit<V>
+  },
+  h: {Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), 1n+g) == True{}: Bool}
+) -> {
+  Pick.back(
+    ~V,
+    ~f,
+    Pick.of(a0, d0, b0),
+    k,
+    v,
+    rep,
+    pos,
+    e,
+    z,
+    o,
+    d,
+    Crit.put.fuel(~V, ~f, g, Pick.side(V, Pick.of(a0, d0, b0), z, o), 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d)
+  )
+    == Shared.Bool.when(
+      Crit<V>,
+      a0,
+      u => Crit.join(V, Crit.Leaf{k, v}, Crit.Fork{rep, pos, e, z, o}, Maybe.default(&2, Nat, d, 0n)),
+      u => Shared.Bool.when(
+        Crit<V>,
+        d0,
+        u => Crit.mk(V, k, pos, Some{Crit.merge(~V, ~f, e, v)}, z, o),
+        u => Shared.Bool.when(
+          Crit<V>,
+          b0,
+          w => Crit.mk(V, rep, pos, e, z, Crit.put(~V, ~f, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d)),
+          w => Crit.mk(V, rep, pos, e, Crit.put(~V, ~f, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d), o)
+        )
+      )
+    ): Crit<V>
+}:
+  match a0 d0 b0:
+    case True{} d0 b0:
+      {==}
+    case False{} True{} b0:
+      {==}
+    case False{} False{} True{}:
+      %io(Cur.fuel_step(Nat.sub(pos, at), c, g)(h)(ed)): {Crit.mk(V, rep, pos, e, z, Crit.put.fuel(~V, ~f, g, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d)) == Crit.mk(V, rep, pos, e, z, _): Crit<V>}
+      {==}
+    case False{} False{} False{}:
+      %iz(Cur.fuel_step(Nat.sub(pos, at), c, g)(h)(ed)): {Crit.mk(V, rep, pos, e, Crit.put.fuel(~V, ~f, g, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d), o) == Crit.mk(V, rep, pos, e, _, o): Crit<V>}
+      {==}
+
+# a write with more fuel than the bits left is the write
+def Crit.put_fuel(
+  ~V: Data,
+  ~f: V -> V -> V,
+  n: Nat,
+  m: Crit<V>,
+  +at: Nat,
+  +c: Cur,
+  +k: List<&2, U32>,
+  +v: V,
+  +d: Maybe<&2, Nat>
+) -> {Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), n) == True{}: Bool} -> {
+  Crit.put.fuel(~V, ~f, n, m, at, c, k, v, d) == Crit.put(~V, ~f, m, at, c, k, v, d): Crit<V>
+}:
+  match n m:
+    case 0n x:
+      h => Empty.absurd(
+        {Crit.put.fuel(~V, ~f, 0n, x, at, c, k, v, d) == Crit.put(~V, ~f, x, at, c, k, v, d): Crit<V>},
+        Shared.Bool.true_ne_false(Equal.trans(Bool, True{}, Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), 0n), False{}, Equal.sym(Bool, Nat.is_lt(List.length(&2, Bool, Cur.bits(c)), 0n), True{}, h), Crit.lt_zero(List.length(&2, Bool, Cur.bits(c)))))
+      )
+    case 1n++g Crit.Tip{}:
+      h => {==}
+    case 1n++g Crit.Leaf{+k2, +w}:
+      h => Crit.put.leaf_when(~V, ~f, Maybe.is_none(&2, Nat, d), k2, w, k, v, d)
+    case 1n++g Crit.Fork{+rep, +pos, +e, +z, +o}:
+      h => Crit.put_fuel.fork(
+        ~V,
+        ~f,
+        g,
+        rep,
+        pos,
+        e,
+        z,
+        o,
+        at,
+        c,
+        k,
+        v,
+        d,
+        Crit.above(d, pos),
+        Cur.done(Cur.skip(Nat.sub(pos, at), c)),
+        Cur.bit(Cur.skip(Nat.sub(pos, at), c)),
+        {==},
+        Crit.put_fuel(~V, ~f, g, z, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d),
+        Crit.put_fuel(~V, ~f, g, o, 1n+pos, Cur.next(Cur.skip(Nat.sub(pos, at), c)), k, v, d),
+        h
+      )
+
+# a write is the write from the start of the key, at the key that a near
+# read reaches
+def Crit.upsert_put(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U32>, +v: V) -> {
+  Crit.upsert(~V, ~f, m, k, v) == Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, m, 0n, Cur.of(k)))): Crit<V>
+}:
+  Equal.trans(
+    Crit<V>,
+    Crit.upsert(~V, ~f, m, k, v),
+    Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near.fuel(V, Key.fuel(k), m, 0n, Cur.of(k), None{}))),
+    Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, m, 0n, Cur.of(k)))),
+    Crit.put_fuel(~V, ~f, Key.fuel(k), m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near.fuel(V, Key.fuel(k), m, 0n, Cur.of(k), None{})))(Key.fuel_lt(k)),
+    Equal.cong(
+      Maybe<&2, List<&2, U32>>,
+      Crit<V>,
+      x => Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, x)),
+      Crit.near.fuel(V, Key.fuel(k), m, 0n, Cur.of(k), None{}),
+      Crit.near(V, m, 0n, Cur.of(k)),
+      Equal.trans(
+        Maybe<&2, List<&2, U32>>,
+        Crit.near.fuel(V, Key.fuel(k), m, 0n, Cur.of(k), None{}),
+        Maybe.or(&2, List<&2, U32>, Crit.near(V, m, 0n, Cur.of(k)), None{}),
+        Crit.near(V, m, 0n, Cur.of(k)),
+        Crit.near_fuel(V, Key.fuel(k), m, 0n, Cur.of(k), None{})(Key.fuel_lt(k)),
+        Shared.Maybe.or_none(List<&2, U32>, Crit.near(V, m, 0n, Cur.of(k)))
+      )
+    )
+  )
+
+# Key.diff.step is the step of Key.diff.fast at two words x and y, once it
+# is known whether they are the same (eq)
+def Key.diff_step(a: List<&2, U32>, b: List<&2, U32>, +at: Nat, eq: Bool, +x: U32, +y: U32) -> {
+  Key.diff.step(a, b, at, eq, x, y)
+    == Shared.Bool.when(
+      Maybe<&2, Nat>,
+      eq,
+      u => Key.diff.fast(a, b, Nat.add(at, 32n)),
+      u => Key.diff.go(x <> a, y <> b, at)
+    ): Maybe<&2, Nat>
+}:
+  match a b:
+    case Nil{} Nil{}:
+      match eq:
+        case False{}:
+          {==}
+        case True{}:
+          {==}
+    case Nil{} Con{y2, rb}:
+      match eq:
+        case False{}:
+          {==}
+        case True{}:
+          {==}
+    case Con{x2, ra} Nil{}:
+      match eq:
+        case False{}:
+          {==}
+        case True{}:
+          {==}
+    case Con{+x2, +ra} Con{+y2, +rb}:
+      match eq:
+        case False{}:
+          {==}
+        case True{}:
+          Key.diff_step(ra, rb, Nat.add(at, 32n), U32.is_eq(x2, y2), x2, y2)
+
+# Key.diff gives what Key.diff.fast gives from the start
+def Key.diff_fast(a: List<&2, U32>, b: List<&2, U32>) -> {Key.diff(a, b) == Key.diff.fast(a, b, 0n): Maybe<&2, Nat>}:
+  match a b:
+    case Nil{} Nil{}:
+      {==}
+    case Nil{} Con{y, rb}:
+      {==}
+    case Con{x, ra} Nil{}:
+      {==}
+    case Con{+x, +ra} Con{+y, +rb}:
+      Key.diff_step(ra, rb, 0n, U32.is_eq(x, y), x, y)
+
+# bend-lint: expect-end bend-lint-rules/performance/missed_fork@hint
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
 # the read of a key from a cursor finds what the clear read of its bits finds
 def Crit.get_find(-V: Data, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32>) -> {
   Crit.get.go(V, m, at, c, k) == Crit.find(V, m, at, Cur.bits(c), k): Maybe<&2, V>
@@ -1177,9 +1989,10 @@ def Crit.get_find(-V: Data, m: Crit<V>, +at: Nat, +c: Cur, +k: List<&2, U32>) ->
       {==}
 
 # the read of a key finds what the clear read of its bits finds
-def Crit.get_is_find(-V: Data, m: Crit<V>, +k: List<&2, U32>) -> {
+def Crit.get_is_find(-V: Data, +m: Crit<V>, +k: List<&2, U32>) -> {
   Crit.get(V, m, k) == Crit.find(V, m, 0n, Key.bits(k), k): Maybe<&2, V>
 }:
+  %Equal.sym(Maybe<&2, V>, Crit.get(V, m, k), Crit.get.go(V, m, 0n, Cur.of(k), k), Crit.get_go(V, m, k)): {_ == Crit.find(V, m, 0n, Key.bits(k), k): Maybe<&2, V>}
   Crit.get_find(V, m, 0n, Cur.of(k), k)
 
 # Laws of differences
@@ -1460,6 +2273,7 @@ def Key.diff_fast_go(a: List<&2, U32>, b: List<&2, U32>, at: Nat) -> {
 def Key.diff_bits(+a: List<&2, U32>, +b: List<&2, U32>) -> {
   Key.diff(a, b) == Bits.diff(Key.bits(a), Key.bits(b)): Maybe<&2, Nat>
 }:
+  %Equal.sym(Maybe<&2, Nat>, Key.diff(a, b), Key.diff.fast(a, b, 0n), Key.diff_fast(a, b)): {_ == Bits.diff(Key.bits(a), Key.bits(b)): Maybe<&2, Nat>}
   %Equal.sym(Maybe<&2, Nat>, Key.diff.fast(a, b, 0n), Key.diff.go(a, b, 0n), Key.diff_fast_go(a, b, 0n)): {_ == Bits.diff(Key.bits(a), Key.bits(b)): Maybe<&2, Nat>}
   %Equal.sym(
     Maybe<&2, Nat>,
@@ -2226,12 +3040,19 @@ def Key.side_bits(k, pos):
 # a read is the clear read, and two maps that read the same are equal.
 
 # Key.is_eq is True only for equal keys
-def Key.is_eq_sound(a: List<&2, U32>, b: List<&2, U32>) -> {Key.is_eq(a, b) == True{}: Bool} -> {a == b: List<&2, U32>}:
-  Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), a, b)
+def Key.is_eq_sound(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.is_eq(a, b) == True{}: Bool} -> {a == b: List<&2, U32>}:
+  h => Shared.List.is_eq_sound(~U32, ~U32.is_eq, ~Shared.U32.laws(), a, b)((
+      %Key.is_eq_list(a, b): {_ == True{}: Bool}
+      h))
 
 # Key.is_eq is True for a key and itself
-def Key.is_eq_refl(a: List<&2, U32>) -> {Key.is_eq(a, a) == True{}: Bool}:
+def Key.is_eq_refl(+a: List<&2, U32>) -> {Key.is_eq(a, a) == True{}: Bool}:
+  %Equal.sym(Bool, Key.is_eq(a, a), Shared.List.is_eq(~U32, ~U32.is_eq, a, a), Key.is_eq_list(a, a)): {_ == True{}: Bool}
   Shared.List.is_eq_refl(~U32, ~U32.is_eq, ~Shared.U32.laws(), a)
+
+# the laws of Key.is_eq
+def Key.laws() -> Shared.Eq.Laws(List<&2, U32>, Key.is_eq):
+  (x => Key.is_eq_refl(x), x => y => Key.is_eq_sound(x, y))
 
 # a choice that does not hold is nothing
 def Crit.when_none(-V: Data, b: Bool, -k: Unit -> Maybe<&2, V>) -> ({b == True{}: Bool} -> Empty) -> {
@@ -2727,7 +3548,7 @@ def Key.diff_go_none(+a: List<&2, U32>, +b: List<&2, U32>, +at: Nat) -> {Key.dif
 
 # keys that differ nowhere are equal
 def Key.diff_none(+a: List<&2, U32>, +b: List<&2, U32>) -> {Key.diff(a, b) == None{}: Maybe<&2, Nat>} -> {a == b: List<&2, U32>}:
-  h => Key.diff_go_none(a, b, 0n)(Equal.trans(Maybe<&2, Nat>, Key.diff.go(a, b, 0n), Key.diff.fast(a, b, 0n), None{}, Equal.sym(Maybe<&2, Nat>, Key.diff.fast(a, b, 0n), Key.diff.go(a, b, 0n), Key.diff_fast_go(a, b, 0n)), h))
+  h => Key.diff_go_none(a, b, 0n)(Equal.trans(Maybe<&2, Nat>, Key.diff.go(a, b, 0n), Key.diff.fast(a, b, 0n), None{}, Equal.sym(Maybe<&2, Nat>, Key.diff.fast(a, b, 0n), Key.diff.go(a, b, 0n), Key.diff_fast_go(a, b, 0n)), Equal.trans(Maybe<&2, Nat>, Key.diff.fast(a, b, 0n), Key.diff(a, b), None{}, Equal.sym(Maybe<&2, Nat>, Key.diff(a, b), Key.diff.fast(a, b, 0n), Key.diff_fast(a, b)), h)))
 
 # a difference that is none is None
 def Crit.none_of(d: Maybe<&2, Nat>) -> {Maybe.is_none(&2, Nat, d) == True{}: Bool} -> {d == None{}: Maybe<&2, Nat>}:
@@ -4436,14 +5257,6 @@ def Crit.put_new(
           )
         )
 
-# no number is below 0
-def Crit.lt_zero(a: Nat) -> {Nat.is_lt(a, 0n) == False{}: Bool}:
-  match a:
-    case 0n:
-      {==}
-    case 1n+p:
-      {==}
-
 # a difference that is some is some of its value
 def Crit.some_of(d: Maybe<&2, Nat>) -> {Maybe.is_none(&2, Nat, d) == False{}: Bool} -> {d == Some{Maybe.default(&2, Nat, d, 0n)}: Maybe<&2, Nat>}:
   match d:
@@ -5385,7 +6198,9 @@ def Crit.upsert_wf.at(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U32>,
 def Crit.upsert_wf.go(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U32>, +v: V) -> {Crit.wf(~V, m, 0n) == True{}: Bool} -> {
   Crit.wf(~V, Crit.upsert(~V, ~f, m, k, v), 0n) == True{}: Bool
 }:
-  h => Crit.upsert_wf.at(~V, ~f, m, k, v, Crit.near(V, m, 0n, Cur.of(k)))(h)({==})
+  h =>
+    %Equal.sym(Crit<V>, Crit.upsert(~V, ~f, m, k, v), Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, m, 0n, Cur.of(k)))), Crit.upsert_put(~V, ~f, m, k, v)): {Crit.wf(~V, _, 0n) == True{}: Bool}
+    Crit.upsert_wf.at(~V, ~f, m, k, v, Crit.near(V, m, 0n, Cur.of(k)))(h)({==})
 
 # a write keeps a map well formed
 law Crit.upsert_wf:
@@ -5509,6 +6324,17 @@ def Crit.upsert_lookup.at(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +lo: Nat, +k: 
         )
       )
 
+# Crit.upsert_lookup in a map well formed below the bit lo
+def Crit.upsert_lookup.lo(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +lo: Nat, +k: List<&2, U32>, +v: V, +q: List<&2, U32>) -> {
+  Crit.wf(~V, m, lo) == True{}: Bool
+} -> {
+  Crit.lookup(V, Crit.upsert(~V, ~f, m, k, v), q)
+    == Bool.pick(Maybe<&2, V>, Key.is_eq(q, k), Some{Crit.merge(~V, ~f, Crit.lookup(V, m, k), v)}, Crit.lookup(V, m, q)): Maybe<&2, V>
+}:
+  h =>
+    %Equal.sym(Crit<V>, Crit.upsert(~V, ~f, m, k, v), Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, m, 0n, Cur.of(k)))), Crit.upsert_put(~V, ~f, m, k, v)): {Crit.lookup(V, _, q) == Bool.pick(Maybe<&2, V>, Key.is_eq(q, k), Some{Crit.merge(~V, ~f, Crit.lookup(V, m, k), v)}, Crit.lookup(V, m, q)): Maybe<&2, V>}
+    Crit.upsert_lookup.at(~V, ~f, m, lo, k, v, q, Crit.near(V, m, 0n, Cur.of(k)))(h)({==})
+
 # Crit.upsert_lookup, with m, k and q used more than once
 def Crit.upsert_lookup.go(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U32>, +v: V, +q: List<&2, U32>) -> {
   Crit.wf(~V, m, 0n) == True{}: Bool
@@ -5516,7 +6342,7 @@ def Crit.upsert_lookup.go(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U
   Crit.lookup(V, Crit.upsert(~V, ~f, m, k, v), q)
     == Bool.pick(Maybe<&2, V>, Key.is_eq(q, k), Some{Crit.merge(~V, ~f, Crit.lookup(V, m, k), v)}, Crit.lookup(V, m, q)): Maybe<&2, V>
 }:
-  h => Crit.upsert_lookup.at(~V, ~f, m, 0n, k, v, q, Crit.near(V, m, 0n, Cur.of(k)))(h)({==})
+  h => Crit.upsert_lookup.lo(~V, ~f, m, 0n, k, v, q)(h)
 
 # a write binds its key, to f of the old value and v when there was one, and
 # no other key
@@ -6422,7 +7248,9 @@ def Crit.upsert_fit.at(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +lo: Nat, +k: Lis
 def Crit.upsert_fit(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +lo: Nat, +k: List<&2, U32>, +v: V, +r: List<&2, U32>, +s: Bool) -> {Crit.wf(~V, m, lo) == True{}: Bool} -> {
   Crit.fits(~V, Crit.Leaf{k, v}, m, lo, r, s) == True{}: Bool
 } -> {Crit.wf(~V, Crit.upsert(~V, ~f, m, k, v), lo) == True{}: Bool}:
-  h => hf => Crit.upsert_fit.at(~V, ~f, m, lo, k, v, r, s, Crit.near(V, m, 0n, Cur.of(k)))(h)({==})(hf)
+  h => hf =>
+    %Equal.sym(Crit<V>, Crit.upsert(~V, ~f, m, k, v), Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, m, 0n, Cur.of(k)))), Crit.upsert_put(~V, ~f, m, k, v)): {Crit.wf(~V, _, lo) == True{}: Bool}
+    Crit.upsert_fit.at(~V, ~f, m, lo, k, v, r, s, Crit.near(V, m, 0n, Cur.of(k)))(h)({==})(hf)
 
 # a fork of two maps whose first keys end at its bit, or not, passes p when both do
 def Crit.join_end_all.any(~V: Data, ~G: Data, ~p: G -> List<&2, U32> -> Bool, x: Crit<V>, +y: Crit<V>, +d: Nat, b: Bool, +g: G) -> {Crit.all(~V, ~G, ~p, x, g) == True{}: Bool} -> {
@@ -6516,6 +7344,7 @@ def Crit.union_at_all(~V: Data, ~j: V -> V -> V, ~G: Data, ~p: G -> List<&2, U32
         t3 => Crit.mk_all(~V, ~G, ~p, rb, pb, eb, Crit.union(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, zb), ob, g)(Crit.all.hit(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb))(i5)(Crit.all.o(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb))
       )
 
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- these binders are premises of a proof's own type; a proof does not run
 # a union passes p when both maps do
 def Crit.union_all(~V: Data, ~j: V -> V -> V, ~G: Data, ~p: G -> List<&2, U32> -> Bool, +a: Crit<V>, +b: Crit<V>, +g: G) -> {Crit.all(~V, ~G, ~p, a, g) == True{}: Bool} -> {
   Crit.all(~V, ~G, ~p, b, g) == True{}: Bool
@@ -6532,11 +7361,17 @@ def Crit.union_all(~V: Data, ~j: V -> V -> V, ~G: Data, ~p: G -> List<&2, U32> -
     case Crit.Fork{ra, pa, ea, za, oa} Crit.Tip{}:
       ha => hb => ha
     case Crit.Leaf{+k, +v} Crit.Leaf{+k2, +w}:
-      ha => hb => Crit.put_all(~V, ~(w => x => j(x, w)), ~G, ~p, Crit.Leaf{k2, w}, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, Crit.Leaf{k2, w}, 0n, Cur.of(k))), g)(hb)(ha)
+      ha => hb =>
+        %Equal.sym(Crit<V>, Crit.upsert(~V, ~(w => x => j(x, w)), Crit.Leaf{k2, w}, k, v), Crit.put(~V, ~(w => x => j(x, w)), Crit.Leaf{k2, w}, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, Crit.Leaf{k2, w}, 0n, Cur.of(k)))), Crit.upsert_put(~V, ~(w => x => j(x, w)), Crit.Leaf{k2, w}, k, v)): {Crit.all(~V, ~G, ~p, _, g) == True{}: Bool}
+        Crit.put_all(~V, ~(w => x => j(x, w)), ~G, ~p, Crit.Leaf{k2, w}, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, Crit.Leaf{k2, w}, 0n, Cur.of(k))), g)(hb)(ha)
     case Crit.Leaf{+k, +v} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
-      ha => hb => Crit.put_all(~V, ~(w => x => j(x, w)), ~G, ~p, Crit.Fork{rb, pb, eb, zb, ob}, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, Crit.Fork{rb, pb, eb, zb, ob}, 0n, Cur.of(k))), g)(hb)(ha)
+      ha => hb =>
+        %Equal.sym(Crit<V>, Crit.upsert(~V, ~(w => x => j(x, w)), Crit.Fork{rb, pb, eb, zb, ob}, k, v), Crit.put(~V, ~(w => x => j(x, w)), Crit.Fork{rb, pb, eb, zb, ob}, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, Crit.Fork{rb, pb, eb, zb, ob}, 0n, Cur.of(k)))), Crit.upsert_put(~V, ~(w => x => j(x, w)), Crit.Fork{rb, pb, eb, zb, ob}, k, v)): {Crit.all(~V, ~G, ~p, _, g) == True{}: Bool}
+        Crit.put_all(~V, ~(w => x => j(x, w)), ~G, ~p, Crit.Fork{rb, pb, eb, zb, ob}, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, Crit.Fork{rb, pb, eb, zb, ob}, 0n, Cur.of(k))), g)(hb)(ha)
     case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Leaf{+k, +w}:
-      ha => hb => Crit.put_all(~V, ~j, ~G, ~p, Crit.Fork{ra, pa, ea, za, oa}, 0n, Cur.of(k), k, w, Crit.diff(k, Crit.near(V, Crit.Fork{ra, pa, ea, za, oa}, 0n, Cur.of(k))), g)(ha)(hb)
+      ha => hb =>
+        %Equal.sym(Crit<V>, Crit.upsert(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, k, w), Crit.put(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, 0n, Cur.of(k), k, w, Crit.diff(k, Crit.near(V, Crit.Fork{ra, pa, ea, za, oa}, 0n, Cur.of(k)))), Crit.upsert_put(~V, ~j, Crit.Fork{ra, pa, ea, za, oa}, k, w)): {Crit.all(~V, ~G, ~p, _, g) == True{}: Bool}
+        Crit.put_all(~V, ~j, ~G, ~p, Crit.Fork{ra, pa, ea, za, oa}, 0n, Cur.of(k), k, w, Crit.diff(k, Crit.near(V, Crit.Fork{ra, pa, ea, za, oa}, 0n, Cur.of(k))), g)(ha)(hb)
     case Crit.Fork{+ra, +pa, +ea, +za, +oa} Crit.Fork{+rb, +pb, +eb, +zb, +ob}:
       +ha => +hb => Shared.Bool.when_cases(
         Crit<V>,
@@ -6553,6 +7388,7 @@ def Crit.union_all(~V: Data, ~j: V -> V -> V, ~G: Data, ~p: G -> List<&2, U32> -
           Crit.union_all(~V, ~j, ~G, ~p, a, zb, g)(ha)(Crit.all.z(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb))
         )(Crit.union_all(~V, ~j, ~G, ~p, a, ob, g)(ha)(Crit.all.o(~V, ~G, ~p, rb, pb, eb, zb, ob, g)(hb)))
       )
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
 # the cursor at x of the rep of a well formed fork at a later bit is not done
 def Crit.rep_not_done(~V: Data, +rep: List<&2, U32>, +pos: Nat, +e: Maybe<&2, V>, +z: Crit<V>, +o: Crit<V>, +lo: Nat, +x: Nat) -> {Crit.wf(~V, Crit.Fork{rep, pos, e, z, o}, lo) == True{}: Bool} -> {
@@ -6918,7 +7754,7 @@ def Crit.union_leaf_l(~V: Data, ~j: V -> V -> V, +k: List<&2, U32>, +v: V, +y: C
     Crit.lookup(V, Crit.upsert(~V, ~(w => x => j(x, w)), y, k, v), q),
     Bool.pick(Maybe<&2, V>, Key.is_eq(q, k), Some{Crit.merge(~V, ~(w => x => j(x, w)), Crit.lookup(V, y, k), v)}, Crit.lookup(V, y, q)),
     Shared.Maybe.join(~V, ~j, Crit.lookup(V, Crit.Leaf{k, v}, q), Crit.lookup(V, y, q)),
-    Crit.upsert_lookup.at(~V, ~(w => x => j(x, w)), y, ly, k, v, q, Crit.near(V, y, 0n, Cur.of(k)))(h)({==}),
+    Crit.upsert_lookup.lo(~V, ~(w => x => j(x, w)), y, ly, k, v, q)(h),
     Crit.pick_cases(Maybe<&2, V>, Key.is_eq(q, k), Some{Crit.merge(~V, ~(w => x => j(x, w)), Crit.lookup(V, y, k), v)}, Crit.lookup(V, y, q), Shared.Maybe.join(~V, ~j, Crit.lookup(V, Crit.Leaf{k, v}, q), Crit.lookup(V, y, q)))(
       t => (
         %Equal.sym(List<&2, U32>, q, k, Key.is_eq_sound(q, k)(t)): {Some{Crit.merge(~V, ~(w => x => j(x, w)), Crit.lookup(V, y, k), v)} == Shared.Maybe.join(~V, ~j, Shared.Maybe.when(V, Key.is_eq(k, _), u => Some{v}), Crit.lookup(V, y, _)): Maybe<&2, V>}
@@ -6942,7 +7778,7 @@ def Crit.union_leaf_r(~V: Data, ~j: V -> V -> V, +a: Crit<V>, +la: Nat, +k: List
     Crit.lookup(V, Crit.upsert(~V, ~j, a, k, w), q),
     Bool.pick(Maybe<&2, V>, Key.is_eq(q, k), Some{Crit.merge(~V, ~j, Crit.lookup(V, a, k), w)}, Crit.lookup(V, a, q)),
     Shared.Maybe.join(~V, ~j, Crit.lookup(V, a, q), Crit.lookup(V, Crit.Leaf{k, w}, q)),
-    Crit.upsert_lookup.at(~V, ~j, a, la, k, w, q, Crit.near(V, a, 0n, Cur.of(k)))(h)({==}),
+    Crit.upsert_lookup.lo(~V, ~j, a, la, k, w, q)(h),
     Crit.pick_cases(Maybe<&2, V>, Key.is_eq(q, k), Some{Crit.merge(~V, ~j, Crit.lookup(V, a, k), w)}, Crit.lookup(V, a, q), Shared.Maybe.join(~V, ~j, Crit.lookup(V, a, q), Crit.lookup(V, Crit.Leaf{k, w}, q)))(
       t => (
         %Equal.sym(List<&2, U32>, q, k, Key.is_eq_sound(q, k)(t)): {Some{Crit.merge(~V, ~j, Crit.lookup(V, a, k), w)} == Shared.Maybe.join(~V, ~j, Crit.lookup(V, a, _), Shared.Maybe.when(V, Key.is_eq(k, _), u => Some{w})): Maybe<&2, V>}
@@ -9066,7 +9902,7 @@ def Crit.union_idem.go(~V: Data, ~j: V -> V -> V, ~idem: @x: V -> {j(x, x) == x:
     case Crit.Leaf{+k, +v}:
       h =>
         %Equal.sym(Maybe<&2, Nat>, Key.diff(k, k), None{}, Key.diff_self(k)): {
-          Crit.put(~V, ~(w => x => j(x, w)), Crit.Leaf{k, v}, 0n, Cur.of(k), k, v, _) == Crit.Leaf{k, v}: Crit<V>
+          Crit.put.leaf(~V, ~(w => x => j(x, w)), Maybe.is_none(&2, Nat, _), k, v, k, v, _) == Crit.Leaf{k, v}: Crit<V>
         }
         %Equal.sym(V, j(v, v), v, idem(v)): {Crit.Leaf{k, _} == Crit.Leaf{k, v}: Crit<V>}
         {==}
@@ -9831,7 +10667,9 @@ def Crit.size_upsert.at(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U32
 def Crit.size_upsert.go(~V: Data, ~f: V -> V -> V, +m: Crit<V>, +k: List<&2, U32>, +v: V) -> {Crit.wf(~V, m, 0n) == True{}: Bool} -> {
   Crit.size(V, Crit.upsert(~V, ~f, m, k, v)) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, m, k)), Crit.size(V, m)): Nat
 }:
-  h => Crit.size_upsert.at(~V, ~f, m, k, v, Crit.near(V, m, 0n, Cur.of(k)))(h)({==})
+  h =>
+    %Equal.sym(Crit<V>, Crit.upsert(~V, ~f, m, k, v), Crit.put(~V, ~f, m, 0n, Cur.of(k), k, v, Crit.diff(k, Crit.near(V, m, 0n, Cur.of(k)))), Crit.upsert_put(~V, ~f, m, k, v)): {Crit.size(V, _) == Shared.Nat.add_if(Maybe.is_none(&2, V, Crit.lookup(V, m, k)), Crit.size(V, m)): Nat}
+    Crit.size_upsert.at(~V, ~f, m, k, v, Crit.near(V, m, 0n, Cur.of(k)))(h)({==})
 
 # a write of a key that a map lacks adds one entry; of one it holds, none
 law Crit.size_upsert:
@@ -10348,14 +11186,6 @@ def Crit.pred(n: Nat) -> Nat:
 # no successor is zero
 def Crit.zero_ne_succ(-n: Nat, h: {0n == 1n+n: Nat}) -> Empty:
   Shared.Bool.true_ne_false(Equal.cong(Nat, Bool, t => Nat.is_eq(t, 0n), 0n, 1n+n, h))
-
-# the length of two lists one after the other is the sum of their lengths
-def Bits.length_append(xs: List<&2, Bool>, +ys: List<&2, Bool>) -> {List.length(&2, Bool, List.append(&2, Bool, xs, ys)) == Nat.add(List.length(&2, Bool, xs), List.length(&2, Bool, ys)): Nat}:
-  match xs:
-    case Nil{}:
-      {==}
-    case Con{x, r}:
-      Equal.cong(Nat, Nat, t => 1n+t, List.length(&2, Bool, List.append(&2, Bool, r, ys)), Nat.add(List.length(&2, Bool, r), List.length(&2, Bool, ys)), Bits.length_append(r, ys))
 
 # lists of one length, each followed by more, agree as far as both do when
 # both parts do
