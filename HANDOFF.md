@@ -134,10 +134,32 @@ These modules stated how the old code worked. The new core does not use them.
 Kept, not used by the core: `glob`, `regex`, `search`, `spans`, `uris`, `keyset`, `reach`, `rope`,
 `pack`, `depot`.
 
+## Tested, not proven
+
+The drivers are in `tools/drivers/` (not approved tests: yours to keep or delete). Each is built
+by copying it into `src/vend_node/` and running `bend <driver> -o <binary>` (`build.sh`).
+
+- Progress of rounds, `main30.bend` with `rnd.sh`: random Ask, 1 to 3 Works, Sync. 60 runs each
+  for 2 owners with 2 live nodes, 3 with 3, and 3 with 2 (one lost). Result: every request ends
+  decided, the live nodes give the same answers, and 3 more Works per node after settling add
+  no fact. The code before the new pass rule does not finish this driver.
+- Behind those runs, and not proven:
+  - `Slot.pass_once` has the premise that the pass is read as the next ballot of the node, and
+    it speaks of a list with one more ballot, not of the set of facts.
+  - With N owners, the Work of a follower casts a vote, and that vote counts.
+  - After its vote in a round, a node casts no other ballot for that slot.
+- Not covered by a test or a law: a node that joins the top round and is then lost before it
+  leads (decision 3); an unsound lead of a faulty owner is waited on.
+- Speed, `main9` (one branch), `main10` (two branches, merges), `main11` (50 branches, two
+  writers), `main16` (two nodes): the numbers under Speed. Each driver also prints replies, which
+  were read by hand, not checked against expected values.
+- The equality of the fast node and the plain node is proven, not tested (`fast.bend`), under
+  the premise that the node is sound (`Raw.ok`).
+
 ## Not done
 
 - No IO: a node is the pure core. `tools/build.ts` has no `main` to build.
-- No test was added (each needs your approval).
+- No test was added to a test suite (each needs your approval); see Tested, not proven.
 - bend-synth was not the first step of each proof, against AGENTS.md: it was run on one proof
   ("no step applies"); the agents wrote the other proofs by hand.
 - Seals are not in the pure core (trusted, outside the spec).

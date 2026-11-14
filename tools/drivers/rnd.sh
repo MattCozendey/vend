@@ -1,0 +1,3 @@
+#!/bin/bash
+# rnd.sh <dir> <seeds> <steps> <asks>: random interleavings; N L = 2 2, 3 3, 3 2
+D=$1; for cfg in "2 2" "3 3" "3 2"; do bad=0; idle=0; tot=0; for s in $(seq 1 $2); do o=$(timeout 600 $D/m30 $cfg $s $3 $4); tot=$((tot+1)); case "$(echo "$o" | tail -1)" in *"bad=0") ;; *) bad=$((bad+1)); echo "cfg $cfg seed $s: $o";; esac; a=$(echo "$o" | sed -n 's/.* facts=//p' | head -1); b=$(echo "$o" | sed -n 's/^facts after.*=//p'); [ "$a" = "$b" ] || { idle=$((idle+1)); echo "cfg $cfg seed $s idle works changed: $a -> $b"; }; done; echo "cfg $cfg: runs=$tot undecided_or_disagree=$bad idle_work_changed=$idle"; done
