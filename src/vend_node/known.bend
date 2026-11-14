@@ -1937,7 +1937,190 @@ def Infos.with_ok(
     )(Infos.wf(l, s)(h))(Infos.keyed(l, s)(h))(Crits.Key.is_eq_refl(RKnown.Info.key(i)))
   )
 
-# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# the items of xs, the last first, before acc, are as many as xs and acc
+def Rev.go_length(xs: List<&2, Types.Entry>, +acc: List<&2, Types.Entry>) -> {
+  List.length(&2, Types.Entry, List.reverse.go(&2, Types.Entry, xs, acc))
+    == Nat.add(List.length(&2, Types.Entry, xs), List.length(&2, Types.Entry, acc)): Nat
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+h, +t}:
+      Equal.trans(
+        Nat,
+        List.length(&2, Types.Entry, List.reverse.go(&2, Types.Entry, t, h <> acc)),
+        Nat.add(List.length(&2, Types.Entry, t), 1n+List.length(&2, Types.Entry, acc)),
+        1n+Nat.add(List.length(&2, Types.Entry, t), List.length(&2, Types.Entry, acc)),
+        Rev.go_length(t, h <> acc),
+        Shared.Nat.add_succ(List.length(&2, Types.Entry, t), List.length(&2, Types.Entry, acc))
+      )
+
+# versions, the last first, are as many
+def Rev.length(+xs: List<&2, Types.Entry>) -> {
+  List.length(&2, Types.Entry, List.reverse(&2, Types.Entry, xs)) == List.length(&2, Types.Entry, xs): Nat
+}:
+  Equal.trans(
+    Nat,
+    List.length(&2, Types.Entry, List.reverse(&2, Types.Entry, xs)),
+    Nat.add(List.length(&2, Types.Entry, xs), 0n),
+    List.length(&2, Types.Entry, xs),
+    Rev.go_length(xs, []),
+    Shared.Nat.add_zero(List.length(&2, Types.Entry, xs))
+  )
+
+# the items of xs before acc, the last first, then the last first again
+# before zs, are the items of acc, the last first, before xs and zs
+def Rev.go_go(xs: List<&2, Types.Entry>, +acc: List<&2, Types.Entry>, -zs: List<&2, Types.Entry>) -> {
+  List.reverse.go(&2, Types.Entry, List.reverse.go(&2, Types.Entry, xs, acc), zs)
+    == List.reverse.go(&2, Types.Entry, acc, List.append(&2, Types.Entry, xs, zs)): List<&2, Types.Entry>
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+h, +t}:
+      Rev.go_go(t, h <> acc, zs)
+
+# versions, the last first, and then the last first again, are the versions
+def Rev.twice(+xs: List<&2, Types.Entry>) -> {
+  List.reverse(&2, Types.Entry, List.reverse(&2, Types.Entry, xs)) == xs: List<&2, Types.Entry>
+}:
+  Equal.trans(
+    List<&2, Types.Entry>,
+    List.reverse(&2, Types.Entry, List.reverse(&2, Types.Entry, xs)),
+    List.append(&2, Types.Entry, xs, []),
+    xs,
+    Rev.go_go(xs, [], []),
+    Shared.List.append_nil(Types.Entry, xs)
+  )
+
+# the state that a node keeps of a state is that state
+def Seen.of_state(st: RLines.State) -> {RKnown.Seen.state(RKnown.Seen.of(st)) == st: RLines.State}:
+  match st:
+    case RLines.State{+vs, +k}:
+      Equal.cong(
+        List<&2, Types.Entry>,
+        RLines.State,
+        z => RLines.State{z, k},
+        List.reverse(&2, Types.Entry, List.reverse(&2, Types.Entry, vs)),
+        vs,
+        Rev.twice(vs)
+      )
+
+# what a node keeps of a state has the count of its versions
+def Seen.of_counted(st: RLines.State) -> {
+  RContents.Seen.counted(Some{RKnown.Seen.of(st)}) == True{}: Bool
+}:
+  match st:
+    case RLines.State{+vs, k}:
+      %Equal.sym(Nat, List.length(&2, Types.Entry, List.reverse(&2, Types.Entry, vs)), List.length(&2, Types.Entry, vs), Rev.length(vs)): {Nat.is_eq(List.length(&2, Types.Entry, vs), _) == True{}: Bool}
+      Shared.Nat.is_eq_refl(List.length(&2, Types.Entry, vs))
+
+# what is right of a line holds the right state of the line
+def Info.ok_state(
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +m: Maybe<&2, RKnown.Seen>,
+  +r: Maybe<&2, RKnown.Mark>,
+  +x: Maybe<&2, RKnown.Ids>
+) -> {
+  RContents.Info.ok(s, RKnown.Info{c, m, r, x}) == True{}: Bool
+} -> {RContents.State.ok(s, c, RKnown.Seen.state.of(m)) == True{}: Bool}:
+  h => Shared.Bool.and_true_left(
+    RContents.State.ok(s, c, RKnown.Seen.state.of(m)),
+    Bool.and(RContents.Mark.ok(s, c, r), Bool.and(RContents.Made.ok(s, c, x), RContents.Seen.counted(m)))
+  )(h)
+
+# what is right of a line holds the right era and rule of its next version
+def Info.ok_mark(
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +m: Maybe<&2, RKnown.Seen>,
+  +r: Maybe<&2, RKnown.Mark>,
+  +x: Maybe<&2, RKnown.Ids>
+) -> {
+  RContents.Info.ok(s, RKnown.Info{c, m, r, x}) == True{}: Bool
+} -> {RContents.Mark.ok(s, c, r) == True{}: Bool}:
+  h => Shared.Bool.and_true_left(
+    RContents.Mark.ok(s, c, r),
+    Bool.and(RContents.Made.ok(s, c, x), RContents.Seen.counted(m))
+  )(
+    Shared.Bool.and_true_right(
+      RContents.State.ok(s, c, RKnown.Seen.state.of(m)),
+      Bool.and(RContents.Mark.ok(s, c, r), Bool.and(RContents.Made.ok(s, c, x), RContents.Seen.counted(m)))
+    )(h)
+  )
+
+# what is right of a line holds the right ids of its versions
+def Info.ok_made(
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +m: Maybe<&2, RKnown.Seen>,
+  +r: Maybe<&2, RKnown.Mark>,
+  +x: Maybe<&2, RKnown.Ids>
+) -> {
+  RContents.Info.ok(s, RKnown.Info{c, m, r, x}) == True{}: Bool
+} -> {RContents.Made.ok(s, c, x) == True{}: Bool}:
+  h => Shared.Bool.and_true_left(RContents.Made.ok(s, c, x), RContents.Seen.counted(m))(
+    Shared.Bool.and_true_right(
+      RContents.Mark.ok(s, c, r),
+      Bool.and(RContents.Made.ok(s, c, x), RContents.Seen.counted(m))
+    )(
+      Shared.Bool.and_true_right(
+        RContents.State.ok(s, c, RKnown.Seen.state.of(m)),
+        Bool.and(RContents.Mark.ok(s, c, r), Bool.and(RContents.Made.ok(s, c, x), RContents.Seen.counted(m)))
+      )(h)
+    )
+  )
+
+# what is right of a line holds the count of its versions
+def Info.ok_counted(
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +m: Maybe<&2, RKnown.Seen>,
+  +r: Maybe<&2, RKnown.Mark>,
+  +x: Maybe<&2, RKnown.Ids>
+) -> {
+  RContents.Info.ok(s, RKnown.Info{c, m, r, x}) == True{}: Bool
+} -> {RContents.Seen.counted(m) == True{}: Bool}:
+  h => Shared.Bool.and_true_right(RContents.Made.ok(s, c, x), RContents.Seen.counted(m))(
+    Shared.Bool.and_true_right(
+      RContents.Mark.ok(s, c, r),
+      Bool.and(RContents.Made.ok(s, c, x), RContents.Seen.counted(m))
+    )(
+      Shared.Bool.and_true_right(
+        RContents.State.ok(s, c, RKnown.Seen.state.of(m)),
+        Bool.and(RContents.Mark.ok(s, c, r), Bool.and(RContents.Made.ok(s, c, x), RContents.Seen.counted(m)))
+      )(h)
+    )
+  )
+
+# a right state, a right era and rule, right ids and a right count are what
+# is right of a line
+def Info.ok_of(
+  +s: RFacts.Plain(),
+  +c: Ledgers.Line,
+  +m: Maybe<&2, RKnown.Seen>,
+  +r: Maybe<&2, RKnown.Mark>,
+  +x: Maybe<&2, RKnown.Ids>
+) -> {
+  RContents.State.ok(s, c, RKnown.Seen.state.of(m)) == True{}: Bool
+} -> {
+  RContents.Mark.ok(s, c, r) == True{}: Bool
+} -> {
+  RContents.Made.ok(s, c, x) == True{}: Bool
+} -> {
+  RContents.Seen.counted(m) == True{}: Bool
+} -> {RContents.Info.ok(s, RKnown.Info{c, m, r, x}) == True{}: Bool}:
+  h1 => h2 => h3 => h4 => Shared.Bool.and_both(
+    RContents.State.ok(s, c, RKnown.Seen.state.of(m)),
+    Bool.and(RContents.Mark.ok(s, c, r), Bool.and(RContents.Made.ok(s, c, x), RContents.Seen.counted(m)))
+  )(h1)(
+    Shared.Bool.and_both(
+      RContents.Mark.ok(s, c, r),
+      Bool.and(RContents.Made.ok(s, c, x), RContents.Seen.counted(m))
+    )(h2)(Shared.Bool.and_both(RContents.Made.ok(s, c, x), RContents.Seen.counted(m))(h3)(h4))
+  )
+
 # what is right of a line, with the right state of the line, is right
 def Info.state_set_ok(
   i: RKnown.Info,
@@ -1953,17 +2136,10 @@ def Info.state_set_ok(
 } -> {RContents.Info.ok(s, RKnown.Info.state.set(i, st)) == True{}: Bool}:
   match i:
     case RKnown.Info{+c2, +m, +r, +x}:
-      el => h => hk => Shared.Bool.and_both(
-        RContents.State.ok(s, c2, Some{st}),
-        Bool.and(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x))
-      )((
+      el => +h => hk => Info.ok_of(s, c2, Some{RKnown.Seen.of(st)}, r, x)((
+          %Equal.sym(RLines.State, RKnown.Seen.state(RKnown.Seen.of(st)), st, Seen.of_state(st)): {RContents.Kept.ok(s, RKnown.Kept{c2, _}) == True{}: Bool}
           %Equal.sym(Ledgers.Line, c2, c, el): {RContents.Kept.ok(s, RKnown.Kept{_, st}) == True{}: Bool}
-          hk))(
-        Shared.Bool.and_true_right(
-          RContents.State.ok(s, c2, m),
-          Bool.and(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x))
-        )(h)
-      )
+          hk))(Info.ok_mark(s, c2, m, r, x)(h))(Info.ok_made(s, c2, m, r, x)(h))(Seen.of_counted(st))
 
 # what is right of a line, with the right era and rule of its next version,
 # is right
@@ -1982,32 +2158,9 @@ def Info.mark_set_ok(
 } -> {RContents.Info.ok(s, RKnown.Info.mark.set(i, n, u)) == True{}: Bool}:
   match i:
     case RKnown.Info{+c2, +m, +r, +x}:
-      el => +h => hk => Shared.Bool.and_both(
-        RContents.State.ok(s, c2, m),
-        Bool.and(RContents.Mark.ok(s, c2, Some{RKnown.Mark{n, u}}), RContents.Made.ok(s, c2, x))
-      )(
-        Shared.Bool.and_true_left(
-          RContents.State.ok(s, c2, m),
-          Bool.and(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x))
-        )(h)
-      )(
-        Shared.Bool.and_both(
-          RContents.Mark.ok(s, c2, Some{RKnown.Mark{n, u}}),
-          RContents.Made.ok(s, c2, x)
-        )((
-            %Equal.sym(Ledgers.Line, c2, c, el): {RContents.Kept.ok(s, RKnown.Ruled{_, n, u}) == True{}: Bool}
-            hk))(
-          Shared.Bool.and_true_right(
-            RContents.Mark.ok(s, c2, r),
-            RContents.Made.ok(s, c2, x)
-          )(
-            Shared.Bool.and_true_right(
-              RContents.State.ok(s, c2, m),
-              Bool.and(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x))
-            )(h)
-          )
-        )
-      )
+      el => +h => hk => Info.ok_of(s, c2, m, Some{RKnown.Mark{n, u}}, x)(Info.ok_state(s, c2, m, r, x)(h))((
+          %Equal.sym(Ledgers.Line, c2, c, el): {RContents.Kept.ok(s, RKnown.Ruled{_, n, u}) == True{}: Bool}
+          hk))(Info.ok_made(s, c2, m, r, x)(h))(Info.ok_counted(s, c2, m, r, x)(h))
 
 # what is right of a line, with the right ids of its versions, is right
 def Info.ids_set_ok(
@@ -2024,33 +2177,9 @@ def Info.ids_set_ok(
 } -> {RContents.Info.ok(s, RKnown.Info.ids.set(i, y)) == True{}: Bool}:
   match i:
     case RKnown.Info{+c2, +m, +r, +x}:
-      el => +h => hk => Shared.Bool.and_both(
-        RContents.State.ok(s, c2, m),
-        Bool.and(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, Some{y}))
-      )(
-        Shared.Bool.and_true_left(
-          RContents.State.ok(s, c2, m),
-          Bool.and(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x))
-        )(h)
-      )(
-        Shared.Bool.and_both(
-          RContents.Mark.ok(s, c2, r),
-          RContents.Made.ok(s, c2, Some{y})
-        )(
-          Shared.Bool.and_true_left(
-            RContents.Mark.ok(s, c2, r),
-            RContents.Made.ok(s, c2, x)
-          )(
-            Shared.Bool.and_true_right(
-              RContents.State.ok(s, c2, m),
-              Bool.and(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x))
-            )(h)
-          )
-        )((
-            %Equal.sym(Ledgers.Line, c2, c, el): {RContents.Kept.ok(s, RKnown.Made{_, y}) == True{}: Bool}
-            hk))
-      )
-# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+      el => +h => hk => Info.ok_of(s, c2, m, r, Some{y})(Info.ok_state(s, c2, m, r, x)(h))(Info.ok_mark(s, c2, m, r, x)(h))((
+          %Equal.sym(Ledgers.Line, c2, c, el): {RContents.Kept.ok(s, RKnown.Made{_, y}) == True{}: Bool}
+          hk))(Info.ok_counted(s, c2, m, r, x)(h))
 
 # a right table that also says what is right is right
 def Ok.cons(
@@ -2188,7 +2317,7 @@ def Info.state_ok(
       el => h => e => State.fits_sound(RLines.Line.state(s, c), st)((
           %el: {RKnown.State.fits(RLines.Line.state(s, _), st) == True{}: Bool}
           %e: {RContents.State.ok(s, c2, _) == True{}: Bool}
-          Shared.Bool.and_true_left(RContents.State.ok(s, c2, m), Bool.and(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x)))(h)))
+          Info.ok_state(s, c2, m, r, x)(h)))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the state that a right table holds for a line is the state that the facts
@@ -2230,7 +2359,7 @@ def Info.ids_ok(
       el => h => e => (
         %el: {RKnown.Made.fits(RLines.Line.state(s, _), y) == True{}: Bool}
         %e: {RContents.Made.ok(s, c2, _) == True{}: Bool}
-        Shared.Bool.and_true_right(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x))(Shared.Bool.and_true_right(RContents.State.ok(s, c2, m), Bool.and(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x)))(h)))
+        Info.ok_made(s, c2, m, r, x)(h))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # the ids that a right table holds for a line fit the state that the facts
@@ -2397,7 +2526,7 @@ def Info.mark_ok(
       el => h => e => (
         %el: {RContents.Kept.ok(s, RKnown.Ruled{_, n, u}) == True{}: Bool}
         %e: {RContents.Mark.ok(s, c2, _) == True{}: Bool}
-        Shared.Bool.and_true_left(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x))(Shared.Bool.and_true_right(RContents.State.ok(s, c2, m), Bool.and(RContents.Mark.ok(s, c2, r), RContents.Made.ok(s, c2, x)))(h)))
+        Info.ok_mark(s, c2, m, r, x)(h))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # Info.ruled_ok, with the era and the rule k that are held
@@ -2801,9 +2930,9 @@ def Known.learn_one_ok(
   RContents.Known.ok(kn, s) == True{}: Bool
 } -> {RContents.Known.ok(RKnown.Known.learn.one(kn, s, c), s) == True{}: Bool}:
   +ok => Lists.Maybe.by(
-    RLines.State,
+    RKnown.Seen,
     m => {RContents.Known.ok(RKnown.Known.learn.of(kn, s, c, m), s) == True{}: Bool},
-    RKnown.Known.find(kn, c),
+    RKnown.Known.seen(kn, c),
     en => Known.put_ok(
       kn,
       s,
@@ -3192,81 +3321,13 @@ def Info.kept(
 } -> {RContents.Info.ok(Facts.Facts.crit(s2), i) == True{}: Bool}:
   match i:
     case RKnown.Info{+c2, +m, +r, +y}:
-      +ec => er => +h => Shared.Bool.and_both(
-        RContents.State.ok(Facts.Facts.crit(s2), c2, m),
-        Bool.and(
-          RContents.Mark.ok(Facts.Facts.crit(s2), c2, r),
-          RContents.Made.ok(Facts.Facts.crit(s2), c2, y)
-        )
+      +ec => er => +h => Info.ok_of(Facts.Facts.crit(s2), c2, m, r, y)(
+        State.kept(RKnown.Seen.state.of(m), s, s2, c2)(ec)(Info.ok_state(Facts.Facts.crit(s), c2, m, r, y)(h))
       )(
-        State.kept(
-          m,
-          s,
-          s2,
-          c2
-        )(
-          ec
-        )(
-          Shared.Bool.and_true_left(
-            RContents.State.ok(Facts.Facts.crit(s), c2, m),
-            Bool.and(
-              RContents.Mark.ok(Facts.Facts.crit(s), c2, r),
-              RContents.Made.ok(Facts.Facts.crit(s), c2, y)
-            )
-          )(h)
-        )
+        Mark.kept(r, s, s2, c2)(ec)(er)(Info.ok_mark(Facts.Facts.crit(s), c2, m, r, y)(h))
       )(
-        Shared.Bool.and_both(
-          RContents.Mark.ok(Facts.Facts.crit(s2), c2, r),
-          RContents.Made.ok(Facts.Facts.crit(s2), c2, y)
-        )(
-          Mark.kept(
-            r,
-            s,
-            s2,
-            c2
-          )(
-            ec
-          )(
-            er
-          )(
-            Shared.Bool.and_true_left(
-              RContents.Mark.ok(Facts.Facts.crit(s), c2, r),
-              RContents.Made.ok(Facts.Facts.crit(s), c2, y)
-            )(
-              Shared.Bool.and_true_right(
-                RContents.State.ok(Facts.Facts.crit(s), c2, m),
-                Bool.and(
-                  RContents.Mark.ok(Facts.Facts.crit(s), c2, r),
-                  RContents.Made.ok(Facts.Facts.crit(s), c2, y)
-                )
-              )(h)
-            )
-          )
-        )(
-          Made.kept(
-            y,
-            s,
-            s2,
-            c2
-          )(
-            ec
-          )(
-            Shared.Bool.and_true_right(
-              RContents.Mark.ok(Facts.Facts.crit(s), c2, r),
-              RContents.Made.ok(Facts.Facts.crit(s), c2, y)
-            )(
-              Shared.Bool.and_true_right(
-                RContents.State.ok(Facts.Facts.crit(s), c2, m),
-                Bool.and(
-                  RContents.Mark.ok(Facts.Facts.crit(s), c2, r),
-                  RContents.Made.ok(Facts.Facts.crit(s), c2, y)
-                )
-              )(h)
-            )
-          )
-        )
-      )
+        Made.kept(y, s, s2, c2)(ec)(Info.ok_made(Facts.Facts.crit(s), c2, m, r, y)(h))
+      )(Info.ok_counted(Facts.Facts.crit(s), c2, m, r, y)(h))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # what is right of a line that a vote for a slot of the line c does not hit
@@ -11796,7 +11857,7 @@ def Known.learn_of_open(
   +kn: RKnown.Known(),
   +s: RFacts.Plain(),
   +c: Ledgers.Line,
-  old: Maybe<&2, RLines.State>
+  old: Maybe<&2, RKnown.Seen>
 ) -> {
   RKnown.Known.shelf(
     kn
@@ -11900,7 +11961,7 @@ def Known.learn_open(
     RKnown.Known.shelf(kn),
     RKnown.Known.shelf(RKnown.Known.learn.one(kn, s, RKnown.Known.root(c))),
     RKnown.Known.shelf(RKnown.Known.learn(kn, s, c)),
-    Known.learn_of_open(kn, s, RKnown.Known.root(c), RKnown.Known.find(kn, RKnown.Known.root(c))),
+    Known.learn_of_open(kn, s, RKnown.Known.root(c), RKnown.Known.seen(kn, RKnown.Known.root(c))),
     Equal.trans(
       Maybe<&2, RKnown.Kept>,
       RKnown.Known.shelf(RKnown.Known.learn.one(kn, s, RKnown.Known.root(c))),
@@ -11912,7 +11973,7 @@ def Known.learn_open(
         RKnown.Known.learn.one(kn, s, RKnown.Known.root(c)),
         s,
         c,
-        RKnown.Known.find(RKnown.Known.learn.one(kn, s, RKnown.Known.root(c)), c)
+        RKnown.Known.seen(RKnown.Known.learn.one(kn, s, RKnown.Known.root(c)), c)
       ),
       Equal.trans(
         Maybe<&2, RKnown.Kept>,

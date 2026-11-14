@@ -688,12 +688,24 @@ def Made.ok(+s: Facts.Plain(), c: Ledgers.Line, m: Maybe<&2, Knowns.Ids>) -> Boo
       Kept.ok(s, Knowns.Made{c, x})
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for a table that is wrong, which then costs no more than a right table, where both sides run
-# what i holds of its line is what the facts s give
+# the count that m keeps, if any, is the count of its versions
+def Seen.counted(m: Maybe<&2, Knowns.Seen>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{Knowns.Seen{rev, n, k}}:
+      Nat.is_eq(n, List.length(&2, Types.Entry, rev))
+
+# what i holds of its line is what the facts s give, and the count of its
+# versions is right
 def Info.ok(s: Facts.Plain(), i: Knowns.Info) -> Bool:
   match i:
-    case Knowns.Info{+c, m, r, x}:
+    case Knowns.Info{+c, +m, r, x}:
       +s = s
-      Bool.and(State.ok(s, c, m), Bool.and(Mark.ok(s, c, r), Made.ok(s, c, x)))
+      Bool.and(
+        State.ok(s, c, Knowns.Seen.state.of(m)),
+        Bool.and(Mark.ok(s, c, r), Bool.and(Made.ok(s, c, x), Seen.counted(m)))
+      )
 
 # the lines l are right for the facts s: what each holds of its line is what
 # s gives, and each sits under the key of its line

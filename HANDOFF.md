@@ -143,13 +143,29 @@ by copying it into `src/vend_node/` and running `bend <driver> -o <binary>` (`bu
   for 2 owners with 2 live nodes, 3 with 3, and 3 with 2 (one lost). Result: every request ends
   decided, the live nodes give the same answers, and 3 more Works per node after settling add
   no fact. The code before the new pass rule does not finish this driver.
-- Behind those runs, and not proven:
-  - `Slot.pass_once` has the premise that the pass is read as the next ballot of the node, and
-    it speaks of a list with one more ballot, not of the set of facts.
-  - With N owners, the Work of a follower casts a vote, and that vote counts.
-  - After its vote in a round, a node casts no other ballot for that slot.
-- Not covered by a test or a law: a node that joins the top round and is then lost before it
-  leads (decision 3); an unsound lead of a faulty owner is waited on.
+- Proven since, in `progress.bend` (a node that is no liar):
+  - A node that passed does not pass again for that slot (`Slot.passed_waits`,
+    `Work.passed_waits`).
+  - A node that voted in the top round, while that round is alive and the next round is not its
+    turn, casts nothing for that slot (`Slot.voted_quiet`). When the next round is its turn it
+    may lead it, bound to the same pick, once more than half voted.
+  - A node below a sound lead of the top round votes for its pick, and the vote counts
+    (`Slot.follower_votes`). The vote that a leader casts is a sound lead (`Slot.lead_sound`).
+  - A sound lead and votes of more than half in wider facts without liars decide the slot
+    (`Votes.lead_decides`).
+  - When the top round is not alive, a node calls its own next round; the call makes the round
+    alive for all; each joins once (`Slot.lost_calls`, `Slot.called_alive`, `Slot.joins`).
+- Still tested only:
+  - That a plan which is a pass came from `Slot.pass` of the open slot (a premise of
+    `Work.passed_waits`).
+  - "More than half voted" from the single votes; the step from a decided slot to the answer for
+    N owners (`decides_alone` is the one-owner case).
+  - `Rounds.mine` finds a round for each node of the rule; the promises that a caller gets give
+    it its lead.
+- Not covered by a test or a law: the node whose turn the alive top round is, lost before its
+  lead reaches anyone (decision 3; this includes a caller lost right after its call); an unsound
+  lead of a faulty owner is waited on. No other schedule that does not decide was found, by
+  reasoning; there is no proof of progress as a whole.
 - Speed, `main9` (one branch), `main10` (two branches, merges), `main11` (50 branches, two
   writers), `main16` (two nodes): the numbers under Speed. Each driver also prints replies, which
   were read by hand, not checked against expected values.

@@ -81,12 +81,18 @@ type Kept is Data:
 type Mark is Data:
   Mark{era: Nat, rule: Lines.Rule}
 
+# the state of a line, as a node keeps it: its versions, the newest first,
+# their count, and its next slot; a new version is one more item, and no
+# walk
+type Seen is Data:
+  Seen{rev: List<&2, Types.Entry>, count: Nat, slot: Nat}
+
 # what a node keeps of a line: its state, the era and the rule of its next
 # version, and the ids of its versions, each if the node has read it
 type Info is Data:
   Info{
     line: Ledgers.Line,
-    state: Maybe<&2, Lines.State>,
+    seen: Maybe<&2, Seen>,
     mark: Maybe<&2, Mark>,
     ids: Maybe<&2, Ids>
   }
@@ -119,11 +125,35 @@ def Info.line(i: Info) -> Ledgers.Line:
     case Info{c, m, r, x}:
       c
 
-# the state of i, if any
-def Info.state(i: Info) -> Maybe<&2, Lines.State>:
+# the state st, as a node keeps it
+def Seen.of(st: Lines.State) -> Seen:
+  match st:
+    case Lines.State{+vs, k}:
+      Seen{List.reverse(&2, Types.Entry, vs), List.length(&2, Types.Entry, vs), k}
+
+# the state that x keeps: its versions, the oldest first, and its next slot
+def Seen.state(x: Seen) -> Lines.State:
+  match x:
+    case Seen{rev, n, k}:
+      Lines.State{List.reverse(&2, Types.Entry, rev), k}
+
+# the state that m keeps, if any
+def Seen.state.of(m: Maybe<&2, Seen>) -> Maybe<&2, Lines.State>:
+  match m:
+    case None{}:
+      None{}
+    case Some{x}:
+      Some{Seen.state(x)}
+
+# the state of i, as the node keeps it, if any
+def Info.seen(i: Info) -> Maybe<&2, Seen>:
   match i:
     case Info{c, m, r, x}:
       m
+
+# the state of i, if any
+def Info.state(i: Info) -> Maybe<&2, Lines.State>:
+  Seen.state.of(Info.seen(i))
 
 # the era and the rule of i, if any
 def Info.mark(i: Info) -> Maybe<&2, Mark>:
@@ -145,7 +175,7 @@ def Info.key(i: Info) -> List<&2, U32>:
 def Info.state.set(i: Info, st: Lines.State) -> Info:
   match i:
     case Info{c, m, r, x}:
-      Info{c, Some{st}, r, x}
+      Info{c, Some{Seen.of(st)}, r, x}
 
 # i with the era n and the rule u
 def Info.mark.set(i: Info, n: Nat, u: Lines.Rule) -> Info:
@@ -203,6 +233,10 @@ def Known.low(kn: Known()) -> Nat:
 # what the table kn holds of the line c
 def Known.info(kn: Known(), +c: Ledgers.Line) -> Info:
   Infos.of(Known.lines(kn), c)
+
+# the state of the line c as the table kn keeps it, if any
+def Known.seen(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Seen>:
+  Info.seen(Known.info(kn, c))
 
 # the state that the table kn holds for the line c, if any
 def Known.find(kn: Known(), +c: Ledgers.Line) -> Maybe<&2, Lines.State>:
@@ -874,9 +908,51 @@ def Known.versions(
 ) -> Maybe<&2, List<&2, Types.Entry>>:
   Maybe.map(&2, Lines.State, List<&2, Types.Entry>, Lines.State.versions, Known.state(kn, s, c))
 
+# version k among the version e, of the number p, and the versions rest
+# before it, the newest first: e when it is version k (hit)
+def Rev.seek(
+  rest: List<&2, Types.Entry>,
+  hit: Bool,
+  e: Types.Entry,
+  p: Nat,
+  +k: Nat
+) -> Maybe<&2, Types.Entry>:
+  match rest hit p:
+    case _ True{} _:
+      Some{e}
+    case Con{e2, rest2} False{} 1n+q:
+      +q = q
+      Rev.seek(rest2, Nat.is_eq(q, k), e2, q, k)
+    case _ False{} _:
+      None{}
+
+# version k among the n versions rev, the newest first
+def Rev.get(rev: List<&2, Types.Entry>, n: Nat, +k: Nat) -> Maybe<&2, Types.Entry>:
+  match rev n:
+    case Con{e, rest} 1n+p:
+      +p = p
+      Rev.seek(rest, Nat.is_eq(p, k), e, p, k)
+    case _ _:
+      None{}
+
+# version k of the line c in the facts s: read from the state m that the
+# table kn keeps for c, if any, with no walk of the versions before k
+def Known.at.by(
+  m: Maybe<&2, Seen>,
+  +kn: Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  k: Nat
+) -> Maybe<&2, Types.Entry>:
+  match m:
+    case None{}:
+      Lines.Line.at.of(Known.versions(kn, s, c), k)
+    case Some{Seen{rev, n, j}}:
+      Rev.get(rev, n, k)
+
 # version k of the line c in the facts s, read through the table kn
 def Known.at(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, k: Nat) -> Maybe<&2, Types.Entry>:
-  Lines.Line.at.of(Known.versions(kn, s, c), k)
+  Known.at.by(Known.seen(kn, c), kn, s, c, k)
 
 # the versions of the store of the root h, read through the table kn
 def Known.store(
@@ -968,9 +1044,31 @@ def Id.waits(m: Maybe<&2, Lines.State>, kn: Known(), +c: Ledgers.Line, i: Ledger
     case Some{Lines.State{vs, k}}:
       Bool.not(Known.made(kn, c, vs, i))
 
+# the request of the id i waits on the line c in the facts s: read from the
+# ids of the versions of c, when the table kn holds them with its state (j)
+def Line.waits.by(j: Info, +kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, i: Ledgers.Id) -> Bool:
+  match j:
+    case Info{c2, Some{y}, r, Some{x}}:
+      Bool.not(Ids.has(x, i))
+    case _:
+      Id.waits(Known.state(kn, s, c), kn, c, i)
+
 # the request of the id i waits on the line c in the facts s
 def Line.waits(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, i: Ledgers.Id) -> Bool:
-  Id.waits(Known.state(kn, s, c), kn, c, i)
+  Line.waits.by(Known.info(kn, c), kn, s, c, i)
+
+# a ballot for the slot k of the line c waits in the facts s: read from the
+# state m that the table kn keeps for c, if any
+def Vote.waits.by(m: Maybe<&2, Seen>, +kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, k: Nat) -> Bool:
+  match m:
+    case None{}:
+      Slot.waits(Known.state(kn, s, c), k)
+    case Some{Seen{rev, n, j}}:
+      Nat.is_le(j, k)
+
+# a ballot for the slot k of the line c waits in the facts s
+def Vote.waits(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line, k: Nat) -> Bool:
+  Vote.waits.by(Known.seen(kn, c), kn, s, c, k)
 
 # the request of the id i, that resolves a merge of the line m, if the node
 # holds an ask of the merge, waits: it made no version of the line
@@ -1013,7 +1111,7 @@ def Fact.waits(g: Scene, f: Types.Fact) -> Bool:
     case Scene{kn, s} Types.Fact.Vote{v, Types.Step.Broken{}, x}:
       False{}
     case Scene{+kn, +s} Types.Fact.Vote{v, Types.Step.At{+c, k, t}, x}:
-      Slot.waits(Known.state(kn, s, c), k)
+      Vote.waits(kn, s, c, k)
     case Scene{+kn, +s} Types.Fact.Ask{Types.Ask{i, n, r}}:
       Request.waits(kn, s, i, r)
 
@@ -1205,7 +1303,7 @@ def Known.learn.of(
   +kn: Known(),
   +s: Facts.Plain(),
   +c: Ledgers.Line,
-  old: Maybe<&2, Lines.State>
+  old: Maybe<&2, Seen>
 ) -> Known():
   match old:
     case Some{st}:
@@ -1215,7 +1313,7 @@ def Known.learn.of(
 
 # the table kn with the state of the line c in the facts s
 def Known.learn.one(+kn: Known(), +s: Facts.Plain(), +c: Ledgers.Line) -> Known():
-  Known.learn.of(kn, s, c, Known.find(kn, c))
+  Known.learn.of(kn, s, c, Known.seen(kn, c))
 
 # the table kn with the rule m, if any, of the next version of the line c,
 # which is of the era n
@@ -1570,6 +1668,19 @@ def Known.safe(
     case _ _ _:
       False{}
 
+# Known.safe, of the states m and ms as a node keeps them
+def Seen.safe(c: Ledgers.Line, m: Maybe<&2, Seen>, ms: Maybe<&2, Seen>, k: Nat) -> Bool:
+  match c m ms:
+    case Ledgers.Line{h, Some{b}} Some{Seen{rev, n, j}} Some{y}:
+      Nat.is_eq(j, k)
+    case _ _ _:
+      False{}
+
+# a ballot for the slot k of the line c continues the versions of c and
+# changes no other line, as the table kn holds them
+def Known.sound(+kn: Known(), +c: Ledgers.Line, k: Nat) -> Bool:
+  Seen.safe(c, Known.seen(kn, c), Known.seen(kn, Known.root(c)), k)
+
 # the contents of the table kn, when a ballot leaves them as they are (safe),
 # for the facts with the ballot, one more fact; else none
 def Known.spared(safe: Bool, kn: Known()) -> Known():
@@ -1839,6 +1950,221 @@ def Known.cast.as(
         run
       )
 
+# A run, as the node keeps it
+# -------------------------
+# The run that a ballot continues (Run) appends each new version to the
+# versions of the line, the oldest first: a walk of them all. The node keeps
+# the versions the newest first (Seen), so the same run over them (Pace) puts
+# a new version in front, and reads the versions of the store only when the
+# era changes. known.bend proves that it leaves what Run leaves.
+
+# what a run leaves of a line, as the node keeps it: its state, the era and
+# the rule of its next version, and the ids of its versions
+type Pace is Data:
+  Pace{seen: Seen, era: Nat, rule: Maybe<&2, Lines.Rule>, ids: Ids}
+
+# the rule at the era m of the branch c, with the versions rr of its store,
+# the newest first: the rule u before, when the era is as before (same)
+def Pace.rule(
+  same: Bool,
+  rr: List<&2, Types.Entry>,
+  c: Ledgers.Line,
+  m: Nat,
+  u: Maybe<&2, Lines.Rule>
+) -> Maybe<&2, Lines.Rule>:
+  match same:
+    case True{}:
+      u
+    case False{}:
+      Lines.Rule.at(List.reverse(&2, Types.Entry, rr), c, m)
+
+# the run of the branch c after the slot k decided the pick pk: a new
+# version, unless the id of pk already made one (dup)
+def Pace.put(
+  dup: Bool,
+  rr: List<&2, Types.Entry>,
+  c: Ledgers.Line,
+  rev: List<&2, Types.Entry>,
+  n: Nat,
+  +k: Nat,
+  +m: Nat,
+  u: Maybe<&2, Lines.Rule>,
+  +x: Ids,
+  +pk: Types.Pick
+) -> Pace:
+  match dup:
+    case True{}:
+      Pace{Seen{rev, n, 1n+k}, m, u, x}
+    case False{}:
+      +m2 = Nat.max(Lines.Entry.era(Types.Entry{pk, k}), m)
+      Pace{
+        Seen{Types.Entry{pk, k} <> rev, 1n+n, 1n+k},
+        m2,
+        Pace.rule(Nat.is_eq(m2, m), rr, c, m2, u),
+        Ids.put(x, Types.Entry{pk, k})
+      }
+
+# the run after the next slot of the run q of the branch c, once its decided
+# pick p is known
+def Pace.step.of(
+  rr: List<&2, Types.Entry>,
+  c: Ledgers.Line,
+  q: Pace,
+  p: Maybe<&2, Types.Pick>
+) -> Maybe<&2, Pace>:
+  match q p:
+    case Pace{st, m, u, x} None{}:
+      None{}
+    case Pace{Seen{rev, n, k}, m, u, +x} Some{+pk}:
+      Some{Pace.put(Ids.has(x, Lines.Pick.id(pk)), rr, c, rev, n, k, m, u, x, pk)}
+
+# the nodes that decide the next slot of the run q, if its rule is known
+def Pace.nodes(q: Pace) -> Maybe<&2, List<&2, String>>:
+  match q:
+    case Pace{st, m, None{}, x}:
+      None{}
+    case Pace{st, m, Some{u}, x}:
+      Some{Lines.Rule.nodes(u)}
+
+# the next slot of the run q
+def Pace.slot(q: Pace) -> Nat:
+  match q:
+    case Pace{Seen{rev, n, k}, m, u, x}:
+      k
+
+# the run after the next slot of the run q of the branch c, read from the
+# facts fs, once the nodes ns that decide the slot are known
+def Pace.step.at(
+  fs: List<&2, Types.Fact>,
+  rr: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +q: Pace,
+  ns: Maybe<&2, List<&2, String>>
+) -> Maybe<&2, Pace>:
+  match ns:
+    case None{}:
+      None{}
+    case Some{ds}:
+      Pace.step.of(rr, c, q, Lines.Votes.decided.in(fs, c, Pace.slot(q), ds))
+
+# the run after the next slot of the run q of the branch c, with the
+# versions rr of its store, read from the facts fs
+def Pace.step(
+  fs: List<&2, Types.Fact>,
+  rr: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +q: Pace
+) -> Maybe<&2, Pace>:
+  Pace.step.at(fs, rr, c, q, Pace.nodes(q))
+
+# the run of the branch c after each decided slot from q on, read from the
+# facts fs, at most fuel of them; m is the run after the next slot of q, if
+# it is decided
+def Pace.go(
+  fuel: Nat,
+  +fs: List<&2, Types.Fact>,
+  +rr: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  q: Pace,
+  m: Maybe<&2, Pace>
+) -> Pace:
+  match fuel m:
+    case 0n _:
+      q
+    case 1n+f None{}:
+      q
+    case 1n+f Some{+q2}:
+      Pace.go(f, fs, rr, c, q2, Pace.step(fs, rr, c, q2))
+
+# the run of the branch c from q on, read from the facts fs
+def Pace.from(
+  +fs: List<&2, Types.Fact>,
+  +rr: List<&2, Types.Entry>,
+  +c: Ledgers.Line,
+  +q: Pace
+) -> Pace:
+  Pace.go(1n+Lines.Line.bound(fs, c), fs, rr, c, q, Pace.step(fs, rr, c, q))
+
+# the era m and the rule u, if any, of the next version of a line
+def Mark.of(m: Nat, u: Maybe<&2, Lines.Rule>) -> Maybe<&2, Mark>:
+  match u:
+    case None{}:
+      None{}
+    case Some{rule}:
+      Some{Mark{m, rule}}
+
+# the table kn after a ballot for a slot of the branch c, with what the run
+# q leaves of c, and with its contents, for one more fact: one write of what
+# the table holds of c
+def Known.paced(+kn: Known(), +c: Ledgers.Line, q: Pace) -> Known():
+  match q:
+    case Pace{x, m, u, ids}:
+      Table{
+        Infos.with(Known.lines(kn), Info{c, Some{x}, Mark.of(m, u), Some{ids}}),
+        None{},
+        Known.stock(kn),
+        1n+Known.low(kn)
+      }
+
+# the table kn after a ballot for the slot k of the branch c, when the
+# table holds the state x of c, the state y of its store, and the era, the
+# rule and the ids of c: the run from x on, when k is the next slot of x
+# (next); else as Known.cast.as gives it
+def Known.cast.if(
+  next: Bool,
+  +fs: List<&2, Types.Fact>,
+  +c: Ledgers.Line,
+  x: Seen,
+  y: Seen,
+  era: Nat,
+  rule: Lines.Rule,
+  ids: Ids,
+  +k: Nat,
+  +kn: Known(),
+  +s: Facts.Plain()
+) -> Known():
+  match next y:
+    case True{} Seen{rr, rn, rk}:
+      Known.paced(kn, c, Pace.from(fs, rr, c, Pace{x, era, Some{rule}, ids}))
+    case False{} y:
+      Known.cast.as(Known.quick(kn, c, k, Some{fs}), kn, s, c, k, Some{fs})
+
+# the table kn after a ballot for the slot k of the line c: with the run
+# that the ballot continues, read from the facts w, when the table holds all
+# that it reads (j is what it holds of c, a branch, k is the next slot of
+# c, and ms is the state of its store); else as Known.cast.as gives it
+def Known.cast.by(
+  +w: Maybe<&2, List<&2, Types.Fact>>,
+  +c: Ledgers.Line,
+  j: Info,
+  ms: Maybe<&2, Seen>,
+  +k: Nat,
+  +kn: Known(),
+  +s: Facts.Plain()
+) -> Known():
+  match w c j ms:
+    case Some{
+      +fs
+    } Ledgers.Line{
+      +h,
+      Some{+b}
+    } Info{c2, Some{Seen{+rev, +n, +slot}}, Some{Mark{+era, +rule}}, Some{+ids}} Some{Seen{+rr, +rn, +rk}}:
+      Known.cast.if(
+        Nat.is_eq(slot, k),
+        fs,
+        Ledgers.Line{h, Some{b}},
+        Seen{rev, n, slot},
+        Seen{rr, rn, rk},
+        era,
+        rule,
+        ids,
+        k,
+        kn,
+        s
+      )
+    case _ _ _ _:
+      Known.cast.as(Known.quick(kn, c, k, w), kn, s, c, k, w)
+
 # the table kn after a ballot for the slot k of the line c, where s is the
 # facts with the ballot: without the states that the ballot may change, with
 # the state of c continued from the state that kn holds for it, with the
@@ -1852,4 +2178,4 @@ def Known.cast(
   +k: Nat,
   +w: Maybe<&2, List<&2, Types.Fact>>
 ) -> Known():
-  Known.cast.as(Known.quick(kn, c, k, w), kn, s, c, k, w)
+  Known.cast.by(w, c, Known.info(kn, c), Known.seen(kn, Known.root(c)), k, kn, s)

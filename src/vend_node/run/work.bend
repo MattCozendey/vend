@@ -1,5 +1,6 @@
 import Base
 import ../../shared/shared/ledger.bend as Ledgers
+import ../../shared/shared/shared/shared/hash.bend as Hashes
 import ../../shared/shared/shared/shared/shared.bend as Shared
 import ../shared/lists.bend as Lists
 import ../spec.bend as Spec
@@ -163,12 +164,21 @@ def Era.now.of(m: Maybe<&2, List<&2, Types.Entry>>) -> Nat:
     case Some{R}:
       Nat.sub(List.length(&2, Types.Entry, R), 1n)
 
+# the newest version of the store of the root h: as the state m that the
+# table kn keeps for it counts its versions, if any
+def Era.now.by(m: Maybe<&2, Known.Seen>, +kn: Known.Known(), +s: Facts.Plain(), +h: Hashes.Hash) -> Nat:
+  match m:
+    case None{}:
+      Era.now.of(Known.Known.store(kn, s, h))
+    case Some{Known.Seen{rev, n, k}}:
+      Nat.sub(n, 1n)
+
 # the era that the node pins for the line c: the newest version of its store
 # that it holds
 def Era.now(+kn: Known.Known(), +s: Facts.Plain(), c: Ledgers.Line) -> Nat:
   match c:
-    case Ledgers.Line{h, b}:
-      Era.now.of(Known.Known.store(kn, s, h))
+    case Ledgers.Line{+h, b}:
+      Era.now.by(Known.Known.seen(kn, Ledgers.Line{h, None{}}), kn, s, h)
 
 # The next ballot
 # ---------------
@@ -293,6 +303,85 @@ def Work.offer.at(
         )
       )
 
+# the pins that the node gives the request r for the line c, of the versions
+# rev, the newest first, at the era m: the versions are read only for a
+# merge
+def Pins.seen(
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +c: Ledgers.Line,
+  rev: List<&2, Types.Entry>,
+  m: Nat,
+  r: Spec.Request
+) -> Types.Pins:
+  match r:
+    case Spec.Request.Merge{+f, x}:
+      Pins.merge(m, c, f, List.reverse(&2, Types.Entry, rev), Known.Known.versions(kn, s, f))
+    case _:
+      Lines.Pins.plain(m)
+
+# the vote of the node name for the ask a at the next slot k of the line c,
+# of the versions rev, the newest first, which the nodes ns decide: when
+# name is one of them (in), the request made no version of the line yet
+# (made is false), it is its turn, and the votes of the rounds before leave
+# it free
+def Work.offer.if(
+  in: Bool,
+  made: Bool,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String,
+  +c: Ledgers.Line,
+  +a: Types.Ask,
+  rev: List<&2, Types.Entry>,
+  +k: Nat,
+  +ns: List<&2, String>
+) -> Maybe<&2, Plan>:
+  match in made:
+    case True{} False{}:
+      Plan.of(
+        c,
+        k,
+        Work.offer.of(
+          u2 => Types.Pick{a, Pins.seen(kn, s, c, rev, Era.now(kn, s, c), Lines.Ask.request(a))},
+          Rounds.Slot.chance(Work.ballots(kn, s, c, k), ns, k, name)
+        )
+      )
+    case _ _:
+      None{}
+
+# the vote of the node name for the ask a on the line c: read from what the
+# table kn holds of c (j), when it holds its state, its rule and its ids
+def Work.offer.by(
+  j: Known.Info,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String,
+  +c: Ledgers.Line,
+  +a: Types.Ask
+) -> Maybe<&2, Plan>:
+  match j:
+    case Known.Info{
+      c2,
+      Some{Known.Seen{rev, n, k}},
+      Some{Known.Mark{era, Lines.Rule{g, +ns}}},
+      Some{x}
+    }:
+      Work.offer.if(
+        List.contains(~String, ~String.eq, ns, name),
+        Known.Ids.has(x, Lines.Ask.id(a)),
+        kn,
+        s,
+        name,
+        c,
+        a,
+        rev,
+        k,
+        ns
+      )
+    case _:
+      Work.offer.at(kn, s, name, c, a, Work.open(kn, s, name, c))
+
 # the vote of the node name for the ask a, on the line m that it is for
 def Work.offer.on(
   +kn: Known.Known(),
@@ -305,7 +394,7 @@ def Work.offer.on(
     case None{}:
       None{}
     case Some{+c}:
-      Work.offer.at(kn, s, name, c, a, Work.open(kn, s, name, c))
+      Work.offer.by(Known.Known.info(kn, c), kn, s, name, c, a)
 
 # the vote that the node name may cast for the ask a, where all is the facts
 # of s
@@ -398,6 +487,50 @@ def Work.follow.at(
         u => Plan.of(c, k, Rounds.Slot.follow(Work.ballots(kn, s, c, k), ns, k, name))
       )
 
+# the vote of the node name at the slot k of the line c, which the nodes ns
+# decide: when name is one of them (in) and k is the next slot of the line
+# (next)
+def Work.follow.if(
+  in: Bool,
+  next: Bool,
+  kn: Known.Known(),
+  s: Facts.Plain(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat,
+  +ns: List<&2, String>
+) -> Maybe<&2, Plan>:
+  match in next:
+    case True{} True{}:
+      Plan.of(c, k, Rounds.Slot.follow(Work.ballots(kn, s, c, k), ns, k, name))
+    case _ _:
+      None{}
+
+# the vote of the node name at the slot k of the line c: read from what the
+# table kn holds of c (j), when it holds its state and its rule
+def Work.follow.by(
+  j: Known.Info,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k: Nat
+) -> Maybe<&2, Plan>:
+  match j:
+    case Known.Info{c2, Some{Known.Seen{rev, n, k2}}, Some{Known.Mark{era, Lines.Rule{g, +ns}}}, x}:
+      Work.follow.if(
+        List.contains(~String, ~String.eq, ns, name),
+        Nat.is_eq(k2, k),
+        kn,
+        s,
+        name,
+        c,
+        k,
+        ns
+      )
+    case _:
+      Work.follow.at(kn, s, name, c, k, Work.open(kn, s, name, c))
+
 # the vote of the node name at the slot of the fact f, if f is a ballot
 def Work.follow.of(
   +kn: Known.Known(),
@@ -407,7 +540,7 @@ def Work.follow.of(
 ) -> Maybe<&2, Plan>:
   match f:
     case Types.Fact.Vote{v, Types.Step.At{+c, +k, t}, x}:
-      Work.follow.at(kn, s, name, c, k, Work.open(kn, s, name, c))
+      Work.follow.by(Known.Known.info(kn, c), kn, s, name, c, k)
     case _:
       None{}
 
@@ -462,6 +595,68 @@ def Work.pass.at(
     case None{} None{} _:
       None{}
 
+# the pass of the node name at the next slot k2 of the line c, which the
+# nodes ns decide: when name is one of them (in) and the pass is due (go)
+def Work.pass.if(
+  in: Bool,
+  go: Bool,
+  kn: Known.Known(),
+  s: Facts.Plain(),
+  +name: String,
+  +c: Ledgers.Line,
+  +k2: Nat,
+  +ns: List<&2, String>
+) -> Maybe<&2, Plan>:
+  match in go:
+    case True{} True{}:
+      Plan.of(c, k2, Rounds.Slot.pass(Work.ballots(kn, s, c, k2), ns, k2, name))
+    case _ _:
+      None{}
+
+# the pass is due at the next slot k2 of a line: it is the slot k, if any;
+# else the request of the id i, if any, made none of the versions of the ids
+# x
+def Pass.due(k: Maybe<&2, Nat>, i: Maybe<&2, Ledgers.Id>, k2: Nat, x: Known.Ids) -> Bool:
+  match k i:
+    case Some{k1} _:
+      Nat.is_eq(k2, k1)
+    case None{} Some{id}:
+      Bool.not(Known.Ids.has(x, id))
+    case None{} None{}:
+      False{}
+
+# the pass of the node name at the next slot of the line c, as Work.pass.at
+# gives it: read from what the table kn holds of c (j), when it holds its
+# state, its rule and its ids
+def Work.pass.by(
+  j: Known.Info,
+  +kn: Known.Known(),
+  +s: Facts.Plain(),
+  +name: String,
+  +c: Ledgers.Line,
+  k: Maybe<&2, Nat>,
+  i: Maybe<&2, Ledgers.Id>
+) -> Maybe<&2, Plan>:
+  match j:
+    case Known.Info{
+      c2,
+      Some{Known.Seen{rev, n, +k2}},
+      Some{Known.Mark{era, Lines.Rule{g, +ns}}},
+      Some{x}
+    }:
+      Work.pass.if(
+        List.contains(~String, ~String.eq, ns, name),
+        Pass.due(k, i, k2, x),
+        kn,
+        s,
+        name,
+        c,
+        k2,
+        ns
+      )
+    case _:
+      Work.pass.at(kn, s, name, c, k, i, Work.open(kn, s, name, c))
+
 # the pass of the node name for the request of the id i, on the line m that
 # it is for
 def Work.pass.on(
@@ -475,7 +670,7 @@ def Work.pass.on(
     case None{}:
       None{}
     case Some{+c}:
-      Work.pass.at(kn, s, name, c, None{}, Some{i}, Work.open(kn, s, name, c))
+      Work.pass.by(Known.Known.info(kn, c), kn, s, name, c, None{}, Some{i})
 
 # the pass of the node name at the slot that the fact f is about: the slot
 # of a ballot, or the next slot of the line of a request that waits; all is
@@ -489,7 +684,7 @@ def Work.pass.of(
 ) -> Maybe<&2, Plan>:
   match f:
     case Types.Fact.Vote{v, Types.Step.At{+c, k, t}, x}:
-      Work.pass.at(kn, s, name, c, Some{k}, None{}, Work.open(kn, s, name, c))
+      Work.pass.by(Known.Known.info(kn, c), kn, s, name, c, Some{k}, None{})
     case Types.Fact.Vote{v, Types.Step.Broken{}, x}:
       None{}
     case Types.Fact.Ask{Types.Ask{i, n, +r}}:

@@ -146,10 +146,7 @@ def Table.moved(
   Known.Known.moved(
     Known.Known.learn(Contents.Known.grow(kn, Known.Known.cast(kn, s, c, k, w), s, c), s, c),
     s,
-    Known.Known.walk.if(
-      Known.Known.safe(c, Known.Known.find(kn, c), Known.Known.find(kn, Known.Known.root(c)), k),
-      w
-    ),
+    Known.Known.walk.if(Known.Known.sound(kn, c, k), w),
     n,
     t,
     x
@@ -336,7 +333,7 @@ def Seat.facts(+kn: Known.Known(), +s: Facts.Plain(), st: Types.Step) -> List<&2
     case Types.Step.At{+c, k, t}:
       Shared.Bool.when(
         List<&2, Types.Fact>,
-        Known.Slot.waits(Known.Known.state(kn, s, c), k),
+        Known.Vote.waits(kn, s, c, k),
         u => Known.Known.facts(kn, s),
         u => Facts.Facts.list(s)
       )
