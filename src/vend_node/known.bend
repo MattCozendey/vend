@@ -916,6 +916,192 @@ def Ids.go_append(
       Ids.go_append(rest, zs, RKnown.Ids.put(acc, e))
 
 #END NEWIDS
+#BEGIN IDS2
+# a version that the request of an id did not make changes no version found
+def Found.or_miss(
+  x: Maybe<&2, RKnown.Found>,
+  +n: Nat,
+  +e: Types.Entry,
+  +i: Ledgers.Id
+) -> {RLines.Entry.is_of(i, e) == False{}: Bool} -> {RKnown.Found.or(x, RKnown.Found{n, e}, i) == x: Maybe<&2, RKnown.Found>}:
+  ?TODO
+
+# the oldest version that the request of an id made among the versions m,
+# if any, with a version before them: the oldest among m, else that version
+def Bucket.find_put(
+  m: Maybe<&2, List<&2, RKnown.Found>>,
+  +n: Nat,
+  +e: Types.Entry,
+  +i: Ledgers.Id
+) -> {
+  RKnown.Ids.find.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, [RKnown.Found{n, e}])}, i)
+    == RKnown.Found.or(RKnown.Ids.find.of(m, i), RKnown.Found{n, e}, i): Maybe<&2, RKnown.Found>
+}:
+  ?TODO
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# the oldest version that the request of an id made in the versions by id
+# with one more version: the oldest before, else that version
+def Ids.put_find(
+  +m: Crits.Crit<List<&2, RKnown.Found>>,
+  +n: Nat,
+  +e: Types.Entry,
+  +i: Ledgers.Id
+) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
+  RKnown.Ids.find(RKnown.Ids.put(RKnown.Ids{m, n}, e), i)
+    == RKnown.Found.or(RKnown.Ids.find(RKnown.Ids{m, n}, i), RKnown.Found{n, e}, i): Maybe<&2, RKnown.Found>
+}:
+  ?TODO
+
+# the oldest version that the request of the id i made: m, if any, else the
+# first of vs that it made, where the versions vs are numbered from n on
+def Found.over(m: Maybe<&2, RKnown.Found>, n: Nat, vs: List<&2, Types.Entry>, +i: Ledgers.Id) -> Maybe<&2, RKnown.Found>:
+  match vs:
+    case Nil{}:
+      m
+    case Con{+e, rest}:
+      +n = n
+      Found.over(RKnown.Found.or(m, RKnown.Found{n, e}, i), 1n+n, rest, i)
+
+# the oldest version that the request of an id made in the versions by id
+# with the versions vs: the oldest before, else the first of vs
+def Ids.go_find(
+  vs: List<&2, Types.Entry>,
+  +m: Crits.Crit<List<&2, RKnown.Found>>,
+  +n: Nat,
+  +i: Ledgers.Id
+) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
+  RKnown.Ids.find(RKnown.Ids.go(vs, RKnown.Ids{m, n}), i)
+    == Found.over(RKnown.Ids.find(RKnown.Ids{m, n}, i), n, vs, i): Maybe<&2, RKnown.Found>
+}:
+  ?TODO
+
+# a version that was found stays the oldest
+def Found.over_some(
+  +g: RKnown.Found,
+  n: Nat,
+  vs: List<&2, Types.Entry>,
+  +i: Ledgers.Id
+) -> {Found.over(Some{g}, n, vs, i) == Some{g}: Maybe<&2, RKnown.Found>}:
+  ?TODO
+
+# the version m, if any, with n more as its number
+def Found.shift(n: Nat, m: Maybe<&2, RKnown.Found>) -> Maybe<&2, RKnown.Found>:
+  match m:
+    case None{}:
+      None{}
+    case Some{RKnown.Found{j, e}}:
+      Some{RKnown.Found{Nat.add(j, n), e}}
+
+# an entry g, if any, as version 1+j, numbered from n, is g as version j,
+# numbered from 1+n
+def Find.up_get(
+  g: Maybe<&2, Types.Entry>,
+  +j: Nat,
+  +n: Nat
+) -> {
+  Found.shift(n, Maybe.map(&2, Types.Entry, RKnown.Found, e => RKnown.Found{1n+j, e}, g))
+    == Found.shift(1n+n, Maybe.map(&2, Types.Entry, RKnown.Found, e => RKnown.Found{j, e}, g)): Maybe<&2, RKnown.Found>
+}:
+  ?TODO
+
+# the version at an index after the one of mi, among versions with one more
+# before them, numbered from n, is the version at mi, numbered from 1+n
+def Find.up(
+  e: Types.Entry,
+  +rest: List<&2, Types.Entry>,
+  mi: Maybe<&2, Nat>,
+  +n: Nat
+) -> {
+  Found.shift(n, RAnswers.Versions.find.at(e <> rest, Lists.List.index.up(mi)))
+    == Found.shift(1n+n, RAnswers.Versions.find.at(rest, mi)): Maybe<&2, RKnown.Found>
+}:
+  ?TODO
+
+# the first of the versions vs, numbered from n on, that the request of an
+# id made is the version that Versions.find gives, with n more as its number
+def Found.over_none(
+  vs: List<&2, Types.Entry>,
+  +n: Nat,
+  +i: Ledgers.Id
+) -> {Found.over(None{}, n, vs, i) == Found.shift(n, RAnswers.Versions.find(vs, i)): Maybe<&2, RKnown.Found>}:
+  ?TODO
+
+# a version with 0 more as its number is itself
+def Found.shift_zero(m: Maybe<&2, RKnown.Found>) -> {Found.shift(0n, m) == m: Maybe<&2, RKnown.Found>}:
+  ?TODO
+
+# the oldest version that the request of an id made, read from the versions
+# vs by id, is the version that Versions.find gives
+def Ids.of_find(
+  +vs: List<&2, Types.Entry>,
+  +i: Ledgers.Id
+) -> {RKnown.Ids.find(RKnown.Ids.of(vs), i) == RAnswers.Versions.find(vs, i): Maybe<&2, RKnown.Found>}:
+  ?TODO
+
+# an ask made one of the versions m, if any, with a version before them,
+# exactly when it made that version or one of m
+def Bucket.made_put(
+  m: Maybe<&2, List<&2, RKnown.Found>>,
+  +n: Nat,
+  +e: Types.Entry,
+  +a: Types.Ask
+) -> {
+  RKnown.Ids.made.of(Some{Crits.Crit.merge(~List<&2, RKnown.Found>, ~RKnown.Ids.join, m, [RKnown.Found{n, e}])}, a)
+    == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made.of(m, a)): Bool
+}:
+  ?TODO
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# an ask made one of the versions by id with one more version exactly when
+# it made that version, or one of the versions before
+def Ids.put_made(
+  +m: Crits.Crit<List<&2, RKnown.Found>>,
+  +n: Nat,
+  +e: Types.Entry,
+  +a: Types.Ask
+) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
+  RKnown.Ids.made(RKnown.Ids.put(RKnown.Ids{m, n}, e), a)
+    == Bool.or(RKnown.Entry.made_by(a, e), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool
+}:
+  ?TODO
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# an ask made one of the versions by id with the versions vs exactly when it
+# made one of vs, or one of the versions before
+def Ids.go_made(
+  vs: List<&2, Types.Entry>,
+  +m: Crits.Crit<List<&2, RKnown.Found>>,
+  +n: Nat,
+  +a: Types.Ask
+) -> {Crits.Crit.wf(~List<&2, RKnown.Found>, m, 0n) == True{}: Bool} -> {
+  RKnown.Ids.made(RKnown.Ids.go(vs, RKnown.Ids{m, n}), a)
+    == Bool.or(Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a), RKnown.Ids.made(RKnown.Ids{m, n}, a)): Bool
+}:
+  ?TODO
+
+# an ask made one of the versions vs by id exactly when it made one of vs
+def Ids.of_made(
+  +vs: List<&2, Types.Entry>,
+  +a: Types.Ask
+) -> {RKnown.Ids.made(RKnown.Ids.of(vs), a) == Shared.List.some(~Types.Entry, ~Types.Ask, ~RKnown.Entry.made_by, vs, a): Bool}:
+  ?TODO
+
+# the count of the versions by id with the versions vs: as many more
+def Ids.go_count(
+  vs: List<&2, Types.Entry>,
+  +m: Crits.Crit<List<&2, RKnown.Found>>,
+  +n: Nat
+) -> {RKnown.Ids.count(RKnown.Ids.go(vs, RKnown.Ids{m, n})) == Nat.add(List.length(&2, Types.Entry, vs), n): Nat}:
+  ?TODO
+
+# the count of the versions vs by id is the number of vs
+def Ids.of_count(
+  +vs: List<&2, Types.Entry>
+) -> {RKnown.Ids.count(RKnown.Ids.of(vs)) == List.length(&2, Types.Entry, vs): Nat}:
+  ?TODO
+
+#END IDS2
 # the first entry of a right table is right
 def Ok.head(
   e: RKnown.Kept,
