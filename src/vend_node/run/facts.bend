@@ -25,6 +25,18 @@ def Facts.new() -> Plain():
 def Facts.has(s: Plain(), +f: Types.Fact) -> Bool:
   Crits.Crit.has(Types.Fact, s, Coded.Fact.words(f))
 
+# the fact m, if any, is the fact f
+def Facts.held.of(m: Maybe<&2, Types.Fact>, +f: Types.Fact) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{v}:
+      Coded.Fact.is_eq(v, f)
+
+# s holds the fact f under the key k: a read of one key, with no code of f
+def Facts.held(s: Plain(), +k: List<&2, U32>, +f: Types.Fact) -> Bool:
+  Facts.held.of(Crits.Crit.get(Types.Fact, s, k), f)
+
 # s with the fact f
 def Facts.add(+s: Plain(), +f: Types.Fact) -> Plain():
   Crits.Crit.set(~Types.Fact, s, Coded.Fact.words(f), f)

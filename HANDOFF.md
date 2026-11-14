@@ -83,9 +83,10 @@ Measured, native build, one node, one owner:
   0.16 to 0.31 ms, its status 50 to 90 us.
 - Each line keeps the newest version that took each other line: a merge one way with its Work
   takes 0.14 ms at 40 writes and 0.16 at 320 (flat).
-- Still growing: a merge in both directions has no hint and folds every path of the three sides
-  (1.5 ms at 40 writes, 2.4 at 320); the status of an old merge walks the versions for its
-  resolve.
+- Each held content keeps, per neighbour version, the paths where it may differ from it: any
+  merge folds only the paths along its pinned ways back to the base. A merge in both directions
+  with its Work: 0.37 ms at 40 writes, 0.39 at 320 (was 1.5 and 2.4); its status 0.1 to 0.14 ms.
+- Still growing: the status of an old merge scans the versions for its resolves.
 - Sync folds each fact of the other node into the table: a held fact is one lookup, a new one
   joins as an ask or a ballot does. Two nodes, both owners, 50 writes: a write pair (2 asks, 8
   Syncs, Works) 33 ms (was 2.7 s); a Sync that adds nothing 3.3 ms (was 261). It is linear in

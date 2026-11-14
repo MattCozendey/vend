@@ -39,6 +39,31 @@ def Facts.new() -> Facts():
 def Facts.has(s: Facts(), +f: Types.Fact) -> Bool:
   RFacts.Facts.has(Facts.crit(s), f)
 
+# a set that holds the fact f under some key holds f
+def Facts.held_has(
+  s: Facts(),
+  +k: List<&2, U32>,
+  +f: Types.Fact
+) -> {RFacts.Facts.held(Facts.crit(s), k, f) == True{}: Bool} -> {Facts.has(s, f) == True{}: Bool}:
+  match s:
+    case Tuple{+m, Tuple{+wf, +ok}}:
+      h => Lists.Maybe.by(
+        Types.Fact,
+        mm => {
+          RFacts.Facts.held.of(mm, f) == True{}: Bool
+        } -> {Crits.Crit.has(Types.Fact, m, Coded.Fact.words(f)) == True{}: Bool},
+        Crits.Crit.get(Types.Fact, m, k),
+        en => h2 => Empty.absurd(
+          {Crits.Crit.has(Types.Fact, m, Coded.Fact.words(f)) == True{}: Bool},
+          Shared.Bool.false_ne_true(h2)
+        ),
+        +v => +ev => h2 => (
+          %Coded.Fact.is_eq_sound(v, f)(h2): {Crits.Crit.has(Types.Fact, m, Coded.Fact.words(_)) == True{}: Bool}
+          %Crits.Key.is_eq_sound(k, Coded.Fact.words(v))(Sets.ValSet.ok_get(~Types.Fact, ~Coded.Fact.words, m, k, v)(ok)(Equal.trans(Maybe<&2, Types.Fact>, Crits.Crit.lookup(Types.Fact, m, k), Crits.Crit.get(Types.Fact, m, k), Some{v}, Equal.sym(Maybe<&2, Types.Fact>, Crits.Crit.get(Types.Fact, m, k), Crits.Crit.lookup(Types.Fact, m, k), Crits.Crit.get_lookup(~Types.Fact, m, k)(wf)), ev))): {Crits.Crit.has(Types.Fact, m, _) == True{}: Bool}
+          %Equal.sym(Maybe<&2, Types.Fact>, Crits.Crit.get(Types.Fact, m, k), Some{v}, ev): {Maybe.is_some(&2, Types.Fact, _) == True{}: Bool}
+          {==})
+      )(h)
+
 # s with the fact f
 def Facts.add(+s: Facts(), +f: Types.Fact) -> Facts():
   Sets.ValSet.add(~Types.Fact, ~Coded.Fact.words, s, f)

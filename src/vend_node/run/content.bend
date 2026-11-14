@@ -226,129 +226,141 @@ def Merge.clashes.go(
 def Merge.clashes(+b: Files.Files(), +o: Files.Files(), +t: Files.Files()) -> List<&2, String>:
   Merge.clashes.go(b, o, t, Merge.paths(b, o, t))
 
-# Merges of a few writes
-# ----------------------
-# When what a merge takes is its base with a few writes, the merge changes
-# ours at most at the paths of those writes: a path that theirs left as the
-# base stays as ours. A node that holds the state of the line that the merge
-# takes from reads the writes from its versions, and merges only their paths.
-# merges.bend proves that this is the merge of every path (Merge.files).
+# Merges of a few paths
+# ---------------------
+# A version is near the version before it and the version that it takes: its
+# content may differ from theirs only at a few paths, which the node keeps
+# with the content (Knowns.Near). What a merge takes may differ from its
+# base only at the paths of the points on a way between them, and a path
+# that theirs left as the base stays as ours, so the merge reads only those
+# paths. merges.bend proves that this is the merge of every path.
 
-# a write: the words at a path (none: no resource)
-type Write is Data:
-  Write{path: String, words: Maybe<&2, List<&2, U32>>}
-
-# the writes m, if any, after the write of w at the path p
-def Write.put(
-  p: String,
-  w: Maybe<&2, List<&2, U32>>,
-  m: Maybe<&2, List<&2, Write>>
-) -> Maybe<&2, List<&2, Write>>:
+# the paths ps, then the paths m, if any
+def Paths.join(ps: List<&2, String>, m: Maybe<&2, List<&2, String>>) -> Maybe<&2, List<&2, String>>:
   match m:
     case None{}:
       None{}
-    case Some{ws}:
-      Some{Write{p, w} <> ws}
+    case Some{qs}:
+      Some{List.append(&2, String, ps, qs)}
 
-# the write of the request r, then the writes that rest gives: none when r
-# may change more than one path
-def Request.wrote(
-  r: Spec.Request,
-  rest: Unit -> Maybe<&2, List<&2, Write>>
-) -> Maybe<&2, List<&2, Write>>:
-  match r:
-    case Spec.Request.Start{os}:
-      rest(Unit{})
-    case Spec.Request.Write{b, p, w}:
-      Write.put(p, w, rest(Unit{}))
-    case Spec.Request.Merge{f, x}:
+# the paths m, if any, then the paths that rest gives
+def Paths.then(
+  m: Maybe<&2, List<&2, String>>,
+  rest: Unit -> Maybe<&2, List<&2, String>>
+) -> Maybe<&2, List<&2, String>>:
+  match m:
+    case None{}:
       None{}
-    case Spec.Request.Resolve{m, p, w}:
-      Write.put(p, w, rest(Unit{}))
-    case Spec.Request.Mark{b, m, v}:
-      rest(Unit{})
-    case Spec.Request.Move{b, t, v}:
-      None{}
-    case Spec.Request.Group{h, g, ms}:
-      rest(Unit{})
-    case Spec.Request.Own{c, g}:
-      rest(Unit{})
+    case Some{ps}:
+      Paths.join(ps, rest(Unit{}))
 
-# the writes of the first n of the entries es, the oldest first: none when
-# one of them may change more than one path, or es has less than n entries
-def Writes.of(n: Nat, es: List<&2, Types.Entry>) -> Maybe<&2, List<&2, Write>>:
-  match n es:
-    case 0n es:
-      Some{[]}
-    case 1n+d Nil{}:
-      None{}
-    case 1n+d Con{e, rest}:
-      Request.wrote(Lines.Ask.request(Lines.Entry.ask(e)), u => Writes.of(d, rest))
-
-# the writes that make the content of the point t from the content of the
-# point a, when both are versions of one line, a is not after t, and the
-# table holds the state m of the line
-def Merge.hint(
-  m: Maybe<&2, Lines.State>,
-  t: Spec.Point,
-  a: Spec.Point
-) -> Maybe<&2, List<&2, Write>>:
-  match m t a:
-    case None{} t a:
-      None{}
-    case Some{Lines.State{vs, k}} Spec.Point{tl, +tn} Spec.Point{al, +an}:
-      Shared.Maybe.when(
-        List<&2, Write>,
-        List.all.if(u => Nat.is_le(an, tn), Ledgers.Line.is_eq(al, tl)),
-        u => Writes.of(Nat.sub(tn, an), List.drop(&2, Types.Entry, vs, 1n+an))
-      )
-
-# Merge.hint of the state x that a node keeps, of the points of the lines
-# tl and al and the numbers tn and an: no writes when the numbers are the
-# same (same), and then the versions are not read
-def Merge.hint.if(
+# no paths when two points are the same (same), else the paths that rest
+# gives
+def Paths.same(
   same: Bool,
-  x: Knowns.Seen,
-  tl: Ledgers.Line,
-  tn: Nat,
-  al: Ledgers.Line,
-  an: Nat
-) -> Maybe<&2, List<&2, Write>>:
+  rest: Unit -> Maybe<&2, List<&2, String>>
+) -> Maybe<&2, List<&2, String>>:
   match same:
     case True{}:
-      Shared.Maybe.when(List<&2, Write>, Ledgers.Line.is_eq(al, tl), u => Some{[]})
+      Some{[]}
     case False{}:
-      Merge.hint(Some{Knowns.Seen.state(x)}, Spec.Point{tl, tn}, Spec.Point{al, an})
+      rest(Unit{})
 
-# Merge.hint, of the state m that a node keeps
-def Merge.hint.seen(
-  m: Maybe<&2, Knowns.Seen>,
-  t: Spec.Point,
-  a: Spec.Point
-) -> Maybe<&2, List<&2, Write>>:
-  match m t a:
-    case None{} t a:
-      None{}
-    case Some{x} Spec.Point{tl, +tn} Spec.Point{al, +an}:
-      Merge.hint.if(Nat.is_eq(tn, an), x, tl, tn, al, an)
+# the paths where the content of version k of the line c may differ from the
+# content of version i of c, through the contents that the table kn holds,
+# each near the version before it: none when the table does not hold one
+def Down.near(
+  +kn: Knowns.Known(),
+  +c: Ledgers.Line,
+  +i: Nat,
+  k: Nat
+) -> Maybe<&2, List<&2, String>>:
+  match k:
+    case 0n:
+      Paths.same(Nat.is_eq(i, 0n), u => None{})
+    case 1n+j:
+      +j = j
+      Paths.same(
+        Nat.is_eq(i, 1n+j),
+        u => Paths.then(
+          Knowns.Known.near(kn, c, 1n+j, Spec.Point{c, j}),
+          u2 => Down.near(kn, c, i, j)
+        )
+      )
 
-# the paths of the writes ws
-def Writes.paths(ws: List<&2, Write>) -> List<&2, String>:
+# the paths where the content of version k of the line c may differ from the
+# content of version n of the line l, through the contents that the table kn
+# holds: down the line c when l is c (down), else as the content is near it
+def Hop.near(
+  down: Bool,
+  +kn: Knowns.Known(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  l: Ledgers.Line,
+  +n: Nat
+) -> Maybe<&2, List<&2, String>>:
+  match down:
+    case True{}:
+      Down.near(kn, c, n, k)
+    case False{}:
+      Knowns.Known.near(kn, c, k, Spec.Point{l, n})
+
+# the paths where the content of version k of the line c may differ from the
+# content of the point a, through the contents that the table kn holds, from
+# point to point of ws: none when the table does not hold one, or the last
+# point is not a
+def Way.near(
+  +kn: Knowns.Known(),
+  +a: Spec.Point,
+  ws: List<&2, Spec.Point>,
+  +c: Ledgers.Line,
+  +k: Nat
+) -> Maybe<&2, List<&2, String>>:
   match ws:
     case Nil{}:
-      []
-    case Con{Write{p, w}, rest}:
-      p <> Writes.paths(rest)
+      Paths.same(Spec.Point.is_eq(a, Spec.Point{c, k}), u => None{})
+    case Con{Spec.Point{+l, +n}, rest}:
+      Paths.then(
+        Hop.near(Ledgers.Line.is_eq(l, c), kn, c, k, l, n),
+        u => Way.near(kn, a, rest, l, n)
+      )
 
-# the merge of ours o and theirs t from the base b, when t is b with the
-# writes ws: only the paths of ws are merged
+# Way.near, when the table kn holds a content (m is its contents); none when
+# it holds none, and then no way is read
+def Way.near.of(
+  m: Crits.Crit<Knowns.Held>,
+  +kn: Knowns.Known(),
+  +a: Spec.Point,
+  ws: List<&2, Spec.Point>,
+  +c: Ledgers.Line,
+  +k: Nat
+) -> Maybe<&2, List<&2, String>>:
+  match m:
+    case Crits.Crit.Tip{}:
+      None{}
+    case Crits.Crit.Leaf{q, v}:
+      Way.near(kn, a, ws, c, k)
+    case Crits.Crit.Fork{r, i, e, z, o}:
+      Way.near(kn, a, ws, c, k)
+
+# the ways that the entry m, if any, pins from the version that it takes to
+# its base
+def Entry.theirs.of(m: Maybe<&2, Types.Entry>) -> List<&2, Spec.Point>:
+  match m:
+    case None{}:
+      []
+    case Some{e}:
+      Entry.theirs(e)
+
+# the merge of ours o and theirs t from the base b, when t may differ from b
+# only at the paths ps: only those paths are merged
 def Merge.few(
   +b: Files.Files(),
   +o: Files.Files(),
   +t: Files.Files(),
-  ws: List<&2, Write>
+  ps: List<&2, String>
 ) -> Files.Files():
-  Merge.fold(b, o, t, Writes.paths(ws), o)
+  Merge.fold(b, o, t, ps, o)
 
 # the paths among ps that are among cs
 def Paths.among(ps: List<&2, String>, +cs: List<&2, String>) -> List<&2, String>:
@@ -368,21 +380,21 @@ def Merge.clashes.few.of(cs: List<&2, String>, ps: Unit -> List<&2, String>) -> 
       Paths.among(ps(Unit{}), p <> rest)
 
 # the paths that clash in the merge of o and t from b, as Merge.clashes
-# gives them, when t is b with the writes ws: only the paths of ws are
-# merged, and the paths of the three are walked only when one of those
-# clashes
+# gives them, when t may differ from b only at the paths ps: only those
+# paths are merged, and the paths of the three are walked only when one of
+# those clashes
 def Merge.clashes.few(
   +b: Files.Files(),
   +o: Files.Files(),
   +t: Files.Files(),
-  ws: List<&2, Write>
+  ps: List<&2, String>
 ) -> List<&2, String>:
-  Merge.clashes.few.of(Merge.clashes.go(b, o, t, Writes.paths(ws)), u => Merge.paths(b, o, t))
+  Merge.clashes.few.of(Merge.clashes.go(b, o, t, ps), u => Merge.paths(b, o, t))
 
 # the merge of ours and theirs from base, as Merge.of gives it, when theirs
-# is base with the writes ws
+# may differ from base only at the paths ps
 def Merge.of.few(
-  ws: List<&2, Write>,
+  ps: List<&2, String>,
   fits: Bool,
   ours: Maybe<&2, Files.Files()>,
   theirs: Maybe<&2, Files.Files()>,
@@ -390,7 +402,7 @@ def Merge.of.few(
 ) -> Maybe<&2, Files.Files()>:
   match fits ours theirs base:
     case True{} Some{o} Some{t} Some{b}:
-      Some{Merge.few(b, o, t, ws)}
+      Some{Merge.few(b, o, t, ps)}
     case _ _ _ _:
       None{}
 
@@ -459,10 +471,10 @@ def Content.next(
     case Some{e}:
       Content.apply(Lines.Ask.request(Lines.Entry.ask(e)), fits, prev, other, base)
 
-# the content after the request r, as Content.apply gives it, when other is
-# base with the writes ws
+# the content after the request r, as Content.apply gives it, when other
+# may differ from base only at the paths ps
 def Content.apply.few(
-  ws: List<&2, Write>,
+  ps: List<&2, String>,
   r: Spec.Request,
   fits: Bool,
   prev: Maybe<&2, Files.Files()>,
@@ -471,7 +483,7 @@ def Content.apply.few(
 ) -> Maybe<&2, Files.Files()>:
   match r:
     case Spec.Request.Merge{f, x}:
-      Merge.of.few(ws, fits, prev, other, base)
+      Merge.of.few(ps, fits, prev, other, base)
     case Spec.Request.Start{os}:
       prev
     case Spec.Request.Write{b, p, w}:
@@ -487,10 +499,10 @@ def Content.apply.few(
     case Spec.Request.Own{c, g}:
       prev
 
-# the content of a version, as Content.next gives it: when the writes h that
-# make other from base are known, a merge reads only their paths
+# the content of a version, as Content.next gives it: when the paths h where
+# other may differ from base are known, a merge reads only those paths
 def Content.quick(
-  h: Maybe<&2, List<&2, Write>>,
+  h: Maybe<&2, List<&2, String>>,
   m: Maybe<&2, Types.Entry>,
   fits: Bool,
   prev: Maybe<&2, Files.Files()>,
@@ -500,10 +512,10 @@ def Content.quick(
   match h m:
     case None{} m:
       Content.next(m, fits, prev, other, base)
-    case Some{ws} None{}:
+    case Some{ps} None{}:
       None{}
-    case Some{ws} Some{e}:
-      Content.apply.few(ws, Lines.Ask.request(Lines.Entry.ask(e)), fits, prev, other, base)
+    case Some{ps} Some{e}:
+      Content.apply.few(ps, Lines.Ask.request(Lines.Entry.ask(e)), fits, prev, other, base)
 
 # the content of version 0, the entry m if the node holds it: nothing yet
 def Content.first(m: Maybe<&2, Types.Entry>) -> Maybe<&2, Files.Files()>:
@@ -558,8 +570,8 @@ def Content.or(
 # the content of version k of the line c in the facts s, read through at most
 # fuel versions (nothing while the node does not hold enough); a content that
 # the table kn holds is not read again, and a merge reads only the paths
-# that what it takes changed from its base, when the table holds the state
-# of the line that it takes from
+# where what it takes may differ from its base, when the table holds the
+# contents on the way between them
 def Content.at(
   +fuel: Nat,
   +kn: Knowns.Known(),
@@ -577,7 +589,14 @@ def Content.at(
       +t = Entry.taken(c, e)
       +a = Entry.based(c, e)
       Content.quick(
-        Merge.hint.seen(Knowns.Known.seen(kn, Spec.Point.line(t)), t, a),
+        Way.near.of(
+          Knowns.Known.stock(kn),
+          kn,
+          a,
+          Entry.theirs.of(e),
+          Spec.Point.line(t),
+          Spec.Point.n(t)
+        ),
         e,
         Entry.fits(kn, s, c, j, e),
         Content.or(Knowns.Known.files(kn, c, j, f), u => Content.at(f, kn, s, c, j)),
@@ -637,12 +656,64 @@ def Content.read(
 # A table that is right
 # ---------------------
 
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- these are said only in laws (Known.ok), and never run
+# the files x and y hold the same at each of the paths qs that is none of
+# the paths ps
+def Near.files.go(
+  +x: Files.Files(),
+  +y: Files.Files(),
+  +ps: List<&2, String>,
+  qs: List<&2, String>
+) -> Bool:
+  match qs:
+    case Nil{}:
+      True{}
+    case Con{+q, rest}:
+      Bool.and(
+        Bool.or(
+          List.contains(~String, ~String.eq, ps, q),
+          Formats.Content.same(Files.Files.get(x, q), Files.Files.get(y, q))
+        ),
+        Near.files.go(x, y, ps, rest)
+      )
+
+# the files x are near the files y: they hold the same at each path that is
+# none of the paths ps
+def Near.files(+x: Files.Files(), +y: Files.Files(), ps: List<&2, String>) -> Bool:
+  Near.files.go(x, y, ps, List.append(&2, String, Files.Files.paths(x), Files.Files.paths(y)))
+
+# the files x are near the content m: the node holds m, and x may differ
+# from it only at the paths ps
+def Near.ok(m: Maybe<&2, Files.Files()>, x: Files.Files(), ps: List<&2, String>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{y}:
+      Near.files(x, y, ps)
+
+# the files x are near each of the nears ns: the content of its point, read
+# from the facts s with the fuel d
+def Nears.ok(+s: Facts.Plain(), +d: Nat, +x: Files.Files(), ns: List<&2, Knowns.Near>) -> Bool:
+  match ns:
+    case Nil{}:
+      True{}
+    case Con{Knowns.Near{+w, ps}, rest}:
+      Bool.and(
+        Near.ok(Content.at(d, Knowns.Known.none(), s, Spec.Point.line(w), Spec.Point.n(w)), x, ps),
+        Nears.ok(s, d, x, rest)
+      )
+
 # the content e is right: it is what a read of the facts s with its fuel
-# gives
+# gives, and it is near each of its nears
 def Held.ok(s: Facts.Plain(), e: Knowns.Held) -> Bool:
   match e:
-    case Knowns.Held{c, k, d, x}:
-      Files.Files.fits(Content.at(d, Knowns.Known.none(), s, c, k), x)
+    case Knowns.Held{c, k, +d, +x, ns}:
+      +s = s
+      Bool.and(
+        Files.Files.fits(Content.at(d, Knowns.Known.none(), s, c, k), x),
+        Nears.ok(s, d, x, ns)
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the left side fails only for an entry that is wrong, which then costs no more than a right entry, where both sides run
 # the entry e is right: its state is the state that the facts s give its
@@ -813,19 +884,130 @@ def Fill.fuel(
       )
 
 # the table kn with the content m, if any, of version k of the line c, that a
-# read with the fuel d gives
+# read with the fuel d gives, near each of the nears ns
 def Known.fill.of(
   kn: Knowns.Known(),
   c: Ledgers.Line,
   k: Nat,
   d: Nat,
-  m: Maybe<&2, Files.Files()>
+  m: Maybe<&2, Files.Files()>,
+  ns: List<&2, Knowns.Near>
 ) -> Knowns.Known():
   match m:
     case None{}:
       kn
     case Some{x}:
-      Knowns.Known.hold(kn, Knowns.Held{c, k, d, x})
+      Knowns.Known.hold(kn, Knowns.Held{c, k, d, x, ns})
+
+# the paths of the three contents ours o, theirs t and base b that the
+# table holds, if it holds the three
+def Held.paths(
+  o: Maybe<&2, Knowns.Held>,
+  t: Maybe<&2, Knowns.Held>,
+  b: Maybe<&2, Knowns.Held>
+) -> Maybe<&2, List<&2, String>>:
+  match o t b:
+    case Some{
+      Knowns.Held{c1, k1, d1, x1, n1}
+    } Some{Knowns.Held{c2, k2, d2, x2, n2}} Some{Knowns.Held{c3, k3, d3, x3, n3}}:
+      Some{Merge.paths(x3, x1, x2)}
+    case _ _ _:
+      None{}
+
+# the nears of a merge that reads every path, version 1+j of the line c
+# that takes the point t: the version before and t, at each path z of the
+# contents that it merges, if known
+def Nears.all(
+  z: Maybe<&2, List<&2, String>>,
+  +c: Ledgers.Line,
+  +j: Nat,
+  t: Spec.Point
+) -> List<&2, Knowns.Near>:
+  match z:
+    case None{}:
+      []
+    case Some{+zs}:
+      [Knowns.Near{Spec.Point{c, j}, zs}, Knowns.Near{t, zs}]
+
+# the nears of a merge, version 1+j of the line c that takes the point t:
+# the version before it, when the paths h where what it takes may differ
+# from its base are known; and t, when the paths g where the version before
+# may differ from the base are known too; else, as a merge of every path,
+# the version before and t at each path that z gives of its contents
+def Nears.merge(
+  h: Maybe<&2, List<&2, String>>,
+  g: Maybe<&2, List<&2, String>>,
+  +c: Ledgers.Line,
+  +j: Nat,
+  t: Spec.Point,
+  z: Unit -> Maybe<&2, List<&2, String>>
+) -> List<&2, Knowns.Near>:
+  match h g:
+    case Some{ps} Some{qs}:
+      [Knowns.Near{Spec.Point{c, j}, ps}, Knowns.Near{t, qs}]
+    case Some{ps} None{}:
+      [Knowns.Near{Spec.Point{c, j}, ps}]
+    case None{} g:
+      Nears.all(z(Unit{}), c, j, t)
+
+# the nears of version 1+j of the line c, the entry e, made by its request
+# r, through the contents that the table kn holds: a write is near the
+# version before at its path, a move is the version that it takes, and a
+# request that changes no content is the version before
+def Nears.request(
+  r: Spec.Request,
+  +kn: Knowns.Known(),
+  +c: Ledgers.Line,
+  +j: Nat,
+  +e: Types.Entry
+) -> List<&2, Knowns.Near>:
+  match r:
+    case Spec.Request.Write{b, p, w}:
+      [Knowns.Near{Spec.Point{c, j}, [p]}]
+    case Spec.Request.Resolve{m, p, w}:
+      [Knowns.Near{Spec.Point{c, j}, [p]}]
+    case Spec.Request.Move{b, t, v}:
+      [Knowns.Near{Entry.taken(c, Some{e}), []}]
+    case Spec.Request.Merge{f, x}:
+      +a = Entry.based(c, Some{e})
+      +t = Entry.taken(c, Some{e})
+      Nears.merge(
+        Way.near.of(
+          Knowns.Known.stock(kn),
+          kn,
+          a,
+          Entry.theirs(e),
+          Spec.Point.line(t),
+          Spec.Point.n(t)
+        ),
+        Way.near.of(Knowns.Known.stock(kn), kn, a, Entry.ours(e), c, j),
+        c,
+        j,
+        t,
+        u => Held.paths(
+          Knowns.Known.held(kn, c, j),
+          Knowns.Known.held(kn, Spec.Point.line(t), Spec.Point.n(t)),
+          Knowns.Known.held(kn, Spec.Point.line(a), Spec.Point.n(a))
+        )
+      )
+    case _:
+      [Knowns.Near{Spec.Point{c, j}, []}]
+
+# the nears of version k of the line c, the entry m if the node holds it,
+# through the contents that the table kn holds; version 0 is near nothing
+def Nears.of(
+  +kn: Knowns.Known(),
+  +c: Ledgers.Line,
+  k: Nat,
+  m: Maybe<&2, Types.Entry>
+) -> List<&2, Knowns.Near>:
+  match k m:
+    case 0n m:
+      []
+    case 1n+j None{}:
+      []
+    case 1n+j Some{+e}:
+      Nears.request(Lines.Ask.request(Lines.Entry.ask(e)), kn, c, j, e)
 
 # the table kn with the content of version k of the line c in the facts s,
 # read with the fuel d
@@ -836,7 +1018,14 @@ def Known.fill.at(
   +c: Ledgers.Line,
   +k: Nat
 ) -> Knowns.Known():
-  Known.fill.of(kn, c, k, d, Content.at(d, kn, s, c, k))
+  Known.fill.of(
+    kn,
+    c,
+    k,
+    d,
+    Content.at(d, kn, s, c, k),
+    Nears.of(kn, c, k, Knowns.Known.at(kn, s, c, k))
+  )
 
 # the table kn with the content of version k of the line c in the facts s,
 # read from the facts with a fuel that reaches it
@@ -862,10 +1051,24 @@ def Known.fill.write(
   x: Files.Files()
 ) -> Knowns.Known():
   match r:
-    case Spec.Request.Write{b, p, w}:
-      Known.fill.of(kn, c, 1n+j, 1n+d, Some{Files.Files.set(x, p, w)})
-    case Spec.Request.Resolve{m, p, w}:
-      Known.fill.of(kn, c, 1n+j, 1n+d, Some{Files.Files.set(x, p, w)})
+    case Spec.Request.Write{b, +p, w}:
+      Known.fill.of(
+        kn,
+        c,
+        1n+j,
+        1n+d,
+        Some{Files.Files.set(x, p, w)},
+        [Knowns.Near{Spec.Point{c, j}, [p]}]
+      )
+    case Spec.Request.Resolve{m, +p, w}:
+      Known.fill.of(
+        kn,
+        c,
+        1n+j,
+        1n+d,
+        Some{Files.Files.set(x, p, w)},
+        [Knowns.Near{Spec.Point{c, j}, [p]}]
+      )
     case _:
       Known.fill.slow(kn, s, c, 1n+j)
 
@@ -882,7 +1085,7 @@ def Known.fill.next(
 ) -> Knowns.Known():
   match prev e:
     case Some{
-      Knowns.Held{c2, k2, d, x}
+      Knowns.Held{c2, k2, d, x, ns}
     } Some{Types.Entry{Types.Pick{Types.Ask{i, n, r}, pins}, slot}}:
       Known.fill.write(r, kn, s, c, j, d, x)
     case _ _:

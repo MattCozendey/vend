@@ -1,5 +1,6 @@
 import Base
 import ../shared/shared/ledger.bend as Ledgers
+import ../shared/shared/shared/shared/crit.bend as Crits
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
 import ./codes.bend as Coded
@@ -1648,52 +1649,108 @@ def Sync.take_is(
     ef => e => Sync.new_is(name, s, kn, f)(h)
   )({==})
 
-# Sync.all_is, for a fact f and then the facts rest, once what the node has
-# after it takes in f is known (r), with rec for rest
-def Sync.all_is.next(
+# a node that takes in the fact f, which the other node holds under the key
+# k, has the facts that Facts.take gives, with a table that fits them, when
+# its set is sound for it and its table fits
+def Sync.bind_is(
   +name: String,
-  +rest: List<&2, Types.Fact>,
   +s: Facts.Facts(),
   +kn: RKnown.Known(),
+  +k: List<&2, U32>,
+  +f: Types.Fact
+) -> {
+  Facts.Facts.ok(name, s) == True{}: Bool
+} -> {
+  RContents.Known.fit(kn, Facts.Facts.crit(s)) == True{}: Bool
+} -> Sync.Is(
+  RFasts.Sync.bind(name, RFasts.Taken{Facts.Facts.crit(s), kn}, k, f),
+  Facts.Facts.take(name, s, f)
+):
+  +ok => +h => Lists.Bool.by(
+    z => {
+      RFacts.Facts.held(Facts.Facts.crit(s), k, f) == z: Bool
+    } -> Sync.Is(
+      Shared.Bool.when(
+        RFasts.Taken,
+        z,
+        u => RFasts.Taken{Facts.Facts.crit(s), kn},
+        u => RFasts.Sync.take(name, RFasts.Taken{Facts.Facts.crit(s), kn}, f)
+      ),
+      Facts.Facts.take(name, s, f)
+    ),
+    RFacts.Facts.held(Facts.Facts.crit(s), k, f),
+    et => e => Lists.Equal.to(
+      Facts.Facts(),
+      z => Sync.Is(RFasts.Taken{Facts.Facts.crit(s), kn}, z),
+      s,
+      Facts.Facts.take(name, s, f),
+      Equal.sym(
+        Facts.Facts(),
+        Facts.Facts.take(name, s, f),
+        s,
+        Facts.Facts.take_held(name, s, f)(ok)(Facts.Facts.held_has(s, k, f)(e))
+      ),
+      (kn, ({==}, h))
+    ),
+    ef => e => Sync.take_is(name, s, kn, f)(ok)(h)
+  )({==})
+
+# Sync.binds_is, for a fact f under the key k and then the entries rest,
+# once what the node has after it takes in f is known (r), with rec for rest
+def Sync.binds_is.next(
+  +name: String,
+  +rest: List<&2, Crits.Bind<Types.Fact>>,
+  +s: Facts.Facts(),
+  +kn: RKnown.Known(),
+  +k: List<&2, U32>,
   +f: Types.Fact,
   r: Sync.Is(
-    RFasts.Sync.take(name, RFasts.Taken{Facts.Facts.crit(s), kn}, f),
+    RFasts.Sync.bind(name, RFasts.Taken{Facts.Facts.crit(s), kn}, k, f),
     Facts.Facts.take(name, s, f)
   ),
   rec: @kn2: RKnown.Known() -> {
     RContents.Known.fit(kn2, Facts.Facts.crit(Facts.Facts.take(name, s, f))) == True{}: Bool
   } -> Sync.Is(
-    RFasts.Sync.all(name, rest, RFasts.Taken{Facts.Facts.crit(Facts.Facts.take(name, s, f)), kn2}),
-    Facts.Facts.take_all(name, rest, Facts.Facts.take(name, s, f))
+    RFasts.Sync.binds(
+      name,
+      rest,
+      RFasts.Taken{Facts.Facts.crit(Facts.Facts.take(name, s, f)), kn2}
+    ),
+    Facts.Facts.take_all(name, Crits.Binds.values(Types.Fact, rest), Facts.Facts.take(name, s, f))
   )
 ) -> Sync.Is(
-  RFasts.Sync.all(name, rest, RFasts.Sync.take(name, RFasts.Taken{Facts.Facts.crit(s), kn}, f)),
-  Facts.Facts.take_all(name, rest, Facts.Facts.take(name, s, f))
+  RFasts.Sync.binds(
+    name,
+    rest,
+    RFasts.Sync.bind(name, RFasts.Taken{Facts.Facts.crit(s), kn}, k, f)
+  ),
+  Facts.Facts.take_all(name, Crits.Binds.values(Types.Fact, rest), Facts.Facts.take(name, s, f))
 ):
   (+kn2, p) = r
   (e, h2) = p
   Lists.Equal.to(
     RFasts.Taken,
     z => Sync.Is(
-      RFasts.Sync.all(name, rest, z),
-      Facts.Facts.take_all(name, rest, Facts.Facts.take(name, s, f))
+      RFasts.Sync.binds(name, rest, z),
+      Facts.Facts.take_all(name, Crits.Binds.values(Types.Fact, rest), Facts.Facts.take(name, s, f))
     ),
     RFasts.Taken{Facts.Facts.crit(Facts.Facts.take(name, s, f)), kn2},
-    RFasts.Sync.take(name, RFasts.Taken{Facts.Facts.crit(s), kn}, f),
+    RFasts.Sync.bind(name, RFasts.Taken{Facts.Facts.crit(s), kn}, k, f),
     Equal.sym(
       RFasts.Taken,
-      RFasts.Sync.take(name, RFasts.Taken{Facts.Facts.crit(s), kn}, f),
+      RFasts.Sync.bind(name, RFasts.Taken{Facts.Facts.crit(s), kn}, k, f),
       RFasts.Taken{Facts.Facts.crit(Facts.Facts.take(name, s, f)), kn2},
       e
     ),
     rec(kn2)(h2)
   )
 
-# a node that takes in facts has the facts that Facts.take_all gives, with a
-# table that fits them, when its set is sound for it and its table fits
-def Sync.all_is(
+# a node that takes in the facts of the entries es, each under its key, has
+# the facts that Facts.take_all gives, with a table that fits them, when its
+# set is sound for it and its table fits
+def Sync.binds_is(
   +name: String,
-  fs: List<&2, Types.Fact>,
+  es: List<&2, Crits.Bind<Types.Fact>>,
   +s: Facts.Facts(),
   +kn: RKnown.Known()
 ) -> {
@@ -1701,21 +1758,22 @@ def Sync.all_is(
 } -> {
   RContents.Known.fit(kn, Facts.Facts.crit(s)) == True{}: Bool
 } -> Sync.Is(
-  RFasts.Sync.all(name, fs, RFasts.Taken{Facts.Facts.crit(s), kn}),
-  Facts.Facts.take_all(name, fs, s)
+  RFasts.Sync.binds(name, es, RFasts.Taken{Facts.Facts.crit(s), kn}),
+  Facts.Facts.take_all(name, Crits.Binds.values(Types.Fact, es), s)
 ):
-  match fs:
+  match es:
     case Nil{}:
       ok => h => (kn, ({==}, h))
-    case Con{+f, +rest}:
-      +ok => h => Sync.all_is.next(
+    case Con{Crits.Bind{+k, +f}, +rest}:
+      +ok => h => Sync.binds_is.next(
         name,
         rest,
         s,
         kn,
+        k,
         f,
-        Sync.take_is(name, s, kn, f)(ok)(h),
-        +kn2 => h2 => Sync.all_is(
+        Sync.bind_is(name, s, kn, k, f)(ok)(h),
+        +kn2 => h2 => Sync.binds_is(
           name,
           rest,
           Facts.Facts.take(name, s, f),
@@ -1810,11 +1868,11 @@ def Fast.does_ok(
         ms,
         st,
         RParts.Parts.join(ps, ps2),
-        RFasts.Sync.all(name, RFacts.Facts.list(fs2), RFasts.Taken{fs, kn}),
+        RFasts.Sync.binds(name, Crits.Crit.entries(Types.Fact, fs2), RFasts.Taken{fs, kn}),
         Facts.Facts.take_all(name, RFacts.Facts.list(fs2), Impl.Node.set(name, fs, ps, okr)),
-        Sync.all_is(
+        Sync.binds_is(
           name,
-          RFacts.Facts.list(fs2),
+          Crits.Crit.entries(Types.Fact, fs2),
           Impl.Node.set(name, fs, ps, okr),
           kn
         )(Impl.Node.sound(name, fs, ps, okr))(ok)
@@ -1893,7 +1951,7 @@ def Fast.does_raw(
             ms,
             st,
             RParts.Parts.join(ps, ps2),
-            RFasts.Sync.all(name, RFacts.Facts.list(fs2), RFasts.Taken{fs, kn})
+            RFasts.Sync.binds(name, Crits.Crit.entries(Types.Fact, fs2), RFasts.Taken{fs, kn})
           )
         ),
         Nodes.Raw{
@@ -1920,11 +1978,11 @@ def Fast.does_raw(
           ms,
           st,
           RParts.Parts.join(ps, ps2),
-          RFasts.Sync.all(name, RFacts.Facts.list(fs2), RFasts.Taken{fs, kn}),
+          RFasts.Sync.binds(name, Crits.Crit.entries(Types.Fact, fs2), RFasts.Taken{fs, kn}),
           Facts.Facts.take_all(name, RFacts.Facts.list(fs2), Impl.Node.set(name, fs, ps, okr)),
-          Sync.all_is(
+          Sync.binds_is(
             name,
-            RFacts.Facts.list(fs2),
+            Crits.Crit.entries(Types.Fact, fs2),
             Impl.Node.set(name, fs, ps, okr),
             kn
           )(Impl.Node.sound(name, fs, ps, okr))(ok)

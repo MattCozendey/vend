@@ -134,10 +134,10 @@ def Clashes.at(
     case _ _ _ _:
       None{}
 
-# the paths that clash in a merge, as Clashes.at gives them, when theirs is
-# base with the writes ws
+# the paths that clash in a merge, as Clashes.at gives them, when theirs
+# may differ from base only at the paths ps
 def Clashes.at.few(
-  ws: List<&2, Contents.Write>,
+  ps: List<&2, String>,
   fits: Bool,
   base: Maybe<&2, Files.Files()>,
   ours: Maybe<&2, Files.Files()>,
@@ -145,14 +145,14 @@ def Clashes.at.few(
 ) -> Maybe<&2, List<&2, String>>:
   match fits base ours theirs:
     case True{} Some{b} Some{o} Some{t}:
-      Some{Contents.Merge.clashes.few(b, o, t, ws)}
+      Some{Contents.Merge.clashes.few(b, o, t, ps)}
     case _ _ _ _:
       None{}
 
-# the paths that clash in a merge, as Clashes.at gives them: when the writes
-# h that make theirs from base are known, only their paths are merged
+# the paths that clash in a merge, as Clashes.at gives them: when the paths
+# h where theirs may differ from base are known, only those are merged
 def Clashes.quick(
-  h: Maybe<&2, List<&2, Contents.Write>>,
+  h: Maybe<&2, List<&2, String>>,
   fits: Bool,
   base: Maybe<&2, Files.Files()>,
   ours: Maybe<&2, Files.Files()>,
@@ -161,8 +161,8 @@ def Clashes.quick(
   match h:
     case None{}:
       Clashes.at(fits, base, ours, theirs)
-    case Some{ws}:
-      Clashes.at.few(ws, fits, base, ours, theirs)
+    case Some{ps}:
+      Clashes.at.few(ps, fits, base, ours, theirs)
 
 # bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- for an entry that is no merge, Merge.fits finds no base and stops
 # the paths that clash in the merge e, version k of the line c
@@ -181,7 +181,14 @@ def Clashes.of(
       +a = Contents.Entry.based(c, Some{e})
       +t = Contents.Entry.taken(c, Some{e})
       Clashes.quick(
-        Contents.Merge.hint.seen(Known.Known.seen(kn, Spec.Point.line(t)), t, a),
+        Contents.Way.near.of(
+          Known.Known.stock(kn),
+          kn,
+          a,
+          Contents.Entry.theirs(e),
+          Spec.Point.line(t),
+          Spec.Point.n(t)
+        ),
         Bool.and(Contents.Request.is_merge(Entry.request(e)), Contents.Merge.fits(kn, s, c, j, e)),
         Contents.Content.of(kn, s, Spec.Point.line(a), Spec.Point.n(a)),
         Contents.Content.of(kn, s, c, j),

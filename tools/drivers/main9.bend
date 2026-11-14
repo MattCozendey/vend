@@ -406,7 +406,7 @@ def one(mode: Nat, +b: Ledgers.Line, +kn: Known.Known(), +fs: Facts.Plain(), +m:
     case 46n:
       List.length(&2, Rounds.Ballot, Rounds.Slot.ballots(wfs(kn, m), b, slotof(m)))
     case 47n:
-      klen(Known.Known.hold(kn, Known.Held{b, 99999n, 5n, Files.Files.new()}))
+      klen(Known.Known.hold(kn, Known.Held{b, 99999n, 5n, Files.Files.new(), []}))
     case 48n:
       rlen2(Known.Known.depth(kn, b, 100n))
     case 49n:

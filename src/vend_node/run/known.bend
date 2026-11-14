@@ -60,9 +60,16 @@ type Took is Data:
 type Ids is Data:
   Ids{map: Crits.Crit<List<&2, Found>>, count: Nat, takes: Crits.Crit<Took>}
 
-# the content of a version of a line, which a read with the fuel depth gives
+# a point that a content is near: the content may differ from the content
+# of the point only at the paths
+type Near is Data:
+  Near{at: Spec.Point, paths: List<&2, String>}
+
+# the content of a version of a line, which a read with the fuel depth gives,
+# and the points that it is near (the version before it, the version that it
+# takes), each with the paths where it may differ from that point
 type Held is Data:
-  Held{line: Ledgers.Line, version: Nat, depth: Nat, files: Files.Files()}
+  Held{line: Ledgers.Line, version: Nat, depth: Nat, files: Files.Files(), near: List<&2, Near>}
 
 # what a table says of the facts of a node: the state of a line, or the era
 # and the rule of its next version, or the ids of its versions, or the facts
@@ -282,11 +289,11 @@ def Held.of(m: Maybe<&2, Held>, c: Ledgers.Line, k: Nat) -> Maybe<&2, Held>:
   match m:
     case None{}:
       None{}
-    case Some{Held{+c2, +k2, d, x}}:
+    case Some{Held{+c2, +k2, d, x, ns}}:
       Shared.Maybe.when(
         Held,
         List.all.if(u2 => Ledgers.Line.is_eq(c2, c), Nat.is_eq(k2, k)),
-        u => Some{Held{c2, k2, d, x}}
+        u => Some{Held{c2, k2, d, x, ns}}
       )
 
 # the content of version k of the line c among the contents m
@@ -301,7 +308,7 @@ def Known.held(kn: Known(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Held>:
 # the files of the content m, if a read with the fuel f gives it
 def Known.files.of(m: Maybe<&2, Held>, f: Nat) -> Maybe<&2, Files.Files()>:
   match m:
-    case Some{Held{c, k, d, x}}:
+    case Some{Held{c, k, d, x, ns}}:
       Shared.Maybe.when(Files.Files(), Nat.is_le(d, f), u => Some{x})
     case None{}:
       None{}
@@ -314,7 +321,7 @@ def Known.files(kn: Known(), +c: Ledgers.Line, +k: Nat, f: Nat) -> Maybe<&2, Fil
 # the fuel of the content m, if any
 def Known.depth.of(m: Maybe<&2, Held>) -> Maybe<&2, Nat>:
   match m:
-    case Some{Held{c, k, d, x}}:
+    case Some{Held{c, k, d, x, ns}}:
       Some{d}
     case None{}:
       None{}
@@ -324,11 +331,51 @@ def Known.depth.of(m: Maybe<&2, Held>) -> Maybe<&2, Nat>:
 def Known.depth(kn: Known(), +c: Ledgers.Line, +k: Nat) -> Maybe<&2, Nat>:
   Known.depth.of(Known.held(kn, c, k))
 
+# the paths of the first of the nears ns whose point is w, when hit says
+# that the first is
+def Nears.find.if(
+  hit: Bool,
+  ps: List<&2, String>,
+  rest: Unit -> Maybe<&2, List<&2, String>>
+) -> Maybe<&2, List<&2, String>>:
+  match hit:
+    case True{}:
+      Some{ps}
+    case False{}:
+      rest(Unit{})
+
+# the paths of the first of the nears ns whose point is w, if any
+def Nears.find(ns: List<&2, Near>, +w: Spec.Point) -> Maybe<&2, List<&2, String>>:
+  match ns:
+    case Nil{}:
+      None{}
+    case Con{Near{v, ps}, rest}:
+      Nears.find.if(Spec.Point.is_eq(v, w), ps, u => Nears.find(rest, w))
+
+# the paths where the content m, if any, may differ from the content of the
+# point w, if it is near w
+def Held.near(m: Maybe<&2, Held>, +w: Spec.Point) -> Maybe<&2, List<&2, String>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Held{c, k, d, x, ns}}:
+      Nears.find(ns, w)
+
+# the paths where the content of version k of the line c that the table kn
+# holds may differ from the content of the point w, if it is near w
+def Known.near(
+  kn: Known(),
+  +c: Ledgers.Line,
+  +k: Nat,
+  +w: Spec.Point
+) -> Maybe<&2, List<&2, String>>:
+  Held.near(Known.held(kn, c, k), w)
+
 # the contents m with the content e, under its key
 def Stock.put(+m: Crits.Crit<Held>, e: Held) -> Crits.Crit<Held>:
   match e:
-    case Held{+c, +k, d, x}:
-      Crits.Crit.set(~Held, m, Held.key(c, k), Held{c, k, d, x})
+    case Held{+c, +k, d, x, ns}:
+      Crits.Crit.set(~Held, m, Held.key(c, k), Held{c, k, d, x, ns})
 
 # the table kn with the content e
 def Known.hold(+kn: Known(), e: Held) -> Known():

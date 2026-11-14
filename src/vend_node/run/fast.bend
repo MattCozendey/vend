@@ -544,13 +544,27 @@ def Sync.take(+name: String, t: Taken, +f: Types.Fact) -> Taken:
         u => Sync.new(name, s, kn, f)
       )
 
-# what the node name has after it takes in each of the facts fs
-def Sync.all(+name: String, fs: List<&2, Types.Fact>, t: Taken) -> Taken:
-  match fs:
+# what the node name has after it takes in the fact f that the other node
+# holds under the key k: nothing changes when it holds f under k, which
+# reads one key and builds no code of f; else as Sync.take gives it
+def Sync.bind(+name: String, t: Taken, +k: List<&2, U32>, +f: Types.Fact) -> Taken:
+  match t:
+    case Taken{+s, +kn}:
+      Shared.Bool.when(
+        Taken,
+        Facts.Facts.held(s, k, f),
+        u => Taken{s, kn},
+        u => Sync.take(name, Taken{s, kn}, f)
+      )
+
+# what the node name has after it takes in each fact of the entries es of
+# the facts of the other node, each under its key
+def Sync.binds(+name: String, es: List<&2, Crits.Bind<Types.Fact>>, t: Taken) -> Taken:
+  match es:
     case Nil{}:
       t
-    case Con{f, rest}:
-      Sync.all(name, rest, Sync.take(name, t, f))
+    case Con{Crits.Bind{+k, +f}, rest}:
+      Sync.binds(name, rest, Sync.bind(name, t, k, f))
 
 # the fast node after a Sync that left the facts and the table t
 def Fast.synced(
@@ -597,7 +611,7 @@ def Fast.does(f: Fast, a: Nodes.Act) -> Fast:
         ms,
         st,
         Parts.Parts.join(ps, ps2),
-        Sync.all(name, Facts.Facts.list(fs2), Taken{fs, kn})
+        Sync.binds(name, Crits.Crit.entries(Types.Fact, fs2), Taken{fs, kn})
       )
     case Fast{Nodes.Raw{+name, ws, ms, +st, +fs, ps}, +kn} Nodes.Act.Mount{+a, +b, +p, held}:
       Fast.asks.to(

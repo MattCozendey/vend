@@ -1667,45 +1667,6 @@ def Reply.status_by(
         %e: {RAnswers.Reply.status.seen(kn, s, c, rev, m) == RAnswers.Reply.status(kn, s, c, Maybe.map(&2, RLines.State, List<&2, Types.Entry>, RLines.State.versions, RKnown.Known.state.of(RKnown.Seen.state.of(_), kn, s, c)), m): Maybe<&2, Spec.Reply>}
         Reply.status_seen(kn, s, c, rev, m)
 
-# a number less itself is zero
-def Nat.sub_self(a: Nat) -> {Nat.sub(a, a) == 0n: Nat}:
-  match a:
-    case 0n:
-      {==}
-    case 1n+ap:
-      Nat.sub_self(ap)
-
-# Merge.hint.seen is Merge.hint of the state that a node keeps
-def Merge.hint_seen(m: Maybe<&2, RKnown.Seen>, t: Spec.Point, a: Spec.Point) -> {
-  RContents.Merge.hint.seen(m, t, a)
-    == RContents.Merge.hint(RKnown.Seen.state.of(m), t, a): Maybe<&2, List<&2, RContents.Write>>
-}:
-  match m t a:
-    case None{} t a:
-      {==}
-    case Some{RKnown.Seen{+rev, n, k}} Spec.Point{+tl, +tn} Spec.Point{+al, +an}:
-      Lists.Bool.by(
-        b => {
-          RContents.Merge.hint.if(b, RKnown.Seen{rev, n, k}, tl, tn, al, an)
-            == RContents.Merge.hint(Some{RLines.State{List.reverse(&2, Types.Entry, rev), k}}, Spec.Point{tl, tn}, Spec.Point{al, an}): Maybe<&2, List<&2, RContents.Write>>
-        },
-        Nat.is_eq(tn, an),
-        et => (
-          %Equal.sym(Nat, tn, an, Shared.Nat.is_eq_sound(tn, an)(et)): {Shared.Maybe.when(List<&2, RContents.Write>, Ledgers.Line.is_eq(al, tl), u => Some{[]}) == Shared.Maybe.when(List<&2, RContents.Write>, List.all.if(u => Nat.is_le(an, _), Ledgers.Line.is_eq(al, tl)), u => RContents.Writes.of(Nat.sub(_, an), List.drop(&2, Types.Entry, List.reverse(&2, Types.Entry, rev), 1n+an))): Maybe<&2, List<&2, RContents.Write>>}
-          %Equal.sym(Nat, Nat.sub(an, an), 0n, Nat.sub_self(an)): {Shared.Maybe.when(List<&2, RContents.Write>, Ledgers.Line.is_eq(al, tl), u => Some{[]}) == Shared.Maybe.when(List<&2, RContents.Write>, List.all.if(u => Nat.is_le(an, an), Ledgers.Line.is_eq(al, tl)), u => RContents.Writes.of(_, List.drop(&2, Types.Entry, List.reverse(&2, Types.Entry, rev), 1n+an))): Maybe<&2, List<&2, RContents.Write>>}
-          %Equal.sym(Bool, Nat.is_le(an, an), True{}, Shared.Nat.le_refl(an)): {Shared.Maybe.when(List<&2, RContents.Write>, Ledgers.Line.is_eq(al, tl), u => Some{[]}) == Shared.Maybe.when(List<&2, RContents.Write>, List.all.if(u => _, Ledgers.Line.is_eq(al, tl)), u => Some{[]}): Maybe<&2, List<&2, RContents.Write>>}
-          Lists.Bool.by(
-            b2 => {
-              Shared.Maybe.when(List<&2, RContents.Write>, b2, u => Some{[]})
-                == Shared.Maybe.when(List<&2, RContents.Write>, List.all.if(u => True{}, b2), u => Some{[]}): Maybe<&2, List<&2, RContents.Write>>
-            },
-            Ledgers.Line.is_eq(al, tl),
-            et2 => {==},
-            ef2 => {==}
-          )),
-        ef => {==}
-      )
-
 # the next slot of a state, read from the facts of a node as a list, is the
 # one read from the facts, once the rule u of the slot is known
 def Step.at_in_eq(
