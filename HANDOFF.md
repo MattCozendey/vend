@@ -19,8 +19,8 @@ of work". These are the decisions.
    name (`Trust` in `facts.bend`), so the laws that need `Honest` release it. Names that start with
    `~` are reserved: no node has one (`Node.name_free`), so this never names a node.
 2. Speed: all code that runs works on plain values and builds no proof (`src/vend_node/run/`,
-   `node.bend`). The proofs are beside it, in the law world. In work: the node keeps the state of
-   each line, then the content of each version, proven equal to the reads.
+   `node.bend`). The proofs are beside it, in the law world. The fast node keeps what it read
+   (see Speed).
 3. Rounds: done. A slot is decided when more than half of its nodes cast a sound vote for one
    pick in one round. The ballots of a node for a slot are a chain (`Step.At{line, slot, turn}`):
    a ballot counts only with all the earlier ones, so a node cannot hide a vote. A ballot is a vote
@@ -42,8 +42,14 @@ Measured, native build, one node, one owner:
 
 - Proofs inside the data run. A node that carried its proofs took 283 s for 4 decided requests.
   The plain state takes 0.01 s.
-- The reads are still polynomial: 20 writes take 0.8 s, 40 take 6.8 s, 80 take 88 s. Each deed
-  reads every line again from the facts. Decision 2 removes that.
+- `Raw.does` (`node.bend`) reads every line again from the facts at each deed: 80 writes take
+  27 s.
+- The fast node (`run/fast.bend`, `Fast.does`) keeps the state of each line, the content of each
+  version and the rule of each line, in a table. It is the same code with the table as a
+  parameter; `known.bend` and `fast.bend` prove that it does and answers what `Raw` does. 80
+  writes take 0.25 s, 320 take 6 s; a read of the newest version is one lookup.
+- In work: indexes, so that a deed costs about the size of its change (Work still scans all asks,
+  an ask scans all facts).
 
 ## Lint
 
