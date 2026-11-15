@@ -72,6 +72,23 @@ def Raw.ok(r: Raw) -> Bool:
     case Raw{name, ws, ms, st, fs, ps}:
       Raw.sound(name, fs, ps)
 
+# Raw.ok, with the facts read by Facts.ok.fast: the check that a node makes
+# of the facts that it resumes from (fast.bend: Raw.ok_fast)
+def Raw.ok.fast(r: Raw) -> Bool:
+  match r:
+    case Raw{+name, ws, ms, st, +fs, ps}:
+      Shared.Bool.when(
+        Bool,
+        Raw.set(fs, ps),
+        u => Shared.Bool.when(
+          Bool,
+          Facts.Facts.ok.fast(name, fs),
+          u2 => Bool.not(Facts.Trust.reserved(name)),
+          u2 => False{}
+        ),
+        u => False{}
+      )
+
 # the address of the mounted resource m
 def Mounted.address(m: Mounted) -> String:
   match m:

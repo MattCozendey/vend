@@ -195,11 +195,13 @@ by copying it into `src/vend_node/` and running `bend <driver> -o <binary>` (`bu
 
 ## Not done
 
-- IO: `src/main.bend` is a command line around the core (README, Caveats). `bun run build`
-  checks it and builds it (about 100 s); `tools/e2e.sh` builds and runs a scenario with two
-  nodes. Not built: network Sync, a node that keeps running, mounts. A resume replays the log
-  with a Sync into an empty node (43 ms at 50 writes, 430 ms at 200); a vote stores its whole
-  request again (decision 5).
+- IO: `src/main.bend` is a command line around the core (README, Caveats): data address, fact
+  log (each request once, LEB128 words), parts, lock, `serve` over TCP, Sync of what the other
+  side lacks (one SHA-256 per fact), mounted folders. A resume is the facts with an empty table
+  (`Fast.none_ok`), refused unless the facts are sound (`Raw.ok_fast`): 33 ms at 50 writes, 0.6 s
+  at 800. `bun run build` checks it and builds it (about 100 s); `tools/e2e.sh` builds and runs a
+  scenario with three nodes. The command line and the wire are not proven; the e2e run is their
+  only check.
 - No test was added to a test suite (each needs your approval); see Tested, not proven.
 - bend-synth was not the first step of each proof, against AGENTS.md: it was run on one proof
   ("no step applies"); the agents wrote the other proofs by hand.

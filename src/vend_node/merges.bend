@@ -2945,20 +2945,36 @@ def Few.clashes(
 ) -> {
   RContents.Merge.clashes.few(b, o, t, ps) == RContents.Merge.clashes(b, o, t): List<&2, String>
 }:
-  Equal.trans(
+  Equal.cong(
     List<&2, String>,
-    RContents.Merge.clashes.few(b, o, t, ps),
-    RContents.Paths.among(RContents.Merge.paths(b, o, t), RContents.Merge.clashes.go(b, o, t, ps)),
-    RContents.Merge.clashes(b, o, t),
-    Among.few(RContents.Merge.clashes.go(b, o, t, ps), RContents.Merge.paths(b, o, t)),
-    Equal.sym(
+    List<&2, String>,
+    l => RContents.Paths.order(l),
+    RContents.Merge.clashes.few.of(
+      RContents.Merge.clashes.go(b, o, t, ps),
+      u => RContents.Merge.paths(b, o, t)
+    ),
+    RContents.Merge.clashes.go(b, o, t, RContents.Merge.paths(b, o, t)),
+    Equal.trans(
       List<&2, String>,
-      RContents.Merge.clashes(b, o, t),
+      RContents.Merge.clashes.few.of(
+        RContents.Merge.clashes.go(b, o, t, ps),
+        u => RContents.Merge.paths(b, o, t)
+      ),
       RContents.Paths.among(
         RContents.Merge.paths(b, o, t),
         RContents.Merge.clashes.go(b, o, t, ps)
       ),
-      Clash.among(RContents.Merge.paths(b, o, t), b, o, t, ps, wb, wt, hn)
+      RContents.Merge.clashes.go(b, o, t, RContents.Merge.paths(b, o, t)),
+      Among.few(RContents.Merge.clashes.go(b, o, t, ps), RContents.Merge.paths(b, o, t)),
+      Equal.sym(
+        List<&2, String>,
+        RContents.Merge.clashes.go(b, o, t, RContents.Merge.paths(b, o, t)),
+        RContents.Paths.among(
+          RContents.Merge.paths(b, o, t),
+          RContents.Merge.clashes.go(b, o, t, ps)
+        ),
+        Clash.among(RContents.Merge.paths(b, o, t), b, o, t, ps, wb, wt, hn)
+      )
     )
   )
 

@@ -3044,6 +3044,675 @@ def Merge.files_get(
     )
   )
 
+# Paths in order
+# --------------
+# RContents.Paths.order lists each path once, in order; a path is in it
+# exactly when it is in the list that it orders.
+
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a choice made at h is True when h is, else it is b; with a before it
+def Or.any(
+  +a: Bool,
+  b: Bool,
+  h: Bool
+) -> {List.any.if(u => Bool.or(a, b), h) == Bool.or(a, List.any.if(u => b, h)): Bool}:
+  match h:
+    case False{}:
+      {==}
+    case True{}:
+      Equal.sym(
+        Bool,
+        Bool.or(a, List.any.if(u => b, True{})),
+        List.any.if(u => Bool.or(a, b), True{}),
+        Shared.Bool.or_true_right(a)
+      )
+
+# Paths.union_has where both lists start with the same path, given it for
+# the rest of both
+def Union.same(
+  +m: Nat,
+  +x: String,
+  +xr: List<&2, String>,
+  +y: String,
+  +yr: List<&2, String>,
+  +p: String,
+  exy: {String.eq(x, y) == True{}: Bool},
+  ih: {
+    List.contains(
+      ~String,
+      ~String.eq,
+      RContents.Paths.union(m, xr, yr),
+      p
+    )
+      == List.contains(~String, ~String.eq, List.append(&2, String, xr, yr), p): Bool
+  }
+) -> {
+  List.contains(
+    ~String,
+    ~String.eq,
+    x <> RContents.Paths.union(m, xr, yr),
+    p
+  )
+    == List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, y <> yr), p): Bool
+}:
+  Lists.Bool.by(
+    d => {
+      String.eq(x, p) == d: Bool
+    } -> {
+      List.any.if(
+        u => List.contains(~String, ~String.eq, RContents.Paths.union(m, xr, yr), p),
+        d
+      )
+        == List.any.if(
+          u => List.contains(~String, ~String.eq, List.append(&2, String, xr, y <> yr), p),
+          d
+        ): Bool
+    },
+    String.eq(x, p),
+    et => e => {==},
+    ef => e => Equal.trans(
+      Bool,
+      List.contains(~String, ~String.eq, RContents.Paths.union(m, xr, yr), p),
+      List.contains(~String, ~String.eq, List.append(&2, String, xr, yr), p),
+      List.contains(~String, ~String.eq, List.append(&2, String, xr, y <> yr), p),
+      ih,
+      Equal.trans(
+        Bool,
+        List.contains(~String, ~String.eq, List.append(&2, String, xr, yr), p),
+        Bool.or(
+          List.contains(~String, ~String.eq, xr, p),
+          List.contains(~String, ~String.eq, yr, p)
+        ),
+        List.contains(~String, ~String.eq, List.append(&2, String, xr, y <> yr), p),
+        Shared.List.contains_append(~String, ~String.eq, xr, yr, p),
+        Equal.sym(
+          Bool,
+          List.contains(~String, ~String.eq, List.append(&2, String, xr, y <> yr), p),
+          Bool.or(
+            List.contains(~String, ~String.eq, xr, p),
+            List.contains(~String, ~String.eq, yr, p)
+          ),
+          Equal.trans(
+            Bool,
+            List.contains(~String, ~String.eq, List.append(&2, String, xr, y <> yr), p),
+            Bool.or(
+              List.contains(~String, ~String.eq, xr, p),
+              List.contains(~String, ~String.eq, y <> yr, p)
+            ),
+            Bool.or(
+              List.contains(~String, ~String.eq, xr, p),
+              List.contains(~String, ~String.eq, yr, p)
+            ),
+            Shared.List.contains_append(~String, ~String.eq, xr, y <> yr, p),
+            Equal.cong(
+              Bool,
+              Bool,
+              z => Bool.or(
+                List.contains(~String, ~String.eq, xr, p),
+                List.any.if(u => List.contains(~String, ~String.eq, yr, p), z)
+              ),
+              String.eq(y, p),
+              False{},
+              Eq.to(
+                String,
+                z => {String.eq(z, p) == False{}: Bool},
+                x,
+                y,
+                Texts.String.eq_sound(x, y)(exy),
+                e
+              )
+            )
+          )
+        )
+      )
+    )
+  )({==})
+
+# Paths.union_has where the first list starts with the lower path, given it
+# for the rest
+def Union.left(
+  +m: Nat,
+  +x: String,
+  +xr: List<&2, String>,
+  +y: String,
+  +yr: List<&2, String>,
+  +p: String,
+  ih: {
+    List.contains(
+      ~String,
+      ~String.eq,
+      RContents.Paths.union(m, xr, y <> yr),
+      p
+    )
+      == List.contains(~String, ~String.eq, List.append(&2, String, xr, y <> yr), p): Bool
+  }
+) -> {
+  List.contains(
+    ~String,
+    ~String.eq,
+    x <> RContents.Paths.union(m, xr, y <> yr),
+    p
+  )
+    == List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, y <> yr), p): Bool
+}:
+  Equal.cong(
+    Bool,
+    Bool,
+    z => List.any.if(u => z, String.eq(x, p)),
+    List.contains(~String, ~String.eq, RContents.Paths.union(m, xr, y <> yr), p),
+    List.contains(~String, ~String.eq, List.append(&2, String, xr, y <> yr), p),
+    ih
+  )
+
+# Paths.union_has where the second list starts with the lower path, given it
+# for the rest
+def Union.right(
+  +m: Nat,
+  +x: String,
+  +xr: List<&2, String>,
+  +y: String,
+  +yr: List<&2, String>,
+  +p: String,
+  ih: {
+    List.contains(
+      ~String,
+      ~String.eq,
+      RContents.Paths.union(m, x <> xr, yr),
+      p
+    )
+      == List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, yr), p): Bool
+  }
+) -> {
+  List.contains(
+    ~String,
+    ~String.eq,
+    y <> RContents.Paths.union(m, x <> xr, yr),
+    p
+  )
+    == List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, y <> yr), p): Bool
+}:
+  Equal.trans(
+    Bool,
+    List.contains(~String, ~String.eq, y <> RContents.Paths.union(m, x <> xr, yr), p),
+    List.any.if(
+      u => List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, yr), p),
+      String.eq(y, p)
+    ),
+    List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, y <> yr), p),
+    Equal.cong(
+      Bool,
+      Bool,
+      z => List.any.if(u => z, String.eq(y, p)),
+      List.contains(~String, ~String.eq, RContents.Paths.union(m, x <> xr, yr), p),
+      List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, yr), p),
+      ih
+    ),
+    Equal.trans(
+      Bool,
+      List.any.if(
+        u => List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, yr), p),
+        String.eq(y, p)
+      ),
+      List.any.if(
+        u => Bool.or(
+          List.contains(~String, ~String.eq, x <> xr, p),
+          List.contains(~String, ~String.eq, yr, p)
+        ),
+        String.eq(y, p)
+      ),
+      List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, y <> yr), p),
+      Equal.cong(
+        Bool,
+        Bool,
+        z => List.any.if(u => z, String.eq(y, p)),
+        List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, yr), p),
+        Bool.or(
+          List.contains(~String, ~String.eq, x <> xr, p),
+          List.contains(~String, ~String.eq, yr, p)
+        ),
+        Shared.List.contains_append(~String, ~String.eq, x <> xr, yr, p)
+      ),
+      Equal.trans(
+        Bool,
+        List.any.if(
+          u => Bool.or(
+            List.contains(~String, ~String.eq, x <> xr, p),
+            List.contains(~String, ~String.eq, yr, p)
+          ),
+          String.eq(y, p)
+        ),
+        Bool.or(
+          List.contains(~String, ~String.eq, x <> xr, p),
+          List.contains(~String, ~String.eq, y <> yr, p)
+        ),
+        List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, y <> yr), p),
+        Or.any(
+          List.contains(~String, ~String.eq, x <> xr, p),
+          List.contains(~String, ~String.eq, yr, p),
+          String.eq(y, p)
+        ),
+        Equal.sym(
+          Bool,
+          List.contains(~String, ~String.eq, List.append(&2, String, x <> xr, y <> yr), p),
+          Bool.or(
+            List.contains(~String, ~String.eq, x <> xr, p),
+            List.contains(~String, ~String.eq, y <> yr, p)
+          ),
+          Shared.List.contains_append(~String, ~String.eq, x <> xr, y <> yr, p)
+        )
+      )
+    )
+  )
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
+# a path is in the merge of two lists exactly when it is in one of them, one
+# after the other
+def Paths.union_has(
+  n: Nat,
+  xs: List<&2, String>,
+  ys: List<&2, String>,
+  +p: String
+) -> {
+  List.contains(
+    ~String,
+    ~String.eq,
+    RContents.Paths.union(n, xs, ys),
+    p
+  )
+    == List.contains(~String, ~String.eq, List.append(&2, String, xs, ys), p): Bool
+}:
+  match n xs ys:
+    case 0n a b:
+      {==}
+    case 1n+m Nil{} b:
+      {==}
+    case 1n+m Con{+x, +xr} Nil{}:
+      Equal.cong(
+        List<&2, String>,
+        Bool,
+        l => List.contains(~String, ~String.eq, l, p),
+        x <> xr,
+        List.append(&2, String, x <> xr, []),
+        Equal.sym(
+          List<&2, String>,
+          List.append(&2, String, x <> xr, []),
+          x <> xr,
+          Shared.List.append_nil(String, x <> xr)
+        )
+      )
+    case 1n+m Con{+x, +xr} Con{+y, +yr}:
+      +m = m
+      Shared.Bool.when_cases(
+        List<&2, String>,
+        l => {
+          List.contains(
+            ~String,
+            ~String.eq,
+            l,
+            p
+          )
+            == List.contains(
+              ~String,
+              ~String.eq,
+              List.append(&2, String, x <> xr, y <> yr),
+              p
+            ): Bool
+        },
+        String.eq(x, y),
+        u => x <> RContents.Paths.union(m, xr, yr),
+        u => Shared.Bool.when(
+          List<&2, String>,
+          String.is_lt(x, y),
+          u2 => x <> RContents.Paths.union(m, xr, y <> yr),
+          u2 => y <> RContents.Paths.union(m, x <> xr, yr)
+        ),
+        exy => Union.same(m, x, xr, y, yr, p, exy, Paths.union_has(m, xr, yr, p)),
+        nxy => Shared.Bool.when_cases(
+          List<&2, String>,
+          l => {
+            List.contains(
+              ~String,
+              ~String.eq,
+              l,
+              p
+            )
+              == List.contains(
+                ~String,
+                ~String.eq,
+                List.append(&2, String, x <> xr, y <> yr),
+                p
+              ): Bool
+          },
+          String.is_lt(x, y),
+          u2 => x <> RContents.Paths.union(m, xr, y <> yr),
+          u2 => y <> RContents.Paths.union(m, x <> xr, yr),
+          lt => Union.left(m, x, xr, y, yr, p, Paths.union_has(m, xr, y <> yr, p)),
+          gt => Union.right(m, x, xr, y, yr, p, Paths.union_has(m, x <> xr, yr, p))
+        )
+      )
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# a path is in the runs after a pass exactly when it is in the runs before
+def Paths.pass_has(
+  +n: Nat,
+  rs: List<&2, List<&2, String>>,
+  +p: String
+) -> {
+  List.contains(
+    ~String,
+    ~String.eq,
+    List.concat(&2, String, RContents.Paths.pass(n, rs)),
+    p
+  )
+    == List.contains(~String, ~String.eq, List.concat(&2, String, rs), p): Bool
+}:
+  match rs:
+    case Nil{}:
+      {==}
+    case Con{r, Nil{}}:
+      {==}
+    case Con{+a, Con{+b, +rest}}:
+      %Equal.sym(
+        Bool,
+        List.contains(
+          ~String,
+          ~String.eq,
+          List.append(
+            &2,
+            String,
+            RContents.Paths.union(n, a, b),
+            List.concat(&2, String, RContents.Paths.pass(n, rest))
+          ),
+          p
+        ),
+        Bool.or(
+          List.contains(~String, ~String.eq, RContents.Paths.union(n, a, b), p),
+          List.contains(
+            ~String,
+            ~String.eq,
+            List.concat(&2, String, RContents.Paths.pass(n, rest)),
+            p
+          )
+        ),
+        Shared.List.contains_append(
+          ~String,
+          ~String.eq,
+          RContents.Paths.union(n, a, b),
+          List.concat(&2, String, RContents.Paths.pass(n, rest)),
+          p
+        )
+      ): {
+        _
+          == List.contains(
+            ~String,
+            ~String.eq,
+            List.append(&2, String, a, List.append(&2, String, b, List.concat(&2, String, rest))),
+            p
+          ): Bool
+      }
+      %Equal.sym(
+        Bool,
+        List.contains(~String, ~String.eq, RContents.Paths.union(n, a, b), p),
+        List.contains(~String, ~String.eq, List.append(&2, String, a, b), p),
+        Paths.union_has(n, a, b, p)
+      ): {
+        Bool.or(
+          _,
+          List.contains(
+            ~String,
+            ~String.eq,
+            List.concat(&2, String, RContents.Paths.pass(n, rest)),
+            p
+          )
+        )
+          == List.contains(
+            ~String,
+            ~String.eq,
+            List.append(&2, String, a, List.append(&2, String, b, List.concat(&2, String, rest))),
+            p
+          ): Bool
+      }
+      %Equal.sym(
+        Bool,
+        List.contains(
+          ~String,
+          ~String.eq,
+          List.concat(&2, String, RContents.Paths.pass(n, rest)),
+          p
+        ),
+        List.contains(~String, ~String.eq, List.concat(&2, String, rest), p),
+        Paths.pass_has(n, rest, p)
+      ): {
+        Bool.or(
+          List.contains(~String, ~String.eq, List.append(&2, String, a, b), p),
+          _
+        )
+          == List.contains(
+            ~String,
+            ~String.eq,
+            List.append(&2, String, a, List.append(&2, String, b, List.concat(&2, String, rest))),
+            p
+          ): Bool
+      }
+      %Equal.sym(
+        Bool,
+        List.contains(~String, ~String.eq, List.append(&2, String, a, b), p),
+        Bool.or(List.contains(~String, ~String.eq, a, p), List.contains(~String, ~String.eq, b, p)),
+        Shared.List.contains_append(~String, ~String.eq, a, b, p)
+      ): {
+        Bool.or(
+          _,
+          List.contains(~String, ~String.eq, List.concat(&2, String, rest), p)
+        )
+          == List.contains(
+            ~String,
+            ~String.eq,
+            List.append(&2, String, a, List.append(&2, String, b, List.concat(&2, String, rest))),
+            p
+          ): Bool
+      }
+      %Equal.sym(
+        Bool,
+        List.contains(
+          ~String,
+          ~String.eq,
+          List.append(&2, String, a, List.append(&2, String, b, List.concat(&2, String, rest))),
+          p
+        ),
+        Bool.or(
+          List.contains(~String, ~String.eq, a, p),
+          List.contains(
+            ~String,
+            ~String.eq,
+            List.append(&2, String, b, List.concat(&2, String, rest)),
+            p
+          )
+        ),
+        Shared.List.contains_append(
+          ~String,
+          ~String.eq,
+          a,
+          List.append(&2, String, b, List.concat(&2, String, rest)),
+          p
+        )
+      ): {
+        Bool.or(
+          Bool.or(
+            List.contains(~String, ~String.eq, a, p),
+            List.contains(~String, ~String.eq, b, p)
+          ),
+          List.contains(~String, ~String.eq, List.concat(&2, String, rest), p)
+        )
+          == _: Bool
+      }
+      %Equal.sym(
+        Bool,
+        List.contains(
+          ~String,
+          ~String.eq,
+          List.append(&2, String, b, List.concat(&2, String, rest)),
+          p
+        ),
+        Bool.or(
+          List.contains(~String, ~String.eq, b, p),
+          List.contains(~String, ~String.eq, List.concat(&2, String, rest), p)
+        ),
+        Shared.List.contains_append(~String, ~String.eq, b, List.concat(&2, String, rest), p)
+      ): {
+        Bool.or(
+          Bool.or(
+            List.contains(~String, ~String.eq, a, p),
+            List.contains(~String, ~String.eq, b, p)
+          ),
+          List.contains(~String, ~String.eq, List.concat(&2, String, rest), p)
+        )
+          == Bool.or(List.contains(~String, ~String.eq, a, p), _): Bool
+      }
+      Equal.sym(
+        Bool,
+        Bool.or(
+          List.contains(~String, ~String.eq, a, p),
+          Bool.or(
+            List.contains(~String, ~String.eq, b, p),
+            List.contains(~String, ~String.eq, List.concat(&2, String, rest), p)
+          )
+        ),
+        Bool.or(
+          Bool.or(
+            List.contains(~String, ~String.eq, a, p),
+            List.contains(~String, ~String.eq, b, p)
+          ),
+          List.contains(~String, ~String.eq, List.concat(&2, String, rest), p)
+        ),
+        Shared.Bool.or_assoc(
+          List.contains(~String, ~String.eq, a, p),
+          List.contains(~String, ~String.eq, b, p),
+          List.contains(~String, ~String.eq, List.concat(&2, String, rest), p)
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
+# a path is in the sort of runs exactly when it is in the runs
+def Paths.sort_has(
+  n: Nat,
+  +k: Nat,
+  rs: List<&2, List<&2, String>>,
+  +p: String
+) -> {
+  List.contains(
+    ~String,
+    ~String.eq,
+    RContents.Paths.sort(n, k, rs),
+    p
+  )
+    == List.contains(~String, ~String.eq, List.concat(&2, String, rs), p): Bool
+}:
+  match n rs:
+    case 0n qs:
+      {==}
+    case 1n+m Nil{}:
+      {==}
+    case 1n+m Con{+r, Nil{}}:
+      Equal.cong(
+        List<&2, String>,
+        Bool,
+        l => List.contains(~String, ~String.eq, l, p),
+        r,
+        List.append(&2, String, r, []),
+        Equal.sym(
+          List<&2, String>,
+          List.append(&2, String, r, []),
+          r,
+          Shared.List.append_nil(String, r)
+        )
+      )
+    case 1n+m Con{+a, Con{+b, +rest}}:
+      Equal.trans(
+        Bool,
+        List.contains(
+          ~String,
+          ~String.eq,
+          RContents.Paths.sort(m, k, RContents.Paths.pass(k, a <> b <> rest)),
+          p
+        ),
+        List.contains(
+          ~String,
+          ~String.eq,
+          List.concat(&2, String, RContents.Paths.pass(k, a <> b <> rest)),
+          p
+        ),
+        List.contains(~String, ~String.eq, List.concat(&2, String, a <> b <> rest), p),
+        Paths.sort_has(m, k, RContents.Paths.pass(k, a <> b <> rest), p),
+        Paths.pass_has(k, a <> b <> rest, p)
+      )
+
+# a path is in the runs of a list exactly when it is in the list
+def Paths.runs_has(
+  xs: List<&2, String>,
+  +p: String
+) -> {
+  List.contains(
+    ~String,
+    ~String.eq,
+    List.concat(&2, String, RContents.Paths.runs(xs)),
+    p
+  )
+    == List.contains(~String, ~String.eq, xs, p): Bool
+}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      %Paths.runs_has(
+        tail,
+        p
+      ): {
+        List.any.if(
+          u => List.contains(
+            String,
+            String.eq,
+            List.append(&2, String, [], List.concat(&2, String, RContents.Paths.runs(tail))),
+            p
+          ),
+          String.eq(head, p)
+        )
+          == List.any.if(u => _, String.eq(head, p)): Bool
+      }; {==}
+
+# a path is in the paths in order exactly when it is in the paths
+def Paths.order_has(
+  +xs: List<&2, String>,
+  +p: String
+) -> {
+  List.contains(
+    ~String,
+    ~String.eq,
+    RContents.Paths.order(xs),
+    p
+  )
+    == List.contains(~String, ~String.eq, xs, p): Bool
+}:
+  %Equal.sym(
+    Bool,
+    List.contains(
+      String,
+      String.eq,
+      RContents.Paths.sort(
+        List.length(&2, String, xs),
+        List.length(&2, String, xs),
+        RContents.Paths.runs(xs)
+      ),
+      p
+    ),
+    List.contains(String, String.eq, List.concat(&2, String, RContents.Paths.runs(xs)), p),
+    Paths.sort_has(
+      List.length(&2, String, xs),
+      List.length(&2, String, xs),
+      RContents.Paths.runs(xs),
+      p
+    )
+  ): {_ == List.contains(String, String.eq, xs, p): Bool}; Paths.runs_has(xs, p)
+
 # a path whose merge clashes is among the clashes of the three contents
 def Merge.clashes_get(
   +b: Files.Files(),
@@ -3058,7 +3727,19 @@ def Merge.clashes_get(
   Lists.Bool.by(
     d => {List.contains(~String, ~String.eq, RContents.Merge.clashes(b, o, t), p) == True{}: Bool},
     List.contains(~String, ~String.eq, RContents.Merge.paths(b, o, t), p),
-    et => Merge.clashes_in(b, o, t, RContents.Merge.paths(b, o, t), p)(hm)(et),
+    et => Equal.trans(
+      Bool,
+      List.contains(~String, ~String.eq, RContents.Merge.clashes(b, o, t), p),
+      List.contains(
+        ~String,
+        ~String.eq,
+        RContents.Merge.clashes.go(b, o, t, RContents.Merge.paths(b, o, t)),
+        p
+      ),
+      True{},
+      Paths.order_has(RContents.Merge.clashes.go(b, o, t, RContents.Merge.paths(b, o, t)), p),
+      Merge.clashes_in(b, o, t, RContents.Merge.paths(b, o, t), p)(hm)(et)
+    ),
     ef => And.by(
       {RContents.Merge.at(b, o, t, p) == Some{None{}}: Maybe<&2, Maybe<&2, List<&2, U32>>>},
       {Files.Files.get(o, p) == None{}: Maybe<&2, List<&2, U32>>},

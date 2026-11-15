@@ -4,11 +4,14 @@
 #   1. Node a alone owns a store: two writes, a branch, a merge with a clash, a resolve, the
 #      status of each request, reads and views.
 #   2. Nodes a and b own a second store together: each request needs both, so they sync both ways.
+#   3. Nodes c and d own a third store together and sync over TCP on localhost: d serves, c
+#      fetches; a write at c and a save in a folder that d watches both need both owners.
+#   4. Mounts: c mounts a folder; each command reads it, and each save becomes a version.
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+trap 'if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi; rm -rf "$tmp"' EXIT
 if [ $# -ge 1 ]; then
   vend="$1"
 else
@@ -18,10 +21,15 @@ fi
 
 A="$tmp/a"
 B="$tmp/b"
+C="$tmp/c"
+D="$tmp/d"
 S=no-store-yet
 T=no-store-yet
+U=no-store-yet
+pid=
+port=0
 step() { echo; echo "# $*"; }
-short() { sed -e "s|$tmp/||g" -e "s|$S|\$S|g" -e "s|$T|\$T|g"; }
+short() { sed -e "s|$tmp/||g" -e "s|$S|\$S|g" -e "s|$T|\$T|g" -e "s|$U|\$U|g" -e "s|127.0.0.1:$port|127.0.0.1:\$port|g"; }
 run() {
   echo "\$ vend $*" | short
   "$vend" "$@" 2>&1 | short
@@ -101,6 +109,72 @@ run "$A" w work || true
 rm "$A/lock"
 step "the state on disk"
 ls -l "$A" | short
+echo "log of a: $(wc -c < "$A/facts") bytes, log of b: $(wc -c < "$B/facts") bytes"
 echo "parts: $(ls "$A/parts" | wc -l)"
 run "$A" w drop
 echo "parts: $(ls "$A/parts" | wc -l)"
+
+step "3. nodes c and d own a store together, and sync over TCP"
+run "$C" init c
+run "$D" init d
+U=$(store "$C" x start s3 c d)
+echo "store \$U = $U"
+mkdir -p "$tmp/notes"
+printf 'first\n' > "$tmp/notes/todo.txt"
+echo "(d watches the folder notes, at notes/ of \$U:main)"
+run "$D" y mount "$tmp/notes" "$U:main" notes
+port=$((20000 + RANDOM % 20000))
+"$vend" "$D" serve "$port" > "$tmp/serve.out" 2>&1 &
+pid=$!
+for k in $(seq 1 100); do grep -q serves "$tmp/serve.out" 2>/dev/null && break; sleep 0.1; done
+short < "$tmp/serve.out"
+echo "(while d serves, it holds the lock of its address)"
+run "$D" y work || true
+run "$C" x group g3 "$U" core c d
+for k in 1 2 3; do run "$C" x sync "tcp:127.0.0.1:$port"; done
+run "$C" x own o6 "$U" core
+run "$C" x own o7 "$U:main" core
+for k in 1 2 3 4; do run "$C" x sync "tcp:127.0.0.1:$port"; done
+run "$C" x status "$U" g3
+run "$C" x status "$U:main" o7
+step "a write at c needs the vote of d: c syncs, d works after each session"
+run "$C" x write z1 "$U:main" c.txt "$(file v8 'from c\n')"
+for k in 1 2 3; do run "$C" x sync "tcp:127.0.0.1:$port"; done
+run "$C" x status "$U:main" z1
+step "a save in the folder that d watches becomes a version, decided by both"
+for k in 1 2 3; do run "$C" x sync "tcp:127.0.0.1:$port"; done
+run "$C" x view "$U:main" notes/todo.txt
+printf 'first\nsecond\n' > "$tmp/notes/todo.txt"
+sleep 1.5
+for k in 1 2 3; do run "$C" x sync "tcp:127.0.0.1:$port"; done
+run "$C" x view "$U:main" notes/todo.txt
+run "$C" x answer count "$U:main"
+
+step "4. c mounts a folder: each command reads it"
+mkdir -p "$tmp/site"
+printf '<p>hello</p>\n' > "$tmp/site/index.html"
+run "$C" x mount "$tmp/site" "$U:main" site
+for k in 1 2 3 4 5 6; do run "$C" x sync "tcp:127.0.0.1:$port"; done
+run "$C" x view "$U:main" site/index.html
+printf '<p>hello again</p>\n' > "$tmp/site/index.html"
+printf 'body {}\n' > "$tmp/site/style.css"
+for k in 1 2 3 4 5 6; do run "$C" x sync "tcp:127.0.0.1:$port"; done
+run "$C" x view "$U:main" site/index.html
+run "$C" x view "$U:main" site/style.css
+rm "$tmp/site/style.css"
+for k in 1 2 3 4 5 6; do run "$C" x sync "tcp:127.0.0.1:$port"; done
+run "$C" x view "$U:main" site/style.css
+run "$C" x answer count "$U:main"
+sed -e "s|$tmp/||g" -e "s|$U|\$U|g" "$C/mounts"
+run "$C" x unmount "$tmp/site"
+echo "mounts of c: $(wc -c < "$C/mounts") bytes"
+
+step "a node with a mount stops only when forced"
+run "tcp:127.0.0.1:$port" x stop
+run "tcp:127.0.0.1:$port" x stop --force
+wait "$pid" || true
+pid=
+short < "$tmp/serve.out"
+run "$D" y answer count "$U:main"
+run "$D" y view "$U:main" c.txt
+echo "log of c: $(wc -c < "$C/facts") bytes, log of d: $(wc -c < "$D/facts") bytes"

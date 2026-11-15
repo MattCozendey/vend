@@ -327,6 +327,143 @@ def Facts.ok(+name: String, +s: Plain()) -> Bool:
   )
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
+# Soundness, read fast
+# --------------------
+# Facts.ok reads each fact against each fact, and builds the words of each
+# ballot again each time. Only two votes of the node at one step name it a
+# liar, and only two starts collide, so Facts.ok.fast reads those only, each
+# ballot built once and compared with those of its step only (the starts,
+# a few, each with each). fast.bend proves that it is Facts.ok
+# (Sound.ok_fast).
+
+# the ballot m, if any, before the ballots rest, when its voter is name
+def Own.put(
+  +name: String,
+  m: Maybe<&2, Spec.Ballot>,
+  rest: List<&2, Spec.Ballot>
+) -> List<&2, Spec.Ballot>:
+  match m:
+    case None{}:
+      rest
+    case Some{+b}:
+      List.filter.put(Spec.Ballot, b, rest, String.eq(Ballot.voter(b), name))
+
+# the ballots of the votes of the voter name among fs
+def Facts.own(+name: String, fs: List<&2, Types.Fact>) -> List<&2, Spec.Ballot>:
+  match fs:
+    case Nil{}:
+      []
+    case Con{f, rest}:
+      Own.put(name, Fact.ballot(f), Facts.own(name, rest))
+
+# Ballot.clash, which compares the steps only of one voter, and the casts
+# only at one step
+def Ballot.clash.lazy(a: Spec.Ballot, b: Spec.Ballot) -> Bool:
+  match a b:
+    case Spec.Ballot{v, s, x} Spec.Ballot{w, t, y}:
+      Shared.Bool.when(
+        Bool,
+        String.eq(v, w),
+        u => Shared.Bool.when(
+          Bool,
+          Words.is_eq(s, t),
+          u2 => Bool.not(Words.is_eq(x, y)),
+          u2 => False{}
+        ),
+        u => False{}
+      )
+
+# some ballot of bs contradicts a ballot of all
+def Ballots.clash(+all: List<&2, Spec.Ballot>, bs: List<&2, Spec.Ballot>) -> Bool:
+  match bs:
+    case Nil{}:
+      False{}
+    case Con{+b, rest}:
+      List.any.if(
+        u => Ballots.clash(all, rest),
+        Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~Ballot.clash.lazy, all, b)
+      )
+
+# the ballots that m holds, if any
+def Bucket.of(m: Maybe<&2, List<&2, Spec.Ballot>>) -> List<&2, Spec.Ballot>:
+  match m:
+    case None{}:
+      []
+    case Some{bs}:
+      bs
+
+# the ballots bs by the words of their step: under each, those of that step
+def Ballots.by_step(bs: List<&2, Spec.Ballot>) -> Crits.Crit<List<&2, Spec.Ballot>>:
+  match bs:
+    case Nil{}:
+      Crits.Crit.new(List<&2, Spec.Ballot>)
+    case Con{Spec.Ballot{+v, +st, +x}, rest}:
+      +m = Ballots.by_step(rest)
+      Crits.Crit.set(
+        ~List<&2, Spec.Ballot>,
+        m,
+        st,
+        Spec.Ballot{v, st, x} <> Bucket.of(Crits.Crit.get(List<&2, Spec.Ballot>, m, st))
+      )
+
+# some ballot of bs contradicts a ballot of its step in m: Ballots.clash,
+# where m holds the ballots of all by step (fast.bend: Steps.clash_by), so
+# that a ballot is compared only with those of its step
+def Ballots.clash.by(+m: Crits.Crit<List<&2, Spec.Ballot>>, bs: List<&2, Spec.Ballot>) -> Bool:
+  match bs:
+    case Nil{}:
+      False{}
+    case Con{Spec.Ballot{+v, +st, +x}, rest}:
+      List.any.if(
+        u => Ballots.clash.by(m, rest),
+        Shared.List.some(
+          ~Spec.Ballot,
+          ~Spec.Ballot,
+          ~Ballot.clash.lazy,
+          Bucket.of(Crits.Crit.get(List<&2, Spec.Ballot>, m, st)),
+          Spec.Ballot{v, st, x}
+        )
+      )
+
+# the ask of the fact f before the asks rest, when it starts a store
+def Start.put(f: Types.Fact, rest: List<&2, Types.Ask>) -> List<&2, Types.Ask>:
+  match f:
+    case Types.Fact.Ask{Types.Ask{i, k, +r}}:
+      List.filter.put(Types.Ask, Types.Ask{i, k, r}, rest, Request.is_start(r))
+    case Types.Fact.Vote{v, st, pk}:
+      rest
+
+# the asks among fs that start a store
+def Facts.starts(fs: List<&2, Types.Fact>) -> List<&2, Types.Ask>:
+  match fs:
+    case Nil{}:
+      []
+    case Con{f, rest}:
+      Start.put(f, Facts.starts(rest))
+
+# some ask of xs collides with an ask of all
+def Asks.collide(+all: List<&2, Types.Ask>, xs: List<&2, Types.Ask>) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case Con{+a, rest}:
+      List.any.if(
+        u => Asks.collide(all, rest),
+        Shared.List.some(~Types.Ask, ~Types.Ask, ~(x => y => Ask.collides(x, y)), all, a)
+      )
+
+# Facts.ok, read from the votes of the node and the starts only
+def Facts.ok.fast(+name: String, +s: Plain()) -> Bool:
+  +fs = Facts.list(s)
+  +own = Facts.own(name, fs)
+  +st = Facts.starts(fs)
+  Shared.Bool.when(
+    Bool,
+    Ballots.clash.by(Ballots.by_step(own), own),
+    u => False{},
+    u => Shared.Bool.when(Bool, Asks.collide(st, st), u2 => Trust.broken(s, name), u2 => True{})
+  )
+
 # Votes of the node
 # -----------------
 

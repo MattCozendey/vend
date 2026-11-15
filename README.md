@@ -53,9 +53,14 @@ unless marked "not checked". `HANDOFF.md` has the details.
 - "Starts or resumes on a data address": a directory with the node's name, a log of its facts,
   each written once, and its parts by hash. "Only one Vend Node can run on an address": a lock
   file, made with an exclusive create; a node that crashed leaves it, and a person removes it.
-- Not built: a node that keeps running, so nothing "catches up by itself"; Sync over a network
-  (a node takes in another data address on the same machine only); a writer's connection over a
-  wire. Mounts and connected writers are not saved between commands.
+- `vend <address> serve <port>` is a node that keeps running: it holds the lock, answers Syncs
+  over TCP, works after each one, and watches its mounted folders, so it catches up by itself for
+  what reaches it. Two nodes sync with `sync tcp:<host>:<port>`: each side sends only the facts
+  and parts that the other lacks, found by one hash per fact (so a Sync still reads every fact).
+  Each fact still goes in through the core, which checks it.
+- Limits of the program: a served node takes only `stop` from a remote writer (no other writer
+  command over the wire); it serves one session at a time; a killed node leaves its lock; every
+  command resumes the node from its log (0.6 s at 800 writes).
 - Nothing is signed. A ballot carries the name of its voter, and the core trusts that name.
   Signatures are assumed to sit outside the core.
 
@@ -75,18 +80,22 @@ unless marked "not checked". `HANDOFF.md` has the details.
   its requests and ballots. A node can let go only of cached content, never of a request; the spec
   requires that a request stays held with its words. Nothing counts how many nodes keep a part.
 - "Content is stored once by hash and versions share every unchanged part": versions share
-  unchanged files in memory, and parts are kept once by hash. There is no storage on disk.
+  unchanged files in memory, and parts are kept once by hash, on disk too. The log on disk keeps
+  each request once; a vote names an earlier record instead of repeating its request.
 - "An edit costs about its own size, even in huge resources": a write carries the whole words of
-  the resource, not a difference. In time, a write, a read, a view and a status no longer grow
-  with the history (measured); a write still grows slowly with the number of versions of its
-  branch, and a store request with the size of the store.
+  the resource, not a difference. In time, each deed and answer of the core no longer grows with
+  the history (measured), except a Sync, which reads every fact of the other node, and a late
+  vote, a little.
 
 ## Vend Writer
 
-- "Through mounted resources (like a watched folder, whose every save becomes a version)": the
-  core records a mount and the words that the resource held as a change. Nothing watches a folder.
+- "Through mounted resources (like a watched folder, whose every save becomes a version)": a
+  folder is mounted with `vend <address> <writer> mount <dir> <line> <path>`. A served node polls
+  it every 500 ms, and each changed file becomes a write. Each command also reads every mounted
+  file. File names with tabs or new lines are not supported.
 - "Pending (owners not reached yet, still delivered later)": the core answers nothing for such a
-  request, and has no Pending reply. Delivery later needs the program.
+  request (it has no Pending reply), and the command line prints "pending". The request is
+  delivered by later Syncs.
 - "Writers are told only about changes to what their work uses": the core answers the question
   (which paths changed among those that given paths reach through imports, in a build). Nothing
   tells a writer; there are no notices or subscriptions.
@@ -130,6 +139,7 @@ unless marked "not checked". `HANDOFF.md` has the details.
   not an item in it.
 - "A merge never loses a change made on only one side": proven for the merge of the core.
 - "Mounting it to another Vend Branch is a checkout", "a worktree": the core records mounts by
-  address, branch and path. It writes nothing to a resource.
+  address, branch and path. Nothing writes the content of a branch into a folder, so a mount only
+  records what the folder holds; it is not a checkout.
 - "A submodule ... served by any Vend Node that has it": a `.module` format exists; the core does
   not follow it into another store. Not built.

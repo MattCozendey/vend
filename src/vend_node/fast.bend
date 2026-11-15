@@ -3,6 +3,7 @@ import ../shared/shared/ledger.bend as Ledgers
 import ../shared/shared/shared/shared/crit.bend as Crits
 import ../shared/shared/shared/shared/hash.bend as Hashes
 import ../shared/shared/shared/shared/shared.bend as Shared
+import ../shared/shared/shared/text.bend as Texts
 import ./codes.bend as Coded
 import ./facts.bend as Facts
 import ./impl.bend as Impl
@@ -2200,6 +2201,22 @@ def Fast.does_raw(
 def Fast.new_ok(name: String) -> {RFasts.Fast.ok(RFasts.Fast.new(name)) == True{}: Bool}:
   {==}
 
+# bend-lint: expect-begin bend-lint-rules/language/reused_binder@warning -- in these proofs a second use sits in a rewrite motive or an erased argument; the checker accepts it
+# a fast node of any state whose table knows nothing holds a right table: a
+# node resumes from its facts with no Sync
+def Fast.none_ok(
+  r: Nodes.Raw
+) -> {RFasts.Fast.ok(RFasts.Fast{r, RKnown.Known.none()}) == True{}: Bool}:
+  %Equal.sym(
+    Bool,
+    RContents.Known.ok(RKnown.Known.none(), Nodes.Raw.facts(r)),
+    True{},
+    Knowns.Ok.none(Nodes.Raw.facts(r))
+  ):
+    {Bool.and(_, True{}) == True{}: Bool}
+  {==}
+# bend-lint: expect-end bend-lint-rules/language/reused_binder@warning
+
 # a fast node that learns the states of a line keeps its state
 def Fast.learn_raw(
   f: RFasts.Fast,
@@ -2223,6 +2240,1110 @@ def Fast.learn_ok(
         Nodes.Raw.facts(r),
         c
       )(Knowns.Known.learn_fit(kn, Nodes.Raw.facts(r), c)(ok))
+
+# The soundness that a node resumes from
+# --------------------------------------
+# RFacts.Facts.ok.fast reads only the votes of the node and the starts; it is
+# RFacts.Facts.ok, so Nodes.Raw.ok.fast is Nodes.Raw.ok.
+
+# an ask that starts no store starts not the store h
+def Ask.starts_not(
+  +h: Hashes.Hash,
+  +i: Ledgers.Id,
+  +k: Nat,
+  +r: Spec.Request
+) -> {
+  RFacts.Request.is_start(r) == False{}: Bool
+} -> {RFacts.Ask.starts(h, Types.Ask{i, k, r}) == False{}: Bool}:
+  x => (%Equal.sym(
+    Bool,
+    RFacts.Request.is_start(r),
+    False{},
+    x
+  ): {
+    Shared.Bool.when(
+      Bool,
+      _,
+      u => Hashes.Hash.is_eq(RFacts.Start.root(i, r), h),
+      u => False{}
+    )
+      == False{}: Bool
+  }; {==})
+
+# no ask collides with an ask that starts no store
+def Ask.collides_not_right(
+  +a: Types.Ask,
+  +i: Ledgers.Id,
+  +k: Nat,
+  +r: Spec.Request
+) -> {
+  RFacts.Request.is_start(r) == False{}: Bool
+} -> {RFacts.Ask.collides(a, Types.Ask{i, k, r}) == False{}: Bool}:
+  x => Knowns.Collides.off(a, Types.Ask{i, k, r})(Ask.starts_not(RFacts.Ask.root(a), i, k, r)(x))
+
+# an ask that starts no store collides with no ask
+def Ask.collides_not_left(
+  +i: Ledgers.Id,
+  +k: Nat,
+  +r: Spec.Request,
+  +b: Types.Ask
+) -> {
+  RFacts.Request.is_start(r) == False{}: Bool
+} -> {RFacts.Ask.collides(Types.Ask{i, k, r}, b) == False{}: Bool}:
+  x => (%Equal.sym(
+    Bool,
+    RFacts.Request.is_start(r),
+    False{},
+    x
+  ): {
+    Shared.Bool.when(
+      Bool,
+      Shared.Bool.when(
+        Bool,
+        _,
+        u => Hashes.Hash.is_eq(RFacts.Start.root(i, r), RFacts.Ask.root(Types.Ask{i, k, r})),
+        u => False{}
+      ),
+      un => Shared.Bool.when(
+        Bool,
+        RFacts.Ask.starts(RFacts.Ask.root(Types.Ask{i, k, r}), b),
+        u => Bool.not(RFacts.Ask.alike(Types.Ask{i, k, r}, b)),
+        u => False{}
+      ),
+      un => False{}
+    )
+      == False{}: Bool
+  }; {==})
+
+# an ask that starts no store collides with none of the asks xs
+def Asks.none(
+  +i: Ledgers.Id,
+  +k: Nat,
+  +r: Spec.Request,
+  xs: List<&2, Types.Ask>
+) -> {
+  RFacts.Request.is_start(r) == False{}: Bool
+} -> {
+  Shared.List.some(
+    ~Types.Ask,
+    ~Types.Ask,
+    ~(x => y => RFacts.Ask.collides(x, y)),
+    xs,
+    Types.Ask{i, k, r}
+  )
+    == False{}: Bool
+}:
+  match xs:
+    case Nil{}:
+      h => {==}
+    case Con{x, +rest}:
+      +h =>
+        %Equal.sym(
+          Bool,
+          RFacts.Ask.collides(Types.Ask{i, k, r}, x),
+          False{},
+          Ask.collides_not_left(i, k, r, x)(h)
+        ): {
+          List.any.if(
+            u => Shared.List.some(
+              ~Types.Ask,
+              ~Types.Ask,
+              ~(x => y => RFacts.Ask.collides(x, y)),
+              rest,
+              Types.Ask{i, k, r}
+            ),
+            _
+          )
+            == False{}: Bool
+        }
+        Asks.none(i, k, r, rest)(h)
+
+# an ask collides with a fact of fs exactly when it collides with a start
+# among fs
+def Starts.collides_has(
+  +a: Types.Ask,
+  fs: List<&2, Types.Fact>
+) -> {
+  Shared.List.some(
+    ~Types.Fact,
+    ~Types.Ask,
+    ~RFacts.Fact.collides,
+    fs,
+    a
+  )
+    == Shared.List.some(
+      ~Types.Ask,
+      ~Types.Ask,
+      ~(x => y => RFacts.Ask.collides(x, y)),
+      RFacts.Facts.starts(fs),
+      a
+    ): Bool
+}:
+  match fs:
+    case Nil{}:
+      {==}
+    case Con{Types.Fact.Vote{v, st, pk}, rest}:
+      Starts.collides_has(a, rest)
+    case Con{Types.Fact.Ask{Types.Ask{+i, +k, +r}}, +rest}:
+      Lists.Bool.by(
+        d => {RFacts.Request.is_start(r) == d: Bool} -> {List.any.if(u => Shared.List.some(~Types.Fact, ~Types.Ask, ~RFacts.Fact.collides, rest, a), RFacts.Ask.collides(a, Types.Ask{i, k, r})) == Shared.List.some(~Types.Ask, ~Types.Ask, ~(x => y => RFacts.Ask.collides(x, y)), List.filter.put(Types.Ask, Types.Ask{i, k, r}, RFacts.Facts.starts(rest), d), a): Bool},
+        RFacts.Request.is_start(r),
+        et => e => Equal.cong(Bool, Bool, z => List.any.if(u => z, RFacts.Ask.collides(a, Types.Ask{i, k, r})), Shared.List.some(~Types.Fact, ~Types.Ask, ~RFacts.Fact.collides, rest, a), Shared.List.some(~Types.Ask, ~Types.Ask, ~(x => y => RFacts.Ask.collides(x, y)), RFacts.Facts.starts(rest), a), Starts.collides_has(a, rest)),
+        ef => e =>
+          %Equal.sym(Bool, RFacts.Ask.collides(a, Types.Ask{i, k, r}), False{}, Ask.collides_not_right(a, i, k, r)(e)): {List.any.if(u => Shared.List.some(~Types.Fact, ~Types.Ask, ~RFacts.Fact.collides, rest, a), _) == Shared.List.some(~Types.Ask, ~Types.Ask, ~(x => y => RFacts.Ask.collides(x, y)), RFacts.Facts.starts(rest), a): Bool}
+          Starts.collides_has(a, rest))({==})
+
+# a fact of fs collides with a fact of all exactly when a start among fs
+# collides with a start among all
+def Starts.collided_has(
+  +all: List<&2, Types.Fact>,
+  fs: List<&2, Types.Fact>
+) -> {
+  Shared.List.some(
+    ~Types.Fact,
+    ~List<&2, Types.Fact>,
+    ~RFacts.Fact.collided,
+    fs,
+    all
+  )
+    == RFacts.Asks.collide(RFacts.Facts.starts(all), RFacts.Facts.starts(fs)): Bool
+}:
+  match fs:
+    case Nil{}:
+      {==}
+    case Con{Types.Fact.Vote{v, st, pk}, rest}:
+      Starts.collided_has(all, rest)
+    case Con{Types.Fact.Ask{Types.Ask{+i, +k, +r}}, +rest}:
+      Lists.Bool.by(
+        d => {RFacts.Request.is_start(r) == d: Bool} -> {List.any.if(u => Shared.List.some(~Types.Fact, ~List<&2, Types.Fact>, ~RFacts.Fact.collided, rest, all), Shared.List.some(~Types.Fact, ~Types.Ask, ~RFacts.Fact.collides, all, Types.Ask{i, k, r})) == RFacts.Asks.collide(RFacts.Facts.starts(all), List.filter.put(Types.Ask, Types.Ask{i, k, r}, RFacts.Facts.starts(rest), d)): Bool},
+        RFacts.Request.is_start(r),
+        et => e => Equal.trans(Bool, List.any.if(u => Shared.List.some(~Types.Fact, ~List<&2, Types.Fact>, ~RFacts.Fact.collided, rest, all), Shared.List.some(~Types.Fact, ~Types.Ask, ~RFacts.Fact.collides, all, Types.Ask{i, k, r})), List.any.if(u => Shared.List.some(~Types.Fact, ~List<&2, Types.Fact>, ~RFacts.Fact.collided, rest, all), Shared.List.some(~Types.Ask, ~Types.Ask, ~(x => y => RFacts.Ask.collides(x, y)), RFacts.Facts.starts(all), Types.Ask{i, k, r})), List.any.if(u => RFacts.Asks.collide(RFacts.Facts.starts(all), RFacts.Facts.starts(rest)), Shared.List.some(~Types.Ask, ~Types.Ask, ~(x => y => RFacts.Ask.collides(x, y)), RFacts.Facts.starts(all), Types.Ask{i, k, r})), Equal.cong(Bool, Bool, z => List.any.if(u => Shared.List.some(~Types.Fact, ~List<&2, Types.Fact>, ~RFacts.Fact.collided, rest, all), z), Shared.List.some(~Types.Fact, ~Types.Ask, ~RFacts.Fact.collides, all, Types.Ask{i, k, r}), Shared.List.some(~Types.Ask, ~Types.Ask, ~(x => y => RFacts.Ask.collides(x, y)), RFacts.Facts.starts(all), Types.Ask{i, k, r}), Starts.collides_has(Types.Ask{i, k, r}, all)), Equal.cong(Bool, Bool, z => List.any.if(u => z, Shared.List.some(~Types.Ask, ~Types.Ask, ~(x => y => RFacts.Ask.collides(x, y)), RFacts.Facts.starts(all), Types.Ask{i, k, r})), Shared.List.some(~Types.Fact, ~List<&2, Types.Fact>, ~RFacts.Fact.collided, rest, all), RFacts.Asks.collide(RFacts.Facts.starts(all), RFacts.Facts.starts(rest)), Starts.collided_has(all, rest))),
+        ef => e =>
+          %Equal.sym(Bool, Shared.List.some(~Types.Fact, ~Types.Ask, ~RFacts.Fact.collides, all, Types.Ask{i, k, r}), False{}, Equal.trans(Bool, Shared.List.some(~Types.Fact, ~Types.Ask, ~RFacts.Fact.collides, all, Types.Ask{i, k, r}), Shared.List.some(~Types.Ask, ~Types.Ask, ~(x => y => RFacts.Ask.collides(x, y)), RFacts.Facts.starts(all), Types.Ask{i, k, r}), False{}, Starts.collides_has(Types.Ask{i, k, r}, all), Asks.none(i, k, r, RFacts.Facts.starts(all))(e))): {List.any.if(u => Shared.List.some(~Types.Fact, ~List<&2, Types.Fact>, ~RFacts.Fact.collided, rest, all), _) == RFacts.Asks.collide(RFacts.Facts.starts(all), RFacts.Facts.starts(rest)): Bool}
+          Starts.collided_has(all, rest))({==})
+
+# two names that are not the same, the other way round
+def Name.ne_sym(
+  +a: String,
+  +b: String
+) -> {String.eq(a, b) == False{}: Bool} -> {String.eq(b, a) == False{}: Bool}:
+  h => Lists.Bool.by(
+    d => {String.eq(b, a) == d: Bool} -> {d == False{}: Bool},
+    String.eq(b, a),
+    et => e => Empty.absurd(
+      {True{} == False{}: Bool},
+      Shared.Bool.true_ne_false(
+        Equal.trans(
+          Bool,
+          True{},
+          String.eq(a, a),
+          False{},
+          Equal.sym(Bool, String.eq(a, a), True{}, Texts.String.eq_refl(a)),
+          (%Texts.String.eq_sound(b, a)(e): {String.eq(a, _) == False{}: Bool}; h)
+        )
+      )
+    ),
+    ef => e => {==}
+  )({==})
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- a proof does not run
+# the ballots among bs of the step whose words are k, in order
+def Steps.only(bs: List<&2, Spec.Ballot>, +k: List<&2, U32>) -> List<&2, Spec.Ballot>:
+  match bs:
+    case Nil{}:
+      []
+    case Con{Spec.Ballot{+v, +st, +x}, rest}:
+      List.filter.put(
+        Spec.Ballot,
+        Spec.Ballot{v, st, x},
+        Steps.only(rest, k),
+        Crits.Key.is_eq(k, st)
+      )
+
+# the map of ballots by step is well formed
+def Steps.wf(
+  bs: List<&2, Spec.Ballot>
+) -> {Crits.Crit.wf(~List<&2, Spec.Ballot>, RFacts.Ballots.by_step(bs), 0n) == True{}: Bool}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      match head:
+        case Spec.Ballot{voter, step, choice}:
+          +step = step
+          +tail = tail
+          Crits.Crit.upsert_wf(
+            ~List<&2, Spec.Ballot>,
+            ~w => x => x,
+            RFacts.Ballots.by_step(tail),
+            step,
+            Spec.Ballot{
+              voter,
+              step,
+              choice
+            }
+              <> RFacts.Bucket.of(
+                Crits.Crit.get.fuel(
+                  List<&2, Spec.Ballot>,
+                  1n+Crits.Key.size(step),
+                  RFacts.Ballots.by_step(tail),
+                  0n,
+                  Crits.Cur{0n, step},
+                  step
+                )
+              )
+          )(Steps.wf(tail))
+
+# under the words k of a step, the map of ballots by step holds the ballots
+# of that step, in order
+def Steps.get(
+  bs: List<&2, Spec.Ballot>,
+  +k: List<&2, U32>
+) -> {
+  RFacts.Bucket.of(
+    Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(bs), k)
+  )
+    == Steps.only(bs, k): List<&2, Spec.Ballot>
+}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{Spec.Ballot{+v, +st, +x}, +rest}:
+      %Equal.sym(
+        Maybe<&2, List<&2, Spec.Ballot>>,
+        Crits.Crit.get(
+          List<&2, Spec.Ballot>,
+          Crits.Crit.set(
+            ~List<&2, Spec.Ballot>,
+            RFacts.Ballots.by_step(rest),
+            st,
+            Spec.Ballot{
+              v,
+              st,
+              x
+            }
+              <> RFacts.Bucket.of(
+                Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(rest), st)
+              )
+          ),
+          k
+        ),
+        Bool.pick(
+          Maybe<&2, List<&2, Spec.Ballot>>,
+          Crits.Key.is_eq(k, st),
+          Some{
+            Spec.Ballot{
+              v,
+              st,
+              x
+            }
+              <> RFacts.Bucket.of(
+                Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(rest), st)
+              )
+          },
+          Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(rest), k)
+        ),
+        Crits.Dict.get_set.at(
+          ~List<&2, Spec.Ballot>,
+          RFacts.Ballots.by_step(rest),
+          st,
+          Spec.Ballot{
+            v,
+            st,
+            x
+          }
+            <> RFacts.Bucket.of(
+              Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(rest), st)
+            ),
+          k
+        )(Steps.wf(rest))
+      ): {
+        RFacts.Bucket.of(
+          _
+        )
+          == List.filter.put(
+            Spec.Ballot,
+            Spec.Ballot{v, st, x},
+            Steps.only(rest, k),
+            Crits.Key.is_eq(k, st)
+          ): List<&2, Spec.Ballot>
+      }
+      Lists.Bool.by(
+        d => {
+          Crits.Key.is_eq(k, st) == d: Bool
+        } -> {
+          RFacts.Bucket.of(
+            Bool.pick(
+              Maybe<&2, List<&2, Spec.Ballot>>,
+              d,
+              Some{
+                Spec.Ballot{
+                  v,
+                  st,
+                  x
+                }
+                  <> RFacts.Bucket.of(
+                    Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(rest), st)
+                  )
+              },
+              Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(rest), k)
+            )
+          )
+            == List.filter.put(
+              Spec.Ballot,
+              Spec.Ballot{v, st, x},
+              Steps.only(rest, k),
+              d
+            ): List<&2, Spec.Ballot>
+        },
+        Crits.Key.is_eq(k, st),
+        et => e => Equal.cong(
+          List<&2, Spec.Ballot>,
+          List<&2, Spec.Ballot>,
+          l => Spec.Ballot{v, st, x} <> l,
+          RFacts.Bucket.of(Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(rest), st)),
+          Steps.only(rest, k),
+          Equal.trans(
+            List<&2, Spec.Ballot>,
+            RFacts.Bucket.of(
+              Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(rest), st)
+            ),
+            RFacts.Bucket.of(
+              Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(rest), k)
+            ),
+            Steps.only(rest, k),
+            Equal.cong(
+              List<&2, U32>,
+              List<&2, Spec.Ballot>,
+              z => RFacts.Bucket.of(
+                Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(rest), z)
+              ),
+              st,
+              k,
+              Equal.sym(List<&2, U32>, k, st, Crits.Key.is_eq_sound(k, st)(e))
+            ),
+            Steps.get(rest, k)
+          )
+        ),
+        ef => e => Steps.get(rest, k)
+      )({==})
+
+# a test that is False either way is False
+def Lazy.false(c: Bool) -> {Shared.Bool.when(Bool, c, u => False{}, u => False{}) == False{}: Bool}:
+  +c = c
+  %Equal.sym(
+    Bool,
+    Shared.Bool.when(Bool, c, u => False{}, u => False{}),
+    Bool.pick(Bool, c, False{}, False{}),
+    Knowns.Bool.when_pick(Bool, c, False{}, False{})
+  ): {_ == False{}: Bool}; Crits.Crit.pick_self(Bool, c, False{})
+
+# two ballots of other steps do not clash
+def Steps.apart(
+  +v: String,
+  +sw: List<&2, U32>,
+  +x: List<&2, U32>,
+  +w: String,
+  +tw: List<&2, U32>,
+  +y: List<&2, U32>
+) -> {
+  Crits.Key.is_eq(sw, tw) == False{}: Bool
+} -> {RFacts.Ballot.clash.lazy(Spec.Ballot{v, sw, x}, Spec.Ballot{w, tw, y}) == False{}: Bool}:
+  h =>
+    %Equal.sym(
+      Bool,
+      Shared.List.is_eq(~U32, ~U32.is_eq, sw, tw),
+      False{},
+      Equal.trans(
+        Bool,
+        Shared.List.is_eq(~U32, ~U32.is_eq, sw, tw),
+        Crits.Key.is_eq(sw, tw),
+        False{},
+        Equal.sym(
+          Bool,
+          Crits.Key.is_eq(sw, tw),
+          Shared.List.is_eq(~U32, ~U32.is_eq, sw, tw),
+          Crits.Key.is_eq_list(sw, tw)
+        ),
+        h
+      )
+    ): {
+      Shared.Bool.when(
+        Bool,
+        String.eq(v, w),
+        u => Shared.Bool.when(Bool, _, u2 => Bool.not(RFacts.Words.is_eq(x, y)), u2 => False{}),
+        u => False{}
+      )
+        == False{}: Bool
+    }
+    Lazy.false(String.eq(v, w))
+
+# a ballot clashes with one of all exactly when it clashes with one of its
+# step among all
+def Steps.some_only(
+  +v: String,
+  +sw: List<&2, U32>,
+  +x: List<&2, U32>,
+  all: List<&2, Spec.Ballot>
+) -> {
+  Shared.List.some(
+    ~Spec.Ballot,
+    ~Spec.Ballot,
+    ~RFacts.Ballot.clash.lazy,
+    Steps.only(all, sw),
+    Spec.Ballot{v, sw, x}
+  )
+    == Shared.List.some(
+      ~Spec.Ballot,
+      ~Spec.Ballot,
+      ~RFacts.Ballot.clash.lazy,
+      all,
+      Spec.Ballot{v, sw, x}
+    ): Bool
+}:
+  match all:
+    case Nil{}:
+      {==}
+    case Con{Spec.Ballot{+w, +tw, +y}, +rest}:
+      Lists.Bool.by(
+        d => {Crits.Key.is_eq(sw, tw) == d: Bool} -> {Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, List.filter.put(Spec.Ballot, Spec.Ballot{w, tw, y}, Steps.only(rest, sw), d), Spec.Ballot{v, sw, x}) == List.any.if(u => Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, rest, Spec.Ballot{v, sw, x}), RFacts.Ballot.clash.lazy(Spec.Ballot{v, sw, x}, Spec.Ballot{w, tw, y})): Bool},
+        Crits.Key.is_eq(sw, tw),
+        et => e => Equal.cong(Bool, Bool, z => List.any.if(u => z, RFacts.Ballot.clash.lazy(Spec.Ballot{v, sw, x}, Spec.Ballot{w, tw, y})), Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, Steps.only(rest, sw), Spec.Ballot{v, sw, x}), Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, rest, Spec.Ballot{v, sw, x}), Steps.some_only(v, sw, x, rest)),
+        ef => e =>
+          %Equal.sym(Bool, RFacts.Ballot.clash.lazy(Spec.Ballot{v, sw, x}, Spec.Ballot{w, tw, y}), False{}, Steps.apart(v, sw, x, w, tw, y)(e)): {Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, Steps.only(rest, sw), Spec.Ballot{v, sw, x}) == List.any.if(u => Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, rest, Spec.Ballot{v, sw, x}), _): Bool}
+          Steps.some_only(v, sw, x, rest))({==})
+
+# Ballots.clash.by, with the ballots of all by step, is Ballots.clash
+def Steps.clash_by(
+  +all: List<&2, Spec.Ballot>,
+  bs: List<&2, Spec.Ballot>
+) -> {
+  RFacts.Ballots.clash.by(RFacts.Ballots.by_step(all), bs) == RFacts.Ballots.clash(all, bs): Bool
+}:
+  match bs:
+    case Nil{}:
+      {==}
+    case Con{head, tail}:
+      match head:
+        case Spec.Ballot{voter, step, choice}:
+          +step = step
+          %Equal.sym(
+            List<&2, Spec.Ballot>,
+            RFacts.Bucket.of(
+              Crits.Crit.get(List<&2, Spec.Ballot>, RFacts.Ballots.by_step(all), step)
+            ),
+            Steps.only(all, step),
+            Steps.get(all, step)
+          ):
+            {
+              List.any.if(
+                u => RFacts.Ballots.clash.by(RFacts.Ballots.by_step(all), tail),
+                Shared.List.some(
+                  Spec.Ballot,
+                  Spec.Ballot,
+                  RFacts.Ballot.clash.lazy,
+                  _,
+                  Spec.Ballot{voter, step, choice}
+                )
+              )
+                == List.any.if(
+                  u => RFacts.Ballots.clash(all, tail),
+                  Shared.List.some(
+                    Spec.Ballot,
+                    Spec.Ballot,
+                    RFacts.Ballot.clash.lazy,
+                    all,
+                    Spec.Ballot{voter, step, choice}
+                  )
+                ): Bool
+            }
+          %Equal.sym(
+            Bool,
+            Shared.List.some(
+              Spec.Ballot,
+              Spec.Ballot,
+              RFacts.Ballot.clash.lazy,
+              Steps.only(all, step),
+              Spec.Ballot{voter, step, choice}
+            ),
+            Shared.List.some(
+              Spec.Ballot,
+              Spec.Ballot,
+              RFacts.Ballot.clash.lazy,
+              all,
+              Spec.Ballot{voter, step, choice}
+            ),
+            Steps.some_only(voter, step, choice, all)
+          ):
+            {
+              List.any.if(
+                u => RFacts.Ballots.clash.by(RFacts.Ballots.by_step(all), tail),
+                _
+              )
+                == List.any.if(
+                  u => RFacts.Ballots.clash(all, tail),
+                  Shared.List.some(
+                    Spec.Ballot,
+                    Spec.Ballot,
+                    RFacts.Ballot.clash.lazy,
+                    all,
+                    Spec.Ballot{voter, step, choice}
+                  )
+                ): Bool
+            }
+          %Equal.sym(
+            Bool,
+            RFacts.Ballots.clash.by(RFacts.Ballots.by_step(all), tail),
+            RFacts.Ballots.clash(all, tail),
+            Steps.clash_by(all, tail)
+          ):
+            {
+              List.any.if(
+                u => _,
+                Shared.List.some(
+                  Spec.Ballot,
+                  Spec.Ballot,
+                  RFacts.Ballot.clash.lazy,
+                  all,
+                  Spec.Ballot{voter, step, choice}
+                )
+              )
+                == List.any.if(
+                  u => RFacts.Ballots.clash(all, tail),
+                  Shared.List.some(
+                    Spec.Ballot,
+                    Spec.Ballot,
+                    RFacts.Ballot.clash.lazy,
+                    all,
+                    Spec.Ballot{voter, step, choice}
+                  )
+                ): Bool
+            }
+          {==}
+
+# a test that reads b only when a is True is Bool.and
+def Lazy.and(
+  a: Bool,
+  b: Bool
+) -> {Shared.Bool.when(Bool, a, u => b, u => False{}) == Bool.and(a, b): Bool}:
+  match a:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# Ballot.clash.lazy is Ballot.clash
+def Ballot.lazy_eq(
+  a: Spec.Ballot,
+  b: Spec.Ballot
+) -> {RFacts.Ballot.clash.lazy(a, b) == RFacts.Ballot.clash(a, b): Bool}:
+  match a b:
+    case Spec.Ballot{+v, +s, +x} Spec.Ballot{+w, +t, +y}:
+      Equal.trans(
+        Bool,
+        Shared.Bool.when(
+          Bool,
+          String.eq(v, w),
+          u => Shared.Bool.when(
+            Bool,
+            RFacts.Words.is_eq(s, t),
+            u2 => Bool.not(RFacts.Words.is_eq(x, y)),
+            u2 => False{}
+          ),
+          u => False{}
+        ),
+        Shared.Bool.when(
+          Bool,
+          String.eq(v, w),
+          u => Bool.and(RFacts.Words.is_eq(s, t), Bool.not(RFacts.Words.is_eq(x, y))),
+          u => False{}
+        ),
+        Bool.and(
+          String.eq(v, w),
+          Bool.and(RFacts.Words.is_eq(s, t), Bool.not(RFacts.Words.is_eq(x, y)))
+        ),
+        Equal.cong(
+          Bool,
+          Bool,
+          z => Shared.Bool.when(Bool, String.eq(v, w), u => z, u => False{}),
+          Shared.Bool.when(
+            Bool,
+            RFacts.Words.is_eq(s, t),
+            u2 => Bool.not(RFacts.Words.is_eq(x, y)),
+            u2 => False{}
+          ),
+          Bool.and(RFacts.Words.is_eq(s, t), Bool.not(RFacts.Words.is_eq(x, y))),
+          Lazy.and(RFacts.Words.is_eq(s, t), Bool.not(RFacts.Words.is_eq(x, y)))
+        ),
+        Lazy.and(
+          String.eq(v, w),
+          Bool.and(RFacts.Words.is_eq(s, t), Bool.not(RFacts.Words.is_eq(x, y)))
+        )
+      )
+
+# a ballot of the voter name clashes with a fact of fs exactly when it
+# clashes with a ballot of name among fs
+def Own.clash_has(
+  +w: String,
+  +sw: List<&2, U32>,
+  +cw: List<&2, U32>,
+  +name: String,
+  fs: List<&2, Types.Fact>
+) -> {
+  String.eq(w, name) == True{}: Bool
+} -> {
+  Shared.List.some(
+    ~Types.Fact,
+    ~Spec.Ballot,
+    ~RFacts.Fact.clashes,
+    fs,
+    Spec.Ballot{w, sw, cw}
+  )
+    == Shared.List.some(
+      ~Spec.Ballot,
+      ~Spec.Ballot,
+      ~RFacts.Ballot.clash.lazy,
+      RFacts.Facts.own(name, fs),
+      Spec.Ballot{w, sw, cw}
+    ): Bool
+}:
+  match fs:
+    case Nil{}:
+      hw => {==}
+    case Con{Types.Fact.Ask{q}, rest}:
+      hw => Own.clash_has(w, sw, cw, name, rest)(hw)
+    case Con{Types.Fact.Vote{+v, +st, +pk}, +rest}:
+      +hw => Lists.Bool.by(
+        d => {String.eq(v, name) == d: Bool} -> {List.any.if(u => Shared.List.some(~Types.Fact, ~Spec.Ballot, ~RFacts.Fact.clashes, rest, Spec.Ballot{w, sw, cw}), RFacts.Ballot.clash(Spec.Ballot{w, sw, cw}, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)})) == Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, List.filter.put(Spec.Ballot, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}, RFacts.Facts.own(name, rest), d), Spec.Ballot{w, sw, cw}): Bool},
+        String.eq(v, name),
+        et => e => Equal.trans(Bool, List.any.if(u => Shared.List.some(~Types.Fact, ~Spec.Ballot, ~RFacts.Fact.clashes, rest, Spec.Ballot{w, sw, cw}), RFacts.Ballot.clash(Spec.Ballot{w, sw, cw}, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)})), List.any.if(u => Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, RFacts.Facts.own(name, rest), Spec.Ballot{w, sw, cw}), RFacts.Ballot.clash(Spec.Ballot{w, sw, cw}, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)})), List.any.if(u => Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, RFacts.Facts.own(name, rest), Spec.Ballot{w, sw, cw}), RFacts.Ballot.clash.lazy(Spec.Ballot{w, sw, cw}, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)})), Equal.cong(Bool, Bool, z => List.any.if(u => z, RFacts.Ballot.clash(Spec.Ballot{w, sw, cw}, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)})), Shared.List.some(~Types.Fact, ~Spec.Ballot, ~RFacts.Fact.clashes, rest, Spec.Ballot{w, sw, cw}), Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, RFacts.Facts.own(name, rest), Spec.Ballot{w, sw, cw}), Own.clash_has(w, sw, cw, name, rest)(hw)), Equal.cong(Bool, Bool, z => List.any.if(u => Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, RFacts.Facts.own(name, rest), Spec.Ballot{w, sw, cw}), z), RFacts.Ballot.clash(Spec.Ballot{w, sw, cw}, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}), RFacts.Ballot.clash.lazy(Spec.Ballot{w, sw, cw}, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}), Equal.sym(Bool, RFacts.Ballot.clash.lazy(Spec.Ballot{w, sw, cw}, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}), RFacts.Ballot.clash(Spec.Ballot{w, sw, cw}, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}), Ballot.lazy_eq(Spec.Ballot{w, sw, cw}, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)})))),
+        ef => e =>
+          %Equal.sym(Bool, String.eq(w, v), False{}, (%Equal.sym(String, w, name, Texts.String.eq_sound(w, name)(hw)): {String.eq(_, v) == False{}: Bool}; Name.ne_sym(v, name)(e))): {List.any.if(u => Shared.List.some(~Types.Fact, ~Spec.Ballot, ~RFacts.Fact.clashes, rest, Spec.Ballot{w, sw, cw}), Bool.and(_, Bool.and(RFacts.Words.is_eq(sw, Coded.Step.words(st)), Bool.not(RFacts.Words.is_eq(cw, Coded.Cast.words(pk)))))) == Shared.List.some(~Spec.Ballot, ~Spec.Ballot, ~RFacts.Ballot.clash.lazy, RFacts.Facts.own(name, rest), Spec.Ballot{w, sw, cw}): Bool}
+          Own.clash_has(w, sw, cw, name, rest)(hw))({==})
+
+# a fact of fs names name a liar, against the facts all, exactly when a
+# ballot of name among fs clashes with one among all
+def Own.liars_has(
+  +name: String,
+  +all: List<&2, Types.Fact>,
+  fs: List<&2, Types.Fact>
+) -> {
+  List.contains(
+    ~String,
+    ~String.eq,
+    RFacts.Facts.liars.go(all, fs),
+    name
+  )
+    == RFacts.Ballots.clash(RFacts.Facts.own(name, all), RFacts.Facts.own(name, fs)): Bool
+}:
+  match fs:
+    case Nil{}:
+      {==}
+    case Con{Types.Fact.Ask{q}, rest}:
+      Own.liars_has(name, all, rest)
+    case Con{Types.Fact.Vote{+v, +st, +pk}, +rest}:
+      Lists.Bool.by(
+        d => {String.eq(v, name) == d: Bool} -> {List.contains(~String, ~String.eq, Shared.Maybe.cons(String, Shared.Maybe.when(String, Shared.List.some(~Types.Fact, ~Spec.Ballot, ~RFacts.Fact.clashes, all, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}), u => Some{RFacts.Ballot.voter(Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)})}), RFacts.Facts.liars.go(all, rest)), name) == RFacts.Ballots.clash(RFacts.Facts.own(name, all), List.filter.put(Spec.Ballot, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}, RFacts.Facts.own(name, rest), d)): Bool},
+        String.eq(v, name),
+        +et => +e =>
+          %Own.clash_has(v, Coded.Step.words(st), Coded.Cast.words(pk), name, all)(e): {List.contains(~String, ~String.eq, Shared.Maybe.cons(String, Shared.Maybe.when(String, Shared.List.some(~Types.Fact, ~Spec.Ballot, ~RFacts.Fact.clashes, all, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}), u => Some{RFacts.Ballot.voter(Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)})}), RFacts.Facts.liars.go(all, rest)), name) == List.any.if(u => RFacts.Ballots.clash(RFacts.Facts.own(name, all), RFacts.Facts.own(name, rest)), _): Bool}
+          Lists.Bool.by(
+        d2 => {Shared.List.some(~Types.Fact, ~Spec.Ballot, ~RFacts.Fact.clashes, all, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}) == d2: Bool} -> {List.contains(~String, ~String.eq, Shared.Maybe.cons(String, Shared.Maybe.when(String, d2, u => Some{v}), RFacts.Facts.liars.go(all, rest)), name) == List.any.if(u => RFacts.Ballots.clash(RFacts.Facts.own(name, all), RFacts.Facts.own(name, rest)), d2): Bool},
+        Shared.List.some(~Types.Fact, ~Spec.Ballot, ~RFacts.Fact.clashes, all, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}),
+        ct => e2 =>
+          %Equal.sym(Bool, String.eq(v, name), True{}, e): {List.any.if(u => List.contains(~String, ~String.eq, RFacts.Facts.liars.go(all, rest), name), _) == True{}: Bool}
+          {==},
+        cf => e2 => Own.liars_has(name, all, rest))({==}),
+        ef => e => Lists.Bool.by(
+        d2 => {Shared.List.some(~Types.Fact, ~Spec.Ballot, ~RFacts.Fact.clashes, all, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}) == d2: Bool} -> {List.contains(~String, ~String.eq, Shared.Maybe.cons(String, Shared.Maybe.when(String, d2, u => Some{v}), RFacts.Facts.liars.go(all, rest)), name) == RFacts.Ballots.clash(RFacts.Facts.own(name, all), RFacts.Facts.own(name, rest)): Bool},
+        Shared.List.some(~Types.Fact, ~Spec.Ballot, ~RFacts.Fact.clashes, all, Spec.Ballot{v, Coded.Step.words(st), Coded.Cast.words(pk)}),
+        ct => e2 =>
+          %Equal.sym(Bool, String.eq(v, name), False{}, e): {List.any.if(u => List.contains(~String, ~String.eq, RFacts.Facts.liars.go(all, rest), name), _) == RFacts.Ballots.clash(RFacts.Facts.own(name, all), RFacts.Facts.own(name, rest)): Bool}
+          Own.liars_has(name, all, rest),
+        cf => e2 => Own.liars_has(name, all, rest))({==}))({==})
+
+# a test that is True unless c holds, and then is r, is Bool.and(not c, r)
+def Lazy.not_and(
+  c: Bool,
+  r: Bool
+) -> {Shared.Bool.when(Bool, c, u => False{}, u => r) == Bool.and(Bool.not(c), r): Bool}:
+  match c:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# a test that is b when c holds, else True, is Bool.or(not c, b)
+def Lazy.not_or(
+  c: Bool,
+  b: Bool
+) -> {Shared.Bool.when(Bool, c, u => b, u => True{}) == Bool.or(Bool.not(c), b): Bool}:
+  match c:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+# RFacts.Facts.ok.fast, with each test read whole, is RFacts.Facts.ok
+def Sound.eager(
+  +name: String,
+  +s: RFacts.Plain()
+) -> {
+  Bool.and(
+    Bool.not(
+      RFacts.Ballots.clash(
+        RFacts.Facts.own(name, RFacts.Facts.list(s)),
+        RFacts.Facts.own(name, RFacts.Facts.list(s))
+      )
+    ),
+    Bool.or(
+      Bool.not(
+        RFacts.Asks.collide(
+          RFacts.Facts.starts(RFacts.Facts.list(s)),
+          RFacts.Facts.starts(RFacts.Facts.list(s))
+        )
+      ),
+      RFacts.Trust.broken(s, name)
+    )
+  )
+    == RFacts.Facts.ok(name, s): Bool
+}:
+  +fs = RFacts.Facts.list(s)
+  %Equal.sym(
+    Bool,
+    List.contains(~String, ~String.eq, RFacts.Facts.liars.go(fs, fs), name),
+    RFacts.Ballots.clash(RFacts.Facts.own(name, fs), RFacts.Facts.own(name, fs)),
+    Own.liars_has(name, fs, fs)
+  ): {
+    Bool.and(
+      Bool.not(
+        RFacts.Ballots.clash(
+          RFacts.Facts.own(name, RFacts.Facts.list(s)),
+          RFacts.Facts.own(name, RFacts.Facts.list(s))
+        )
+      ),
+      Bool.or(
+        Bool.not(
+          RFacts.Asks.collide(
+            RFacts.Facts.starts(RFacts.Facts.list(s)),
+            RFacts.Facts.starts(RFacts.Facts.list(s))
+          )
+        ),
+        RFacts.Trust.broken(s, name)
+      )
+    )
+      == Bool.and(
+        Bool.not(_),
+        Bool.or(Bool.not(RFacts.Facts.collide(s)), RFacts.Trust.broken(s, name))
+      ): Bool
+  }
+  %Equal.sym(
+    Bool,
+    Shared.List.some(~Types.Fact, ~List<&2, Types.Fact>, ~RFacts.Fact.collided, fs, fs),
+    RFacts.Asks.collide(RFacts.Facts.starts(fs), RFacts.Facts.starts(fs)),
+    Starts.collided_has(fs, fs)
+  ): {
+    Bool.and(
+      Bool.not(
+        RFacts.Ballots.clash(
+          RFacts.Facts.own(name, RFacts.Facts.list(s)),
+          RFacts.Facts.own(name, RFacts.Facts.list(s))
+        )
+      ),
+      Bool.or(
+        Bool.not(
+          RFacts.Asks.collide(
+            RFacts.Facts.starts(RFacts.Facts.list(s)),
+            RFacts.Facts.starts(RFacts.Facts.list(s))
+          )
+        ),
+        RFacts.Trust.broken(s, name)
+      )
+    )
+      == Bool.and(
+        Bool.not(RFacts.Ballots.clash(RFacts.Facts.own(name, fs), RFacts.Facts.own(name, fs))),
+        Bool.or(Bool.not(_), RFacts.Trust.broken(s, name))
+      ): Bool
+  }
+  {==}
+
+# RFacts.Facts.ok.fast is RFacts.Facts.ok
+def Sound.ok_fast(
+  +name: String,
+  +s: RFacts.Plain()
+) -> {RFacts.Facts.ok.fast(name, s) == RFacts.Facts.ok(name, s): Bool}:
+  Equal.trans(
+    Bool,
+    RFacts.Facts.ok.fast(name, s),
+    Shared.Bool.when(
+      Bool,
+      RFacts.Ballots.clash(
+        RFacts.Facts.own(name, RFacts.Facts.list(s)),
+        RFacts.Facts.own(name, RFacts.Facts.list(s))
+      ),
+      u => False{},
+      u => Shared.Bool.when(
+        Bool,
+        RFacts.Asks.collide(
+          RFacts.Facts.starts(RFacts.Facts.list(s)),
+          RFacts.Facts.starts(RFacts.Facts.list(s))
+        ),
+        u2 => RFacts.Trust.broken(s, name),
+        u2 => True{}
+      )
+    ),
+    RFacts.Facts.ok(name, s),
+    Equal.cong(
+      Bool,
+      Bool,
+      z => Shared.Bool.when(
+        Bool,
+        z,
+        u => False{},
+        u => Shared.Bool.when(
+          Bool,
+          RFacts.Asks.collide(
+            RFacts.Facts.starts(RFacts.Facts.list(s)),
+            RFacts.Facts.starts(RFacts.Facts.list(s))
+          ),
+          u2 => RFacts.Trust.broken(s, name),
+          u2 => True{}
+        )
+      ),
+      RFacts.Ballots.clash.by(
+        RFacts.Ballots.by_step(RFacts.Facts.own(name, RFacts.Facts.list(s))),
+        RFacts.Facts.own(name, RFacts.Facts.list(s))
+      ),
+      RFacts.Ballots.clash(
+        RFacts.Facts.own(name, RFacts.Facts.list(s)),
+        RFacts.Facts.own(name, RFacts.Facts.list(s))
+      ),
+      Steps.clash_by(
+        RFacts.Facts.own(name, RFacts.Facts.list(s)),
+        RFacts.Facts.own(name, RFacts.Facts.list(s))
+      )
+    ),
+    Equal.trans(
+      Bool,
+      Shared.Bool.when(
+        Bool,
+        RFacts.Ballots.clash(
+          RFacts.Facts.own(name, RFacts.Facts.list(s)),
+          RFacts.Facts.own(name, RFacts.Facts.list(s))
+        ),
+        u => False{},
+        u => Shared.Bool.when(
+          Bool,
+          RFacts.Asks.collide(
+            RFacts.Facts.starts(RFacts.Facts.list(s)),
+            RFacts.Facts.starts(RFacts.Facts.list(s))
+          ),
+          u2 => RFacts.Trust.broken(s, name),
+          u2 => True{}
+        )
+      ),
+      Bool.and(
+        Bool.not(
+          RFacts.Ballots.clash(
+            RFacts.Facts.own(name, RFacts.Facts.list(s)),
+            RFacts.Facts.own(name, RFacts.Facts.list(s))
+          )
+        ),
+        Bool.or(
+          Bool.not(
+            RFacts.Asks.collide(
+              RFacts.Facts.starts(RFacts.Facts.list(s)),
+              RFacts.Facts.starts(RFacts.Facts.list(s))
+            )
+          ),
+          RFacts.Trust.broken(s, name)
+        )
+      ),
+      RFacts.Facts.ok(name, s),
+      Equal.trans(
+        Bool,
+        Shared.Bool.when(
+          Bool,
+          RFacts.Ballots.clash(
+            RFacts.Facts.own(name, RFacts.Facts.list(s)),
+            RFacts.Facts.own(name, RFacts.Facts.list(s))
+          ),
+          u => False{},
+          u => Shared.Bool.when(
+            Bool,
+            RFacts.Asks.collide(
+              RFacts.Facts.starts(RFacts.Facts.list(s)),
+              RFacts.Facts.starts(RFacts.Facts.list(s))
+            ),
+            u2 => RFacts.Trust.broken(s, name),
+            u2 => True{}
+          )
+        ),
+        Shared.Bool.when(
+          Bool,
+          RFacts.Ballots.clash(
+            RFacts.Facts.own(name, RFacts.Facts.list(s)),
+            RFacts.Facts.own(name, RFacts.Facts.list(s))
+          ),
+          u => False{},
+          u => Bool.or(
+            Bool.not(
+              RFacts.Asks.collide(
+                RFacts.Facts.starts(RFacts.Facts.list(s)),
+                RFacts.Facts.starts(RFacts.Facts.list(s))
+              )
+            ),
+            RFacts.Trust.broken(s, name)
+          )
+        ),
+        Bool.and(
+          Bool.not(
+            RFacts.Ballots.clash(
+              RFacts.Facts.own(name, RFacts.Facts.list(s)),
+              RFacts.Facts.own(name, RFacts.Facts.list(s))
+            )
+          ),
+          Bool.or(
+            Bool.not(
+              RFacts.Asks.collide(
+                RFacts.Facts.starts(RFacts.Facts.list(s)),
+                RFacts.Facts.starts(RFacts.Facts.list(s))
+              )
+            ),
+            RFacts.Trust.broken(s, name)
+          )
+        ),
+        Equal.cong(
+          Bool,
+          Bool,
+          z => Shared.Bool.when(
+            Bool,
+            RFacts.Ballots.clash(
+              RFacts.Facts.own(name, RFacts.Facts.list(s)),
+              RFacts.Facts.own(name, RFacts.Facts.list(s))
+            ),
+            u => False{},
+            u => z
+          ),
+          Shared.Bool.when(
+            Bool,
+            RFacts.Asks.collide(
+              RFacts.Facts.starts(RFacts.Facts.list(s)),
+              RFacts.Facts.starts(RFacts.Facts.list(s))
+            ),
+            u2 => RFacts.Trust.broken(s, name),
+            u2 => True{}
+          ),
+          Bool.or(
+            Bool.not(
+              RFacts.Asks.collide(
+                RFacts.Facts.starts(RFacts.Facts.list(s)),
+                RFacts.Facts.starts(RFacts.Facts.list(s))
+              )
+            ),
+            RFacts.Trust.broken(s, name)
+          ),
+          Lazy.not_or(
+            RFacts.Asks.collide(
+              RFacts.Facts.starts(RFacts.Facts.list(s)),
+              RFacts.Facts.starts(RFacts.Facts.list(s))
+            ),
+            RFacts.Trust.broken(s, name)
+          )
+        ),
+        Lazy.not_and(
+          RFacts.Ballots.clash(
+            RFacts.Facts.own(name, RFacts.Facts.list(s)),
+            RFacts.Facts.own(name, RFacts.Facts.list(s))
+          ),
+          Bool.or(
+            Bool.not(
+              RFacts.Asks.collide(
+                RFacts.Facts.starts(RFacts.Facts.list(s)),
+                RFacts.Facts.starts(RFacts.Facts.list(s))
+              )
+            ),
+            RFacts.Trust.broken(s, name)
+          )
+        )
+      ),
+      Sound.eager(name, s)
+    )
+  )
+
+# Raw.ok.fast is Raw.ok
+def Raw.ok_fast(r: Nodes.Raw) -> {Nodes.Raw.ok.fast(r) == Nodes.Raw.ok(r): Bool}:
+  match r:
+    case Nodes.Raw{+name, ws, ms, st, +fs, +ps}:
+      Equal.trans(
+        Bool,
+        Shared.Bool.when(
+          Bool,
+          Nodes.Raw.set(fs, ps),
+          u => Shared.Bool.when(
+            Bool,
+            RFacts.Facts.ok.fast(name, fs),
+            u2 => Bool.not(RFacts.Trust.reserved(name)),
+            u2 => False{}
+          ),
+          u => False{}
+        ),
+        Bool.and(
+          Nodes.Raw.set(fs, ps),
+          Bool.and(RFacts.Facts.ok.fast(name, fs), Bool.not(RFacts.Trust.reserved(name)))
+        ),
+        Nodes.Raw.ok(Nodes.Raw{name, ws, ms, st, fs, ps}),
+        Equal.trans(
+          Bool,
+          Shared.Bool.when(
+            Bool,
+            Nodes.Raw.set(fs, ps),
+            u => Shared.Bool.when(
+              Bool,
+              RFacts.Facts.ok.fast(name, fs),
+              u2 => Bool.not(RFacts.Trust.reserved(name)),
+              u2 => False{}
+            ),
+            u => False{}
+          ),
+          Shared.Bool.when(
+            Bool,
+            Nodes.Raw.set(fs, ps),
+            u => Bool.and(RFacts.Facts.ok.fast(name, fs), Bool.not(RFacts.Trust.reserved(name))),
+            u => False{}
+          ),
+          Bool.and(
+            Nodes.Raw.set(fs, ps),
+            Bool.and(RFacts.Facts.ok.fast(name, fs), Bool.not(RFacts.Trust.reserved(name)))
+          ),
+          Equal.cong(
+            Bool,
+            Bool,
+            z => Shared.Bool.when(Bool, Nodes.Raw.set(fs, ps), u => z, u => False{}),
+            Shared.Bool.when(
+              Bool,
+              RFacts.Facts.ok.fast(name, fs),
+              u2 => Bool.not(RFacts.Trust.reserved(name)),
+              u2 => False{}
+            ),
+            Bool.and(RFacts.Facts.ok.fast(name, fs), Bool.not(RFacts.Trust.reserved(name))),
+            Lazy.and(RFacts.Facts.ok.fast(name, fs), Bool.not(RFacts.Trust.reserved(name)))
+          ),
+          Lazy.and(
+            Nodes.Raw.set(fs, ps),
+            Bool.and(RFacts.Facts.ok.fast(name, fs), Bool.not(RFacts.Trust.reserved(name)))
+          )
+        ),
+        Equal.cong(
+          Bool,
+          Bool,
+          z => Bool.and(Nodes.Raw.set(fs, ps), Bool.and(z, Bool.not(RFacts.Trust.reserved(name)))),
+          RFacts.Facts.ok.fast(name, fs),
+          RFacts.Facts.ok(name, fs),
+          Sound.ok_fast(name, fs)
+        )
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
 # What a fast node shows
 # ----------------------

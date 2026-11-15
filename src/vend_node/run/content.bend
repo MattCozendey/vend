@@ -205,6 +205,73 @@ def Merge.paths(b: Files.Files(), o: Files.Files(), t: Files.Files()) -> List<&2
 def Merge.files(+b: Files.Files(), +o: Files.Files(), +t: Files.Files()) -> Files.Files():
   Merge.fold(b, o, t, Merge.paths(b, o, t), o)
 
+# Paths in order
+# --------------
+# The paths that a merge lists come from three contents, so one path can come
+# up to three times. A reply lists each path once, in the order of strings
+# (String.is_lt): a merge sort whose merge keeps one of two equal paths.
+
+# the paths xs and ys, each in order with no path twice, as one list in
+# order with no path twice; after n steps, the rest of both as they are
+def Paths.union(n: Nat, xs: List<&2, String>, ys: List<&2, String>) -> List<&2, String>:
+  match n xs ys:
+    case 0n a b:
+      List.append(&2, String, a, b)
+    case 1n+m Nil{} b:
+      b
+    case 1n+m Con{x, xr} Nil{}:
+      x <> xr
+    case 1n+m Con{+x, +xr} Con{+y, +yr}:
+      +m = m
+      Shared.Bool.when(
+        List<&2, String>,
+        String.eq(x, y),
+        u => x <> Paths.union(m, xr, yr),
+        u => Shared.Bool.when(
+          List<&2, String>,
+          String.is_lt(x, y),
+          u2 => x <> Paths.union(m, xr, y <> yr),
+          u2 => y <> Paths.union(m, x <> xr, yr)
+        )
+      )
+
+# the runs rs merged two by two, each merge in at most n steps
+def Paths.pass(+n: Nat, rs: List<&2, List<&2, String>>) -> List<&2, List<&2, String>>:
+  match rs:
+    case Nil{}:
+      []
+    case Con{r, Nil{}}:
+      [r]
+    case Con{a, Con{b, rest}}:
+      Paths.union(n, a, b) <> Paths.pass(n, rest)
+
+# the runs rs merged into one in at most n passes, each merge in at most k
+# steps; after n passes, the runs one after another
+def Paths.sort(n: Nat, +k: Nat, rs: List<&2, List<&2, String>>) -> List<&2, String>:
+  match n rs:
+    case 0n qs:
+      List.concat(&2, String, qs)
+    case 1n+m Nil{}:
+      []
+    case 1n+m Con{r, Nil{}}:
+      r
+    case 1n+m Con{a, Con{b, rest}}:
+      Paths.sort(m, k, Paths.pass(k, a <> b <> rest))
+
+# each of the paths xs as a run of its own
+def Paths.runs(xs: List<&2, String>) -> List<&2, List<&2, String>>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{x, rest}:
+      [x] <> Paths.runs(rest)
+
+# the paths xs in order, each once: as many passes and steps as xs has paths
+# is enough
+def Paths.order(+xs: List<&2, String>) -> List<&2, String>:
+  +n = List.length(&2, String, xs)
+  Paths.sort(n, n, Paths.runs(xs))
+
 # the paths among ps that clash
 def Merge.clashes.go(
   +b: Files.Files(),
@@ -223,9 +290,9 @@ def Merge.clashes.go(
         Maybe.is_none(&2, Maybe<&2, List<&2, U32>>, Merge.at(b, o, t, p))
       )
 
-# the paths that clash in the merge of o and t from b
+# the paths that clash in the merge of o and t from b, in order, each once
 def Merge.clashes(+b: Files.Files(), +o: Files.Files(), +t: Files.Files()) -> List<&2, String>:
-  Merge.clashes.go(b, o, t, Merge.paths(b, o, t))
+  Paths.order(Merge.clashes.go(b, o, t, Merge.paths(b, o, t)))
 
 # Merges of a few paths
 # ---------------------
@@ -409,7 +476,7 @@ def Merge.clashes.few(
   +t: Files.Files(),
   ps: List<&2, String>
 ) -> List<&2, String>:
-  Merge.clashes.few.of(Merge.clashes.go(b, o, t, ps), u => Merge.paths(b, o, t))
+  Paths.order(Merge.clashes.few.of(Merge.clashes.go(b, o, t, ps), u => Merge.paths(b, o, t)))
 
 # the merge of ours and theirs from base, as Merge.of gives it, when theirs
 # may differ from base only at the paths ps

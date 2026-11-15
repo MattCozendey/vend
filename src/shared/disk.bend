@@ -4,9 +4,10 @@ import Base
 # ----
 # The effects of a program that keeps its state in files: steps that may
 # fail with a message, files read and written whole as bytes, words kept as
-# bytes, and the directories and the removal of files that Base has no
-# effect for, done by the programs of the operating system (mkdir, ls, rm).
-# This is code that runs and talks to the operating system: no law covers it.
+# bytes, the directories and the removal of files that Base has no effect
+# for, done by the programs of the operating system (mkdir, ls, rm), and
+# messages over TCP. This is code that runs and talks to the operating
+# system: no law covers it.
 
 # Steps that may fail
 # -------------------
@@ -110,6 +111,78 @@ def Words.of_bytes(bs: List<&2, U32>, acc: List<&2, U32>) -> Maybe<&2, List<&2, 
     case _:
       None{}
 
+# Words as short bytes
+# --------------------
+# A word kept in as few bytes as it needs (LEB128): seven bits to a byte, the
+# lowest first, and the highest bit set on each byte but the last of a word.
+# A word below 128 (a count, a tag, an ASCII byte) is one byte; a word of a
+# SHA-256 at most five. Every UTF-8 form of a word below 0x110000 is as long
+# or longer, and a word of four bytes is longer for each word below 2^28.
+
+# the k lowest groups of seven bits of the word w, the lowest first, each but
+# the last with its highest bit set, then rest
+def Short.put(k: Nat, +w: U32, rest: List<&2, U32>) -> List<&2, U32>:
+  match k:
+    case 0n:
+      rest
+    case 1n+m:
+      +m = m
+      more = Bool.to_u32(Bool.not(Nat.is_eq(m, 0n)))
+      (w % 128 + more * 128: U32) <> Short.put(m, (w / 128: U32), rest)
+
+# how many bytes the word w takes
+def Short.size(+w: U32) -> Nat:
+  Bool.pick(
+    Nat,
+    (w < 128: U32),
+    1n,
+    Bool.pick(
+      Nat,
+      (w < 16384: U32),
+      2n,
+      Bool.pick(Nat, (w < 2097152: U32), 3n, Bool.pick(Nat, (w < 268435456: U32), 4n, 5n))
+    )
+  )
+
+# the short bytes of the words ws, then rest
+def Short.bytes(ws: List<&2, U32>, rest: List<&2, U32>) -> List<&2, U32>:
+  match ws:
+    case Nil{}:
+      rest
+    case Con{+w, more}:
+      Short.put(Short.size(w), w, Short.bytes(more, rest))
+
+# the words of the short bytes bs, after the words out in reverse order and
+# the part acc of a word whose next group of seven bits has the value mul;
+# none when the bytes end inside a word
+def Short.read(
+  bs: List<&2, U32>,
+  acc: U32,
+  +mul: U32,
+  out: List<&2, U32>
+) -> Maybe<&2, List<&2, U32>>:
+  match bs:
+    case Nil{}:
+      Bool.pick(
+        Maybe<&2, List<&2, U32>>,
+        U32.is_eq(mul, 1),
+        Some{List.reverse(&2, U32, out)},
+        None{}
+      )
+    case Con{+b, rest}:
+      +x = (acc + (b % 128: U32) * mul: U32)
+      +last = (b < 128: U32)
+      Short.read(
+        rest,
+        Bool.pick(U32, last, 0, x),
+        Bool.pick(U32, last, 1, (mul * 128: U32)),
+        List.filter.put(U32, x, out, last)
+      )
+
+# the words of the short bytes bs; none when they end inside a word
+def Short.words(bs: List<&2, U32>) -> Maybe<&2, List<&2, U32>>:
+  Short.read(bs, 0, 1, [])
+
 # Files
 # -----
 
@@ -188,6 +261,12 @@ def Disk.words(+path: String) -> Run(List<&2, U32>):
     bs: List<&2, U32> <- Disk.read(path)
     Words.got(path, Words.of_bytes(bs, []))
 
+# the words of the file at the path path, kept as short bytes
+def Disk.shorts(+path: String) -> Run(List<&2, U32>):
+  do Run<List<&2, U32>>:
+    bs: List<&2, U32> <- Disk.read(path)
+    Words.got(path, Short.words(bs))
+
 # Programs
 # --------
 
@@ -226,3 +305,177 @@ def Disk.remove(paths: List<String>) -> Run(Unit):
   do Run<Unit>:
     out: String <- Program.run("rm", "-f" <> paths)
     return Unit{}
+
+# Messages over TCP
+# -----------------
+# A message is its length in bytes, as four bytes, the highest first, then
+# its bytes. A socket is a handle that each step hands on, so a step on a
+# socket answers the socket beside its result.
+
+# a step on a socket that answers a value of A, or a message that says why it
+# could not, with the socket
+def Sock(-A: Type) -> Type:
+  IO(Socket & Result<&1, &1, String, A>)
+
+# the step on the socket s that answers x
+def Sock.pure(-A: Type, s: Socket, x: A) -> Sock(A):
+  IO.pure(Socket & Result<&1, &1, String, A>, (s, Done{x}))
+
+# what f does with the socket and the value of p; a message of p stays
+def Sock.next(
+  -A: Type,
+  -B: Type,
+  p: Socket & Result<&1, &1, String, A>,
+  f: Socket -> A -> Sock(B)
+) -> Sock(B):
+  match p:
+    case (s, Fail{e}):
+      IO.pure(Socket & Result<&1, &1, String, B>, (s, Fail{e}))
+    case (s, Done{x}):
+      f(s)(x)
+
+# the step m, then f on its socket and value
+def Sock.bind(-A: Type, -B: Type, m: Sock(A), f: Socket -> A -> Sock(B)) -> Sock(B):
+  IO.bind(
+    Socket & Result<&1, &1, String, A>,
+    Socket & Result<&1, &1, String, B>,
+    m,
+    p => Sock.next(A, B, p, f)
+  )
+
+# what a step on a socket answered, and the socket closed
+def Sock.closed(-A: Type, p: Socket & Result<&1, &1, String, A>) -> Run(A):
+  (s, r) = p
+  IO.bind(
+    Unit,
+    Result<&1, &1, String, A>,
+    Socket.close(s),
+    u => IO.pure(Result<&1, &1, String, A>, r)
+  )
+
+# the step on a socket m, as a step that closes the socket once it is done
+def Sock.close(-A: Type, m: Sock(A)) -> Run(A):
+  IO.bind(Socket & Result<&1, &1, String, A>, Result<&1, &1, String, A>, m, p => Sock.closed(A, p))
+
+# what a send answered, as a step on its socket
+def Net.sent(
+  what: String,
+  p: Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit>
+) -> Sock(Unit):
+  match p:
+    case (s, Fail{((code, msg), rest)}):
+      IO.pure(Socket & Result<&1, &1, String, Unit>, (s, Fail{what ++ ": " ++ msg}))
+    case (s, Done{u}):
+      IO.pure(Socket & Result<&1, &1, String, Unit>, (s, Done{u}))
+
+# the bytes bs sent on the socket s as one message
+def Net.send(s: Socket, +bs: List<&2, U32>) -> Sock(Unit):
+  n = U32.from_nat(List.length(&2, U32, bs))
+  IO.bind(
+    Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit>,
+    Socket & Result<&1, &1, String, Unit>,
+    TCP.send_bytes(s, Words.bytes([n], bs)),
+    p => Net.sent("send", p)
+  )
+
+# f on both sides of the pair p
+def Pair.on(-A: Type, -B: Type, -C: Type, p: A & B, f: A -> B -> C) -> C:
+  (a, b) = p
+  f(a)(b)
+
+# what f does with the socket t and the bytes that a receive on it answered
+# (r); it fails when none came in time, or the connection closed
+def Net.got(
+  t: Socket,
+  r: Poll<&1, &1, Result<&1, &1, U32 & String, Maybe<&1, List<&2, U32>>>, Unit>,
+  f: Socket -> List<&2, U32> -> Sock(List<&2, U32>)
+) -> Sock(List<&2, U32>):
+  match r:
+    case Wait{u}:
+      IO.pure(
+        Socket & Result<&1, &1, String, List<&2, U32>>,
+        (t, Fail{"receive: the other node sent nothing in time"})
+      )
+    case Ready{Fail{(code, msg)}}:
+      IO.pure(Socket & Result<&1, &1, String, List<&2, U32>>, (t, Fail{"receive: " ++ msg}))
+    case Ready{Done{None{}}}:
+      IO.pure(
+        Socket & Result<&1, &1, String, List<&2, U32>>,
+        (t, Fail{"receive: the other node closed the connection"})
+      )
+    case Ready{Done{Some{bs}}}:
+      f(t)(bs)
+
+# n bytes from the socket s after the chunks acc in reverse order, unless
+# they all came (done), in at most k receives that each wait at most ms
+# milliseconds
+def Net.recv.go(
+  k: Nat,
+  done: Bool,
+  +ms: U32,
+  +n: U32,
+  acc: List<&2, List<&2, U32>>,
+  s: Socket
+) -> Sock(List<&2, U32>):
+  match k done:
+    case _ True{}:
+      Sock.pure(List<&2, U32>, s, List.concat(&2, U32, List.reverse(&2, List<&2, U32>, acc)))
+    case 0n False{}:
+      IO.pure(
+        Socket & Result<&1, &1, String, List<&2, U32>>,
+        (s, Fail{"receive: the message is too long"})
+      )
+    case 1n+j False{}:
+      IO.bind(
+        Socket & Poll<&1, &1, Result<&1, &1, U32 & String, Maybe<&1, List<&2, U32>>>, Unit>,
+        Socket & Result<&1, &1, String, List<&2, U32>>,
+        TCP.try_recv_bytes(s, n, ms),
+        q => Pair.on(
+          Socket,
+          Poll<&1, &1, Result<&1, &1, U32 & String, Maybe<&1, List<&2, U32>>>, Unit>,
+          Sock(List<&2, U32>),
+          q,
+          t => r => Net.got(
+            t,
+            r,
+            t2 => +bs => Net.recv.go(
+              j,
+              U32.is_eq(n, U32.from_nat(List.length(&2, U32, bs))),
+              ms,
+              (n - U32.from_nat(List.length(&2, U32, bs)): U32),
+              bs <> acc,
+              t2
+            )
+          )
+        )
+      )
+
+# n bytes from the socket s, each receive waiting at most ms milliseconds
+def Net.recv.some(s: Socket, +n: U32, ms: U32) -> Sock(List<&2, U32>):
+  Net.recv.go(1048576n, U32.is_eq(n, 0), ms, n, [], s)
+
+# the length that the four bytes m give, if they are four
+def Net.length(m: List<&2, U32>) -> Maybe<&2, U32>:
+  match m:
+    case Con{a, Con{b, Con{c, Con{d, Nil{}}}}}:
+      Some{(((a * 256 + b: U32) * 256 + c: U32) * 256 + d: U32)}
+    case _:
+      None{}
+
+# the bytes of the message whose length m gives, from the socket s
+def Net.body(s: Socket, m: Maybe<&2, U32>, ms: U32) -> Sock(List<&2, U32>):
+  match m:
+    case None{}:
+      IO.pure(Socket & Result<&1, &1, String, List<&2, U32>>, (s, Fail{"receive: no length"}))
+    case Some{n}:
+      Net.recv.some(s, n, ms)
+
+# the bytes of one message from the socket s, each receive waiting at most ms
+# milliseconds
+def Net.recv(s: Socket, +ms: U32) -> Sock(List<&2, U32>):
+  Sock.bind(
+    List<&2, U32>,
+    List<&2, U32>,
+    Net.recv.some(s, 4, ms),
+    t => bs => Net.body(t, Net.length(bs), ms)
+  )
