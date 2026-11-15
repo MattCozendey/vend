@@ -205,7 +205,8 @@ by copying it into `src/vend_node/` and running `bend <driver> -o <binary>` (`bu
 - No test was added to a test suite (each needs your approval); see Tested, not proven.
 - bend-synth was not the first step of each proof, against AGENTS.md: it was run on one proof
   ("no step applies"); the agents wrote the other proofs by hand.
-- Seals are not in the pure core (trusted, outside the spec).
+- Signatures are not in the pure core: the program signs each ballot of the node and checks each
+  vote that it receives (`hyper.bend`, `src/main.bend`). Names carry their key (README, Caveats).
 
 ## Trusted, and outside the spec
 

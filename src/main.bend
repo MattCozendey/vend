@@ -4,6 +4,7 @@ import ./shared/shared/ledger.bend as Ledgers
 import ./shared/shared/shared/shared/code.bend as Codes
 import ./shared/shared/shared/shared/crit.bend as Crits
 import ./shared/shared/shared/shared/hash.bend as Hashes
+import ./shared/shared/shared/shared/hyper.bend as Hyper
 import ./shared/shared/shared/shared/shared.bend as Shared
 import ./shared/shared/shared/text.bend as Texts
 import ./vend_node/codes.bend as Coded
@@ -26,12 +27,14 @@ import ./vend_node/types.bend as Types
 # reads and writes the state of the node, which is its facts and its parts.
 #
 # A data address is a directory:
-#   name          the name of the node, as UTF-8
-#   facts         the facts, each written once, as the codes of
-#                 Coded.Fact.code back to back, each word as 4 bytes
-#   parts/<hash>  the words of a part, each as 4 bytes, under the SHA-256 of
+#   name          the name of the node, as UTF-8: a label, '~' and its
+#                 public key in hex (Names)
+#   facts         the log of the facts, each written once (The log)
+#   parts/<hash>  the words of a part, as short bytes, under the SHA-256 of
 #                 its words in hex
-#   lock          there while a node runs on the address
+#   secret/       mode 700: seed, the secret seed of the key of the node in
+#                 hex, mode 600; next, the next leaf number it signs with
+#   lock          there while a node runs on the address: its process id
 
 # Hex
 # ---
@@ -111,6 +114,170 @@ def Hash.read(s: String) -> Maybe<&2, Hashes.Hash>:
 # the hash h in hex
 def Hash.show(h: Hashes.Hash) -> String:
   Hex.words(Hashes.Hash.code(h, []))
+
+# Node names
+# ----------
+# The name of a node is a label, '~' and the public key of its seed in hex
+# (Hyper.Key.public), so anyone checks a ballot from the name of its voter
+# alone. A label is letters, digits, '-', '_' and '.', and is not empty: a
+# name does not start with '~' (Facts.Trust.reserved), and prints as it is.
+
+# x is a letter, a digit, '-', '_' or '.'
+def Label.char.is(+x: U32) -> Bool:
+  Bool.or(
+    Bool.or(Bool.and((x >= 97: U32), (x <= 122: U32)), Bool.and((x >= 65: U32), (x <= 90: U32))),
+    Bool.or(
+      Bool.and((x >= 48: U32), (x <= 57: U32)),
+      Bool.or(U32.is_eq(x, 45), Bool.or(U32.is_eq(x, 95), U32.is_eq(x, 46)))
+    )
+  )
+
+# each character of s may be in a label, and those before it may (ok)
+def Label.chars(s: String, ok: Bool) -> Bool:
+  match s ok:
+    case _ False{}:
+      False{}
+    case SNil{} True{}:
+      True{}
+    case SCon{c, rest} True{}:
+      Label.chars(rest, Label.char.is(Char.to_u32(c)))
+
+# s is a label
+def Label.is(+s: String) -> Bool:
+  Label.chars(s, Bool.not(String.is_empty(s)))
+
+# the name of the node of the label l and the public key k
+def Name.of(l: String, k: Hashes.Hash) -> String:
+  l ++ "~" ++ Hash.show(k)
+
+# the key that the parts ps of a name give: a label, then a key in hex
+def Name.key.of(ps: List<&2, String>) -> Maybe<&2, Hashes.Hash>:
+  match ps:
+    case Con{+l, Con{k, Nil{}}}:
+      Shared.Bool.when(Maybe<&2, Hashes.Hash>, Label.is(l), u => Hash.read(k), u => None{})
+    case _:
+      None{}
+
+# the public key that the name n carries, if it is the name of a node
+def Name.key(n: String) -> Maybe<&2, Hashes.Hash>:
+  Name.key.of(String.split(n, '~'))
+
+# Signed facts
+# ------------
+# A vote travels and is kept with the signature of its voter, of the hash of
+# the code of the vote (Wire.digest). An ask carries none: a writer is not
+# trusted, and an ask checks by what it says. A node gives the core a vote
+# from another node only when its signature checks with the key in the name
+# of its voter; it refuses every other vote, and says so.
+
+# a fact, and the signature of its voter, if any
+type Signed is Data:
+  Signed{fact: Types.Fact, sig: Maybe<&2, Hyper.Sig>}
+
+# the hash of the code of the fact f: what its voter signs, and how a Sync
+# names it
+def Wire.digest(f: Types.Fact) -> Hashes.Hash:
+  Hashes.Sha.hash(Coded.Fact.code(f, []))
+
+# the fact f is an ask
+def Fact.is_ask(f: Types.Fact) -> Bool:
+  match f:
+    case Types.Fact.Ask{a}:
+      True{}
+    case Types.Fact.Vote{v, st, x}:
+      False{}
+
+# why the vote f does not check with the key k of its voter's name and the
+# signature m, if it does not
+def Signed.fault.of(
+  k: Maybe<&2, Hashes.Hash>,
+  f: Types.Fact,
+  m: Maybe<&2, Hyper.Sig>
+) -> Maybe<&2, String>:
+  match k m:
+    case None{} _:
+      Some{"the name of its voter carries no key"}
+    case Some{p} None{}:
+      Some{"it has no signature"}
+    case Some{p} Some{x}:
+      Bool.pick(
+        Maybe<&2, String>,
+        Hyper.Key.check(p, Wire.digest(f), x),
+        None{},
+        Some{"its signature does not check"}
+      )
+
+# why the signed fact x does not check, if it does not: an ask always checks
+def Signed.fault(x: Signed) -> Maybe<&2, String>:
+  match x:
+    case Signed{Types.Fact.Ask{a}, m}:
+      None{}
+    case Signed{Types.Fact.Vote{+v, st, c}, m}:
+      Signed.fault.of(Name.key(v), Types.Fact.Vote{v, st, c}, m)
+
+# the voter of the fact f, or the writer of its ask
+def Fact.by(f: Types.Fact) -> String:
+  match f:
+    case Types.Fact.Ask{Types.Ask{Ledgers.Id{w, r}, n, q}}:
+      w
+    case Types.Fact.Vote{v, st, c}:
+      v
+
+# what a node takes in from another: the facts that check, and why it
+# refused each other one
+type Taken is Data:
+  Taken{facts: List<&2, Signed>, refused: List<&2, String>}
+
+# t with the signed fact x, or with why it was refused (e)
+def Taken.put(x: Signed, e: Maybe<&2, String>, t: Taken) -> Taken:
+  match x e t:
+    case Signed{f, m} None{} Taken{fs, rs}:
+      Taken{Signed{f, m} <> fs, rs}
+    case Signed{f, m} Some{why} Taken{fs, rs}:
+      Taken{fs, ("refused a vote of " ++ Fact.by(f) ++ ": " ++ why) <> rs}
+
+# the facts of xs that the facts held do not hold, sorted into those that
+# check and those refused
+def Taken.sort(xs: List<&2, Signed>, +held: Facts.Plain()) -> Taken:
+  match xs:
+    case Nil{}:
+      Taken{[], []}
+    case Con{Signed{+f, +m}, +rest}:
+      Shared.Bool.when(
+        Taken,
+        Facts.Facts.has(held, f),
+        u => Taken.sort(rest, held),
+        u => Taken.put(Signed{f, m}, Signed.fault(Signed{f, m}), Taken.sort(rest, held))
+      )
+
+# the signatures ts with those of the facts xs, each under the key of its
+# fact
+def Sigs.add(xs: List<&2, Signed>, ts: Crits.Crit<Hyper.Sig>) -> Crits.Crit<Hyper.Sig>:
+  match xs:
+    case Nil{}:
+      ts
+    case Con{Signed{f, None{}}, rest}:
+      Sigs.add(rest, ts)
+    case Con{Signed{f, Some{x}}, rest}:
+      Sigs.add(rest, Crits.Crit.set(~Hyper.Sig, ts, Coded.Fact.words(f), x))
+
+# the signed fact x, then r
+def Signed.code(x: Signed, r: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Signed{f, m}:
+      Coded.Fact.code(f, Codes.Code.maybe(~Hyper.Sig, ~Hyper.Sig.code, m, r))
+
+# a signed fact
+def Signed.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Signed>>:
+  Codes.Code.two.read(
+    ~Types.Fact,
+    ~Maybe<&2, Hyper.Sig>,
+    ~Signed,
+    ~Coded.Fact.code.read,
+    ~(q => Codes.Code.maybe.read(~Hyper.Sig, ~Hyper.Sig.code.read, q)),
+    a => b => Signed{a, b},
+    ts
+  )
 
 # Names
 # -----
@@ -503,22 +670,26 @@ def Path.at(d: String, f: String) -> String:
 # its fact (Coded.Fact.code: tag 0, an ask; tag 1, a vote), or, for a vote
 # whose request an earlier record holds, tag 2: the number of that record,
 # then the vote without its ask (Ref.code). So the words of a request are
-# kept once, however many votes name it. The records are numbered from 0.
+# kept once, however many votes name it. A vote record ends with the code of
+# the signature of its voter, if any (Codes.Code.maybe): a vote of the node
+# that a trust broke has none (Facts.Trust). The records are numbered from 0.
+# Format 2 had no signatures; its votes cannot be checked, so a log of
+# format 2 is refused, not read: a node of format 3 starts with init.
 
 # the first words of a log of this format
 def Log.head() -> List<&2, U32>:
-  Texts.Bytes.of_text("vend facts 2\n")
+  Texts.Bytes.of_text("vend facts 3\n")
 
 # what the records of a log give beside the facts: how many there are, the
 # ask that each record that holds one holds, under the code of its number
-# (Log.key), and the number of the first record that holds each ask, under
-# the code of the ask
+# (Log.key), the number of the first record that holds each ask, under the
+# code of the ask, and the signature of each vote, under the key of the vote
 type Log is Data:
-  Log{count: Nat, asks: Crits.Crit<Types.Ask>, index: Crits.Crit<Nat>}
+  Log{count: Nat, asks: Crits.Crit<Types.Ask>, index: Crits.Crit<Nat>, sigs: Crits.Crit<Hyper.Sig>}
 
 # a log with no record
 def Log.new() -> Log:
-  Log{0n, Crits.Crit.new(Types.Ask), Crits.Crit.new(Nat)}
+  Log{0n, Crits.Crit.new(Types.Ask), Crits.Crit.new(Nat), Crits.Crit.new(Hyper.Sig)}
 
 # the key of the record number n
 def Log.key(n: Nat) -> List<&2, U32>:
@@ -527,8 +698,20 @@ def Log.key(n: Nat) -> List<&2, U32>:
 # the asks of the records of the log l
 def Log.asks(l: Log) -> Crits.Crit<Types.Ask>:
   match l:
-    case Log{n, xs, ix}:
+    case Log{n, xs, ix, ts}:
       xs
+
+# the signatures of the votes of the log l
+def Log.sigs(l: Log) -> Crits.Crit<Hyper.Sig>:
+  match l:
+    case Log{n, xs, ix, ts}:
+      ts
+
+# the log l, with the signature m, if any, of the fact f
+def Log.signed(l: Log, f: Types.Fact, m: Maybe<&2, Hyper.Sig>) -> Log:
+  match l:
+    case Log{n, xs, ix, ts}:
+      Log{n, xs, ix, Sigs.add([Signed{f, m}], ts)}
 
 # the index ix of the first record of each ask, with the record n for the
 # ask of the code k, unless it has one
@@ -543,13 +726,14 @@ def Log.first(+ix: Crits.Crit<Nat>, +k: List<&2, U32>, n: Nat) -> Crits.Crit<Nat
 # the log l with one more record, which holds the ask m, if any
 def Log.add(l: Log, m: Maybe<&2, Types.Ask>) -> Log:
   match l m:
-    case Log{n, xs, ix} None{}:
-      Log{1n+n, xs, ix}
-    case Log{+n, xs, ix} Some{+a}:
+    case Log{n, xs, ix, ts} None{}:
+      Log{1n+n, xs, ix, ts}
+    case Log{+n, xs, ix, ts} Some{+a}:
       Log{
         1n+n,
         Crits.Crit.set(~Types.Ask, xs, Log.key(n), a),
-        Log.first(ix, Coded.Ask.code(a, []), n)
+        Log.first(ix, Coded.Ask.code(a, []), n),
+        ts
       }
 
 # the ask that the fact f holds, if any: an ask, or the pick of a vote
@@ -686,16 +870,29 @@ def Ref.code(
 type Next is Data:
   Next.End{}
   Next.Bad{}
-  Next.Got{fact: Types.Fact, fresh: Bool, rest: List<&2, U32>}
+  Next.Got{fact: Types.Fact, sig: Maybe<&2, Hyper.Sig>, fresh: Bool, rest: List<&2, U32>}
 
-# what the read m of a record found: a record that names the record of its
-# ask is not fresh
-def Next.of(fresh: Bool, m: Maybe<&2, Codes.Read<Types.Fact>>) -> Next:
+# what the read of a vote record found, once its signature is read (m)
+def Next.signed(fresh: Bool, f: Types.Fact, m: Maybe<&2, Codes.Read<Maybe<&2, Hyper.Sig>>>) -> Next:
   match m:
     case None{}:
       Next.Bad{}
-    case Some{Codes.Read{f, r}}:
-      Next.Got{f, fresh, r}
+    case Some{Codes.Read{x, r}}:
+      Next.Got{f, x, fresh, r}
+
+# what the read m of a record found: a record that names the record of its
+# ask is not fresh; a vote is followed by its signature, if any
+def Next.of(+fresh: Bool, m: Maybe<&2, Codes.Read<Types.Fact>>) -> Next:
+  match m:
+    case None{}:
+      Next.Bad{}
+    case Some{Codes.Read{+f, +r}}:
+      Shared.Bool.when(
+        Next,
+        Fact.is_ask(f),
+        u => Next.Got{f, None{}, fresh, r},
+        u => Next.signed(fresh, f, Codes.Code.maybe.read(~Hyper.Sig, ~Hyper.Sig.code.read, r))
+      )
 
 # the record whose tag is x, with the words r after it, where xs are the
 # asks of the records before it
@@ -740,8 +937,8 @@ def Log.go(
   match n x:
     case _ Next.End{}:
       Done{(l, s)}
-    case 1n+p Next.Got{+f, fresh, r}:
-      +l2 = Log.add(l, Fresh.ask(fresh, f))
+    case 1n+p Next.Got{+f, m, fresh, r}:
+      +l2 = Log.signed(Log.add(l, Fresh.ask(fresh, f)), f, m)
       Log.go(at, p, Next.read(Log.asks(l2), r), l2, Facts.Facts.add(s, f))
     case _ _:
       Fail{at ++ ": a record does not read; the log is damaged"}
@@ -766,9 +963,7 @@ def Log.of(at: String, m: Maybe<&2, List<&2, U32>>) -> Result<&1, &1, String, Lo
     case None{}:
       Fail{
         at
-          ++ ": not a log of this version (it starts with "
-          ++ Texts.Bytes.to_text(Log.head())
-          ++ ")"
+          ++ ": not a log of format 3; a log of format 2 holds votes with no signature: start a new node with init"
       }
     case Some{+ws}:
       Log.go(
@@ -814,40 +1009,61 @@ def Log.fresh_ask(m: Maybe<&2, Nat>, a: Types.Ask) -> Maybe<&2, Types.Ask>:
 # the index of the first record of each ask of the log l
 def Log.index(l: Log) -> Crits.Crit<Nat>:
   match l:
-    case Log{n, xs, ix}:
+    case Log{n, xs, ix, ts}:
       ix
 
 # the record of the fact f after the log l, then rest
-def Log.code(+l: Log, f: Types.Fact, rest: List<&2, U32>) -> List<&2, U32>:
+def Log.record(+l: Log, f: Types.Fact, rest: List<&2, U32>) -> List<&2, U32>:
   match f:
     case Types.Fact.Vote{v, st, Types.Cast.Vote{r, Types.Pick{+a, pins}, b}}:
       Log.vote(Crits.Crit.get(Nat, Log.index(l), Coded.Ask.code(a, [])), v, st, r, a, pins, b, rest)
     case _:
       Coded.Fact.code(f, rest)
 
+# the signature m, if any, then rest, unless the record is an ask's (ask)
+def Sig.after(ask: Bool, m: Maybe<&2, Hyper.Sig>, rest: List<&2, U32>) -> List<&2, U32>:
+  match ask:
+    case True{}:
+      rest
+    case False{}:
+      Codes.Code.maybe(~Hyper.Sig, ~Hyper.Sig.code, m, rest)
+
+# the record of the signed fact x after the log l, then rest: a vote, then
+# its signature, if any
+def Log.code(+l: Log, x: Signed, rest: List<&2, U32>) -> List<&2, U32>:
+  match x:
+    case Signed{+f, m}:
+      Log.record(l, f, Sig.after(Fact.is_ask(f), m, rest))
+
 # the log l after the record of the fact f
-def Log.after(+l: Log, f: Types.Fact) -> Log:
+def Log.after.fact(+l: Log, f: Types.Fact) -> Log:
   match f:
     case Types.Fact.Vote{v, st, Types.Cast.Vote{r, Types.Pick{+a, pins}, b}}:
       Log.add(l, Log.fresh_ask(Crits.Crit.get(Nat, Log.index(l), Coded.Ask.code(a, [])), a))
     case _:
       Log.add(l, Fact.ask(f))
 
-# the records of the facts fs after the log l, then rest
-def Log.puts(fs: List<&2, Types.Fact>, +l: Log) -> List<&2, U32>:
-  match fs:
+# the log l after the record of the signed fact x
+def Log.after(+l: Log, x: Signed) -> Log:
+  match x:
+    case Signed{+f, m}:
+      Log.signed(Log.after.fact(l, f), f, m)
+
+# the records of the signed facts xs after the log l, then rest
+def Log.puts(xs: List<&2, Signed>, +l: Log) -> List<&2, U32>:
+  match xs:
     case Nil{}:
       []
-    case Con{+f, more}:
-      Log.code(l, f, Log.puts(more, Log.after(l, f)))
+    case Con{+x, more}:
+      Log.code(l, x, Log.puts(more, Log.after(l, x)))
 
-# the fact f is an ask
-def Fact.is_ask(f: Types.Fact) -> Bool:
-  match f:
-    case Types.Fact.Ask{a}:
-      True{}
-    case Types.Fact.Vote{v, st, x}:
-      False{}
+# the facts of the signed facts xs
+def Signed.facts(xs: List<&2, Signed>) -> List<&2, Types.Fact>:
+  match xs:
+    case Nil{}:
+      []
+    case Con{Signed{f, m}, more}:
+      f <> Signed.facts(more)
 
 # the facts of the entries es that old does not hold, asks first (Ask) or
 # votes (not Ask)
@@ -903,17 +1119,17 @@ def Log.checked(
     case Fail{e}:
       Fail{e}
 
-# the records of the facts fs after the log l, with the log after them, when
-# they read back as fs, for the file at the path at
+# the records of the signed facts xs after the log l, with the log after
+# them, when they read back as their facts, for the file at the path at
 def Log.records(
   +at: String,
-  +fs: List<&2, Types.Fact>,
+  +xs: List<&2, Signed>,
   +l: Log
 ) -> Result<&1, &1, String, Log & List<&2, U32>>:
-  +ws = Log.puts(fs, l)
+  +ws = Log.puts(xs, l)
   Log.checked(
     at,
-    fs,
+    Signed.facts(xs),
     ws,
     Log.go(at, List.length(&2, U32, ws), Next.read(Log.asks(l), ws), l, Facts.Facts.new())
   )
@@ -1033,12 +1249,6 @@ def Stored.of(n: String, p: Log & Facts.Plain(), ps: Parts.Parts) -> Stored:
   (l, fs) = p
   Stored{Nodes.Raw{n, [], [], False{}, fs, ps}, l}
 
-# the node of what a data address keeps
-def Stored.node(k: Stored) -> Nodes.Raw:
-  match k:
-    case Stored{r, l}:
-      r
-
 # what the data address a keeps: the name, the facts and the parts of its
 # node, and the log
 def Node.load(+a: String) -> Disk.Run(Stored):
@@ -1087,89 +1297,370 @@ def Log.write(+at: String, p: Log & List<&2, U32>) -> Disk.Run(Log):
     Disk.Disk.write(at, "a", Disk.Short.bytes(ws, []))
     return l
 
+# The key of a node
+# -----------------
+# The directory secret of a data address holds the seed of the key of the
+# node, and the next leaf number it signs with. A leaf seals one message only
+# (Hyper), so the number moves on before a signature with it is made:
+# Node.save writes the new number, then signs the new votes of the node, then
+# appends them to the log. A crash between the two loses the numbers taken,
+# and reuses none. The number is written whole to next.new, which is then
+# renamed over next, so a crash leaves the old number or the new one. Base
+# has no fsync: a crash of the machine itself may lose the last writes, and a
+# leaf may then seal twice; so may an address restored from a copy. A node
+# with no leaf left signs no more (Hyper.count).
+
+# the path of the file f of the secret directory of the data address a
+def Key.at(a: String, f: String) -> String:
+  Path.at(Path.at(a, "secret"), f)
+
+# the seed that m read from the file at the path at
+def Key.got(at: String, m: Maybe<&2, Hashes.Hash>) -> Result<&1, &1, String, Hashes.Hash>:
+  match m:
+    case None{}:
+      Fail{at ++ ": not a seed"}
+    case Some{h}:
+      Done{h}
+
+# the seed of the key of the node of the data address a
+def Key.load(+a: String) -> Disk.Run(Hashes.Hash):
+  +at = Key.at(a, "seed")
+  do Disk.Run<Hashes.Hash>:
+    bs: List<&2, U32> <- Disk.Disk.read(at)
+    Disk.Run.of(Hashes.Hash, Key.got(at, Hash.read(Texts.Bytes.to_text(bs))))
+
+# the leaf number i read from the file at the path at, when n more are left
+# after it
+def Key.room(at: String, m: Maybe<&2, U32>, +n: Nat) -> Result<&1, &1, String, U32>:
+  match m:
+    case None{}:
+      Fail{at ++ ": not a leaf number"}
+    case Some{+i}:
+      Bool.pick(
+        Result<&1, &1, String, U32>,
+        Bool.and(
+          (i <= Hyper.Hyper.count(): U32),
+          (U32.from_nat(n) <= (Hyper.Hyper.count() - i: U32): U32)
+        ),
+        Done{i},
+        Fail{
+          "the node has signed with "
+            ++ U32.show(i)
+            ++ " of its "
+            ++ U32.show(Hyper.Hyper.count())
+            ++ " leaves and cannot sign "
+            ++ Nat.show(n)
+            ++ " more: start a new node"
+        }
+      )
+
+# the first of n leaf numbers, taken at the data address a: the next number
+# moves on by n before it is answered
+def Key.take(+a: String, +n: Nat) -> Disk.Run(U32):
+  +at = Key.at(a, "next")
+  +tmp = Key.at(a, "next.new")
+  do Disk.Run<U32>:
+    bs: List<&2, U32> <- Disk.Disk.read(at)
+    +i: U32 <- Disk.Run.of(U32, Key.room(at, U32.read(Texts.Bytes.to_text(bs)), n))
+    Disk.Disk.write(tmp, "w", Texts.Bytes.of_text(U32.show((i + U32.from_nat(n): U32))))
+    out: String <- Disk.Program.run("mv", [tmp, at])
+    return i
+
+# the fact f is a vote of the node name that the signatures ts do not hold
+def Own.unsigned(+name: String, +ts: Crits.Crit<Hyper.Sig>, f: Types.Fact) -> Bool:
+  match f:
+    case Types.Fact.Vote{+v, st, c}:
+      Shared.Bool.when(
+        Bool,
+        String.eq(v, name),
+        u => Bool.not(Crits.Crit.has(Hyper.Sig, ts, Coded.Fact.words(Types.Fact.Vote{v, st, c}))),
+        u => False{}
+      )
+    case _:
+      False{}
+
+# how many of the facts fs are votes of the node name that ts does not hold
+def Own.count(fs: List<&2, Types.Fact>, +ts: Crits.Crit<Hyper.Sig>, +name: String) -> Nat:
+  match fs:
+    case Nil{}:
+      0n
+    case Con{f, rest}:
+      Nat.add(Bool.pick(Nat, Own.unsigned(name, ts, f), 1n, 0n), Own.count(rest, ts, name))
+
+# the signature of the fact f: a new one by the seed at the leaf number i
+# when it is an own vote not yet signed (own), else the one ts holds, if any
+def Save.sig(
+  own: Bool,
+  +ts: Crits.Crit<Hyper.Sig>,
+  +seed: Hashes.Hash,
+  +i: U32,
+  +f: Types.Fact
+) -> Maybe<&2, Hyper.Sig>:
+  match own:
+    case True{}:
+      Some{Hyper.Key.sign(seed, i, Wire.digest(f))}
+    case False{}:
+      Crits.Crit.get(Hyper.Sig, ts, Coded.Fact.words(f))
+
+# the facts fs with their signatures, where ts holds those known, and the
+# own votes not yet signed take those of the seed, from the leaf number i on
+def Save.sign(
+  fs: List<&2, Types.Fact>,
+  +ts: Crits.Crit<Hyper.Sig>,
+  +name: String,
+  +seed: Hashes.Hash,
+  +i: U32
+) -> List<&2, Signed>:
+  match fs:
+    case Nil{}:
+      []
+    case Con{+f, rest}:
+      +own = Own.unsigned(name, ts, f)
+      Signed{
+        f,
+        Save.sig(own, ts, seed, i, f)
+      }
+        <> Save.sign(rest, ts, name, seed, Bool.pick(U32, own, (i + 1: U32), i))
+
+# the new facts fs of the node name of the data address a, with their
+# signatures, where ts holds those known: when n of them are own votes not
+# yet signed, the node takes n leaf numbers first
+def Save.signed(
+  +a: String,
+  +n: Nat,
+  +fs: List<&2, Types.Fact>,
+  +ts: Crits.Crit<Hyper.Sig>,
+  +name: String
+) -> Disk.Run(List<&2, Signed>):
+  Shared.Bool.when(
+    Disk.Run(List<&2, Signed>),
+    Nat.is_eq(n, 0n),
+    u => Disk.Run.pure(List<&2, Signed>, Save.sign(fs, ts, name, Hashes.Hash{0, 0, 0, 0, 0, 0, 0, 0}, 0)),
+    u => do Disk.Run<List<&2, Signed>>:
+      seed: Hashes.Hash <- Key.load(a)
+      i: U32 <- Key.take(a, n)
+      return Save.sign(fs, ts, name, seed, i))
+
 # the data address a, whose log was l when it kept the node f0, keeping the
-# node f that f0 became: the new parts first, then the new facts (asks first,
-# so that a vote names the record of its ask), then the parts that f let go
-# of removed; and the log after it
-def Node.save(+a: String, +l: Log, +f0: Fasts.Fast, +f: Fasts.Fast) -> Disk.Run(Log):
+# node f that f0 became, where ts holds the signatures known: the new parts
+# first, then the new facts (asks first, so that a vote names the record of
+# its ask), each own vote signed, then the parts that f let go of removed;
+# and the log after it
+def Node.save(
+  +a: String,
+  +l: Log,
+  +f0: Fasts.Fast,
+  +f: Fasts.Fast,
+  +ts: Crits.Crit<Hyper.Sig>
+) -> Disk.Run(Log):
   +d = Path.at(a, "parts")
   +at = Path.at(a, "facts")
   +es = Crits.Crit.entries(Types.Fact, Node.facts(f))
+  +name = Raw.name(Fasts.Fast.raw(f))
+  +fs = List.append(
+    &2,
+    Types.Fact,
+    Log.fresh(True{}, es, Node.facts(f0)),
+    Log.fresh(False{}, es, Node.facts(f0))
+  )
   do Disk.Run<Log>:
     Kept.save(Crits.Crit.entries(List<&2, U32>, Node.kept(f)), Node.kept(f0), d)
+    xs: List<&2, Signed> <- Save.signed(a, Own.count(fs, ts, name), fs, ts, name)
     l2: Log <- Disk.Run.bind(
       Log & List<&2, U32>,
       Log,
-      Disk.Run.of(
-        Log & List<&2, U32>,
-        Log.records(
-          at,
-          List.append(
-            &2,
-            Types.Fact,
-            Log.fresh(True{}, es, Node.facts(f0)),
-            Log.fresh(False{}, es, Node.facts(f0))
-          ),
-          l
-        )
-      ),
+      Disk.Run.of(Log & List<&2, U32>, Log.records(at, xs, l)),
       p => Log.write(at, p)
     )
     Disk.Disk.remove(Kept.gone(Crits.Crit.entries(List<&2, U32>, Node.kept(f0)), Node.kept(f), d))
     return l2
 
+# The lock
+# --------
+# The file lock holds the process id of the node that runs on the address.
+# It is made whole under another name, then linked to lock, which fails when
+# lock is there (link does not replace a file). A lock whose process no
+# longer runs (ps finds no such process: the node crashed or was killed) is
+# taken over: it is renamed away, and a new one is linked. Two nodes that
+# take over one stale lock at the same time: the rename succeeds for one
+# only, unless the other renames the new lock of the first; it then reads a
+# process id that is not the stale one, links it back and gives up. A third
+# node that starts in the moment between that rename and the link back finds
+# no lock and runs beside the first, so three starts at once on an address
+# whose node crashed can run two nodes. That needs a person to start three
+# nodes on one address within milliseconds; the lock is for the mistake of
+# one more start, not for that. A process id that the system gave again to
+# another process keeps the lock until a person removes it.
+
+# the process id of this program, as text: the parent of the shell it runs
+def Pid.own() -> Disk.Run(String):
+  do Disk.Run<String>:
+    out: String <- Disk.Program.run("sh", ["-c", "echo $PPID"])
+    return String.join(String.lines(out), "")
+
+# the first of the lines ls; empty when there is none
+def Lock.first(ls: List<&2, String>) -> String:
+  match ls:
+    case Con{x, rest}:
+      x
+    case Nil{}:
+      ""
+
+# the first line of the bytes bs, as text
+def Lock.text(bs: List<&2, U32>) -> String:
+  Lock.first(String.lines(Texts.Bytes.to_text(bs)))
+
+# whether r is not a failure
+def Run.ok.of(-A: Type, r: Result<&1, &1, String, A>) -> Bool:
+  match r:
+    case Done{x}:
+      True{}
+    case Fail{e}:
+      False{}
+
+# the result of the step m, as a value: whether it did not fail
+def Run.ok(-A: Type, m: Disk.Run(A)) -> Disk.Run(Bool):
+  IO.bind(
+    Result<&1, &1, String, A>,
+    Result<&1, &1, String, Bool>,
+    m,
+    r => IO.pure(Result<&1, &1, String, Bool>, Done{Run.ok.of(A, r)})
+  )
+
+# a lock made at the path lock for the process pid: its file is written
+# whole under its own name, then linked to lock; whether the link was made
+def Lock.make(+lock: String, +pid: String) -> Disk.Run(Bool):
+  +mine = lock ++ "." ++ pid
+  do Disk.Run<Bool>:
+    Disk.Disk.write(mine, "w", Texts.Bytes.of_text(pid ++ "\n"))
+    made: Bool <- Run.ok(String, Disk.Program.run("ln", [mine, lock]))
+    Disk.Disk.remove([mine])
+    return made
+
+# the lock at the path lock, made (made) or held by another process
+def Lock.made(made: Bool, +lock: String) -> Disk.Run(Unit):
+  match made:
+    case True{}:
+      Disk.Run.pure(Unit, Unit{})
+    case False{}:
+      Disk.Run.fail(Unit, "no node can run on the address: " ++ lock ++ " is there")
+
+# the stale lock of the process old at the path lock, taken over by the
+# process pid: the moved file held what (it is still stale when it is old)
+def Lock.moved(
+  +lock: String,
+  +pid: String,
+  +old: String,
+  +moved: String,
+  what: String
+) -> Disk.Run(Unit):
+  Shared.Bool.when(
+    Disk.Run(Unit),
+    String.eq(what, old),
+    u => do Disk.Run<Unit>:
+      Disk.Disk.remove([moved])
+      made: Bool <- Lock.make(lock, pid)
+      Disk.Run.io(Unit, IO.print_err("took over the lock of process " ++ old ++ ", which no longer runs"))
+      Lock.made(made, lock),
+    u => do Disk.Run<Unit>:
+      back: Bool <- Run.ok(String, Disk.Program.run("ln", [moved, lock]))
+      Disk.Disk.remove([moved])
+      Disk.Run.fail(Unit, "another node took over the lock " ++ lock ++ " first"))
+
+# the lock at the path lock held by the process old, which runs or not
+# (runs), for the process pid
+def Lock.stale(runs: Bool, +lock: String, +pid: String, +old: String) -> Disk.Run(Unit):
+  match runs:
+    case True{}:
+      Disk.Run.fail(Unit, "a node runs on the address: process " ++ old ++ " holds " ++ lock)
+    case False{}:
+      +moved = lock ++ ".stale." ++ pid
+      do Disk.Run<Unit>:
+        out: String <- Disk.Run.else(
+          String,
+          "another node took over the lock " ++ lock ++ " first",
+          Disk.Program.run("mv", [lock, moved])
+        )
+        bs: List<&2, U32> <- Disk.Disk.read(moved)
+        Lock.moved(lock, pid, old, moved, Lock.text(bs))
+
+# Lock.held, once the id old is read as a number (m)
+def Lock.held.of(m: Maybe<&2, U32>, +lock: String, +pid: String, +old: String) -> Disk.Run(Unit):
+  match m:
+    case None{}:
+      Disk.Run.fail(
+        Unit,
+        lock ++ " names no process; if no node runs on the address, remove " ++ lock
+      )
+    case Some{n}:
+      do Disk.Run<Unit>:
+        runs: Bool <- Run.ok(String, Disk.Program.run("ps", ["-p", old, "-o", "pid="]))
+        Lock.stale(runs, lock, pid, old)
+
+# the lock at the path lock, held by the process whose id is old, for the
+# process pid
+def Lock.held(+lock: String, +pid: String, +old: String) -> Disk.Run(Unit):
+  Lock.held.of(U32.read(old), lock, pid, old)
+
+# the lock at the path lock for the process pid, unless the link failed (made)
+def Lock.got(made: Bool, +lock: String, +pid: String) -> Disk.Run(Unit):
+  match made:
+    case True{}:
+      Disk.Run.pure(Unit, Unit{})
+    case False{}:
+      do Disk.Run<Unit>:
+        bs: List<&2, U32> <- Disk.Disk.read(lock)
+        Lock.held(lock, pid, Lock.text(bs))
+
 # the step m, while the node holds the lock of the data address a: only one
-# node runs on an address, since the lock is made only where it is not
+# node runs on an address (The lock)
 def Node.locked(-A: Type, +a: String, m: Disk.Run(A)) -> Disk.Run(A):
   +lock = Path.at(a, "lock")
   do Disk.Run<A>:
-    Disk.Run.else(
-      Unit,
-      "no node can run on "
-        ++ a
-        ++ ": none is there, or one runs there (if none runs, remove "
-        ++ lock
-        ++ ")",
-      Disk.Disk.write(lock, "x", [])
-    )
+    +pid: String <- Pid.own()
+    made: Bool <- Lock.make(lock, pid)
+    Lock.got(made, lock, pid)
     r: Result<&1, &1, String, A> <- Disk.Run.io(Result<&1, &1, String, A>, m)
     Disk.Disk.remove([lock])
     Disk.Run.of(A, r)
 
 # Sync over TCP
 # -------------
-# A session, in one connection: the node that fetches (the client) sends
-# what it asks (Ask.sync, or a stop) and a summary of what it holds, the
+# A session, in one connection: the node that fetches (the client) says what
+# it asks (Hello) and, for a sync, sends a summary of what it holds, the
 # SHA-256 of the code of each fact and the hash of each part; the node that
 # serves answers with the facts and parts that the client lacks, and the
 # summary of its own; the client sends the facts and parts that the server
-# lacks. Each side takes the facts in by the core's Sync, which checks each,
-# and a part only under the hash of its words (Parts.put). A summary is one
-# round trip each way and a hash per fact (as the store trusts SHA-256); a
-# hash per crit subtree would send less when both hold almost the same, but
-# costs a round trip per level of the tree and the same hashes to build.
-# Each message is the words of Codes, as short bytes (Disk.Short.bytes).
+# lacks. A vote travels with its signature (Signed), and a node offers no
+# vote that it holds no signature for. Each side takes in the facts that
+# check (Taken.sort) by the core's Sync, which checks each again, and a part
+# only under the hash of its words (Parts.put); it says which votes it
+# refused. A summary is one round trip each way and a hash per fact (as the
+# store trusts SHA-256); a hash per crit subtree would send less when both
+# hold almost the same, but costs a round trip per level of the tree and the
+# same hashes to build. A writer may instead send a command, with the words
+# of the file that it writes, and gets the reply as text (Remote). Each
+# message is the words of Codes, as short bytes (Disk.Short.bytes).
 
-# what the client of a session asks: a sync (0), or a stop (1, forced 2)
-def Ask.sync() -> Nat:
-  0n
-
-# how long a node waits for a message of a session, in milliseconds
+# how long a client waits for a message of a session, in milliseconds: the
+# node that serves works, and signs its votes, before it answers
 def Wire.wait_ms() -> U32:
-  30000
+  60000
+
+# how long a node that serves waits for each part of a message of a session,
+# in milliseconds: a client that sends nothing holds it that long, at most
+def Serve.wait_ms() -> U32:
+  2000
 
 # what a node holds, for the other node of a session: the hash of the code
 # of each fact, and the hash of each part
 type Summary is Data:
   Summary{facts: List<&2, Hashes.Hash>, parts: List<&2, Hashes.Hash>}
 
-# what a node sends the other: facts, and the words of parts
+# what a node sends the other: facts with their signatures, and the words of
+# parts
 type Offer is Data:
-  Offer{facts: List<&2, Types.Fact>, parts: List<&2, List<&2, U32>>}
-
-# the hash of the code of the fact f
-def Wire.digest(f: Types.Fact) -> Hashes.Hash:
-  Hashes.Sha.hash(Coded.Fact.code(f, []))
+  Offer{facts: List<&2, Signed>, parts: List<&2, List<&2, U32>>}
 
 # the hashes of the facts of the entries es
 def Wire.digests(es: List<&2, Crits.Bind<Types.Fact>>) -> List<&2, Hashes.Hash>:
@@ -1191,20 +1682,26 @@ def Wire.set(hs: List<&2, Hashes.Hash>, acc: Crits.Crit<Unit>) -> Crits.Crit<Uni
 def Wire.summary(+f: Fasts.Fast) -> Summary:
   Summary{Wire.digests(Crits.Crit.entries(Types.Fact, Node.facts(f))), Fasts.Fast.parts(f)}
 
-# the facts of the entries es whose hash the set have does not hold
+# the facts of the entries es whose hash the set have does not hold, each
+# with its signature in ts: the asks, and the votes that have one
 def Wire.lacks(
   es: List<&2, Crits.Bind<Types.Fact>>,
-  +have: Crits.Crit<Unit>
-) -> List<&2, Types.Fact>:
+  +have: Crits.Crit<Unit>,
+  +ts: Crits.Crit<Hyper.Sig>
+) -> List<&2, Signed>:
   match es:
     case Nil{}:
       []
-    case Con{Crits.Bind{k, +f}, rest}:
+    case Con{Crits.Bind{+k, +f}, rest}:
+      +m = Crits.Crit.get(Hyper.Sig, ts, k)
       List.filter.put(
-        Types.Fact,
-        f,
-        Wire.lacks(rest, have),
-        Bool.not(Crits.Crit.has(Unit, have, Hashes.Hash.code(Wire.digest(f), [])))
+        Signed,
+        Signed{f, m},
+        Wire.lacks(rest, have, ts),
+        Bool.and(
+          Bool.not(Crits.Crit.has(Unit, have, Hashes.Hash.code(Wire.digest(f), []))),
+          Bool.or(Fact.is_ask(f), Maybe.is_some(&2, Hyper.Sig, m))
+        )
       )
 
 # the words of the parts of the entries es whose key the set have does not
@@ -1224,14 +1721,16 @@ def Wire.lacks_parts(
         Bool.not(Crits.Crit.has(Unit, have, k))
       )
 
-# what the fast node f sends a node whose summary is x: what x lacks
-def Wire.offer(+f: Fasts.Fast, x: Summary) -> Offer:
+# what the fast node f, with the signatures ts, sends a node whose summary
+# is x: what x lacks
+def Wire.offer(+f: Fasts.Fast, +ts: Crits.Crit<Hyper.Sig>, x: Summary) -> Offer:
   match x:
     case Summary{hs, ps}:
       Offer{
         Wire.lacks(
           Crits.Crit.entries(Types.Fact, Node.facts(f)),
-          Wire.set(hs, Crits.Crit.new(Unit))
+          Wire.set(hs, Crits.Crit.new(Unit)),
+          ts
         ),
         Wire.lacks_parts(
           Crits.Crit.entries(List<&2, U32>, Node.kept(f)),
@@ -1255,23 +1754,45 @@ def Wire.parts(wss: List<&2, List<&2, U32>>, ps: Parts.Parts) -> Parts.Parts:
     case Con{ws, rest}:
       Wire.parts(rest, Parts.Parts.put(ps, ws))
 
-# the fast node f after it takes in the offer o, by the core's Sync
-def Wire.take(f: Fasts.Fast, o: Offer) -> Fasts.Fast:
-  match o:
-    case Offer{fs, wss}:
-      Fasts.Fast.does(
-        f,
-        Nodes.Act.Sync{
-          Nodes.Raw{
-            "",
-            [],
-            [],
-            False{},
-            Wire.facts(fs, Facts.Facts.new()),
-            Wire.parts(wss, Parts.Parts.new())
+# a node at work in the program: the fast node, the signatures of the votes
+# that it holds and did not cast unsigned, and what it refused, said in words
+type Live is Data:
+  Live{fast: Fasts.Fast, sigs: Crits.Crit<Hyper.Sig>, refused: List<&2, String>}
+
+# the fast node f with the signatures ts, which refused rs, after it takes in
+# what t found to check, with the parts ps, by the core's Sync
+def Live.took(
+  f: Fasts.Fast,
+  ts: Crits.Crit<Hyper.Sig>,
+  rs: List<&2, String>,
+  ps: Parts.Parts,
+  t: Taken
+) -> Live:
+  match t:
+    case Taken{+ys, zs}:
+      Live{
+        Fasts.Fast.does(
+          f,
+          Nodes.Act.Sync{
+            Nodes.Raw{"", [], [], False{}, Wire.facts(Signed.facts(ys), Facts.Facts.new()), ps}
           }
-        }
-      )
+        ),
+        Sigs.add(ys, ts),
+        List.append(&2, String, rs, zs)
+      }
+
+# the node v after it takes in the signed facts xs and the parts ps of
+# another node: the facts that it lacks and that check
+def Live.take(v: Live, xs: List<&2, Signed>, ps: Parts.Parts) -> Live:
+  match v:
+    case Live{+f, ts, rs}:
+      Live.took(f, ts, rs, ps, Taken.sort(xs, Node.facts(f)))
+
+# the node v after it takes in the offer o
+def Wire.take(v: Live, o: Offer) -> Live:
+  match o:
+    case Offer{xs, wss}:
+      Live.take(v, xs, Wire.parts(wss, Parts.Parts.new()))
 
 # the summary x, then r
 def Summary.code(x: Summary, r: List<&2, U32>) -> List<&2, U32>:
@@ -1299,25 +1820,117 @@ def Summary.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Summary>>:
 # the offer x, then r
 def Offer.code(x: Offer, r: List<&2, U32>) -> List<&2, U32>:
   match x:
-    case Offer{fs, wss}:
+    case Offer{xs, wss}:
       Codes.Code.list(
-        ~Types.Fact,
-        ~Coded.Fact.code,
-        fs,
+        ~Signed,
+        ~Signed.code,
+        xs,
         Codes.Code.list(~List<&2, U32>, ~Codes.Code.words, wss, r)
       )
 
 # an offer
 def Offer.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Offer>>:
   Codes.Code.two.read(
-    ~List<&2, Types.Fact>,
+    ~List<&2, Signed>,
     ~List<&2, List<&2, U32>>,
     ~Offer,
-    ~(t => Codes.Code.list.read(~Types.Fact, ~Coded.Fact.code.read, t)),
+    ~(t => Codes.Code.list.read(~Signed, ~Signed.code.read, t)),
     ~(t => Codes.Code.list.read(~List<&2, U32>, ~Codes.Code.words.read, t)),
     a => b => Offer{a, b},
     ts
   )
+
+# what a client asks first: a sync, with the summary of what it holds; a
+# stop, forced or not; or the command of the words words of the writer
+# writer, with the words of the file it names, if any (none: the file is
+# gone)
+type Hello is Data:
+  Hello.Sync{summary: Summary}
+  Hello.Stop{force: Bool}
+  Hello.Cmd{writer: String, words: List<&2, String>, file: Maybe<&2, Maybe<&2, List<&2, U32>>>}
+
+# the file m of a command, then r
+def File.code(m: Maybe<&2, Maybe<&2, List<&2, U32>>>, r: List<&2, U32>) -> List<&2, U32>:
+  match m:
+    case None{}:
+      0 <> r
+    case Some{None{}}:
+      1 <> r
+    case Some{Some{ws}}:
+      2 <> Codes.Code.words(ws, r)
+
+# the words of a file of a command, once read (m)
+def File.code.words(
+  m: Maybe<&2, Codes.Read<List<&2, U32>>>
+) -> Maybe<&2, Codes.Read<Maybe<&2, Maybe<&2, List<&2, U32>>>>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{Codes.Read{ws, r}}:
+      Some{Codes.Read{Some{Some{ws}}, r}}
+
+# the file of a command, whose tag is x
+def File.code.of(
+  x: U32,
+  r: List<&2, U32>
+) -> Maybe<&2, Codes.Read<Maybe<&2, Maybe<&2, List<&2, U32>>>>>:
+  match x:
+    case 0:
+      Some{Codes.Read{None{}, r}}
+    case 1:
+      Some{Codes.Read{Some{None{}}, r}}
+    case 2:
+      File.code.words(Codes.Code.words.read(r))
+    case _:
+      None{}
+
+# the file of a command
+def File.code.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Maybe<&2, Maybe<&2, List<&2, U32>>>>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{x, r}:
+      File.code.of(x, r)
+
+# what a client asks, h, then r
+def Hello.code(h: Hello, r: List<&2, U32>) -> List<&2, U32>:
+  match h:
+    case Hello.Sync{x}:
+      0 <> Summary.code(x, r)
+    case Hello.Stop{b}:
+      1 <> Codes.Code.bool(b, r)
+    case Hello.Cmd{w, ws, m}:
+      2 <> Codes.Code.text(w, Codes.Code.list(~String, ~Codes.Code.text, ws, File.code(m, r)))
+
+# what a client asks, whose tag is x
+def Hello.read.of(x: U32, r: List<&2, U32>) -> Maybe<&2, Codes.Read<Hello>>:
+  match x:
+    case 0:
+      Codes.Code.one.read(~Summary, ~Hello, ~Summary.read, y => Hello.Sync{y}, r)
+    case 1:
+      Codes.Code.one.read(~Bool, ~Hello, ~Codes.Code.bool.read, b => Hello.Stop{b}, r)
+    case 2:
+      Codes.Code.three.read(
+        ~String,
+        ~List<&2, String>,
+        ~Maybe<&2, Maybe<&2, List<&2, U32>>>,
+        ~Hello,
+        ~Codes.Code.text.read,
+        ~(q => Codes.Code.list.read(~String, ~Codes.Code.text.read, q)),
+        ~File.code.read,
+        w => ws => m => Hello.Cmd{w, ws, m},
+        r
+      )
+    case _:
+      None{}
+
+# what a client asks first
+def Hello.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Hello>>:
+  match ts:
+    case Nil{}:
+      None{}
+    case Con{x, r}:
+      Hello.read.of(x, r)
 
 # the value that m read, when it read all the words
 def Wire.whole(-A: Data, m: Maybe<&2, Codes.Read<A>>) -> Maybe<&2, A>:
@@ -1350,12 +1963,18 @@ def Wire.got(-A: Data, s: Socket, m: Maybe<&2, A>) -> Disk.Sock(A):
     case Some{x}:
       Disk.Sock.pure(A, s, x)
 
-# the next message from the socket s, read by r
-def Wire.recv(~A: Data, ~r: List<&2, U32> -> Maybe<&2, Codes.Read<A>>, s: Socket) -> Disk.Sock(A):
+# the next message from the socket s, read by r, each part of it waited for
+# at most ms milliseconds
+def Wire.recv(
+  ~A: Data,
+  ~r: List<&2, U32> -> Maybe<&2, Codes.Read<A>>,
+  s: Socket,
+  ms: U32
+) -> Disk.Sock(A):
   Disk.Sock.bind(
     List<&2, U32>,
     A,
-    Disk.Net.recv(s, Wire.wait_ms()),
+    Disk.Net.recv(s, ms),
     t => bs => Wire.got(A, t, Wire.read(~A, ~r, bs))
   )
 
@@ -1382,36 +2001,40 @@ def Served.code(x: Served, r: List<&2, U32>) -> List<&2, U32>:
     case Served{o, y}:
       Offer.code(o, Summary.code(y, r))
 
-# the client of a session, with the fast node g after it took in the offer
-# of the node that serves, whose summary is x: it sends what x lacks
-def Client.took(s: Socket, +g: Fasts.Fast, x: Summary) -> Disk.Sock(Fasts.Fast):
-  Disk.Sock.bind(
-    Unit,
-    Fasts.Fast,
-    Wire.send(s, Offer.code(Wire.offer(g, x), [])),
-    t => u => Disk.Sock.pure(Fasts.Fast, t, g)
-  )
+# the client of a session, with the node v after it took in the offer of the
+# node that serves, whose summary is x: it sends what x lacks
+def Client.took(s: Socket, v: Live, x: Summary) -> Disk.Sock(Live):
+  match v:
+    case Live{+g, +ts, rs}:
+      Disk.Sock.bind(
+        Unit,
+        Live,
+        Wire.send(s, Offer.code(Wire.offer(g, ts, x), [])),
+        t => u => Disk.Sock.pure(Live, t, Live{g, ts, rs})
+      )
 
-# the client of a session, with the fast node f, after the answer p of the
-# node that serves: it takes the offer in and sends what the other lacks
-def Client.answered(s: Socket, +f: Fasts.Fast, p: Served) -> Disk.Sock(Fasts.Fast):
+# the client of a session, with the node v, after the answer p of the node
+# that serves: it takes the offer in and sends what the other lacks
+def Client.answered(s: Socket, v: Live, p: Served) -> Disk.Sock(Live):
   match p:
     case Served{o, x}:
-      Client.took(s, Wire.take(f, o), x)
+      Client.took(s, Wire.take(v, o), x)
 
-# a session of the client with the fast node f on the socket s
-def Client.session(s: Socket, +f: Fasts.Fast) -> Disk.Sock(Fasts.Fast):
-  Disk.Sock.bind(
-    Unit,
-    Fasts.Fast,
-    Wire.send(s, Codes.Code.count(Ask.sync(), Summary.code(Wire.summary(f), []))),
-    t => u => Disk.Sock.bind(
-      Served,
-      Fasts.Fast,
-      Wire.recv(~Served, ~Served.read, t),
-      t2 => p => Client.answered(t2, f, p)
-    )
-  )
+# a session of the client with the node v on the socket s
+def Client.session(s: Socket, v: Live) -> Disk.Sock(Live):
+  match v:
+    case Live{+f, ts, rs}:
+      Disk.Sock.bind(
+        Unit,
+        Live,
+        Wire.send(s, Hello.code(Hello.Sync{Wire.summary(f)}, [])),
+        t => u => Disk.Sock.bind(
+          Served,
+          Live,
+          Wire.recv(~Served, ~Served.read, t, Wire.wait_ms()),
+          t2 => p => Client.answered(t2, Live{f, ts, rs}, p)
+        )
+      )
 
 # a TCP address: a host (an IPv4 literal) and a port
 type Tcp is Data:
@@ -1891,41 +2514,115 @@ def Words.load(+at: String) -> Disk.Run(Maybe<&2, List<&2, U32>>):
         ws: List<&2, U32> <- Disk.Disk.read(at)
         return Some{ws}
 
-# the fast node f after it takes in what the node at a holds: over TCP when
-# a is a TCP address (m), else from the data address a
-def Sync.from(+a: String, m: Maybe<&2, Tcp>, +f: Fasts.Fast) -> Disk.Run(Fasts.Fast):
+# the words of a command with the words of the file it names, where m is
+# the file, if the command names one: a write or a resolve becomes its ask
+def Cmd.with(c: Cmd, m: Maybe<&2, List<&2, U32>>) -> Cmd:
+  match c:
+    case Cmd.Put{i, b, p, at}:
+      Cmd.Ask{i, Spec.Request.Write{b, p, m}}
+    case Cmd.Fix{i, x, p, at}:
+      Cmd.Ask{i, Spec.Request.Resolve{x, p, m}}
+    case _:
+      c
+
+# the file that the command c names, if any
+def Cmd.file(c: Cmd) -> Maybe<&2, String>:
+  match c:
+    case Cmd.Put{i, b, p, at}:
+      Some{at}
+    case Cmd.Fix{i, x, p, at}:
+      Some{at}
+    case _:
+      None{}
+
+# the words of the file m, if c names one (m)
+def File.load(m: Maybe<&2, String>) -> Disk.Run(Maybe<&2, Maybe<&2, List<&2, U32>>>):
+  match m:
+    case None{}:
+      Disk.Run.pure(Maybe<&2, Maybe<&2, List<&2, U32>>>, None{})
+    case Some{at}:
+      do Disk.Run<Maybe<&2, Maybe<&2, List<&2, U32>>>>:
+        x: Maybe<&2, List<&2, U32>> <- Words.load(at)
+        return Some{x}
+
+# the command c, once the words of the file it names are read (m)
+def Cmd.loaded(+c: Cmd, m: Maybe<&2, Maybe<&2, List<&2, U32>>>) -> Cmd:
+  match m:
+    case None{}:
+      c
+    case Some{x}:
+      Cmd.with(c, x)
+
+# the command c with the words of the file it names, if any
+def Cmd.load(+c: Cmd) -> Disk.Run(Cmd):
+  do Disk.Run<Cmd>:
+    m: Maybe<&2, Maybe<&2, List<&2, U32>>> <- File.load(Cmd.file(c))
+    return Cmd.loaded(c, m)
+
+# why the command c runs only at the data address of its node, if it does:
+# it makes the node read files or reach other nodes, which a writer that is
+# not trusted must not make it do; a stop goes as a message of its own
+def Cmd.local(c: Cmd) -> Maybe<&2, String>:
+  match c:
+    case Cmd.Mount{d, x, p}:
+      Some{"mount is local only: run it at the data address of the node"}
+    case Cmd.Unmount{d}:
+      Some{"unmount is local only: run it at the data address of the node"}
+    case Cmd.Sync{a}:
+      Some{"sync is local only: run it at the data address of the node"}
+    case Cmd.Drop{}:
+      Some{"drop is local only: run it at the data address of the node"}
+    case Cmd.Stop{b}:
+      Some{"a stop goes as a stop: vend tcp:<host>:<port> <writer> stop"}
+    case _:
+      None{}
+
+# the signed facts of the entries es, with the signatures ts
+def Signed.of(es: List<&2, Crits.Bind<Types.Fact>>, +ts: Crits.Crit<Hyper.Sig>) -> List<&2, Signed>:
+  match es:
+    case Nil{}:
+      []
+    case Con{Crits.Bind{+k, f}, rest}:
+      Signed{f, Crits.Crit.get(Hyper.Sig, ts, k)} <> Signed.of(rest, ts)
+
+# the node v after it takes in what the data address keeps (k): the facts
+# that it lacks and that check, and the parts
+def Live.load(v: Live, k: Stored) -> Live:
+  match k:
+    case Stored{Nodes.Raw{n, ws, ms, st, fs, ps}, l}:
+      Live.take(v, Signed.of(Crits.Crit.entries(Types.Fact, fs), Log.sigs(l)), ps)
+
+# the node v after it takes in what the node at a holds: over TCP when a is
+# a TCP address (m), else from the data address a
+def Sync.from(+a: String, m: Maybe<&2, Tcp>, v: Live) -> Disk.Run(Live):
   match m:
     case Some{t}:
-      Tcp.connect(Fasts.Fast, t, s => Client.session(s, f))
+      Tcp.connect(Live, t, s => Client.session(s, v))
     case None{}:
-      do Disk.Run<Fasts.Fast>:
+      do Disk.Run<Live>:
         k: Stored <- Node.load(a)
-        return Fasts.Fast.does(f, Nodes.Act.Sync{Stored.node(k)})
+        return Live.load(v, k)
 
-# the fast node f, after the deeds of the command c of the writer w
-def Cmd.does(+w: String, c: Cmd, +f: Fasts.Fast) -> Disk.Run(Fasts.Fast):
+# the fast node f, after the deeds of the command c of the writer w that do
+# no effect
+def Cmd.acts(+w: String, c: Cmd, +f: Fasts.Fast) -> Fasts.Fast:
   match c:
     case Cmd.Ask{i, q}:
-      Disk.Run.pure(Fasts.Fast, Fasts.Fast.does(f, Nodes.Act.Ask{i, q}))
-    case Cmd.Put{i, b, p, at}:
-      do Disk.Run<Fasts.Fast>:
-        m: Maybe<&2, List<&2, U32>> <- Words.load(at)
-        return Fasts.Fast.does(f, Nodes.Act.Ask{i, Spec.Request.Write{b, p, m}})
-    case Cmd.Fix{i, x, p, at}:
-      do Disk.Run<Fasts.Fast>:
-        m: Maybe<&2, List<&2, U32>> <- Words.load(at)
-        return Fasts.Fast.does(f, Nodes.Act.Ask{i, Spec.Request.Resolve{x, p, m}})
-    case Cmd.Sync{+a}:
-      Sync.from(a, Tcp.read(a), f)
+      Fasts.Fast.does(f, Nodes.Act.Ask{i, q})
     case Cmd.Drop{}:
-      Disk.Run.pure(Fasts.Fast, Fasts.Fast.does(f, Nodes.Act.Drop{}))
+      Fasts.Fast.does(f, Nodes.Act.Drop{})
     case Cmd.Stop{force}:
-      Disk.Run.pure(
-        Fasts.Fast,
-        Fasts.Fast.does(Fasts.Fast.does(f, Nodes.Act.Leave{w}), Nodes.Act.Stop{force})
-      )
+      Fasts.Fast.does(Fasts.Fast.does(f, Nodes.Act.Leave{w}), Nodes.Act.Stop{force})
     case _:
-      Disk.Run.pure(Fasts.Fast, f)
+      f
+
+# the node v, after the deeds of the command c of the writer w
+def Cmd.does(+w: String, c: Cmd, v: Live) -> Disk.Run(Live):
+  match c v:
+    case Cmd.Sync{+a} v2:
+      Sync.from(a, Tcp.read(a), v2)
+    case c2 Live{f, ts, rs}:
+      Disk.Run.pure(Live, Live{Cmd.acts(w, c2, f), ts, rs})
 
 # the line whose status says what became of the request r of the id i, where
 # m is the line that the core reads for r: a start is for its store
@@ -1985,10 +2682,6 @@ def Cmd.reply(+w: String, c: Cmd, +f0: Fasts.Fast, +f: Fasts.Fast) -> String:
   match c:
     case Cmd.Ask{i, q}:
       Ask.reply(f, i, q)
-    case Cmd.Put{i, b, p, at}:
-      Ask.reply(f, i, Spec.Request.Write{b, p, None{}})
-    case Cmd.Fix{i, x, p, at}:
-      Ask.reply(f, i, Spec.Request.Resolve{x, p, None{}})
     case Cmd.Answer{+q}:
       Answer.show(q, Fasts.Fast.answer(f, q))
     case Cmd.Read{x, k, p}:
@@ -2002,8 +2695,16 @@ def Cmd.reply(+w: String, c: Cmd, +f0: Fasts.Fast, +f: Fasts.Fast) -> String:
     case _:
       Node.summary(f0, f)
 
-# the reply to the command c of the writer w at the node f, which was f0
-# when it resumed with the log l, after the data address a keeps f and the
+# the refusals rs, each on a line of its own
+def Notes.show(rs: List<&2, String>) -> String:
+  match rs:
+    case Nil{}:
+      ""
+    case Con{r, rest}:
+      "\n" ++ r ++ Notes.show(rest)
+
+# the reply to the command c of the writer w at the node v, which was f0
+# when it resumed with the log l, after the data address a keeps it and the
 # mounts ms
 def Node.done(
   +a: String,
@@ -2012,12 +2713,21 @@ def Node.done(
   +l: Log,
   ms: Mounts,
   +f0: Fasts.Fast,
-  +f: Fasts.Fast
+  v: Live
 ) -> Disk.Run(String):
-  do Disk.Run<String>:
-    l2: Log <- Node.save(a, l, f0, f)
-    Mounts.save(a, ms)
-    return Cmd.reply(w, c, f0, f)
+  match v:
+    case Live{+f, +ts, rs}:
+      do Disk.Run<String>:
+        l2: Log <- Node.save(a, l, f0, f, ts)
+        Mounts.save(a, ms)
+        return Cmd.reply(w, c, f0, f) ++ Notes.show(rs)
+
+# the node v after it works until a work adds no fact (at most 256 works),
+# and the writer w leaves
+def Live.settled(+w: String, v: Live) -> Live:
+  match v:
+    case Live{f, ts, rs}:
+      Live{Fasts.Fast.does(Node.settle(256n, False{}, f), Nodes.Act.Leave{w}), ts, rs}
 
 # Node.resumed, once the node read its mounted files (b)
 def Node.scanned(
@@ -2032,16 +2742,8 @@ def Node.scanned(
   match b:
     case Scanned{f1, seen}:
       do Disk.Run<String>:
-        f2: Fasts.Fast <- Cmd.does(w, c, Fasts.Fast.does(f1, Nodes.Act.Connect{w}))
-        Node.done(
-          a,
-          w,
-          c,
-          l,
-          Mounts.with(ms, seen),
-          f0,
-          Fasts.Fast.does(Node.settle(256n, False{}, f2), Nodes.Act.Leave{w})
-        )
+        v: Live <- Cmd.does(w, c, Live{Fasts.Fast.does(f1, Nodes.Act.Connect{w}), Log.sigs(l), []})
+        Node.done(a, w, c, l, Mounts.with(ms, seen), f0, Live.settled(w, v))
 
 # the reply to the command c of the writer w, at the data address a where
 # the node f0 resumed with the log l and the mounts ms: the node reads its
@@ -2075,14 +2777,15 @@ def Node.ran(+a: String, +w: String, +c: Cmd, +ms: Mounts, k: Stored) -> Disk.Ru
 
 # the reply to the command c of the writer w, at the data address a, while
 # the node holds its lock; a mount or an unmount changes the mounts first
-def Node.run(+a: String, +w: String, +c: Cmd) -> Disk.Run(String):
+def Node.run(+a: String, +w: String, c: Cmd) -> Disk.Run(String):
   Node.locked(
     String,
     a,
     do Disk.Run<String>:
+      +x: Cmd <- Cmd.load(c)
       k: Stored <- Node.load(a)
       ms: Mounts <- Mounts.load(a)
-      Node.ran(a, w, c, Mounts.change(c, ms), k))
+      Node.ran(a, w, x, Mounts.change(x, ms), k))
 
 # A node that serves
 # ------------------
@@ -2105,83 +2808,137 @@ def Serve.poll_ms() -> U32:
 type Held is Data:
   Held{log: Log, fast: Fasts.Fast, mounts: Mounts, listing: String}
 
-# what a session did: the node after it, and whether it stopped
+# what a session did: the node after it, whether it stopped, and the reply
+# to send, if any
 type Session is Data:
-  Session{fast: Fasts.Fast, stopped: Bool}
+  Session{live: Live, stopped: Bool, reply: Maybe<&2, String>}
 
-# what the client of a session asks first: a sync (0) or a stop, and its
-# summary
-type Hello is Data:
-  Hello{kind: Nat, summary: Summary}
+# Remote
+# ------
+# A writer sends a command to a node that serves: vend tcp:<host>:<port>
+# <writer> <command>. The client reads the file that a write or a resolve
+# names and sends its words; the node that serves never reads a file for a
+# writer. Mount, unmount, sync and drop are local only: they make the node
+# read files or reach other nodes, which a writer that is not trusted must
+# not make it do. A stop goes as its own message (Hello.Stop).
 
-# what a client asks first
-def Hello.read(ts: List<&2, U32>) -> Maybe<&2, Codes.Read<Hello>>:
-  Codes.Code.two.read(
-    ~Nat,
-    ~Summary,
-    ~Hello,
-    ~Codes.Code.count.read,
-    ~Summary.read,
-    a => b => Hello{a, b},
-    ts
-  )
+# the command x of a writer, sent to a node that serves with the words m of
+# the file it names, if any; or why it does not run (none sent for a file)
+def Remote.cmd.file(
+  f: Maybe<&2, String>,
+  +x: Cmd,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> Result<&1, &1, String, Cmd>:
+  match f m:
+    case Some{at} None{}:
+      Fail{"the words of the file were not sent"}
+    case _ m2:
+      Done{Cmd.loaded(x, m2)}
 
-# the session on the socket s of the node f that serves, after the client
-# asked h
-def Serve.hello(s: Socket, +f: Fasts.Fast, h: Hello) -> Disk.Sock(Session):
+# the command x of a writer, sent to a node that serves, unless it is local
+# only (l)
+def Remote.cmd.at(
+  l: Maybe<&2, String>,
+  +x: Cmd,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> Result<&1, &1, String, Cmd>:
+  match l:
+    case Some{e}:
+      Fail{e}
+    case None{}:
+      Remote.cmd.file(Cmd.file(x), x, m)
+
+# the command that the node that serves runs for a writer, from what c reads
+# and the words m of the file it names, if sent; or why it does not run it
+def Remote.cmd.of(
+  c: Maybe<&2, Cmd>,
+  m: Maybe<&2, Maybe<&2, List<&2, U32>>>
+) -> Result<&1, &1, String, Cmd>:
+  match c:
+    case None{}:
+      Fail{"not a command (vend lists them)"}
+    case Some{+x}:
+      Remote.cmd.at(Cmd.local(x), x, m)
+
+# what the session of the node f that serves, with the signatures ts, does
+# for the command r of the writer w: the writer connects, the command does
+# its deeds, the node works, the writer leaves; the reply is what the node
+# then answers
+def Serve.command(
+  +w: String,
+  +f: Fasts.Fast,
+  ts: Crits.Crit<Hyper.Sig>,
+  r: Result<&1, &1, String, Cmd>
+) -> Session:
+  match r:
+    case Fail{e}:
+      Session{Live{f, ts, []}, False{}, Some{e}}
+    case Done{+c}:
+      +g = Fasts.Fast.does(
+        Node.settle(256n, False{}, Cmd.acts(w, c, Fasts.Fast.does(f, Nodes.Act.Connect{w}))),
+        Nodes.Act.Leave{w}
+      )
+      Session{Live{g, ts, []}, False{}, Some{Cmd.reply(w, c, f, g)}}
+
+# the session on the socket s of the node f that serves, with the
+# signatures ts, after the client asked h
+def Serve.hello(
+  s: Socket,
+  +f: Fasts.Fast,
+  +ts: Crits.Crit<Hyper.Sig>,
+  h: Hello
+) -> Disk.Sock(Session):
   match h:
-    case Hello{0n, x}:
+    case Hello.Sync{x}:
       Disk.Sock.bind(
         Unit,
         Session,
-        Wire.send(s, Served.code(Served{Wire.offer(f, x), Wire.summary(f)}, [])),
+        Wire.send(s, Served.code(Served{Wire.offer(f, ts, x), Wire.summary(f)}, [])),
         t => u => Disk.Sock.bind(
           Offer,
           Session,
-          Wire.recv(~Offer, ~Offer.read, t),
-          t2 => o => Disk.Sock.pure(Session, t2, Session{Wire.take(f, o), False{}})
+          Wire.recv(~Offer, ~Offer.read, t, Serve.wait_ms()),
+          t2 => o => Disk.Sock.pure(
+            Session,
+            t2,
+            Session{Wire.take(Live{f, ts, []}, o), False{}, None{}}
+          )
         )
       )
-    case Hello{1n+k, x}:
-      +g = Fasts.Fast.does(f, Nodes.Act.Stop{Bool.not(Nat.is_eq(k, 0n))})
+    case Hello.Stop{force}:
+      +g = Fasts.Fast.does(f, Nodes.Act.Stop{force})
       +st = Raw.stopped(Fasts.Fast.raw(g))
-      Disk.Sock.bind(
-        Unit,
-        Session,
-        Wire.send(s, Codes.Code.count(Bool.pick(Nat, st, 1n, 0n), [])),
-        t => u => Disk.Sock.pure(Session, t, Session{g, st})
-      )
+      Disk.Sock.pure(Session, s, Session{Live{g, ts, []}, st, Some{Stop.show(st)}})
+    case Hello.Cmd{+w, ws, m}:
+      Disk.Sock.pure(Session, s, Serve.command(w, f, ts, Remote.cmd.of(Cmd.read(w, ws), m)))
 
-# a session of the node f that serves, on the socket s
-def Serve.session(s: Socket, +f: Fasts.Fast) -> Disk.Sock(Session):
-  Disk.Sock.bind(Hello, Session, Wire.recv(~Hello, ~Hello.read, s), t => h => Serve.hello(t, f, h))
+# a session of the node f that serves, with the signatures ts, on the
+# socket s
+def Serve.session(s: Socket, +f: Fasts.Fast, +ts: Crits.Crit<Hyper.Sig>) -> Disk.Sock(Session):
+  Disk.Sock.bind(
+    Hello,
+    Session,
+    Wire.recv(~Hello, ~Hello.read, s, Serve.wait_ms()),
+    t => h => Serve.hello(t, f, ts, h)
+  )
 
-# what the node that serves holds after it worked on the node g and kept it
-# at the data address a, where h is what it held before; and whether it
-# stops (st)
-def Serve.keep(+a: String, h: Held, +g: Fasts.Fast, +st: Bool) -> Disk.Run(Maybe<&2, Held>):
+# what the node that serves holds after it worked on the node g, with the
+# signatures ts, and kept it at the data address a, where h is what it held
+# before; and whether it stops (st)
+def Serve.keep(
+  +a: String,
+  h: Held,
+  +g: Fasts.Fast,
+  +ts: Crits.Crit<Hyper.Sig>,
+  +st: Bool
+) -> Disk.Run(Maybe<&2, Held>):
   match h:
     case Held{+l, +f, +ms, +ls}:
       +g2 = Node.settle(256n, False{}, g)
       do Disk.Run<Maybe<&2, Held>>:
-        l2: Log <- Node.save(a, l, f, g2)
+        l2: Log <- Node.save(a, l, f, g2, ts)
         Mounts.save(a, ms)
         return Bool.pick(Maybe<&2, Held>, st, None{}, Some{Held{l2, g2, ms, ls}})
-
-# what the node that serves holds after a session answered r, where h is
-# what it held before: a session that failed changes nothing
-def Serve.answered(
-  +a: String,
-  +h: Held,
-  r: Result<&1, &1, String, Session>
-) -> Disk.Run(Maybe<&2, Held>):
-  match r:
-    case Fail{e}:
-      do Disk.Run<Maybe<&2, Held>>:
-        Disk.Run.io(Unit, IO.print_err("a session failed: " ++ e))
-        return Some{h}
-    case Done{Session{g, st}}:
-      Serve.keep(a, h, g, st)
 
 # the fast node of what a node that serves holds
 def Held.fast(h: Held) -> Fasts.Fast:
@@ -2189,21 +2946,110 @@ def Held.fast(h: Held) -> Fasts.Fast:
     case Held{l, f, ms, ls}:
       f
 
+# the signatures of the votes that a node that serves holds
+def Held.sigs(h: Held) -> Crits.Crit<Hyper.Sig>:
+  match h:
+    case Held{l, f, ms, ls}:
+      Log.sigs(l)
+
+# the refusals rs, each printed on the error output
+def Notes.print(rs: List<&2, String>) -> IO(Unit):
+  match rs:
+    case Nil{}:
+      IO.pure(Unit, Unit{})
+    case Con{r, rest}:
+      IO.bind(Unit, Unit, IO.print_err(r), u => Notes.print(rest))
+
+# the reply m of a session, if any, sent on the socket t, and the socket
+# closed
+def Serve.send(t: Socket, m: Maybe<&2, String>) -> IO(Unit):
+  match m:
+    case None{}:
+      Socket.close(t)
+    case Some{x}:
+      IO.bind(
+        Result<&1, &1, String, Unit>,
+        Unit,
+        Disk.Sock.close(Unit, Wire.send(t, Codes.Code.text(x, []))),
+        r => IO.pure(Unit, Unit{})
+      )
+
+# the reply m of a session, if any, where the node could not keep what it
+# did, for the reason e
+def Serve.failed(e: String, m: Maybe<&2, String>) -> Maybe<&2, String>:
+  match m:
+    case None{}:
+      None{}
+    case Some{x}:
+      Some{"the node could not keep it: " ++ e}
+
+# the reply m of a session, if any, sent on the socket t once the node kept
+# what the session did (r), and the socket closed
+def Serve.reply(
+  t: Socket,
+  m: Maybe<&2, String>,
+  r: Result<&1, &1, String, Maybe<&2, Held>>
+) -> Disk.Run(Maybe<&2, Held>):
+  match r:
+    case Done{h}:
+      IO.bind(
+        Unit,
+        Result<&1, &1, String, Maybe<&2, Held>>,
+        Serve.send(t, m),
+        u => Disk.Run.pure(Maybe<&2, Held>, h)
+      )
+    case Fail{+e}:
+      IO.bind(
+        Unit,
+        Result<&1, &1, String, Maybe<&2, Held>>,
+        Serve.send(t, Serve.failed(e, m)),
+        u => Disk.Run.fail(Maybe<&2, Held>, e)
+      )
+
+# what the node that serves holds after a session ended with p, where h is
+# what it held before: a session that failed changes nothing; else the node
+# keeps what it did, then replies
+def Serve.ended(
+  +a: String,
+  +h: Held,
+  p: Socket & Result<&1, &1, String, Session>
+) -> Disk.Run(Maybe<&2, Held>):
+  match p:
+    case (t, Fail{e}):
+      do Disk.Run<Maybe<&2, Held>>:
+        Disk.Run.io(Unit, Socket.close(t))
+        Disk.Run.io(Unit, IO.print_err("a session failed: " ++ e))
+        return Some{h}
+    case (t, Done{Session{Live{g, ts, rs}, +st, m}}):
+      do Disk.Run<Maybe<&2, Held>>:
+        Disk.Run.io(Unit, Notes.print(rs))
+        r: Result<
+          &1,
+          &1,
+          String,
+          Maybe<
+            &2,
+            Held>> <- Disk.Run.io(
+          Result<&1, &1, String, Maybe<&2, Held>>,
+          Serve.keep(a, h, g, ts, st)
+        )
+        Serve.reply(t, m, r)
+
 # what the node that serves holds after a session on the socket s, where h
 # is what it held before
 def Serve.met(+a: String, +h: Held, s: Socket) -> Disk.Run(Maybe<&2, Held>):
   IO.bind(
-    Result<&1, &1, String, Session>,
+    Socket & Result<&1, &1, String, Session>,
     Result<&1, &1, String, Maybe<&2, Held>>,
-    Disk.Sock.close(Session, Serve.session(s, Held.fast(h))),
-    r => Serve.answered(a, h, r)
+    Serve.session(s, Held.fast(h), Held.sigs(h)),
+    p => Serve.ended(a, h, p)
   )
 
 # Serve.read, once the node read its mounted files (b)
 def Serve.scanned(+a: String, h: Held, b: Scanned) -> Disk.Run(Maybe<&2, Held>):
   match h b:
-    case Held{l, f, ms, ls} Scanned{g, seen}:
-      Serve.keep(a, Held{l, f, Mounts.with(ms, seen), ls}, g, False{})
+    case Held{+l, f, ms, ls} Scanned{g, seen}:
+      Serve.keep(a, Held{l, f, Mounts.with(ms, seen), ls}, g, Log.sigs(l), False{})
 
 # what the node that serves holds after it read its mounted files, where h
 # is what it held before and ls the sizes and times of the files now
@@ -2386,45 +3232,94 @@ def Serve.at(ps: List<&2, String>) -> Maybe<&2, Tcp>:
     case _:
       None{}
 
-# a stop sent to the node that serves at the TCP address t, as the reply it
-# gives (whether it stopped)
-def Remote.stop(t: Tcp, +force: Bool) -> Disk.Run(String):
+# what the node that serves at the TCP address t replies when the client
+# asks h
+def Remote.ask(t: Tcp, h: Hello) -> Disk.Run(String):
   Tcp.connect(
     String,
     t,
     s => Disk.Sock.bind(
       Unit,
       String,
-      Wire.send(
-        s,
-        Codes.Code.count(Bool.pick(Nat, force, 2n, 1n), Summary.code(Summary{[], []}, []))
-      ),
-      t2 => u => Disk.Sock.bind(
-        Nat,
-        String,
-        Wire.recv(~Nat, ~Codes.Code.count.read, t2),
-        t3 => n => Disk.Sock.pure(String, t3, Stop.show(Bool.not(Nat.is_eq(n, 0n))))
-      )
+      Wire.send(s, Hello.code(h, [])),
+      t2 => u => Wire.recv(~String, ~Codes.Code.text.read, t2, Wire.wait_ms())
     )
   )
 
-# a new node of the name n on the new data address a: its directory, its
-# name, no facts and no parts. A reserved name is no node's
-def Node.init.if(reserved: Bool, +a: String, +n: String) -> Disk.Run(String):
-  match reserved:
-    case True{}:
-      Disk.Run.fail(String, "the name " ++ n ++ " is reserved: it starts with '~'")
-    case False{}:
-      do Disk.Run<String>:
-        Disk.Disk.make_dir(a)
-        Disk.Disk.make_dir(Path.at(a, "parts"))
-        Disk.Disk.write(Path.at(a, "name"), "x", Texts.Bytes.of_text(n))
-        Disk.Disk.write(Path.at(a, "facts"), "x", Disk.Short.bytes(Log.head(), []))
-        return "node " ++ n ++ " starts on " ++ a
+# the words of the file that the command c names, unless it is local only
+# (l)
+def Remote.file.at(l: Maybe<&2, String>, c: Cmd) -> Disk.Run(Maybe<&2, Maybe<&2, List<&2, U32>>>):
+  match l:
+    case Some{e}:
+      Disk.Run.fail(Maybe<&2, Maybe<&2, List<&2, U32>>>, e)
+    case None{}:
+      File.load(Cmd.file(c))
 
-# a new node of the name n on the new data address a
-def Node.init(+a: String, +n: String) -> Disk.Run(String):
-  Node.init.if(Facts.Trust.reserved(n), a, n)
+# the words of the file that the command m names, if it is a command that a
+# writer may send to a node that serves
+def Remote.file(m: Maybe<&2, Cmd>) -> Disk.Run(Maybe<&2, Maybe<&2, List<&2, U32>>>):
+  match m:
+    case None{}:
+      Disk.Run.fail(Maybe<&2, Maybe<&2, List<&2, U32>>>, "not a command (vend lists them)")
+    case Some{+c}:
+      Remote.file.at(Cmd.local(c), c)
+
+# the command ws of the writer w sent to the node that serves at the TCP
+# address t, and its reply
+def Remote.cmd(+t: Tcp, +w: String, +ws: List<&2, String>) -> Disk.Run(String):
+  do Disk.Run<String>:
+    m: Maybe<&2, Maybe<&2, List<&2, U32>>> <- Remote.file(Cmd.read(w, ws))
+    Remote.ask(t, Hello.Cmd{w, ws, m})
+
+# a new secret seed: the hash of eight words of the entropy of the system
+# and the time now
+def Key.new() -> Disk.Run(Hashes.Hash):
+  do Disk.Run<Hashes.Hash>:
+    a: U32 <- Disk.Run.sys(U32, "random", IO.random_u32())
+    b: U32 <- Disk.Run.sys(U32, "random", IO.random_u32())
+    c: U32 <- Disk.Run.sys(U32, "random", IO.random_u32())
+    d: U32 <- Disk.Run.sys(U32, "random", IO.random_u32())
+    e: U32 <- Disk.Run.sys(U32, "random", IO.random_u32())
+    f: U32 <- Disk.Run.sys(U32, "random", IO.random_u32())
+    g: U32 <- Disk.Run.sys(U32, "random", IO.random_u32())
+    h: U32 <- Disk.Run.sys(U32, "random", IO.random_u32())
+    now: Nat <- Disk.Run.io(Nat, IO.now())
+    return Hashes.Sha.hash(a <> b <> c <> d <> e <> f <> g <> h <> Codes.Code.count(now, []))
+
+# a new node of the label l on the new data address a, with the secret seed
+# seed: its directory, its secret, its name, no facts and no parts. The
+# secret directory is made with mode 700 before the seed is written in it,
+# and the seed is then given mode 600 (Base makes files with mode 644, less
+# the umask): only its user and root read it, and it sits there unciphered
+def Node.init.with(+a: String, +l: String, +seed: Hashes.Hash) -> Disk.Run(String):
+  +name = Name.of(l, Hyper.Key.public(seed))
+  do Disk.Run<String>:
+    Disk.Disk.make_dir(a)
+    Disk.Disk.make_dir(Path.at(a, "parts"))
+    out: String <- Disk.Program.run("mkdir", ["-m", "700", Path.at(a, "secret")])
+    Disk.Disk.write(Key.at(a, "seed"), "x", Texts.Bytes.of_text(Hash.show(seed)))
+    mode: String <- Disk.Program.run("chmod", ["600", Key.at(a, "seed")])
+    Disk.Disk.write(Key.at(a, "next"), "x", Texts.Bytes.of_text("0"))
+    Disk.Disk.write(Path.at(a, "name"), "x", Texts.Bytes.of_text(name))
+    Disk.Disk.write(Path.at(a, "facts"), "x", Disk.Short.bytes(Log.head(), []))
+    return "node " ++ name ++ " starts on " ++ a
+
+# a new node of the label l on the new data address a, if l is a label
+def Node.init.if(ok: Bool, +a: String, +l: String) -> Disk.Run(String):
+  match ok:
+    case False{}:
+      Disk.Run.fail(
+        String,
+        "the label "
+          ++ l
+          ++ " is not one: it is letters, digits, '-', '_' and '.' (the name of the node is the label, '~' and its key)"
+      )
+    case True{}:
+      Disk.Run.bind(Hashes.Hash, String, Key.new(), seed => Node.init.with(a, l, seed))
+
+# a new node of the label l on the new data address a
+def Node.init(+a: String, +l: String) -> Disk.Run(String):
+  Node.init.if(Label.is(l), a, l)
 
 # Main
 # ----
@@ -2433,7 +3328,7 @@ def Node.init(+a: String, +n: String) -> Disk.Run(String):
 def Main.usage() -> String:
   String.join(
     [
-      "usage: vend <address> init <node name>",
+      "usage: vend <address> init <label>       a new node, named <label>~<its key>",
       "       vend <address> <writer> <command>",
       "commands (a line is <store hash>[:<branch>]; an id is [<writer>/]<request id>):",
       "  start <id> <owner node>...           a new store",
@@ -2456,7 +3351,7 @@ def Main.usage() -> String:
       "  sync <other address>|tcp:<host>:<port>  take in what the node there holds, and give it what it lacks over TCP",
       "  mount <folder> <line> <path> | unmount <folder>   each save of a file in the folder becomes a version",
       "       vend <address> serve [<host>:]<port>   run: answer syncs, read the mounts, work, keep",
-      "       vend tcp:<host>:<port> <writer> stop [--force]"
+      "       vend tcp:<host>:<port> <writer> <command>   any command but mount, unmount, sync and drop"
     ],
     "\n"
   )
@@ -2478,18 +3373,15 @@ def Main.serve(+a: String, m: Maybe<&2, Tcp>) -> Disk.Run(String):
       Serve.run(a, t)
 
 # the command ws of the writer w at a, which is a data address, or the TCP
-# address of a node that serves (m): only a stop goes to such a node
+# address of a node that serves (m)
 def Main.to(+a: String, m: Maybe<&2, Tcp>, +w: String, ws: List<&2, String>) -> Disk.Run(String):
   match m ws:
     case Some{t} Con{"stop", Nil{}}:
-      Remote.stop(t, False{})
+      Remote.ask(t, Hello.Stop{False{}})
     case Some{t} Con{"stop", Con{"--force", Nil{}}}:
-      Remote.stop(t, True{})
-    case Some{t} _:
-      Disk.Run.fail(
-        String,
-        "a node that serves takes a stop only (vend tcp:<host>:<port> <writer> stop)"
-      )
+      Remote.ask(t, Hello.Stop{True{}})
+    case Some{t} rest:
+      Remote.cmd(t, w, rest)
     case None{} rest:
       Main.cmd(a, w, Cmd.read(w, rest))
 
