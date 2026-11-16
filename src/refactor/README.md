@@ -129,8 +129,11 @@ tree than they do, because a module never imports a sibling.
 
 | Module | What it states | Status |
 | --- | --- | --- |
-| Shared helpers (`shared/shared/shared/shared.bend`) | Comparing lists of words (equal only when the same, flips when swapped, "below" is transitive), the split key of two lists of words, optional values, lists of pairs, n values in a row. | Laws stated |
-| `sha256` (`shared/shared/shared/`) | SHA-256 of words. No law: the standard's own vectors test it. | Stated; test to approve |
+| `list_append` (`shared/shared/shared/`) | Joining lists (Base's `List.append`) is associative, and joining an empty list changes nothing. | Laws stated |
+| `word_list_order` (`shared/shared/shared/`) | Comparing lists of words: equal only when the same, flips when swapped, "below" is transitive; the split key of two lists lies above the first and at or below the second. | Laws stated |
+| `shared.bend` (`shared/shared/shared/`) | Helpers with no laws: combining comparisons, optional values, n values in a row. | Stated |
+| `association_list` (`shared/shared/`) | Lists of key-value pairs, which the `patricia_map` laws compare a map with. No laws. | Stated |
+| `sha256` (`shared/shared/`) | SHA-256 of words. No law: a test against the standard's examples checks it. | Stated; test written |
 | `patricia_map` | A map from keys (lists of words) to values: made from a list, merge, keep, split, list, "same entries, same map", and a summary that combines the summaries of two halves split where the keys part (a Merkle hash when the combine hashes). | Laws stated |
 | `exact_word_encoding` | Exact encodings as words (each value has one encoding, read back with the words after it) for a word, a number, a pair, n values in a row, and a conversion; every other type's encoding comes from these. | Laws stated |
 | `signatures` | A signer (never copied, so never signs twice from one state): every signature it makes checks with its public key, which never changes; it makes at least 2^20. | Laws stated |
