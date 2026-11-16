@@ -2,7 +2,7 @@ import Base
 import ../shared/monotone_queries/spec.bend as MonotoneQueries
 import ../shared/shared/shared/word_list_sets/spec.bend as WordListSets
 
-# Slot consensus decides, for each step (a slot of a line, named by words), one
+# Slot consensus decides, for each step (a slot of a line), one
 # choice (words), by the ballots of the voters of that step. The voters are a
 # parameter: a module above says who they are.
 #
@@ -36,13 +36,23 @@ type BallotAction is Data:
   LeadRound{choice: List<&2, U32>, basis: List<&2, List<&2, U32>>}
   VoteForLead{choice: List<&2, U32>}
 
+# a step: the slot number slot of the line named line
+type Step is Data:
+  Step{line: List<&2, U32>, slot: Nat}
+
+# a and b are the same step
+def Step.same(a: Step, b: Step) -> Bool:
+  match a b:
+    case Step{la, na} Step{lb, nb}:
+      Bool.and(WordListSets.same(la, lb), Nat.is_eq(na, nb))
+
 # a ballot: the key of the record it comes from, its voter, its step, its index in
 # the voter's chain for the step, its round, and what it does
 type Ballot is Data:
   Ballot{
     key: List<&2, U32>,
     voter: List<&2, U32>,
-    step: List<&2, U32>,
+    step: Step,
     index: Nat,
     round: Nat,
     cast: BallotAction
@@ -87,7 +97,7 @@ def Ballot.same(a: Ballot, b: Ballot) -> Bool:
       Bool.and(
         Bool.and(
           WordListSets.same(ka, kb),
-          Bool.and(WordListSets.same(va, vb), WordListSets.same(sa, sb))
+          Bool.and(WordListSets.same(va, vb), Step.same(sa, sb))
         ),
         Bool.and(Bool.and(Nat.is_eq(ia, ib), Nat.is_eq(ra, rb)), BallotAction.same(ca, cb))
       )
@@ -108,7 +118,7 @@ def Ballot.contradicts(a: Ballot, b: Ballot) -> Bool:
       +same_round = Nat.is_eq(ra, rb)
       +same_cast = BallotAction.same(ca, cb)
       Bool.and(
-        Bool.and(WordListSets.same(va, vb), WordListSets.same(sa, sb)),
+        Bool.and(WordListSets.same(va, vb), Step.same(sa, sb)),
         Bool.or(
           Bool.and(Nat.is_eq(ia, ib), Bool.not(Bool.and(same_round, same_cast))),
           Bool.and(
@@ -119,10 +129,10 @@ def Ballot.contradicts(a: Ballot, b: Ballot) -> Bool:
       )
 
 # the ballot b is of a voter of vs, for the step s
-def Ballot.is_of(b: Ballot, vs: List<&2, List<&2, U32>>, s: List<&2, U32>) -> Bool:
+def Ballot.is_of(b: Ballot, vs: List<&2, List<&2, U32>>, s: Step) -> Bool:
   match b:
     case Ballot{k, v, st, i, r, c}:
-      Bool.and(WordListSets.contains(vs, v), WordListSets.same(st, s))
+      Bool.and(WordListSets.contains(vs, v), Step.same(st, s))
 
 # the key of a ballot of all that contradicts a, if any
 def Ballots.contradicting(all: List<&2, Ballot>, +a: Ballot) -> Maybe<&2, List<&2, U32>>:
@@ -153,7 +163,7 @@ def Ballots.lie.proof(
 def Ballots.lie(
   bs: List<&2, Ballot>,
   +vs: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   +all: List<&2, Ballot>
 ) -> Maybe<&2, List<&2, List<&2, U32>>>:
   match bs:
@@ -176,13 +186,13 @@ def Ballots.lie(
 # ------
 
 # all has a ballot of the voter v for the step s with the index i
-def Ballots.has_index(all: List<&2, Ballot>, +v: List<&2, U32>, +s: List<&2, U32>, +i: Nat) -> Bool:
+def Ballots.has_index(all: List<&2, Ballot>, +v: List<&2, U32>, +s: Step, +i: Nat) -> Bool:
   match all:
     case Nil{}:
       False{}
     case Con{Ballot{k, w, st, j, r, c}, rest}:
       Bool.or(
-        Bool.and(Bool.and(WordListSets.same(w, v), WordListSets.same(st, s)), Nat.is_eq(j, i)),
+        Bool.and(Bool.and(WordListSets.same(w, v), Step.same(st, s)), Nat.is_eq(j, i)),
         Ballots.has_index(rest, v, s, i)
       )
 
@@ -191,7 +201,7 @@ def Ballots.chain_below(
   +i: Nat,
   +all: List<&2, Ballot>,
   +v: List<&2, U32>,
-  +s: List<&2, U32>
+  +s: Step
 ) -> Bool:
   match i:
     case 0n:
@@ -204,7 +214,7 @@ def Ballots.chain_below(
 def Ballots.joined_above(
   all: List<&2, Ballot>,
   +v: List<&2, U32>,
-  +s: List<&2, U32>,
+  +s: Step,
   +r: Nat,
   +i: Nat
 ) -> Bool:
@@ -214,7 +224,7 @@ def Ballots.joined_above(
     case Con{Ballot{k, w, st, j, q, c}, rest}:
       Bool.or(
         Bool.and(
-          Bool.and(Bool.and(WordListSets.same(w, v), WordListSets.same(st, s)), Nat.is_lt(j, i)),
+          Bool.and(Bool.and(WordListSets.same(w, v), Step.same(st, s)), Nat.is_lt(j, i)),
           Bool.and(Nat.is_lt(r, q), BallotAction.same(c, JoinRound{}))
         ),
         Ballots.joined_above(rest, v, s, r, i)
@@ -236,7 +246,7 @@ def Ballots.first_join(
   bs: List<&2, Ballot>,
   +all: List<&2, Ballot>,
   +v: List<&2, U32>,
-  +s: List<&2, U32>,
+  +s: Step,
   +r: Nat
 ) -> Maybe<&2, Nat>:
   match bs:
@@ -244,7 +254,7 @@ def Ballots.first_join(
       None{}
     case Con{Ballot{k, w, st, +j, q, c}, rest}:
       here = Bool.and(
-        Bool.and(Bool.and(WordListSets.same(w, v), WordListSets.same(st, s)), Nat.is_eq(q, r)),
+        Bool.and(Bool.and(WordListSets.same(w, v), Step.same(st, s)), Nat.is_eq(q, r)),
         Bool.and(BallotAction.same(c, JoinRound{}), Ballots.chain_below(j, all, v, s))
       )
       Nat.min_some(
@@ -315,7 +325,7 @@ def VotesBeforeJoin.join(a: VotesBeforeJoin, b: VotesBeforeJoin) -> VotesBeforeJ
 def JudgedBallot.find(
   js: List<&2, JudgedBallot>,
   +v: List<&2, U32>,
-  +s: List<&2, U32>,
+  +s: Step,
   +i: Nat
 ) -> Maybe<&2, Bool>:
   match js:
@@ -327,7 +337,7 @@ def JudgedBallot.find(
         Bool,
         Bool.pick(
           Maybe<&2, Bool>,
-          Bool.and(Bool.and(WordListSets.same(w, v), WordListSets.same(st, s)), Nat.is_eq(j, i)),
+          Bool.and(Bool.and(WordListSets.same(w, v), Step.same(st, s)), Nat.is_eq(j, i)),
           Some{ok},
           None{}
         ),
@@ -350,21 +360,21 @@ def VotesBeforeJoin.of_ballot(
   b: Ballot,
   js: List<&2, JudgedBallot>,
   v: List<&2, U32>,
-  s: List<&2, U32>,
+  s: Step,
   i: Nat
 ) -> VotesBeforeJoin:
   match b:
     case Ballot{k, +w, +st, +j, r, LeadRound{x, basis}}:
       Bool.pick(
         VotesBeforeJoin,
-        Bool.and(Bool.and(WordListSets.same(w, v), WordListSets.same(st, s)), Nat.is_lt(j, i)),
+        Bool.and(Bool.and(WordListSets.same(w, v), Step.same(st, s)), Nat.is_lt(j, i)),
         VotesBeforeJoin.of_judgment(JudgedBallot.find(js, w, st, j), r, x),
         VotesBeforeJoin{True{}, None{}}
       )
     case Ballot{k, +w, +st, +j, r, VoteForLead{x}}:
       Bool.pick(
         VotesBeforeJoin,
-        Bool.and(Bool.and(WordListSets.same(w, v), WordListSets.same(st, s)), Nat.is_lt(j, i)),
+        Bool.and(Bool.and(WordListSets.same(w, v), Step.same(st, s)), Nat.is_lt(j, i)),
         VotesBeforeJoin.of_judgment(JudgedBallot.find(js, w, st, j), r, x),
         VotesBeforeJoin{True{}, None{}}
       )
@@ -376,7 +386,7 @@ def VotesBeforeJoin.below(
   bs: List<&2, Ballot>,
   +js: List<&2, JudgedBallot>,
   +v: List<&2, U32>,
-  +s: List<&2, U32>,
+  +s: Step,
   +i: Nat
 ) -> VotesBeforeJoin:
   match bs:
@@ -399,7 +409,7 @@ def JoinTally.of_join(
   all: List<&2, Ballot>,
   js: List<&2, JudgedBallot>,
   v: List<&2, U32>,
-  s: List<&2, U32>
+  s: Step
 ) -> JoinTally:
   match m:
     case None{}:
@@ -420,7 +430,7 @@ def JoinTally.of(
   +all: List<&2, Ballot>,
   +js: List<&2, JudgedBallot>,
   +vs: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   +r: Nat
 ) -> JoinTally:
   match us:
@@ -465,12 +475,12 @@ def Judge.lead(
   js: List<&2, JudgedBallot>,
   +vs: List<&2, List<&2, U32>>,
   +n: Nat,
-  +s: List<&2, U32>,
+  +s: Step,
   +r: Nat
 ) -> Maybe<&2, Bool>:
   match b:
     case Ballot{k, +v, st, +i, q, LeadRound{x, basis}}:
-      mine = Bool.and(WordListSets.same(st, s), Nat.is_eq(q, r))
+      mine = Bool.and(Step.same(st, s), Nat.is_eq(q, r))
       chain = Ballots.chain_below(i, all, v, s)
       placed = Bool.and(leads_round(vs, n, r, v), Bool.not(Ballots.joined_above(all, v, s, r, i)))
       Bool.pick(
@@ -519,13 +529,13 @@ def Judge.vote(
   ls: List<&2, JudgedBallot>,
   +vs: List<&2, List<&2, U32>>,
   n: Nat,
-  +s: List<&2, U32>,
+  +s: Step,
   +r: Nat
 ) -> Maybe<&2, Bool>:
   match b:
     case Ballot{k, +v, st, +i, q, VoteForLead{x}}:
       mine = Bool.and(
-        Bool.and(WordListSets.same(st, s), Nat.is_eq(q, r)),
+        Bool.and(Step.same(st, s), Nat.is_eq(q, r)),
         WordListSets.contains(vs, v)
       )
       Bool.pick(
@@ -557,7 +567,7 @@ def Judge.leads(
   +js: List<&2, JudgedBallot>,
   +vs: List<&2, List<&2, U32>>,
   +n: Nat,
-  +s: List<&2, U32>,
+  +s: Step,
   +r: Nat
 ) -> List<&2, JudgedBallot>:
   match bs:
@@ -578,7 +588,7 @@ def Judge.votes(
   +ls: List<&2, JudgedBallot>,
   +vs: List<&2, List<&2, U32>>,
   +n: Nat,
-  +s: List<&2, U32>,
+  +s: Step,
   +r: Nat
 ) -> List<&2, JudgedBallot>:
   match bs:
@@ -599,7 +609,7 @@ def Judge.below(
   +all: List<&2, Ballot>,
   +vs: List<&2, List<&2, U32>>,
   +n: Nat,
-  +s: List<&2, U32>
+  +s: Step
 ) -> List<&2, JudgedBallot>:
   match k:
     case 0n:
@@ -615,13 +625,13 @@ def Judge.below(
       )
 
 # the highest round of the ballots of bs for the step s
-def Ballots.top_round(bs: List<&2, Ballot>, +s: List<&2, U32>) -> Nat:
+def Ballots.top_round(bs: List<&2, Ballot>, +s: Step) -> Nat:
   match bs:
     case Nil{}:
       0n
     case Con{Ballot{k, v, st, i, +r, c}, rest}:
       +rest_top = Ballots.top_round(rest, s)
-      Bool.pick(Nat, Bool.and(WordListSets.same(st, s), Nat.is_lt(rest_top, r)), r, rest_top)
+      Bool.pick(Nat, Bool.and(Step.same(st, s), Nat.is_lt(rest_top, r)), r, rest_top)
 
 # Deciding
 # --------
@@ -710,7 +720,7 @@ def Decide.answer(m: Maybe<&2, List<&2, U32>>) -> MonotoneQueries.MonotoneAnswer
 def SlotConsensus.decision.after(
   l: Maybe<&2, List<&2, List<&2, U32>>>,
   +vs: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   +all: List<&2, Ballot>
 ) -> MonotoneQueries.MonotoneAnswer<List<&2, U32>>:
   match l:
@@ -726,7 +736,7 @@ def SlotConsensus.decision.after(
 # votes for it in one round, else Unknown
 def SlotConsensus.decision(
   voters: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   +all: List<&2, Ballot>
 ) -> MonotoneQueries.MonotoneAnswer<List<&2, U32>>:
   +vs = WordListSets.dedupe(voters)
@@ -738,7 +748,7 @@ def SlotConsensus.decision(
 # voters are voters: sound, unsound, or not yet
 def SlotConsensus.judgment(
   voters: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   +all: List<&2, Ballot>,
   b: Ballot
 ) -> Maybe<&2, Bool>:
@@ -764,7 +774,7 @@ def BallotToSign.signed(
   c: BallotToSign,
   k: List<&2, U32>,
   me: List<&2, U32>,
-  s: List<&2, U32>
+  s: Step
 ) -> Ballot:
   match c:
     case BallotToSign{i, r, a}:
@@ -790,7 +800,7 @@ def Nat.max_some(a: Maybe<&2, Nat>, b: Maybe<&2, Nat>) -> Maybe<&2, Nat>:
 
 # the index after the highest index of the ballots of me for the step s in bs;
 # 0 when there is none
-def Ballots.next_index(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: List<&2, U32>) -> Nat:
+def Ballots.next_index(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: Step) -> Nat:
   match bs:
     case Nil{}:
       0n
@@ -798,7 +808,7 @@ def Ballots.next_index(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: List<&2, U3
       +later = Ballots.next_index(rest, me, s)
       Bool.pick(
         Nat,
-        Bool.and(Bool.and(WordListSets.same(w, me), WordListSets.same(st, s)), Nat.is_le(later, i)),
+        Bool.and(Bool.and(WordListSets.same(w, me), Step.same(st, s)), Nat.is_le(later, i)),
         1n+i,
         later
       )
@@ -807,7 +817,7 @@ def Ballots.next_index(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: List<&2, U3
 def Ballots.top_round_of(
   bs: List<&2, Ballot>,
   +me: List<&2, U32>,
-  +s: List<&2, U32>
+  +s: Step
 ) -> Maybe<&2, Nat>:
   match bs:
     case Nil{}:
@@ -816,7 +826,7 @@ def Ballots.top_round_of(
       Nat.max_some(
         Bool.pick(
           Maybe<&2, Nat>,
-          Bool.and(WordListSets.same(w, me), WordListSets.same(st, s)),
+          Bool.and(WordListSets.same(w, me), Step.same(st, s)),
           Some{q},
           None{}
         ),
@@ -824,28 +834,28 @@ def Ballots.top_round_of(
       )
 
 # me has, for the step s, a lead or a vote of round r
-def Ballots.acted_in(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: List<&2, U32>, +r: Nat) -> Bool:
+def Ballots.acted_in(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: Step, +r: Nat) -> Bool:
   match bs:
     case Nil{}:
       False{}
     case Con{Ballot{k, w, st, i, q, a}, rest}:
       Bool.or(
         Bool.and(
-          Bool.and(WordListSets.same(w, me), WordListSets.same(st, s)),
+          Bool.and(WordListSets.same(w, me), Step.same(st, s)),
           Bool.and(Nat.is_eq(q, r), Bool.not(BallotAction.same(a, JoinRound{})))
         ),
         Ballots.acted_in(rest, me, s, r)
       )
 
 # me has, for the step s, a lead of round r
-def Ballots.led(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: List<&2, U32>, +r: Nat) -> Bool:
+def Ballots.led(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: Step, +r: Nat) -> Bool:
   match bs:
     case Nil{}:
       False{}
     case Con{Ballot{k, w, st, i, q, a}, rest}:
       Bool.or(
         Bool.and(
-          Bool.and(WordListSets.same(w, me), WordListSets.same(st, s)),
+          Bool.and(WordListSets.same(w, me), Step.same(st, s)),
           Bool.and(Nat.is_eq(q, r), BallotAction.is_lead(a))
         ),
         Ballots.led(rest, me, s, r)
@@ -882,7 +892,7 @@ def ReadyJoiners.of_join(
   all: List<&2, Ballot>,
   js: List<&2, JudgedBallot>,
   +v: List<&2, U32>,
-  s: List<&2, U32>
+  s: Step
 ) -> ReadyJoiners:
   match m:
     case None{}:
@@ -901,7 +911,7 @@ def ReadyJoiners.of(
   us: List<&2, List<&2, U32>>,
   +all: List<&2, Ballot>,
   +js: List<&2, JudgedBallot>,
-  +s: List<&2, U32>,
+  +s: Step,
   +r: Nat
 ) -> ReadyJoiners:
   match us:
@@ -951,7 +961,7 @@ def NextBallot.vote(
   vs: List<&2, List<&2, U32>>,
   n: Nat,
   +me: List<&2, U32>,
-  +s: List<&2, U32>,
+  +s: Step,
   +i: Nat
 ) -> Maybe<&2, BallotToSign>:
   match top:
@@ -980,7 +990,7 @@ def NextBallot.lead(
   +vs: List<&2, List<&2, U32>>,
   +n: Nat,
   +me: List<&2, U32>,
-  +s: List<&2, U32>,
+  +s: Step,
   i: Nat,
   proposal: List<&2, U32>
 ) -> Maybe<&2, BallotToSign>:
@@ -1013,7 +1023,7 @@ def Ballots.count_reached.of(m: Maybe<&2, Nat>, r: Nat) -> Nat:
 def Ballots.count_reached(
   vs: List<&2, List<&2, U32>>,
   +all: List<&2, Ballot>,
-  +s: List<&2, U32>,
+  +s: Step,
   +r: Nat
 ) -> Nat:
   match vs:
@@ -1030,7 +1040,7 @@ def Ballots.catch_up.of(
   m: Maybe<&2, Nat>,
   vs: List<&2, List<&2, U32>>,
   all: List<&2, Ballot>,
-  s: List<&2, U32>,
+  s: Step,
   need: Nat
 ) -> Maybe<&2, Nat>:
   match m:
@@ -1051,7 +1061,7 @@ def Ballots.catch_up(
   us: List<&2, List<&2, U32>>,
   +vs: List<&2, List<&2, U32>>,
   +all: List<&2, Ballot>,
-  +s: List<&2, U32>,
+  +s: Step,
   +need: Nat
 ) -> Maybe<&2, Nat>:
   match us:
@@ -1116,7 +1126,7 @@ def is_unknown(a: MonotoneQueries.MonotoneAnswer<List<&2, U32>>) -> Bool:
 # tick, a join of the round after its own.
 def SlotConsensus.next_ballot(
   +voters: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   +all: List<&2, Ballot>,
   +me: List<&2, U32>,
   proposal: List<&2, U32>,
@@ -1160,7 +1170,7 @@ def SlotConsensus.next_ballot(
 # network makes good phases happen; the laws below say what one does.
 
 # the ballot that the voter h is about to sign, m, signed for the step s
-def Run.signed(m: Maybe<&2, BallotToSign>, h: List<&2, U32>, s: List<&2, U32>) -> List<&2, Ballot>:
+def Run.signed(m: Maybe<&2, BallotToSign>, h: List<&2, U32>, s: Step) -> List<&2, Ballot>:
   match m:
     case None{}:
       []
@@ -1171,7 +1181,7 @@ def Run.signed(m: Maybe<&2, BallotToSign>, h: List<&2, U32>, s: List<&2, U32>) -
 def Run.casts(
   hs: List<&2, List<&2, U32>>,
   +voters: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   +all: List<&2, Ballot>,
   +p: List<&2, U32>,
   +ticked: Bool
@@ -1193,7 +1203,7 @@ def Run.exchange(
   +all: List<&2, Ballot>,
   hs: List<&2, List<&2, U32>>,
   voters: List<&2, List<&2, U32>>,
-  s: List<&2, U32>,
+  s: Step,
   p: List<&2, U32>,
   ticked: Bool,
   extra: List<&2, Ballot>
@@ -1210,7 +1220,7 @@ def Run.exchange(
 # other voters add at each
 def Run.good_phase(
   +voters: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   all: List<&2, Ballot>,
   +hs: List<&2, List<&2, U32>>,
   +p: List<&2, U32>,
@@ -1234,7 +1244,7 @@ def Run.none_by(xs: List<&2, Ballot>, +hs: List<&2, List<&2, U32>>) -> Bool:
 def Run.quiet(
   hs: List<&2, List<&2, U32>>,
   +voters: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   +all: List<&2, Ballot>,
   +p: List<&2, U32>
 ) -> Bool:
@@ -1260,7 +1270,7 @@ def Run.is_round(m: Maybe<&2, Nat>, t: Nat) -> Bool:
 def Run.level(
   hs: List<&2, List<&2, U32>>,
   +all: List<&2, Ballot>,
-  +s: List<&2, U32>,
+  +s: Step,
   +t: Nat
 ) -> Bool:
   match hs:
@@ -1281,7 +1291,7 @@ def Run.judged.one(
   b: Ballot,
   hs: List<&2, List<&2, U32>>,
   voters: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   all: List<&2, Ballot>
 ) -> Bool:
   match b:
@@ -1289,7 +1299,7 @@ def Run.judged.one(
       True{}
     case Ballot{+k, +v, +st, +i, +r, +a}:
       Bool.or(
-        Bool.not(Bool.and(WordListSets.contains(hs, v), WordListSets.same(st, s))),
+        Bool.not(Bool.and(WordListSets.contains(hs, v), Step.same(st, s))),
         Maybe.is_some(&2, Bool, SlotConsensus.judgment(voters, s, all, Ballot{k, v, st, i, r, a}))
       )
 
@@ -1299,7 +1309,7 @@ def Run.judged(
   bs: List<&2, Ballot>,
   +hs: List<&2, List<&2, U32>>,
   +voters: List<&2, List<&2, U32>>,
-  +s: List<&2, U32>,
+  +s: Step,
   +all: List<&2, Ballot>
 ) -> Bool:
   match bs:
@@ -1347,7 +1357,7 @@ def EqualWordLists(a: List<&2, U32>, b: List<&2, U32>) -> Type:
 # slot 5, or Contradicted.
 law SlotConsensus.decision_is_monotone:
   for voters: List<&2, List<&2, U32>>
-  for s: List<&2, U32>
+  for s: Step
   for a: List<&2, Ballot>
   for b: List<&2, Ballot>
   Ballots.Grows(a, b)
@@ -1369,7 +1379,7 @@ law SlotConsensus.decision_is_monotone:
 # ballot for slot 5 with index 4.
 law SlotConsensus.next_ballot_contradicts_nothing:
   for voters: List<&2, List<&2, U32>>
-  for s: List<&2, U32>
+  for s: Step
   for all: List<&2, Ballot>
   for me: List<&2, U32>
   for proposal: List<&2, U32>
@@ -1401,7 +1411,7 @@ law SlotConsensus.next_ballot_contradicts_nothing:
 # round 2, and that vote is sound.
 law SlotConsensus.next_ballot_is_judged_sound:
   for voters: List<&2, List<&2, U32>>
-  for s: List<&2, U32>
+  for s: Step
   for all: List<&2, Ballot>
   for me: List<&2, U32>
   for proposal: List<&2, U32>
@@ -1440,7 +1450,7 @@ law SlotConsensus.next_ballot_is_judged_sound:
 # learns the ballots of round 3.
 law SlotConsensus.judgment_never_changes:
   for voters: List<&2, List<&2, U32>>
-  for s: List<&2, U32>
+  for s: Step
   for a: List<&2, Ballot>
   for b: List<&2, Ballot>
   for x: Ballot
@@ -1475,7 +1485,7 @@ law SlotConsensus.judgment_never_changes:
 # round 7 is honest; two exchanges later slot 5 is decided.
 law SlotConsensus.good_phase_decides:
   for voters: List<&2, List<&2, U32>>
-  for s: List<&2, U32>
+  for s: Step
   for all: List<&2, Ballot>
   for hs: List<&2, List<&2, U32>>
   for p: List<&2, U32>
