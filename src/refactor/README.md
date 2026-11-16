@@ -150,7 +150,7 @@ src/refactor/                       Vend (top level)
 | `exact_word_encoding` | Exact encodings as words (each value has one encoding, read back with the words after it) for a word, a number, a pair, n values in a row, and a conversion; every other type's encoding comes from these. | Laws stated |
 | `signatures` | A signer (never copied, so never signs twice from one state): every signature it makes checks with its public key, which never changes; it makes at least 2^20. | Laws stated |
 | `facts` | A fact (author, words, signature); its key reads back as it and as nothing else; it checks exactly when its signature does; a fact set's summaries are Merkle hashes. That a node holds only facts that check is a law of the node, where facts are added. | Laws stated |
-| Answers | Unknown, values, ranges and Broken; final and live queries; how final queries combine; a hook's own state. | Not started |
+| `answers` | An answer (Unknown, a value, or Broken with proof) and when one knows more; ranges that only narrow; a final query (it knows more on a state that grows); "q1, then q2" of final queries is final (1 law); a hook's own state agrees with its plain query. A live query needs no law: it is any function of the state. | Laws stated |
 | Ordering and groups | Votes, rounds, "slot k is decided", Ticks; members, groups of groups, eras. | Not started |
 | Keeping and forgetting | Claims to keep a part, dropping a part, checkpoints. | Not started |
 | Node | A node: its facts, its hooks, and its deeds (Sync, Tick, a request, stop). | Not started |
