@@ -62,8 +62,8 @@ Cost
 ### Facts
 
 The state of a node is a set of facts, kept as a `patricia_map` from the key of each fact to
-nothing. A fact is signed by its author. Its key is the hash of its code followed by the code: the
-hash keeps the map balanced, and the code keeps the key exact, so correctness never depends on the
+nothing. A fact is signed by its author. Its key is the hash of its encoding followed by the encoding:
+the hash keeps the map balanced, and the encoding keeps the key exact, so correctness never depends on the
 hash. A fact enters the set only if it checks by itself: its signature, and the hashes of the facts
 and parts it refers to. A Sync is a merge of two maps. Two maps with the same entries are the same
 map, so the order in which a node receives facts cannot change anything.
@@ -129,10 +129,11 @@ tree than they do, because a module never imports a sibling.
 
 | Module | What it states | Status |
 | --- | --- | --- |
-| Shared helpers | Comparing lists of words (equal only when the same, flips when swapped, "below" is transitive), optional values, lists of pairs. | Laws stated |
-| `patricia_map` | A map from keys (lists of words) to values, with a summary of each part: made from a list, merge, keep, split, list, summary, and "same entries, same map". | Laws stated |
-| `codes` | Exact codes (each value has one code, read back with the words after it) for a word, a number, a pair, n values in a row, and a conversion; every other type's code comes from these. | Laws stated |
-| Hashes and signatures | A hash of words; a signature made with a secret checks with its key. Copied from `src/shared` or written new. | Not started |
+| Shared helpers (`shared/shared/shared/shared.bend`) | Comparing lists of words (equal only when the same, flips when swapped, "below" is transitive), the split key of two lists of words, optional values, lists of pairs, n values in a row. | Laws stated |
+| `sha256` (`shared/shared/shared/`) | SHA-256 of words. No law: the standard's own vectors test it. | Stated; test to approve |
+| `patricia_map` | A map from keys (lists of words) to values: made from a list, merge, keep, split, list, "same entries, same map", and a summary that combines the summaries of two halves split where the keys part (a Merkle hash when the combine hashes). | Laws stated |
+| `exact_word_encoding` | Exact encodings as words (each value has one encoding, read back with the words after it) for a word, a number, a pair, n values in a row, and a conversion; every other type's encoding comes from these. | Laws stated |
+| `signatures` | A signer (never copied, so never signs twice from one state): every signature it makes checks with its public key, which never changes; it makes at least 2^20. | Laws stated |
 | Facts | Signed facts, their keys, the checked-fact type, the fact set, and Sync. | Not started |
 | Answers | Unknown, values, ranges and Broken; final and live queries; how final queries combine; a hook's own state. | Not started |
 | Ordering and groups | Votes, rounds, "slot k is decided", Ticks; members, groups of groups, eras. | Not started |
