@@ -62,11 +62,14 @@ Cost
 ### Facts
 
 The state of a node is a set of facts, kept as a `patricia_map` from the key of each fact to
-nothing. A fact is signed by its author. Its key is the hash of its encoding followed by the encoding:
-the hash keeps the map balanced, and the encoding keeps the key exact, so correctness never depends on the
-hash. A fact enters the set only if it checks by itself: its signature, and the hashes of the facts
-and parts it refers to. A Sync is a merge of two maps. Two maps with the same entries are the same
-map, so the order in which a node receives facts cannot change anything.
+nothing. A fact is an author's public key, words, and the author's signature of the words. Its key
+reads back as the fact and as nothing else, so correctness never depends on a hash; the
+implementation puts a hash in front of the encoding to keep the map balanced. A fact enters the set
+only if its signature checks. What a fact refers to is checked by the queries that read it: a
+missing fact or part makes their answer Unknown, never wrong. A Sync is a merge of two maps. Two
+maps with the same entries are the same map, so the order in which a node receives facts cannot
+change anything. The summary of each part is a Merkle hash, so two nodes find where their facts
+differ by trusting SHA-256 alone.
 
 ### Queries
 
@@ -123,21 +126,30 @@ rule is stated and proven on its own.
 
 ## Modules
 
-Each module is stated as laws (`spec.bend`) and approved before its `impl.bend` is written. They
-are listed from the most general to the least. A module that others use sits deeper in the `shared`
-tree than they do, because a module never imports a sibling.
+Each module is stated as laws (`spec.bend`) and approved before its `impl.bend` is written. A
+module never imports a sibling, so each module sits one layer above everything it uses:
+
+```
+src/refactor/                       Vend (top level)
+  shared/                           node
+    shared/                         ordering and groups, keeping
+      shared/                       facts, answers
+        shared/                     patricia_map, exact_word_encoding, signatures
+          shared/                   sha256, association_list
+            shared/                 shared.bend, word_list_order, list_append
+```
 
 | Module | What it states | Status |
 | --- | --- | --- |
-| `list_append` (`shared/shared/shared/`) | Joining lists (Base's `List.append`) is associative, and joining an empty list changes nothing. | Laws stated |
-| `word_list_order` (`shared/shared/shared/`) | Comparing lists of words: equal only when the same, flips when swapped, "below" is transitive; the split key of two lists lies above the first and at or below the second. | Laws stated |
-| `shared.bend` (`shared/shared/shared/`) | Helpers with no laws: combining comparisons, optional values, n values in a row. | Stated |
-| `association_list` (`shared/shared/`) | Lists of key-value pairs, which the `patricia_map` laws compare a map with. No laws. | Stated |
-| `sha256` (`shared/shared/`) | SHA-256 of words. No law: a test against the standard's examples checks it. | Stated; test written |
+| `list_append` | Joining lists (Base's `List.append`) is associative, and joining an empty list changes nothing. | Laws stated |
+| `word_list_order` | Comparing lists of words: equal only when the same, flips when swapped, "below" is transitive; the split key of two lists lies above the first and at or below the second. | Laws stated |
+| `shared.bend` | Helpers with no laws: combining comparisons, optional values, n values in a row. | Stated |
+| `association_list` | Lists of key-value pairs, which the `patricia_map` laws compare a map with. No laws. | Stated |
+| `sha256` | SHA-256 of words. No law: a test against the standard's examples checks it. | Stated; test written |
 | `patricia_map` | A map from keys (lists of words) to values: made from a list, merge, keep, split, list, "same entries, same map", and a summary that combines the summaries of two halves split where the keys part (a Merkle hash when the combine hashes). | Laws stated |
 | `exact_word_encoding` | Exact encodings as words (each value has one encoding, read back with the words after it) for a word, a number, a pair, n values in a row, and a conversion; every other type's encoding comes from these. | Laws stated |
 | `signatures` | A signer (never copied, so never signs twice from one state): every signature it makes checks with its public key, which never changes; it makes at least 2^20. | Laws stated |
-| Facts | Signed facts, their keys, the checked-fact type, the fact set, and Sync. | Not started |
+| `facts` | A fact (author, words, signature); its key reads back as it and as nothing else; it checks exactly when its signature does; a fact set's summaries are Merkle hashes. That a node holds only facts that check is a law of the node, where facts are added. | Laws stated |
 | Answers | Unknown, values, ranges and Broken; final and live queries; how final queries combine; a hook's own state. | Not started |
 | Ordering and groups | Votes, rounds, "slot k is decided", Ticks; members, groups of groups, eras. | Not started |
 | Keeping and forgetting | Claims to keep a part, dropping a part, checkpoints. | Not started |
