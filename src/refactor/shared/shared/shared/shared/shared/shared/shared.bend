@@ -52,3 +52,13 @@ def Row(-A: Data, n: Nat) -> Data:
     case 1n+m:
       +Sigma<A, _ => Row(A, m)>
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
+
+# the values of the row r of n values, in order
+def Row.to_list(-A: Data, n: Nat, r: Row(A, n)) -> List<&2, A>:
+  match n:
+    case 0n:
+      []
+    case 1n+m:
+      match r:
+        case (a, rest):
+          a <> Row.to_list(A, m, rest)
