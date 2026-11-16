@@ -152,7 +152,8 @@ module never imports a sibling, so each module sits one layer above everything i
 ```
 src/refactor/
   vend/                             Vend (the program's pure edge comes here)
-    shared/                         readers
+    shared/                         readers, versions
+      shared/                       path_contents
   shared/                           node
     shared/                         owner_groups, record_views
       shared/                       slot_consensus, record_sync
@@ -172,7 +173,7 @@ not change.
 | `word_list_sets` | Lists of words as sets: equal, contains, and dedupe, which keeps each list once (1 law). | Laws stated |
 | `item_merge` | Three-way merge of lists of items (lines, functions, blocks): a diff is an edit script over the base. Laws: a diff applies; a diff keeps a longest common list of items; changes that are apart are both applied; changes that touch and differ clash. So a merge never loses a change made on only one side. | Laws stated |
 | `shared.bend` | Helpers with no laws: combining comparisons, optional values, fixed-length lists. | Stated |
-| `association_list` | Lists of key-value pairs, which the `patricia_map` laws compare a map with. No laws. | Stated |
+| `association_list` | Lists of key-value pairs, which the `patricia_map` laws compare a map with, and which hold contents, frontiers and marks in key order. Law: setting a key keeps the keys in order, gives the new value at that key, and leaves every other key as it was. | Laws stated |
 | `sha256` | SHA-256 of words. No law: a test against the standard's examples checks it. | Stated; test written |
 | `patricia_map` | A map from keys (lists of words) to values: made from a list, merge, keep, split, list, "same entries, same map", and a summary that combines the summaries of two halves split where the keys part (a Merkle hash when the combine hashes). | Laws stated |
 | `exact_word_encoding` | Exact encodings as words (each value has one encoding, read back with the words after it) for a word, a number, a dependent pair, a fixed-length list, and a conversion; every other type's encoding comes from these. | Laws stated |
@@ -186,7 +187,9 @@ not change.
 | `record_views` | The ballots and keep claims among a record set's records, read by hooks; a ballot or claim counts only as its record's author's. Laws: ballots and claims are exactly those the records are. | Laws stated |
 | `node` | The whole non-IO program: one pure step from a node's state and a deed to its next state and outputs. Hooks (from Vend): how ballots and claims are written, how choices name eras, the plan of steps and payloads, the needed parts, the answers to questions. Laws: start and resume are sound; every step keeps the invariant (records check, own ballots never contradict, name is the key); no record is lost; a step persists exactly what it adds, before any message; clients and the stop rule; each deed does what it asks and outputs nothing else; submits, syncs and part answers take in what they should; clients watch questions and are notified exactly when an answer changes; Work and Tick cast exactly what slot consensus says; keepers claim and drop parts as part store says; a node signs nothing else. | Laws stated |
 | `vend/shared/readers` | How a resource's content (its bytes) is read: a reader, bound to a resource by name (never by a file name), is any pure function giving the items (lines, functions, blocks; nested parts by other readers, at any depth) and the dependencies (with build conditions, aliases resolved); a resource with no reader of ours is a byte stream (one whole item). Built-in readers `whole` and `lines`. Laws: the built-in readers lose nothing; a merge of present contents is the item merge of their readings; a merge with an absent side takes the one changed side or clashes. | Laws stated |
-| Vend, the rest | Requests and their status, versions (writes, marks, moves), merges and conflicts, what a change affects, resource bindings (mounts, both ways), the Vend node (the hooks into `node`), and the program's pure edge (commands, storage layout). | Not started |
+| `vend/shared/shared/path_contents` | The content of a version: paths in order, each a resource (its reader's name and its content's hash) or a conflict of three entries. Writes change paths; a three-way merge goes path by path, through a content merge hook (the reader merge over parts, which may answer unknown). Laws: the merge of one path takes the one changed side, or the shared change, else the hook's merge when all three are resources with one reader, else a conflict that keeps all three; the merge of contents is the merge of each path, unknown exactly when one path's is. | Laws stated |
+| `vend/shared/versions` | The history of one line from its decided requests: writes (from the version the writer saw), merges (from a base that both sides include), moves, marks; each version is named by its request, with its parents and its frontier (the versions it includes); statuses Pending, Written, Conflicted, Stale, Refused. Laws: with more requests and more data, versions and marks only grow and statuses only move forward; each decided request changes nothing when the history waits or its id was decided, and otherwise does what it asks; a request is Written exactly when each path it clashed on is held without a conflict by a later version; a history never waits once the parts and other lines' versions it needs are held. | Laws stated |
+| Vend, the rest | What a change affects (dependency closure from readers), resource bindings (mounts, both ways), the Vend node (the hooks into `node`, including a writer's view with its pending changes), and the program's pure edge (commands, storage layout). | Not started |
 
 Slot consensus takes the voters of a slot as a parameter, and groups (above it) say who they are,
 from slots that slot consensus decided before. So the two do not depend on each other in a cycle.
