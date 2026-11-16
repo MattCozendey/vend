@@ -150,7 +150,9 @@ Each module is stated as laws (`spec.bend`) and approved before its `impl.bend` 
 module never imports a sibling, so each module sits one layer above everything it uses:
 
 ```
-src/refactor/                       Vend (top level)
+src/refactor/
+  vend/                             Vend (the program's pure edge comes here)
+    shared/                         readers
   shared/                           node
     shared/                         owner_groups, record_views
       shared/                       slot_consensus, record_sync
@@ -183,7 +185,8 @@ not change.
 | `part_store` | Parts of content under their SHA-256; keep claims; dropping; fetching from a peer. Laws: a part is the words of its hash; the empty store holds nothing; put adds a part under its hash and changes nothing else; the hashes are exactly those held, once; a drop keeps what the node needs or claimed and drops a part only once enough other trusted keepers claimed it; a fetch gives every asked part that the peer holds; taking in any message loses no part. | Laws stated |
 | `record_views` | The ballots and keep claims among a record set's records, read by hooks; a ballot or claim counts only as its record's author's. Laws: ballots and claims are exactly those the records are. | Laws stated |
 | `node` | The whole non-IO program: one pure step from a node's state and a deed to its next state and outputs. Hooks (from Vend): how ballots and claims are written, how choices name eras, the plan of steps and payloads, the needed parts, the answers to questions. Laws: start and resume are sound; every step keeps the invariant (records check, own ballots never contradict, name is the key); no record is lost; a step persists exactly what it adds, before any message; clients and the stop rule; each deed does what it asks and outputs nothing else; submits, syncs and part answers take in what they should; clients watch questions and are notified exactly when an answer changes; Work and Tick cast exactly what slot consensus says; keepers claim and drop parts as part store says; a node signs nothing else. | Laws stated |
-| Vend | The versioning hooks, at the top level of `src/refactor/`. | Not started |
+| `vend/shared/readers` | How a resource's content (its bytes) is read: a reader, bound to a resource by name (never by a file name), is any pure function giving the items (lines, functions, blocks; nested parts by other readers, at any depth) and the dependencies (with build conditions, aliases resolved); a resource with no reader of ours is a byte stream (one whole item). Built-in readers `whole` and `lines`. Laws: the built-in readers lose nothing; a merge of present contents is the item merge of their readings; a merge with an absent side takes the one changed side or clashes. | Laws stated |
+| Vend, the rest | Requests and their status, versions (writes, marks, moves), merges and conflicts, what a change affects, resource bindings (mounts, both ways), the Vend node (the hooks into `node`), and the program's pure edge (commands, storage layout). | Not started |
 
 Slot consensus takes the voters of a slot as a parameter, and groups (above it) say who they are,
 from slots that slot consensus decided before. So the two do not depend on each other in a cycle.
