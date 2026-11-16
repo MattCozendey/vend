@@ -25,9 +25,9 @@ law List.append_is_associative:
   }
 
 # Means: joining a list with the empty list, on either side, gives that list.
-# For free: an empty encoding (no values in a row) adds nothing to the words
+# For free: an empty encoding (a fixed-length list of no values) adds nothing to the words
 # around it.
-# For the goal: the encodings of the value with no content and of an empty row
+# For the goal: the encodings of the value with no content and of an empty fixed-length list
 # are empty, and the proofs drop them with this law.
 # Example: [] joined with [1, 2] is [1, 2], and so is [1, 2] joined with [].
 law List.append_empty_changes_nothing:

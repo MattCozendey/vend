@@ -9,4 +9,4 @@ import ../shared/shared.bend as Shared
 # the SHA-256 of the words ws, as 8 words
 law Sha256.of_words:
   for ws: List<&2, U32>
-  Shared.Row(U32, 8n)
+  Shared.FixedLengthList(U32, 8n)

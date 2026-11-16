@@ -43,22 +43,22 @@ def Maybe.when(~A: Data, c: Bool, x: Maybe<&2, A>) -> Maybe<&2, A>:
 # Rows
 # ----
 
-# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- Row is a type: it is used only in types and erased arguments, so no code that runs builds or frees its binder
-# n values of A in a row
-def Row(-A: Data, n: Nat) -> Data:
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- FixedLengthList is a type: it is used only in types and erased arguments, so no code that runs builds or frees its binder
+# a list of exactly n values of A
+def FixedLengthList(-A: Data, n: Nat) -> Data:
   match n:
     case 0n:
       Unit
     case 1n+m:
-      +Sigma<A, _ => Row(A, m)>
+      +Sigma<A, _ => FixedLengthList(A, m)>
 # bend-lint: expect-end bend-lint-rules/performance/unused_result@information
 
-# the values of the row r of n values, in order
-def Row.to_list(-A: Data, n: Nat, r: Row(A, n)) -> List<&2, A>:
+# the values of the list r of n values, in order
+def FixedLengthList.to_list(-A: Data, n: Nat, r: FixedLengthList(A, n)) -> List<&2, A>:
   match n:
     case 0n:
       []
     case 1n+m:
       match r:
         case (a, rest):
-          a <> Row.to_list(A, m, rest)
+          a <> FixedLengthList.to_list(A, m, rest)

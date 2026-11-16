@@ -7,29 +7,29 @@ import ./spec.bend as Spec
 # is SHA-256, and a law compares our code only with our own definitions; only
 # the standard's own values can check it.
 
-# the words of the row r, each after a space
-def Row.show.after(n: Nat, r: Shared.Row(U32, n)) -> String:
+# the words of the list r, each after a space
+def FixedLengthList.show.after(n: Nat, r: Shared.FixedLengthList(U32, n)) -> String:
   match n:
     case 0n:
       ""
     case 1n+m:
       match r:
         case (w, rest):
-          " " ++ U32.show(w) ++ Row.show.after(m, rest)
+          " " ++ U32.show(w) ++ FixedLengthList.show.after(m, rest)
 
-# the words of the row r of 1 + m words, with a space between two words
-def Row.show(m: Nat, r: Shared.Row(U32, 1n+m)) -> String:
+# the words of the list r of 1 + m words, with a space between two words
+def FixedLengthList.show(m: Nat, r: Shared.FixedLengthList(U32, 1n+m)) -> String:
   match r:
     case (w, rest):
-      U32.show(w) ++ Row.show.after(m, rest)
+      U32.show(w) ++ FixedLengthList.show.after(m, rest)
 
 # the SHA-256 of three messages: "", the 448-bit message "abcdbcde...nopq", and
 # the 896-bit message "abcdefgh...nopqrstu"
 def main() -> IO(Unit):
   do IO<Unit>:
-    IO.print(Row.show(7n, Spec.Sha256.of_words([])))
+    IO.print(FixedLengthList.show(7n, Spec.Sha256.of_words([])))
     IO.print(
-      Row.show(
+      FixedLengthList.show(
         7n,
         Spec.Sha256.of_words(
           [
@@ -52,7 +52,7 @@ def main() -> IO(Unit):
       )
     )
     IO.print(
-      Row.show(
+      FixedLengthList.show(
         7n,
         Spec.Sha256.of_words(
           [

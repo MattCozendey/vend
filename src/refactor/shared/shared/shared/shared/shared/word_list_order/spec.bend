@@ -23,7 +23,7 @@ def cmp(a: List<&2, U32>, b: List<&2, U32>) -> Cmp:
 # For free: a key can be found by comparing keys alone; two different keys never
 # land on one entry.
 # For the goal: a map keyed by lists of words holds one entry per key, so a
-# fact is held once, however often it arrives.
+# record is held once, however often it arrives.
 # Example: [1, 2] and [1, 2] compare equal; [1, 2] and [1, 3] do not.
 law cmp_equal:
   for a: List<&2, U32>

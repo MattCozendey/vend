@@ -12,13 +12,13 @@ law Signer:
 
 # the signer of the secret seed, before it signs anything
 law Signer.of_seed:
-  for seed: Shared.Row(U32, 8n)
+  for seed: Shared.FixedLengthList(U32, 8n)
   Signer
 
 # the public key of the signer s, and s
 law Signer.public_key:
   for s: Signer
-  Shared.Row(U32, 8n) & Signer
+  Shared.FixedLengthList(U32, 8n) & Signer
 
 # how many more signatures the signer s can make, and s
 law Signer.remaining:
@@ -33,7 +33,7 @@ law Signer.sign:
 
 # the signature sig of the words m checks with the public key k
 law Signature.checks:
-  for k: Shared.Row(U32, 8n)
+  for k: Shared.FixedLengthList(U32, 8n)
   for m: List<&2, U32>
   for sig: List<&2, U32>
   Bool
@@ -63,7 +63,7 @@ law Signer.signing_checks_keeps_key_and_uses_one:
         == Some{sig}: Maybe<&2, List<&2, U32>>
     } -> {
       Signature.checks(
-        Pair.fst(Shared.Row(U32, 8n), Signer, Signer.public_key(s)),
+        Pair.fst(Shared.FixedLengthList(U32, 8n), Signer, Signer.public_key(s)),
         m,
         sig
       )
@@ -72,11 +72,15 @@ law Signer.signing_checks_keeps_key_and_uses_one:
   )
     & {
       Pair.fst(
-        Shared.Row(U32, 8n),
+        Shared.FixedLengthList(U32, 8n),
         Signer,
         Signer.public_key(Pair.snd(Maybe<&2, List<&2, U32>>, Signer, Signer.sign(s, m)))
       )
-        == Pair.fst(Shared.Row(U32, 8n), Signer, Signer.public_key(s)): Shared.Row(U32, 8n)
+        == Pair.fst(
+          Shared.FixedLengthList(U32, 8n),
+          Signer,
+          Signer.public_key(s)
+        ): Shared.FixedLengthList(U32, 8n)
     }
     & (
       @n: Nat -> {
@@ -106,7 +110,7 @@ law Signer.signing_checks_keeps_key_and_uses_one:
 # key; a signer that never signs cannot pass this law.
 # Example: a signer made from any seed signs its 1000th vote.
 law Signer.of_seed_signs_at_least_2_to_the_20:
-  for seed: Shared.Row(U32, 8n)
+  for seed: Shared.FixedLengthList(U32, 8n)
   {
     Nat.is_le(
       U32.to_nat(1048576),
