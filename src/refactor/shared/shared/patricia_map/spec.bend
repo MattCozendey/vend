@@ -1,8 +1,10 @@
 import Base
-import ../shared/shared.bend as Shared
+import ../shared/association_list/spec.bend as AssociationList
+import ../shared/shared/shared.bend as Shared
+import ../shared/shared/word_list_order/spec.bend as WordListOrder
 
 # A map from keys to values that keeps, for each of its parts, a summary of the
-# entries in it. A key is a list of words, ordered as Shared.Words.cmp orders
+# entries in it. A key is a list of words, ordered as WordListOrder.cmp orders
 # them. The user of the map gives the type of the values (V), the type of the
 # summaries (M), the measure of one entry (of), and how two summaries combine
 # (combine). These four are part of the type of a map, so two maps with
@@ -114,7 +116,7 @@ law PatriciaMap.from_list_takes_first:
       PatriciaMap.from_list(~V, ~M, ~of, ~combine, xs),
       k
     )
-      == Shared.Pairs.first(~V, xs, k): Maybe<&2, V>
+      == AssociationList.first(~V, xs, k): Maybe<&2, V>
   }
 
 # Means: a merge of two maps holds, at each key that both have, the two values
@@ -179,7 +181,12 @@ law PatriciaMap.keep_filters:
       PatriciaMap.keep(~V, ~M, ~of, ~combine, ~test, m),
       k
     )
-      == Shared.Pairs.keep(~V, ~test, k, PatriciaMap.get(~V, ~M, ~of, ~combine, m, k)): Maybe<&2, V>
+      == AssociationList.keep(
+        ~V,
+        ~test,
+        k,
+        PatriciaMap.get(~V, ~M, ~of, ~combine, m, k)
+      ): Maybe<&2, V>
   }
 
 # Means: splitting a map at a key gives two maps: the first holds the entries
@@ -213,7 +220,7 @@ law PatriciaMap.split_divides:
     )
       == Shared.Maybe.when(
         ~V,
-        Cmp.is_lt(Shared.Words.cmp(k, s)),
+        Cmp.is_lt(WordListOrder.cmp(k, s)),
         PatriciaMap.get(~V, ~M, ~of, ~combine, m, k)
       ): Maybe<&2, V>
   }
@@ -232,7 +239,7 @@ law PatriciaMap.split_divides:
       )
         == Shared.Maybe.when(
           ~V,
-          Cmp.is_ge(Shared.Words.cmp(k, s)),
+          Cmp.is_ge(WordListOrder.cmp(k, s)),
           PatriciaMap.get(~V, ~M, ~of, ~combine, m, k)
         ): Maybe<&2, V>
     }
@@ -251,13 +258,13 @@ law PatriciaMap.list_ascends:
   for ~combine: M -> M -> M
   for m: PatriciaMap(~V, ~M, ~of, ~combine)
   {
-    Shared.Pairs.ascend(~V, PatriciaMap.list(~V, ~M, ~of, ~combine, m)) == True{}: Bool
+    AssociationList.ascend(~V, PatriciaMap.list(~V, ~M, ~of, ~combine, m)) == True{}: Bool
   }
     & (
       @k: List<
         &2,
         U32> -> {
-        Shared.Pairs.first(
+        AssociationList.first(
           ~V,
           PatriciaMap.list(~V, ~M, ~of, ~combine, m),
           k
@@ -269,7 +276,7 @@ law PatriciaMap.list_ascends:
 # Means: the summary of an empty map is nothing; of a map with one entry, the
 # measure of that entry; of a map with more entries, the summaries of its two
 # halves combined, where the halves are split at the first bit where the keys of
-# its first and last entries differ (Shared.Words.split_key).
+# its first and last entries differ (WordListOrder.split_key).
 # For free: the summary of every part under a key prefix is ready, and it is
 # the same on every map that has the same entries in that part; with a combine
 # that is associative (a count, a sum), the summary is the measures combined in
@@ -351,7 +358,7 @@ law PatriciaMap.summary_splits:
                   ~of,
                   ~combine,
                   m,
-                  Shared.Words.split_key(k, Shared.Pairs.last_key(~V, more, j))
+                  WordListOrder.split_key(k, AssociationList.last_key(~V, more, j))
                 )
               )
             ),
@@ -369,7 +376,7 @@ law PatriciaMap.summary_splits:
                   ~of,
                   ~combine,
                   m,
-                  Shared.Words.split_key(k, Shared.Pairs.last_key(~V, more, j))
+                  WordListOrder.split_key(k, AssociationList.last_key(~V, more, j))
                 )
               )
             )

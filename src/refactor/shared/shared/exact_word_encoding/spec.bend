@@ -1,5 +1,5 @@
 import Base
-import ../shared/shared.bend as Shared
+import ../shared/shared/shared.bend as Shared
 
 # An encoding of a type writes each value as words, and reads a value from the
 # start of words, handing back the words after it. Encodings are built from five

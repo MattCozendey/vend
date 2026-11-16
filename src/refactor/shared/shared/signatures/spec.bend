@@ -1,5 +1,5 @@
 import Base
-import ../shared/shared.bend as Shared
+import ../shared/shared/shared.bend as Shared
 
 # A signer makes signatures of words with a secret, and a public key checks
 # them. A signer is a Type, not Data, so a program can never copy it and sign

@@ -1,5 +1,5 @@
 import Base
-import ../shared.bend as Shared
+import ../shared/shared.bend as Shared
 
 # SHA-256 (FIPS 180-4) of words, each word read as four bytes, most significant
 # byte first. Its result is what the standard says, so a test against the
