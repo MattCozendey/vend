@@ -61,10 +61,12 @@ Cost
 
 ### Facts
 
-The state of a node is a set of facts. A fact is signed by its author and named by the hash of its
-code. A fact enters the set only if it checks by itself: its signature, and the hashes of the facts
-and parts it refers to. A Sync is the union of two sets. Union is commutative, associative and
-idempotent, so the order in which a node receives facts cannot change anything.
+The state of a node is a set of facts, kept as a `patricia_map` from the key of each fact to
+nothing. A fact is signed by its author. Its key is the hash of its code followed by the code: the
+hash keeps the map balanced, and the code keeps the key exact, so correctness never depends on the
+hash. A fact enters the set only if it checks by itself: its signature, and the hashes of the facts
+and parts it refers to. A Sync is a merge of two maps. Two maps with the same entries are the same
+map, so the order in which a node receives facts cannot change anything.
 
 ### Queries
 
@@ -119,6 +121,29 @@ they keep it. How many is enough is a parameter of the hook.
 The set only grows. A checkpoint is a decided fact that lets nodes drop the facts under it. Its
 rule is stated and proven on its own.
 
+## Modules
+
+Each module is stated as laws (`spec.bend`) and approved before its `impl.bend` is written. They
+are listed from the most general to the least. A module that others use sits deeper in the `shared`
+tree than they do, because a module never imports a sibling.
+
+| Module | What it states | Status |
+| --- | --- | --- |
+| Shared helpers | Comparing lists of words (equal only when the same, flips when swapped, "below" is transitive), optional values, lists of pairs. | Laws stated |
+| `patricia_map` | A map from keys (lists of words) to values, with a summary of each part: made from a list, merge, keep, split, list, summary, and "same entries, same map". | Laws stated |
+| Codes | The words of a value, and reading them back. | Not started |
+| Hashes and signatures | A hash of words; a signature made with a secret checks with its key. Copied from `src/shared` or written new. | Not started |
+| Facts | Signed facts, their keys, the checked-fact type, the fact set, and Sync. | Not started |
+| Answers | Unknown, values, ranges and Broken; final and live queries; how final queries combine; a hook's own state. | Not started |
+| Ordering and groups | Votes, rounds, "slot k is decided", Ticks; members, groups of groups, eras. | Not started |
+| Keeping and forgetting | Claims to keep a part, dropping a part, checkpoints. | Not started |
+| Node | A node: its facts, its hooks, and its deeds (Sync, Tick, a request, stop). | Not started |
+| Vend | The versioning hooks, at the top level of `src/refactor/`. | Not started |
+
+Ordering needs the members of a group to count votes, and the members of a group are decided by
+ordering. So they are one module, or ordering takes the members as a parameter that groups fill.
+This is decided when ordering is stated.
+
 ## Requirement coverage
 
 | Requirement | How |
@@ -130,11 +155,11 @@ rule is stated and proven on its own.
 | Shape 1, 2 | Nodes are one type; Vend is hooks. |
 | Shape 3 | A hook's own state, proven equal to its plain query. |
 | Shape 4 | Groups are a final query over decided facts. |
-| Behavior 1 | Answers are functions of the set; Sync is union. |
+| Behavior 1 | Answers are functions of the set; Sync is a merge; equal entries make equal maps. |
 | Behavior 2 | Final queries answer Unknown or a range until they know. |
 | Behavior 3 | Keeping data. See Limits. |
 | Behavior 4 | A request is one fact, and ordering puts it in at most one slot. A writer's view is a live query. |
-| Cost 1 | Content is split into parts by hash inside the hooks; Sync compares hashes of subtrees; checkpoints. |
+| Cost 1 | Content is split into parts by hash inside the hooks; Sync compares the summaries of parts; checkpoints. |
 | Cost 2 | Final answers never change, so caches never need invalidation. Live queries are not cached. |
 | Cost 3 | Agreement, validity and groups are proven once, for every hook. |
 | Cost 4 | Formats, languages, mounts and submodules are hooks. |
