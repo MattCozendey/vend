@@ -492,6 +492,108 @@ def voters(
     case SlotConsensus.Step{+l, k}:
       voters.by_line(~decode, WordListSets.same(l, root), l, k, root, genesis, all)
 
+# Accepting and proposing
+# -----------------------
+# An honest voter of a line other than the root accepts a choice only when it
+# names an era whose configuration it already knows. An honest leader names
+# the latest such era. So a choice that is decided names an era that some
+# honest voter knew, and the line never waits on an era that the root never
+# reaches.
+
+# what owner groups need to read the voters of a step: the root line, and the
+# changes that start it
+type RootContext is Data:
+  RootContext{root: List<&2, U32>, genesis: List<&2, GroupChange>}
+
+# 1 when the configuration c is known or Contradicted, 0 while it is Unknown
+def known_eras.one(c: MonotoneQueries.MonotoneAnswer<GroupConfig>) -> Nat:
+  match c:
+    case MonotoneQueries.Unknown{}:
+      0n
+    case _:
+      1n
+
+# how many of the root configurations after 1 to fuel root slots are known or
+# Contradicted
+def known_eras.count(
+  ~decode: List<&2, U32> -> DecodedChoice,
+  +fuel: Nat,
+  +root: List<&2, U32>,
+  +genesis: List<&2, GroupChange>,
+  +all: List<&2, SlotConsensus.Ballot>
+) -> Nat:
+  match fuel:
+    case 0n:
+      0n
+    case 1n+f:
+      Nat.add(
+        known_eras.one(root_config(~decode, 1n+f, root, genesis, all)),
+        known_eras.count(~decode, f, root, genesis, all)
+      )
+
+# the latest era whose root configuration the ballots all make known (or
+# Contradicted): the root configurations are known one after another, so it
+# is their number; the root slots that the ballots can decide are at most as
+# many as the ballots
+def known_eras(
+  ~decode: List<&2, U32> -> DecodedChoice,
+  root: List<&2, U32>,
+  genesis: List<&2, GroupChange>,
+  +all: List<&2, SlotConsensus.Ballot>
+) -> Nat:
+  known_eras.count(~decode, 1n+List.length(&2, SlotConsensus.Ballot, all), root, genesis, all)
+
+# the decoded choice d names an era that is at most known
+def acceptable.of(d: DecodedChoice, known: Nat) -> Bool:
+  match d:
+    case DecodedChoice{cs, e}:
+      Nat.is_le(e, known)
+
+# whether a choice x is acceptable: every choice of the root is; a choice of
+# another line is when the era it names is at most the latest known era
+def acceptable.by_line(
+  ~decode: List<&2, U32> -> DecodedChoice,
+  is_root: Bool,
+  root: List<&2, U32>,
+  genesis: List<&2, GroupChange>,
+  all: List<&2, SlotConsensus.Ballot>,
+  x: List<&2, U32>
+) -> Bool:
+  match is_root:
+    case True{}:
+      True{}
+    case False{}:
+      acceptable.of(decode(x), known_eras(~decode, root, genesis, all))
+
+# the choice x of the step is acceptable among the ballots all, in the context
+# ctx: what an honest voter checks before it votes (SlotConsensus.next_ballot)
+def acceptable(
+  ~decode: List<&2, U32> -> DecodedChoice,
+  ctx: RootContext,
+  step: SlotConsensus.Step,
+  all: List<&2, SlotConsensus.Ballot>,
+  x: List<&2, U32>
+) -> Bool:
+  match ctx step:
+    case RootContext{+root, genesis} SlotConsensus.Step{l, k}:
+      acceptable.by_line(~decode, WordListSets.same(l, root), root, genesis, all, x)
+
+# encode and decode are inverse: decoding the encoding of a decoded choice
+# gives it back
+def DecodeInverts(
+  ~encode: DecodedChoice -> List<&2, U32>,
+  ~decode: List<&2, U32> -> DecodedChoice
+) -> Type:
+  @d: DecodedChoice -> {decode(encode(d)) == d: DecodedChoice}
+
+# the answer a for voters is still Unknown
+def voters_unknown(a: MonotoneQueries.MonotoneAnswer<List<&2, List<&2, U32>>>) -> Bool:
+  match a:
+    case MonotoneQueries.Unknown{}:
+      True{}
+    case _:
+      False{}
+
 # Laws
 # ----
 
@@ -620,3 +722,111 @@ law era_grows:
         == MonotoneQueries.Known{y}: MonotoneQueries.MonotoneAnswer<Nat>
     }
     -> {Nat.is_le(x, y) == True{}: Bool}
+
+# Means: a choice that an honest voter accepts among some ballots, it accepts
+# among any more ballots.
+# For free: slot consensus's progress law applies to owner groups (it needs
+# acceptance that lasts); an honest voter's vote never becomes one that it
+# would refuse.
+# For the goal: honest voters agree, once they hold the same ballots, on what
+# they accept, so a good phase decides (Trust 4, progress).
+# Example: a voter that accepts a choice naming era 9 still accepts it after it
+# learns root slot 10.
+law acceptable_is_monotone:
+  for ~decode: List<&2, U32> -> DecodedChoice
+  SlotConsensus.AcceptableIsMonotone(
+    ~RootContext,
+    ~(ctx => step => all => x => acceptable(~decode, ctx, step, all, x))
+  )
+
+# Means: once a slot of a line is decided, among ballots that make its voters
+# known, for a choice that those ballots make acceptable, the voters of the
+# line's next slot are not Unknown among the same ballots.
+# For free: a line never waits on an era that the root never reaches; a faulty
+# leader can name an old era (delaying a change of owners) but never a future
+# one.
+# For the goal: owners change while every line keeps going (Shape 4), and a
+# decided slot always lets the next one start (Trust 4, progress).
+# Example: slot 4 of main decided a choice naming era 9 while era 9 was known,
+# so the voters of slot 5 of main are known.
+law next_voters_are_known:
+  for ~decode: List<&2, U32> -> DecodedChoice
+  for l: List<&2, U32>
+  for k: Nat
+  for root: List<&2, U32>
+  for genesis: List<&2, GroupChange>
+  for all: List<&2, SlotConsensus.Ballot>
+  for vs: List<&2, List<&2, U32>>
+  for x: List<&2, U32>
+  {
+    voters(
+      ~decode,
+      SlotConsensus.Step{l, k},
+      root,
+      genesis,
+      all
+    )
+      == MonotoneQueries.Known{vs}: MonotoneQueries.MonotoneAnswer<List<&2, List<&2, U32>>>
+  }
+    -> {
+      SlotConsensus.SlotConsensus.decision(
+        vs,
+        SlotConsensus.Step{l, k},
+        all
+      )
+        == MonotoneQueries.Known{x}: MonotoneQueries.MonotoneAnswer<List<&2, U32>>
+    }
+    -> {
+      acceptable(
+        ~decode,
+        RootContext{root, genesis},
+        SlotConsensus.Step{l, k},
+        all,
+        x
+      )
+        == True{}: Bool
+    }
+    -> {
+      voters_unknown(
+        voters(~decode, SlotConsensus.Step{l, 1n+k}, root, genesis, all)
+      )
+        == False{}: Bool
+    }
+
+# Means: when encode and decode are inverse, the choice that an honest leader
+# proposes, which names the latest known era, is acceptable, and that era is at
+# least every era whose configuration the ballots make known.
+# For free: an honest leader's proposal always passes honest voters' check;
+# a decided honest proposal moves the line to every change of owners that its
+# leader knew.
+# For the goal: changing a group changes the owners of everything it owns (Shape
+# 4): each line takes the change at the first slot decided from a proposal made
+# after the change was known.
+# Example: the root decided slot 9 (era 10 is known); an honest leader of main
+# proposes a choice naming era 10, and every honest voter that knows era 10
+# accepts it.
+law proposal_names_the_latest_era:
+  for ~encode: DecodedChoice -> List<&2, U32>
+  for ~decode: List<&2, U32> -> DecodedChoice
+  for step: SlotConsensus.Step
+  for root: List<&2, U32>
+  for genesis: List<&2, GroupChange>
+  for all: List<&2, SlotConsensus.Ballot>
+  for cs: List<&2, GroupChange>
+  for m: Nat
+  DecodeInverts(~encode, ~decode)
+    -> {
+      acceptable(
+        ~decode,
+        RootContext{root, genesis},
+        step,
+        all,
+        encode(DecodedChoice{cs, known_eras(~decode, root, genesis, all)})
+      )
+        == True{}: Bool
+    }
+      & (
+        {
+          known_eras.one(root_config(~decode, m, root, genesis, all)) == 1n: Nat
+        } -> {Nat.is_le(m, known_eras(~decode, root, genesis, all)) == True{}: Bool}
+      )

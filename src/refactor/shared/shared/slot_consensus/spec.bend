@@ -95,10 +95,7 @@ def Ballot.same(a: Ballot, b: Ballot) -> Bool:
   match a b:
     case Ballot{ka, va, sa, ia, ra, ca} Ballot{kb, vb, sb, ib, rb, cb}:
       Bool.and(
-        Bool.and(
-          WordListSets.same(ka, kb),
-          Bool.and(WordListSets.same(va, vb), Step.same(sa, sb))
-        ),
+        Bool.and(WordListSets.same(ka, kb), Bool.and(WordListSets.same(va, vb), Step.same(sa, sb))),
         Bool.and(Bool.and(Nat.is_eq(ia, ib), Nat.is_eq(ra, rb)), BallotAction.same(ca, cb))
       )
 
@@ -197,12 +194,7 @@ def Ballots.has_index(all: List<&2, Ballot>, +v: List<&2, U32>, +s: Step, +i: Na
       )
 
 # all has the ballots of the voter v for the step s of every index below i
-def Ballots.chain_below(
-  +i: Nat,
-  +all: List<&2, Ballot>,
-  +v: List<&2, U32>,
-  +s: Step
-) -> Bool:
+def Ballots.chain_below(+i: Nat, +all: List<&2, Ballot>, +v: List<&2, U32>, +s: Step) -> Bool:
   match i:
     case 0n:
       True{}
@@ -534,10 +526,7 @@ def Judge.vote(
 ) -> Maybe<&2, Bool>:
   match b:
     case Ballot{k, +v, st, +i, q, VoteForLead{x}}:
-      mine = Bool.and(
-        Bool.and(Step.same(st, s), Nat.is_eq(q, r)),
-        WordListSets.contains(vs, v)
-      )
+      mine = Bool.and(Bool.and(Step.same(st, s), Nat.is_eq(q, r)), WordListSets.contains(vs, v))
       Bool.pick(
         Maybe<&2, Bool>,
         Bool.and(mine, Ballots.chain_below(i, all, v, s)),
@@ -770,12 +759,7 @@ type BallotToSign is Data:
 
 # the ballot c of the voter me for the step s, signed as the record whose key
 # is k
-def BallotToSign.signed(
-  c: BallotToSign,
-  k: List<&2, U32>,
-  me: List<&2, U32>,
-  s: Step
-) -> Ballot:
+def BallotToSign.signed(c: BallotToSign, k: List<&2, U32>, me: List<&2, U32>, s: Step) -> Ballot:
   match c:
     case BallotToSign{i, r, a}:
       Ballot{k, me, s, i, r, a}
@@ -814,11 +798,7 @@ def Ballots.next_index(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: Step) -> Na
       )
 
 # the highest round of the ballots of me for the step s in bs, if any
-def Ballots.top_round_of(
-  bs: List<&2, Ballot>,
-  +me: List<&2, U32>,
-  +s: Step
-) -> Maybe<&2, Nat>:
+def Ballots.top_round_of(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: Step) -> Maybe<&2, Nat>:
   match bs:
     case Nil{}:
       None{}
@@ -878,27 +858,68 @@ def JudgedBallot.top_sound_lead(
 type ReadyJoiners is Data:
   ReadyJoiners{basis: List<&2, List<&2, U32>>, votes: VotesBeforeJoin}
 
-# the voter v, when what its votes before its join say, p, is all judged
-def ReadyJoiners.of_votes(p: VotesBeforeJoin, v: List<&2, U32>) -> ReadyJoiners:
+# the highest sound vote best, if any, is for a choice that acceptable accepts
+# for the step s among the ballots all, in the context context
+def NextBallot.accepts_prior(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  context: Context,
+  s: Step,
+  all: List<&2, Ballot>,
+  best: Maybe<&2, +Sigma<Nat, _ => List<&2, U32>>>
+) -> Bool:
+  match best:
+    case None{}:
+      True{}
+    case Some{(r, x)}:
+      acceptable(context, s, all, x)
+
+# the voter v, when what its votes before its join say, p, is all judged and
+# its highest sound vote is for an acceptable choice
+def ReadyJoiners.of_votes(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  context: Context,
+  s: Step,
+  all: List<&2, Ballot>,
+  p: VotesBeforeJoin,
+  v: List<&2, U32>
+) -> ReadyJoiners:
   match p:
-    case VotesBeforeJoin{True{}, best}:
-      ReadyJoiners{[v], VotesBeforeJoin{True{}, best}}
+    case VotesBeforeJoin{True{}, +best}:
+      Bool.pick(
+        ReadyJoiners,
+        NextBallot.accepts_prior(~Context, ~acceptable, context, s, all, best),
+        ReadyJoiners{[v], VotesBeforeJoin{True{}, best}},
+        ReadyJoiners{[], VotesBeforeJoin{True{}, None{}}}
+      )
     case VotesBeforeJoin{False{}, best}:
       ReadyJoiners{[], VotesBeforeJoin{True{}, None{}}}
 
 # the voter v, when its first join m is there and ready
 def ReadyJoiners.of_join(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  context: Context,
   m: Maybe<&2, Nat>,
-  all: List<&2, Ballot>,
+  +all: List<&2, Ballot>,
   js: List<&2, JudgedBallot>,
   +v: List<&2, U32>,
-  s: Step
+  +s: Step
 ) -> ReadyJoiners:
   match m:
     case None{}:
       ReadyJoiners{[], VotesBeforeJoin{True{}, None{}}}
     case Some{i}:
-      ReadyJoiners.of_votes(VotesBeforeJoin.below(all, js, v, s, i), v)
+      ReadyJoiners.of_votes(
+        ~Context,
+        ~acceptable,
+        context,
+        s,
+        all,
+        VotesBeforeJoin.below(all, js, v, s, i),
+        v
+      )
 
 # a and b together
 def ReadyJoiners.add(a: ReadyJoiners, b: ReadyJoiners) -> ReadyJoiners:
@@ -908,7 +929,10 @@ def ReadyJoiners.add(a: ReadyJoiners, b: ReadyJoiners) -> ReadyJoiners:
 
 # the voters of us that are ready joiners of round r for the step s
 def ReadyJoiners.of(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
   us: List<&2, List<&2, U32>>,
+  +context: Context,
   +all: List<&2, Ballot>,
   +js: List<&2, JudgedBallot>,
   +s: Step,
@@ -919,8 +943,17 @@ def ReadyJoiners.of(
       ReadyJoiners{[], VotesBeforeJoin{True{}, None{}}}
     case Con{+u, rest}:
       ReadyJoiners.add(
-        ReadyJoiners.of_join(Ballots.first_join(all, all, u, s, r), all, js, u, s),
-        ReadyJoiners.of(rest, all, js, s, r)
+        ReadyJoiners.of_join(
+          ~Context,
+          ~acceptable,
+          context,
+          Ballots.first_join(all, all, u, s, r),
+          all,
+          js,
+          u,
+          s
+        ),
+        ReadyJoiners.of(~Context, ~acceptable, rest, context, all, js, s, r)
       )
 
 # the choice that a lead must have: that of the highest sound vote best, or
@@ -953,9 +986,13 @@ def NextBallot.lead_of(
         None{}
       )
 
-# a vote for the highest sound lead top, when me may still vote in its round:
-# me has not acted in it, has not joined a higher round, and does not lead it
+# a vote for the highest sound lead top, when me may still vote in its round
+# and accepts its choice: me has not acted in it, has not joined a higher
+# round, does not lead it, and acceptable accepts the choice
 def NextBallot.vote(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  context: Context,
   top: Maybe<&2, +Sigma<Nat, _ => List<&2, U32>>>,
   +all: List<&2, Ballot>,
   vs: List<&2, List<&2, U32>>,
@@ -967,11 +1004,11 @@ def NextBallot.vote(
   match top:
     case None{}:
       None{}
-    case Some{(+r, x)}:
+    case Some{(+r, +x)}:
       Bool.pick(
         Maybe<&2, BallotToSign>,
         Bool.and(
-          Bool.not(Ballots.acted_in(all, me, s, r)),
+          Bool.and(Bool.not(Ballots.acted_in(all, me, s, r)), acceptable(context, s, all, x)),
           Bool.and(
             Bool.not(Ballots.joined_above(all, me, s, r, i)),
             Bool.not(leads_round(vs, n, r, me))
@@ -982,8 +1019,12 @@ def NextBallot.vote(
       )
 
 # a lead of the round mine, the highest round that me has a ballot in, when me
-# leads it, joined it, and has not led it yet
+# leads it, joined it, and has not led it yet; its basis is the ready joiners
+# whose highest sound vote is for an acceptable choice
 def NextBallot.lead(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  context: Context,
   mine: Maybe<&2, Nat>,
   +all: List<&2, Ballot>,
   js: List<&2, JudgedBallot>,
@@ -1007,7 +1048,13 @@ def NextBallot.lead(
             Bool.not(Ballots.led(all, me, s, r))
           )
         ),
-        NextBallot.lead_of(ReadyJoiners.of(vs, all, js, s, r), n, r, i, proposal),
+        NextBallot.lead_of(
+          ReadyJoiners.of(~Context, ~acceptable, vs, context, all, js, s, r),
+          n,
+          r,
+          i,
+          proposal
+        ),
         None{}
       )
 
@@ -1117,14 +1164,17 @@ def is_unknown(a: MonotoneQueries.MonotoneAnswer<List<&2, U32>>) -> Bool:
       False{}
 
 # what the voter me signs next for the step s, given the ballots all, the
-# choice proposal that it leads with when free, and whether its round timer ran
-# out (ticked). Nothing once the step is decided or contradicted, when me is
+# choice proposal that it leads with when free, whether its round timer ran out
+# (ticked), and which choices it accepts (acceptable, in the context context). Nothing once the step is decided or contradicted, when me is
 # not a voter, or while a ballot of its own chain is missing. Else the first of:
-# a vote for the highest sound lead that it may still vote for; a lead of its
-# round; a join of the highest round that at least half of the voters reached,
+# a vote for the highest sound lead that it may still vote for and accepts; a
+# lead of its round; a join of the highest round that at least half of the voters reached,
 # when it is above its own; a join of round 0 when it has no ballot yet; on a
 # tick, a join of the round after its own.
 def SlotConsensus.next_ballot(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  +context: Context,
   +voters: List<&2, List<&2, U32>>,
   +s: Step,
   +all: List<&2, Ballot>,
@@ -1146,11 +1196,22 @@ def SlotConsensus.next_ballot(
     Maybe.or(
       &2,
       BallotToSign,
-      NextBallot.vote(JudgedBallot.top_sound_lead(js), all, vs, n, me, s, i),
+      NextBallot.vote(
+        ~Context,
+        ~acceptable,
+        context,
+        JudgedBallot.top_sound_lead(js),
+        all,
+        vs,
+        n,
+        me,
+        s,
+        i
+      ),
       Maybe.or(
         &2,
         BallotToSign,
-        NextBallot.lead(mine, all, js, vs, n, me, s, i, proposal),
+        NextBallot.lead(~Context, ~acceptable, context, mine, all, js, vs, n, me, s, i, proposal),
         Maybe.or(
           &2,
           BallotToSign,
@@ -1179,7 +1240,10 @@ def Run.signed(m: Maybe<&2, BallotToSign>, h: List<&2, U32>, s: Step) -> List<&2
 
 # the ballots that the voters hs sign next for the step s from the ballots all
 def Run.casts(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
   hs: List<&2, List<&2, U32>>,
+  +context: Context,
   +voters: List<&2, List<&2, U32>>,
   +s: Step,
   +all: List<&2, Ballot>,
@@ -1193,13 +1257,20 @@ def Run.casts(
       List.append(
         &2,
         Ballot,
-        Run.signed(SlotConsensus.next_ballot(voters, s, all, h, p, ticked), h, s),
-        Run.casts(rest, voters, s, all, p, ticked)
+        Run.signed(
+          SlotConsensus.next_ballot(~Context, ~acceptable, context, voters, s, all, h, p, ticked),
+          h,
+          s
+        ),
+        Run.casts(~Context, ~acceptable, rest, context, voters, s, all, p, ticked)
       )
 
 # one exchange: the ballots all, with what the honest voters hs sign next from
 # them, and the ballots extra of the other voters
 def Run.exchange(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  context: Context,
   +all: List<&2, Ballot>,
   hs: List<&2, List<&2, U32>>,
   voters: List<&2, List<&2, U32>>,
@@ -1212,13 +1283,21 @@ def Run.exchange(
     &2,
     Ballot,
     all,
-    List.append(&2, Ballot, Run.casts(hs, voters, s, all, p, ticked), extra)
+    List.append(
+      &2,
+      Ballot,
+      Run.casts(~Context, ~acceptable, hs, context, voters, s, all, p, ticked),
+      extra
+    )
   )
 
 # a good phase from the ballots all: an exchange in which every honest voter
 # of hs ticks, then two exchanges without a tick; x0, x1 and x2 are what the
 # other voters add at each
 def Run.good_phase(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  +context: Context,
   +voters: List<&2, List<&2, U32>>,
   +s: Step,
   all: List<&2, Ballot>,
@@ -1228,9 +1307,9 @@ def Run.good_phase(
   x1: List<&2, Ballot>,
   x2: List<&2, Ballot>
 ) -> List<&2, Ballot>:
-  a1 = Run.exchange(all, hs, voters, s, p, True{}, x0)
-  a2 = Run.exchange(a1, hs, voters, s, p, False{}, x1)
-  Run.exchange(a2, hs, voters, s, p, False{}, x2)
+  a1 = Run.exchange(~Context, ~acceptable, context, all, hs, voters, s, p, True{}, x0)
+  a2 = Run.exchange(~Context, ~acceptable, context, a1, hs, voters, s, p, False{}, x1)
+  Run.exchange(~Context, ~acceptable, context, a2, hs, voters, s, p, False{}, x2)
 
 # no ballot of xs is by a voter of hs
 def Run.none_by(xs: List<&2, Ballot>, +hs: List<&2, List<&2, U32>>) -> Bool:
@@ -1242,7 +1321,10 @@ def Run.none_by(xs: List<&2, Ballot>, +hs: List<&2, List<&2, U32>>) -> Bool:
 
 # every voter of hs signs nothing next for the step s without a tick
 def Run.quiet(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
   hs: List<&2, List<&2, U32>>,
+  +context: Context,
   +voters: List<&2, List<&2, U32>>,
   +s: Step,
   +all: List<&2, Ballot>,
@@ -1253,8 +1335,12 @@ def Run.quiet(
       True{}
     case Con{h, rest}:
       Bool.and(
-        Maybe.is_none(&2, BallotToSign, SlotConsensus.next_ballot(voters, s, all, h, p, False{})),
-        Run.quiet(rest, voters, s, all, p)
+        Maybe.is_none(
+          &2,
+          BallotToSign,
+          SlotConsensus.next_ballot(~Context, ~acceptable, context, voters, s, all, h, p, False{})
+        ),
+        Run.quiet(~Context, ~acceptable, rest, context, voters, s, all, p)
       )
 
 # the highest round m is t
@@ -1267,12 +1353,7 @@ def Run.is_round(m: Maybe<&2, Nat>, t: Nat) -> Bool:
 
 # every voter of hs has, for the step s, its highest ballot in round t, and
 # every ballot of its chain below its next index
-def Run.level(
-  hs: List<&2, List<&2, U32>>,
-  +all: List<&2, Ballot>,
-  +s: Step,
-  +t: Nat
-) -> Bool:
+def Run.level(hs: List<&2, List<&2, U32>>, +all: List<&2, Ballot>, +s: Step, +t: Nat) -> Bool:
   match hs:
     case Nil{}:
       True{}
@@ -1318,6 +1399,51 @@ def Run.judged(
     case Con{b, rest}:
       Bool.and(Run.judged.one(b, hs, voters, s, all), Run.judged(rest, hs, voters, s, all))
 
+# the lead or vote b, if it is by a voter of hs for the step s, is for a
+# choice that acceptable accepts among the ballots all
+def Run.accepted.one(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  b: Ballot,
+  context: Context,
+  hs: List<&2, List<&2, U32>>,
+  +s: Step,
+  all: List<&2, Ballot>
+) -> Bool:
+  match b:
+    case Ballot{k, v, st, i, r, LeadRound{x, basis}}:
+      Bool.or(
+        Bool.not(Bool.and(WordListSets.contains(hs, v), Step.same(st, s))),
+        acceptable(context, s, all, x)
+      )
+    case Ballot{k, +v, +st, i, r, VoteForLead{x}}:
+      Bool.or(
+        Bool.not(Bool.and(WordListSets.contains(hs, v), Step.same(st, s))),
+        acceptable(context, s, all, x)
+      )
+    case _:
+      True{}
+
+# every lead and vote of bs by a voter of hs for the step s is for a choice
+# that acceptable accepts among the ballots all
+def Run.accepted(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  bs: List<&2, Ballot>,
+  +context: Context,
+  +hs: List<&2, List<&2, U32>>,
+  +s: Step,
+  +all: List<&2, Ballot>
+) -> Bool:
+  match bs:
+    case Nil{}:
+      True{}
+    case Con{b, rest}:
+      Bool.and(
+        Run.accepted.one(~Context, ~acceptable, b, context, hs, s, all),
+        Run.accepted(~Context, ~acceptable, rest, context, hs, s, all)
+      )
+
 # the voter m, if there, is one of hs
 def Run.names_one_of(m: Maybe<&2, List<&2, U32>>, hs: List<&2, List<&2, U32>>) -> Bool:
   match m:
@@ -1340,6 +1466,36 @@ def Ballots.Grows(a: List<&2, Ballot>, b: List<&2, Ballot>) -> Type:
 # a and b are the same list of words
 def EqualWordLists(a: List<&2, U32>, b: List<&2, U32>) -> Type:
   {a == b: List<&2, U32>}
+
+# acceptable is monotone: a choice that it accepts for a step among some
+# ballots, it accepts among any more ballots
+def AcceptableIsMonotone(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool
+) -> Type:
+  @ctx: Context -> @s: Step -> @a: List<&2, Ballot> -> @b: List<&2, Ballot> -> @x: List<&2, U32>
+    -> Ballots.Grows(a, b)
+    -> {acceptable(ctx, s, a, x) == True{}: Bool}
+    -> {acceptable(ctx, s, b, x) == True{}: Bool}
+
+# the choice of the ballot c, if it leads or votes, is the proposal p or a
+# choice that acceptable accepts for the step s among the ballots all
+def BallotToSign.choice_accepted(
+  ~Context: Data,
+  ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool,
+  context: Context,
+  s: Step,
+  all: List<&2, Ballot>,
+  p: List<&2, U32>,
+  c: BallotToSign
+) -> Bool:
+  match c:
+    case BallotToSign{i, r, VoteForLead{x}}:
+      acceptable(context, s, all, x)
+    case BallotToSign{i, r, LeadRound{+x, basis}}:
+      Bool.or(WordListSets.same(x, p), acceptable(context, s, all, x))
+    case _:
+      True{}
 
 # Means: with more ballots, what a step decides only knows more: Unknown may
 # become a choice or Contradicted, a choice may become Contradicted, and nothing else
@@ -1378,6 +1534,9 @@ law SlotConsensus.decision_is_monotone:
 # Example: a voter whose highest ballot for slot 5 has index 3 signs its next
 # ballot for slot 5 with index 4.
 law SlotConsensus.next_ballot_contradicts_nothing:
+  for ~Context: Data
+  for ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool
+  for context: Context
   for voters: List<&2, List<&2, U32>>
   for s: Step
   for all: List<&2, Ballot>
@@ -1389,6 +1548,9 @@ law SlotConsensus.next_ballot_contradicts_nothing:
   for b: Ballot
   {
     SlotConsensus.next_ballot(
+      ~Context,
+      ~acceptable,
+      context,
       voters,
       s,
       all,
@@ -1401,6 +1563,54 @@ law SlotConsensus.next_ballot_contradicts_nothing:
     -> {List.contains(~Ballot, ~Ballot.same, all, b) == True{}: Bool}
     -> {Ballot.contradicts(b, BallotToSign.signed(c, k, me, s)) == False{}: Bool}
 
+# Means: what an honest voter signs next leads or votes only for its own
+# proposal or for a choice that it accepts.
+# For free: a decided choice was accepted by at least one honest voter, since
+# more than half of the voters voted for it; strangers and faulty leaders
+# cannot get a choice decided that no honest voter accepts.
+# For the goal: a hook (owner groups, Vend) says which choices are acceptable,
+# and nothing else gets decided, so a faulty leader cannot make a line wait on
+# an era or a request that does not exist.
+# Example: a voter that does not know era 12 yet does not vote for a choice
+# that names era 12.
+law SlotConsensus.next_ballot_accepts_its_choice:
+  for ~Context: Data
+  for ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool
+  for context: Context
+  for voters: List<&2, List<&2, U32>>
+  for s: Step
+  for all: List<&2, Ballot>
+  for me: List<&2, U32>
+  for proposal: List<&2, U32>
+  for ticked: Bool
+  for c: BallotToSign
+  {
+    SlotConsensus.next_ballot(
+      ~Context,
+      ~acceptable,
+      context,
+      voters,
+      s,
+      all,
+      me,
+      proposal,
+      ticked
+    )
+      == Some{c}: Maybe<&2, BallotToSign>
+  }
+    -> {
+      BallotToSign.choice_accepted(
+        ~Context,
+        ~acceptable,
+        context,
+        s,
+        all,
+        proposal,
+        c
+      )
+        == True{}: Bool
+    }
+
 # Means: a lead or a vote that an honest voter signs next is judged sound among
 # the ballots it had, together with the new one.
 # For free: with the law below, it stays sound on every node that holds those
@@ -1410,6 +1620,9 @@ law SlotConsensus.next_ballot_contradicts_nothing:
 # Example: a voter that sees the sound lead of round 2 for w7 votes for w7 in
 # round 2, and that vote is sound.
 law SlotConsensus.next_ballot_is_judged_sound:
+  for ~Context: Data
+  for ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool
+  for context: Context
   for voters: List<&2, List<&2, U32>>
   for s: Step
   for all: List<&2, Ballot>
@@ -1420,6 +1633,9 @@ law SlotConsensus.next_ballot_is_judged_sound:
   for k: List<&2, U32>
   {
     SlotConsensus.next_ballot(
+      ~Context,
+      ~acceptable,
+      context,
       voters,
       s,
       all,
@@ -1470,8 +1686,10 @@ law SlotConsensus.judgment_never_changes:
 
 # Means: from ballots that every honest voter holds, where the honest voters
 # are more than half of the voters, all have their highest ballot in one round,
-# have whole chains, have every lead and vote judged, and have nothing more to
-# sign without a tick, and where the leader of the next round is honest: after
+# have whole chains, have every lead and vote judged and for choices they
+# accept, and have nothing more to sign without a tick, where they accept the
+# proposal and accept for good what they accept, and where the leader of the
+# next round is honest: after
 # one exchange in which each honest voter ticks and two more exchanges, the
 # step is decided or Contradicted, whatever the other voters add.
 # For free: a slot is decided within one good phase whose leader is honest;
@@ -1484,6 +1702,9 @@ law SlotConsensus.judgment_never_changes:
 # Example: three honest voters of five, all at round 6, tick; the leader of
 # round 7 is honest; two exchanges later slot 5 is decided.
 law SlotConsensus.good_phase_decides:
+  for ~Context: Data
+  for ~acceptable: Context -> Step -> List<&2, Ballot> -> List<&2, U32> -> Bool
+  for context: Context
   for voters: List<&2, List<&2, U32>>
   for s: Step
   for all: List<&2, Ballot>
@@ -1503,7 +1724,10 @@ law SlotConsensus.good_phase_decides:
     }
     -> {Run.level(hs, all, s, t) == True{}: Bool}
     -> {Run.judged(all, hs, voters, s, all) == True{}: Bool}
-    -> {Run.quiet(hs, voters, s, all, p) == True{}: Bool}
+    -> AcceptableIsMonotone(~Context, ~acceptable)
+    -> {acceptable(context, s, all, p) == True{}: Bool}
+    -> {Run.accepted(~Context, ~acceptable, all, context, hs, s, all) == True{}: Bool}
+    -> {Run.quiet(~Context, ~acceptable, hs, context, voters, s, all, p) == True{}: Bool}
     -> {
       Run.names_one_of(
         voter_at(
@@ -1523,7 +1747,11 @@ law SlotConsensus.good_phase_decides:
     }
     -> {
       is_unknown(
-        SlotConsensus.decision(voters, s, Run.good_phase(voters, s, all, hs, p, x0, x1, x2))
+        SlotConsensus.decision(
+          voters,
+          s,
+          Run.good_phase(~Context, ~acceptable, context, voters, s, all, hs, p, x0, x1, x2)
+        )
       )
         == False{}: Bool
     }
