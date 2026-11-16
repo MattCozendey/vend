@@ -3,7 +3,7 @@
 This folder holds a rewrite of Vend in two layers. The lower layer is a generic decentralized
 system that knows nothing about versioning. Vend is a small set of hooks on top of it.
 
-The root `README.md` stays the canon for what Vend is. This file is the plan for how to build it.
+This folder stands on its own, and this file is its canon: what it must do, and how it is built.
 
 ## Rules of the work
 
@@ -36,7 +36,8 @@ Shape
    hooks on top of it.
 3. Hooks can bring their own data and storage, so speed work happens in the hook, proven equal to
    the plain version.
-4. Groups can contain groups, and they can change over time.
+4. Groups can contain groups, and they can change over time. A change reaches each line at the
+   first slot decided from a proposal made after the change was known.
 
 Behavior
 
@@ -54,7 +55,7 @@ Cost
 2. Caching is safe, now and for any cache added later.
 3. The design is simpler and stronger than the current one: fewer separate things to prove, more
    guaranteed behavior.
-4. It keeps room for everything the root `README.md` plans (formats, nested languages, mounts,
+4. It keeps room for everything planned (formats, nested languages, mounts,
    submodules).
 
 ## Design
@@ -205,6 +206,11 @@ No design removes these. They are stated so that no law claims more.
 - A Sync by hashes of subtrees can miss records when two inputs have one hash. A missed record makes
   answers less known, never wrong.
 - Records from strangers cost storage. The program limits them; the core has no rule for them.
+- A change of a group cannot reach a line at the very next slot when that slot already has votes from
+  before the change: consensus must finish it with its old choice, or two nodes could decide two
+  different ones. The era is part of the chosen value for the same reason: if it could change after
+  the choice is made, two nodes could disagree on who votes next. So the slot after it takes the
+  change.
 
 ## Sources
 
