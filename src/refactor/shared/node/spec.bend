@@ -45,6 +45,8 @@ type Deed is Data:
     contents: List<&2, List<&2, U32>>
   }
   ClientAsks{client: List<&2, U32>, question: List<&2, U32>}
+  ClientWatches{client: List<&2, U32>, question: List<&2, U32>}
+  ClientUnwatches{client: List<&2, U32>, question: List<&2, U32>}
   PeerOpensSync{peer: List<&2, U32>}
   PeerSyncMessage{peer: List<&2, U32>, message: List<&2, U32>}
   PeerAsksParts{peer: List<&2, U32>, message: List<&2, U32>}
@@ -70,14 +72,19 @@ type Output is Data:
   SendParts{peer: List<&2, U32>, message: List<&2, U32>}
   FetchParts{parts: List<&2, Shared.FixedLengthList(U32, 8n)>}
   ReplyToClient{client: List<&2, U32>, answer: List<&2, U32>}
+  NotifyClient{client: List<&2, U32>, question: List<&2, U32>, answer: List<&2, U32>}
 
 # Persist, PersistPart: write a new record or part to storage, before any
 # message goes out. Send, SendPart: a sync or part message to a peer. Fetch:
 # ask some peer for these parts. Reply: answer a client.
 
+# a question that a client watches
+type Watch is Data:
+  Watch{client: List<&2, U32>, question: List<&2, U32>}
+
 # a node: its signer (never copied, so a node never signs twice from one
-# state), its name (its public key), its records and parts, its clients, and
-# whether it stopped
+# state), its name (its public key), its records and parts, its clients, the
+# questions that its clients watch, and whether it stopped
 type NodeState is Type:
   NodeState{
     signer: Signatures.Signer,
@@ -85,31 +92,32 @@ type NodeState is Type:
     records: SignedRecords.SignedRecordSet(),
     parts: PartStore.PartStore,
     clients: List<&2, List<&2, U32>>,
+    watches: List<&2, Watch>,
     stopped: Bool
   }
 
 # the name of the node st
 def NodeState.name(st: NodeState) -> List<&2, U32>:
   match st:
-    case NodeState{sg, n, rs, ps, cs, x}:
+    case NodeState{sg, n, rs, ps, cs, ws, x}:
       n
 
 # the records of the node st
 def NodeState.records(st: NodeState) -> SignedRecords.SignedRecordSet():
   match st:
-    case NodeState{sg, n, rs, ps, cs, x}:
+    case NodeState{sg, n, rs, ps, cs, ws, x}:
       rs
 
 # the parts of the node st
 def NodeState.parts(st: NodeState) -> PartStore.PartStore:
   match st:
-    case NodeState{sg, n, rs, ps, cs, x}:
+    case NodeState{sg, n, rs, ps, cs, ws, x}:
       ps
 
 # the clients of the node st
 def NodeState.clients(st: NodeState) -> List<&2, List<&2, U32>>:
   match st:
-    case NodeState{sg, n, rs, ps, cs, x}:
+    case NodeState{sg, n, rs, ps, cs, ws, x}:
       cs
 
 # the trusted keepers of config
@@ -124,16 +132,22 @@ def NodeConfig.copies(config: NodeConfig) -> Nat:
     case NodeConfig{root, genesis, ks, n}:
       n
 
+# the questions that the clients of the node st watch, each with its client
+def NodeState.watches(st: NodeState) -> List<&2, Watch>:
+  match st:
+    case NodeState{sg, n, rs, ps, cs, ws, x}:
+      ws
+
 # the node st has stopped
 def NodeState.stopped(st: NodeState) -> Bool:
   match st:
-    case NodeState{sg, n, rs, ps, cs, x}:
+    case NodeState{sg, n, rs, ps, cs, ws, x}:
       x
 
 # the signer of the node st
 def NodeState.signer(st: NodeState) -> Signatures.Signer:
   match st:
-    case NodeState{sg, n, rs, ps, cs, x}:
+    case NodeState{sg, n, rs, ps, cs, ws, x}:
       sg
 
 # The step
@@ -373,6 +387,91 @@ def Deed.clients(d: Deed, cs: List<&2, List<&2, U32>>) -> List<&2, List<&2, U32>
     case _:
       cs
 
+# the watches ws without the watch of the client c on the question q
+def Watches.without(ws: List<&2, Watch>, +c: List<&2, U32>, +q: List<&2, U32>) -> List<&2, Watch>:
+  match ws:
+    case Nil{}:
+      []
+    case Con{Watch{+x, +y}, rest}:
+      List.append(
+        &2,
+        Watch,
+        Bool.pick(
+          List<&2, Watch>,
+          Bool.and(WordListSets.same(x, c), WordListSets.same(y, q)),
+          [],
+          [Watch{x, y}]
+        ),
+        Watches.without(rest, c, q)
+      )
+
+# the watches ws without any watch of the client c
+def Watches.without_client(ws: List<&2, Watch>, +c: List<&2, U32>) -> List<&2, Watch>:
+  match ws:
+    case Nil{}:
+      []
+    case Con{Watch{+x, y}, rest}:
+      List.append(
+        &2,
+        Watch,
+        Bool.pick(List<&2, Watch>, WordListSets.same(x, c), [], [Watch{x, y}]),
+        Watches.without_client(rest, c)
+      )
+
+# the watches after the deed d, from ws: a client that watches a question
+# watches it once; a client that stops watching, or leaves, drops it
+def Deed.watches(d: Deed, ws: List<&2, Watch>) -> List<&2, Watch>:
+  match d:
+    case ClientWatches{+c, +q}:
+      Watch{c, q} <> Watches.without(ws, c, q)
+    case ClientUnwatches{c, q}:
+      Watches.without(ws, c, q)
+    case ClientLeaves{c}:
+      Watches.without_client(ws, c)
+    case _:
+      ws
+
+# the first notice that the deed d asks for: the answer to a question that a
+# client starts to watch, from the records rs and parts ps
+def Deed.first_notice(
+  ~answer: SignedRecords.SignedRecordSet() -> PartStore.PartStore -> List<&2, U32> -> List<&2, U32>,
+  d: Deed,
+  rs: SignedRecords.SignedRecordSet(),
+  ps: PartStore.PartStore
+) -> List<&2, Output>:
+  match d:
+    case ClientWatches{c, +q}:
+      [NotifyClient{c, q, answer(rs, ps, q)}]
+    case _:
+      []
+
+# the notices for the watches ws whose answer changed from the records rs and
+# parts ps to the records rs2 and parts ps2: each with its new answer
+def Watches.notices(
+  ~answer: SignedRecords.SignedRecordSet() -> PartStore.PartStore -> List<&2, U32> -> List<&2, U32>,
+  ws: List<&2, Watch>,
+  +rs: SignedRecords.SignedRecordSet(),
+  +ps: PartStore.PartStore,
+  +rs2: SignedRecords.SignedRecordSet(),
+  +ps2: PartStore.PartStore
+) -> List<&2, Output>:
+  match ws:
+    case Nil{}:
+      []
+    case Con{Watch{c, +q}, rest}:
+      +now = answer(rs2, ps2, q)
+      List.append(
+        &2,
+        Output,
+        Bool.pick(
+          List<&2, Output>,
+          WordListSets.same(answer(rs, ps, q), now),
+          [],
+          [NotifyClient{c, q, now}]
+        ),
+        Watches.notices(~answer, rest, rs, ps, rs2, ps2)
+      )
+
 # whether a node has stopped after the deed d: it had, or d is a stop that is
 # forced or finds no client
 def Deed.stopped(d: Deed, s: Bool, cs: List<&2, List<&2, U32>>) -> Bool:
@@ -390,6 +489,10 @@ def Deed.keeps_records(d: Deed) -> Bool:
     case ClientLeaves{c}:
       True{}
     case ClientAsks{c, q}:
+      True{}
+    case ClientWatches{c, q}:
+      True{}
+    case ClientUnwatches{c, q}:
       True{}
     case PeerOpensSync{p}:
       True{}
@@ -420,7 +523,15 @@ def author_of(r: SignedRecords.SignedRecord) -> List<&2, U32>:
     case SignedRecords.SignedRecord{au, bo, sg}:
       Shared.FixedLengthList.to_list(U32, 8n, au)
 
-# the outputs of os that do not persist
+# o tells a client the new answer to a question that it watches
+def Output.notifies(o: Output) -> Bool:
+  match o:
+    case NotifyClient{c, q, a}:
+      True{}
+    case _:
+      False{}
+
+# the outputs of os that neither persist nor notify
 def Outputs.messages(os: List<&2, Output>) -> List<&2, Output>:
   match os:
     case Nil{}:
@@ -429,8 +540,21 @@ def Outputs.messages(os: List<&2, Output>) -> List<&2, Output>:
       List.append(
         &2,
         Output,
-        Bool.pick(List<&2, Output>, Output.persists(o), [], [o]),
+        Bool.pick(List<&2, Output>, Bool.or(Output.persists(o), Output.notifies(o)), [], [o]),
         Outputs.messages(rest)
+      )
+
+# the outputs of os that notify
+def Outputs.notices(os: List<&2, Output>) -> List<&2, Output>:
+  match os:
+    case Nil{}:
+      []
+    case Con{+o, rest}:
+      List.append(
+        &2,
+        Output,
+        Bool.pick(List<&2, Output>, Output.notifies(o), [o], []),
+        Outputs.notices(rest)
       )
 
 # the outputs os persist the record r
@@ -453,8 +577,8 @@ def PersistsWords(os: List<&2, Output>, ws: List<&2, U32>) -> Type:
     case Con{o, rest}:
       PersistsWords(rest, ws)
 
-# the outputs os of the node st after the deed d, other than those that persist,
-# are what d asks: a reply to a question; the opening of a sync; the reply to a
+# the outputs os of the node st after the deed d, other than those that persist
+# or notify, are what d asks: a reply to a question; the opening of a sync; the reply to a
 # sync message, when it is not empty; the answer to a part ask; on a Work, one
 # fetch of exactly the needed parts that the node lacks; nothing otherwise
 def ExpectedMessages(
@@ -2124,5 +2248,199 @@ law Node.work_adds_only_own:
           ),
           k,
           NodeState.name(st)
+        )
+    )
+
+# Means: a new or resumed node has no watch; the watches of a running node are
+# those that its clients started and did not stop, dropped when a client leaves;
+# and every step of a running node notifies, besides the first answer to a
+# question that a client starts to watch, exactly the watches whose answer
+# changed, each with its new answer.
+# For free: a client is told of every change to what it watches and of nothing
+# else, as it happens; a client that also submits its own changes has a flow
+# both ways.
+# For the goal: writers are told only about changes to what their work uses
+# (Writer), and a resource takes its branch's newest content (Resource).
+# Example: a client watches a question whose answer a new record changes; the
+# step that adds the record notifies it of the new answer, and a step that adds
+# a record that the answer does not depend on notifies it of nothing.
+law Node.watches:
+  for ~ballot_of: List<&2, U32> -> Maybe<&2, RecordViews.BallotBody>
+  for ~ballot_body: RecordViews.BallotBody -> List<&2, U32>
+  for ~claim_of: List<&2, U32> -> Maybe<&2, Shared.FixedLengthList(U32, 8n)>
+  for ~claim_body: Shared.FixedLengthList(U32, 8n) -> List<&2, U32>
+  for ~decode: List<&2, U32> -> OwnerGroups.DecodedChoice
+  for ~encode_choice: Nat -> List<&2, U32> -> List<&2, U32>
+  for ~plan: SignedRecords.SignedRecordSet() -> List<
+    &2,
+    +Sigma<SlotConsensus.Step, _ => List<&2, U32>>>
+  for ~needed: SignedRecords.SignedRecordSet() -> List<&2, Shared.FixedLengthList(U32, 8n)>
+  for ~answer: SignedRecords.SignedRecordSet() -> PartStore.PartStore -> List<
+    &2,
+    U32> -> List<&2, U32>
+  for config: NodeConfig
+  for signer: Signatures.Signer
+  for records: List<&2, SignedRecords.SignedRecord>
+  for contents: List<&2, List<&2, U32>>
+  for resumed: NodeState
+  for st: NodeState
+  for d: Deed
+  {
+    NodeState.watches(
+      Node.start(
+        ~ballot_of,
+        ~ballot_body,
+        ~claim_of,
+        ~claim_body,
+        ~decode,
+        ~encode_choice,
+        ~plan,
+        ~needed,
+        ~answer,
+        config,
+        signer
+      )
+    )
+      == []: List<&2, Watch>
+  }
+    & (
+      (
+        {
+          Node.resume(
+            ~ballot_of,
+            ~ballot_body,
+            ~claim_of,
+            ~claim_body,
+            ~decode,
+            ~encode_choice,
+            ~plan,
+            ~needed,
+            ~answer,
+            config,
+            signer,
+            records,
+            contents
+          )
+            == Some{resumed}: Maybe<&1, NodeState>
+        } -> {NodeState.watches(resumed) == []: List<&2, Watch>}
+      )
+        & (
+          {
+            NodeState.stopped(st) == False{}: Bool
+          } -> {
+            NodeState.watches(
+              Pair.fst(
+                NodeState,
+                List<&2, Output>,
+                Node.step(
+                  ~ballot_of,
+                  ~ballot_body,
+                  ~claim_of,
+                  ~claim_body,
+                  ~decode,
+                  ~encode_choice,
+                  ~plan,
+                  ~needed,
+                  ~answer,
+                  config,
+                  st,
+                  d
+                )
+              )
+            )
+              == Deed.watches(d, NodeState.watches(st)): List<&2, Watch>
+          }
+            & {
+              Outputs.notices(
+                Pair.snd(
+                  NodeState,
+                  List<&2, Output>,
+                  Node.step(
+                    ~ballot_of,
+                    ~ballot_body,
+                    ~claim_of,
+                    ~claim_body,
+                    ~decode,
+                    ~encode_choice,
+                    ~plan,
+                    ~needed,
+                    ~answer,
+                    config,
+                    st,
+                    d
+                  )
+                )
+              )
+                == List.append(
+                  &2,
+                  Output,
+                  Deed.first_notice(~answer, d, NodeState.records(st), NodeState.parts(st)),
+                  Watches.notices(
+                    ~answer,
+                    NodeState.watches(
+                      Pair.fst(
+                        NodeState,
+                        List<&2, Output>,
+                        Node.step(
+                          ~ballot_of,
+                          ~ballot_body,
+                          ~claim_of,
+                          ~claim_body,
+                          ~decode,
+                          ~encode_choice,
+                          ~plan,
+                          ~needed,
+                          ~answer,
+                          config,
+                          st,
+                          d
+                        )
+                      )
+                    ),
+                    NodeState.records(st),
+                    NodeState.parts(st),
+                    NodeState.records(
+                      Pair.fst(
+                        NodeState,
+                        List<&2, Output>,
+                        Node.step(
+                          ~ballot_of,
+                          ~ballot_body,
+                          ~claim_of,
+                          ~claim_body,
+                          ~decode,
+                          ~encode_choice,
+                          ~plan,
+                          ~needed,
+                          ~answer,
+                          config,
+                          st,
+                          d
+                        )
+                      )
+                    ),
+                    NodeState.parts(
+                      Pair.fst(
+                        NodeState,
+                        List<&2, Output>,
+                        Node.step(
+                          ~ballot_of,
+                          ~ballot_body,
+                          ~claim_of,
+                          ~claim_body,
+                          ~decode,
+                          ~encode_choice,
+                          ~plan,
+                          ~needed,
+                          ~answer,
+                          config,
+                          st,
+                          d
+                        )
+                      )
+                    )
+                  )
+                ): List<&2, Output>
+            }
         )
     )
