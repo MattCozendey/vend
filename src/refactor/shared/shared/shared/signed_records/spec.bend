@@ -1,13 +1,12 @@
 import Base
+import ../shared/patricia_map/spec.bend as PatriciaMap
 import ../shared/shared/sha256/spec.bend as Sha256
 import ../shared/shared/shared/shared.bend as Shared
 import ../shared/signatures/spec.bend as Signatures
 
 # A record is what nodes share: words written by an author, and the author's
 # signature of them. What the words mean is up to the hooks. A node holds its
-# records in a record set: a patricia_map from the key of each record to
-# nothing, whose entries are measured by SignedRecordSet.entry_hash and whose
-# summaries are combined by SignedRecordSet.combine_hashes.
+# records in a record set (SignedRecordSet).
 
 # a record: its author's public key, its words, and the author's signature of
 # its words
@@ -44,6 +43,25 @@ law SignedRecordSet.combine_hashes:
   for x: Shared.FixedLengthList(U32, 8n)
   for y: Shared.FixedLengthList(U32, 8n)
   Shared.FixedLengthList(U32, 8n)
+
+# placeholders: SignedRecordSet names these in a def; their implementations
+# replace these bodies
+def SignedRecordSet.entry_hash(k, u):
+  ?TODO
+
+def SignedRecordSet.combine_hashes(x, y):
+  ?TODO
+
+# a set of records: a patricia_map from the key of each record to nothing,
+# whose entries are measured by SignedRecordSet.entry_hash and whose summaries
+# are combined by SignedRecordSet.combine_hashes
+def SignedRecordSet() -> Data:
+  PatriciaMap.PatriciaMap(
+    ~Unit,
+    ~(Shared.FixedLengthList(U32, 8n)),
+    ~SignedRecordSet.entry_hash,
+    ~SignedRecordSet.combine_hashes
+  )
 
 # Means: the key of a record reads back as that record, and a key that reads back
 # as a record is that record's key.

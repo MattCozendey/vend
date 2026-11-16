@@ -21,6 +21,11 @@ law PatriciaMap:
   for ~combine_summaries: Summary -> Summary -> Summary
   Data
 
+# placeholder: specs above name this type in defs; its implementation replaces
+# this body
+def PatriciaMap(value, summary, measure_entry, combine_summaries):
+  ?TODO
+
 # the value of the key k in m, if m has k
 law PatriciaMap.get:
   for ~Value: Data

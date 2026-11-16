@@ -12,6 +12,9 @@ This folder stands on its own, and this file is its canon: what it must do, and 
 - Layout: the same onion as the rest of `src/`. Each layer has one `shared.bend` file or one
   `shared/` folder, and what is more general goes deeper. The generic decentralized system lives in
   the `shared` tree of this folder. Vend-specific modules live at the top level of `src/refactor/`.
+- Placeholders: when a spec must name, inside a def, an operation that is still an open law (the
+  record-set type, for example), that law gets a `?TODO` body in its own spec, with a comment. Its
+  implementation later replaces that body in the spec; `impl.bend` holds only proofs for it.
 - Self-sufficient: no file in `src/refactor/` imports a file outside it, except Bend's Base. Code
   from elsewhere in the repository is avoided. When it is needed, its file is copied into the layer
   of `src/refactor/` where it belongs (domain-agnostic code goes into the `shared` tree, at the
@@ -70,7 +73,8 @@ only if its signature checks. What a record refers to is checked by the queries 
 missing record or part makes their answer Unknown, never wrong. A Sync is a merge of two maps. Two
 maps with the same entries are the same map, so the order in which a node receives records cannot
 change anything. The summary of each part is a Merkle hash, so two nodes find where their records
-differ by trusting SHA-256 alone.
+differ by trusting SHA-256 alone; `record_sync` exchanges those summaries, then the records of the
+parts that differ.
 
 ### Queries
 
@@ -143,7 +147,7 @@ module never imports a sibling, so each module sits one layer above everything i
 ```
 src/refactor/                       Vend (top level)
   shared/                           owner_groups
-    shared/                         slot_consensus
+    shared/                         slot_consensus, record_sync
       shared/                       signed_records, monotone_queries
         shared/                     patricia_map, exact_word_encoding, signatures
           shared/                   sha256, association_list, word_list_sets
@@ -165,10 +169,11 @@ not change.
 | `patricia_map` | A map from keys (lists of words) to values: made from a list, merge, keep, split, list, "same entries, same map", and a summary that combines the summaries of two halves split where the keys part (a Merkle hash when the combine hashes). | Laws stated |
 | `exact_word_encoding` | Exact encodings as words (each value has one encoding, read back with the words after it) for a word, a number, a dependent pair, a fixed-length list, and a conversion; every other type's encoding comes from these. | Laws stated |
 | `signatures` | A signer (never copied, so never signs twice from one state): every signature it makes checks with its public key, which never changes; it makes at least 2^20. | Laws stated |
-| `signed_records` | A signed record (author, words, signature); its key reads back as it and as nothing else; it checks exactly when its signature does; a record set's summaries are Merkle hashes. That a node holds only records that check is a law of the node, where records are added. | Laws stated |
+| `signed_records` | A signed record (author, words, signature); its key reads back as it and as nothing else; it checks exactly when its signature does; the record set (`SignedRecordSet`, a `patricia_map`) whose summaries are Merkle hashes. That a node holds only records that check is a law of the node, where records are added. | Laws stated |
 | `monotone_queries` | A monotone answer (Unknown, Known, or Contradicted with proof) and when one knows more; number ranges that only narrow; a monotone query (it knows more on a grown state); "q1, then q2" of monotone queries is monotone (1 law); a hook's incremental state matches its plain query. | Laws stated |
 | `slot_consensus` | Paxos with chained ballots, with the voters as a parameter. Deciding: the rule (definitions) and 2 laws: a decision only knows more with more ballots, and a judged ballot keeps its judgment. Casting: what an honest voter signs next, voting only for choices that a validity hook accepts (a vote, a lead, a catch-up join of a round that at least half of the voters reached, a first join of round 0, or on a Tick a join of the round after its own), with 3 laws: it never contradicts its own ballots, it leads and votes only for its proposal or accepted choices, and its leads and votes are judged sound. Progress: a good phase (honest voters in sync, an honest next leader) decides the slot within one Tick and two exchanges, whatever the other voters send. | Laws stated |
 | `owner_groups` | The voters of each step: a root line whose decided choices set group members and line owners (read by a decode hook); groups of groups; eras that never go back; what an honest voter accepts (a choice naming an era it already knows) and the era an honest leader names (the latest known). Laws: nodes are exactly the names reached through a group; voters only become known; eras grow; acceptance lasts; after a decided accepted slot the next slot's voters are known; an honest proposal is accepted and names every known era. | Laws stated |
+| `record_sync` | Two nodes exchange messages until one has nothing more to say. Laws: taking in a message never loses a record and adds only records that check; every sync ends; a sync between nodes that follow it, with no SHA-256 collision on their parts, ends with both holding the records of both. What the messages say is the implementation's choice; that a sync costs what differs is measured. | Laws stated |
 | Keeping and forgetting | Claims to keep a part, dropping a part, checkpoints. | Not started |
 | Node | A node: its records, its hooks, and its deeds (Sync, Tick, a request, stop). | Not started |
 | Vend | The versioning hooks, at the top level of `src/refactor/`. | Not started |
