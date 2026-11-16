@@ -31,41 +31,6 @@ law RecordSync.reply:
   for m: List<&2, U32>
   List<&2, U32>
 
-# Reading record sets
-# -------------------
-
-# the record set s holds the key k
-def Has(s: SignedRecords.SignedRecordSet(), k: List<&2, U32>) -> Type:
-  {
-    Maybe.is_some(
-      &2,
-      Unit,
-      PatriciaMap.PatriciaMap.get(
-        ~Unit,
-        ~(Shared.FixedLengthList(U32, 8n)),
-        ~SignedRecords.SignedRecordSet.entry_hash,
-        ~SignedRecords.SignedRecordSet.combine_hashes,
-        s,
-        k
-      )
-    )
-      == True{}: Bool
-  }
-
-# k is the key of a record whose signature checks
-def KeyOfChecked(k: List<&2, U32>) -> Type:
-  Exists(
-    SignedRecords.SignedRecord,
-    f => {
-      SignedRecords.SignedRecord.from_key(k) == Some{f}: Maybe<&2, SignedRecords.SignedRecord>
-    }
-      & {SignedRecords.SignedRecord.signature_checks(f) == True{}: Bool}
-  )
-
-# every key of s is the key of a record whose signature checks
-def OnlyChecked(s: SignedRecords.SignedRecordSet()) -> Type:
-  @k: List<&2, U32> -> Has(s, k) -> KeyOfChecked(k)
-
 # SHA-256 has no collision on the parts of a and b with the keys from lo on,
 # below hi when hi is there: two such parts with equal summaries are the same
 def CollisionFreeOn(
@@ -305,7 +270,7 @@ law RecordSync.take_keeps:
   for s: SignedRecords.SignedRecordSet()
   for m: List<&2, U32>
   for k: List<&2, U32>
-  Has(s, k) -> Has(RecordSync.take(s, m), k)
+  SignedRecords.Has(s, k) -> SignedRecords.Has(RecordSync.take(s, m), k)
 
 # Means: a record that a node holds after taking in a message was already
 # there, or its signature checks.
@@ -318,7 +283,10 @@ law RecordSync.take_adds_only_checked:
   for s: SignedRecords.SignedRecordSet()
   for m: List<&2, U32>
   for k: List<&2, U32>
-  Has(RecordSync.take(s, m), k) -> (Has(s, k) | KeyOfChecked(k))
+  SignedRecords.Has(
+    RecordSync.take(s, m),
+    k
+  ) -> (SignedRecords.Has(s, k) | SignedRecords.KeyOfChecked(k))
 
 # Means: every sync between two nodes that follow the protocol ends.
 # For free: a sync needs no timer to finish; a node can serve one sync after
@@ -359,8 +327,8 @@ law RecordSync.ends_with_both:
   for b2: SignedRecords.SignedRecordSet()
   for k: List<&2, U32>
   Ends(n, a, b, RecordSync.opening(a), a2, b2)
-    -> OnlyChecked(a)
-    -> OnlyChecked(b)
+    -> SignedRecords.OnlyChecked(a)
+    -> SignedRecords.OnlyChecked(b)
     -> CollisionFree(a, b)
     -> {
       Maybe.is_some(

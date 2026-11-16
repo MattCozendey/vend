@@ -578,13 +578,21 @@ def acceptable(
     case RootContext{+root, genesis} SlotConsensus.Step{l, k}:
       acceptable.by_line(~decode, WordListSets.same(l, root), root, genesis, all, x)
 
-# encode and decode are inverse: decoding the encoding of a decoded choice
-# gives it back
-def DecodeInverts(
-  ~encode: DecodedChoice -> List<&2, U32>,
+# the era that the decoded choice d names
+def DecodedChoice.next_era(d: DecodedChoice) -> Nat:
+  match d:
+    case DecodedChoice{cs, e}:
+      e
+
+# encode_choice names its era: the choice that it makes from an era e and a
+# payload, read by decode, names e
+def NamesEra(
+  ~encode_choice: Nat -> List<&2, U32> -> List<&2, U32>,
   ~decode: List<&2, U32> -> DecodedChoice
 ) -> Type:
-  @d: DecodedChoice -> {decode(encode(d)) == d: DecodedChoice}
+  @e: Nat -> @payload: List<
+    &2,
+    U32> -> {DecodedChoice.next_era(decode(encode_choice(e, payload))) == e: Nat}
 
 # the answer a for voters is still Unknown
 def voters_unknown(a: MonotoneQueries.MonotoneAnswer<List<&2, List<&2, U32>>>) -> Bool:
@@ -793,8 +801,8 @@ law next_voters_are_known:
         == False{}: Bool
     }
 
-# Means: when encode and decode are inverse, the choice that an honest leader
-# proposes, which names the latest known era, is acceptable, and that era is at
+# Means: when the choices that encode_choice makes name their era, a choice made
+# from the latest known era and any payload is acceptable, and that era is at
 # least every era whose configuration the ballots make known.
 # For free: an honest leader's proposal always passes honest voters' check;
 # a decided honest proposal moves the line to every change of owners that its
@@ -806,22 +814,22 @@ law next_voters_are_known:
 # proposes a choice naming era 10, and every honest voter that knows era 10
 # accepts it.
 law proposal_names_the_latest_era:
-  for ~encode: DecodedChoice -> List<&2, U32>
+  for ~encode_choice: Nat -> List<&2, U32> -> List<&2, U32>
   for ~decode: List<&2, U32> -> DecodedChoice
   for step: SlotConsensus.Step
   for root: List<&2, U32>
   for genesis: List<&2, GroupChange>
   for all: List<&2, SlotConsensus.Ballot>
-  for cs: List<&2, GroupChange>
+  for payload: List<&2, U32>
   for m: Nat
-  DecodeInverts(~encode, ~decode)
+  NamesEra(~encode_choice, ~decode)
     -> {
       acceptable(
         ~decode,
         RootContext{root, genesis},
         step,
         all,
-        encode(DecodedChoice{cs, known_eras(~decode, root, genesis, all)})
+        encode_choice(known_eras(~decode, root, genesis, all), payload)
       )
         == True{}: Bool
     }

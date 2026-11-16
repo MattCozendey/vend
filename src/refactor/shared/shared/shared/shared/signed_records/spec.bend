@@ -135,3 +135,38 @@ law SignedRecordSet.summaries_are_merkle_hashes:
           )
         ): Shared.FixedLengthList(U32, 8n)
     }
+
+# Reading record sets
+# -------------------
+
+# the record set s holds the key k
+def Has(s: SignedRecordSet(), k: List<&2, U32>) -> Type:
+  {
+    Maybe.is_some(
+      &2,
+      Unit,
+      PatriciaMap.PatriciaMap.get(
+        ~Unit,
+        ~(Shared.FixedLengthList(U32, 8n)),
+        ~SignedRecordSet.entry_hash,
+        ~SignedRecordSet.combine_hashes,
+        s,
+        k
+      )
+    )
+      == True{}: Bool
+  }
+
+# k is the key of a record whose signature checks
+def KeyOfChecked(k: List<&2, U32>) -> Type:
+  Exists(
+    SignedRecord,
+    f => {
+      SignedRecord.from_key(k) == Some{f}: Maybe<&2, SignedRecord>
+    }
+      & {SignedRecord.signature_checks(f) == True{}: Bool}
+  )
+
+# every key of s is the key of a record whose signature checks
+def OnlyChecked(s: SignedRecordSet()) -> Type:
+  @k: List<&2, U32> -> Has(s, k) -> KeyOfChecked(k)

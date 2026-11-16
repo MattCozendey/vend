@@ -90,6 +90,12 @@ def BallotAction.same(a: BallotAction, b: BallotAction) -> Bool:
     case _ _:
       False{}
 
+# the voter of the ballot b
+def Ballot.voter(b: Ballot) -> List<&2, U32>:
+  match b:
+    case Ballot{k, v, s, i, r, c}:
+      v
+
 # a and b are the same ballot
 def Ballot.same(a: Ballot, b: Ballot) -> Bool:
   match a b:

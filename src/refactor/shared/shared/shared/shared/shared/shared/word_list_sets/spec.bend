@@ -55,6 +55,10 @@ def within.go(xs: List<&2, List<&2, U32>>, +ys: List<&2, List<&2, U32>>, ok: Boo
 def within(xs: List<&2, List<&2, U32>>, ys: List<&2, List<&2, U32>>) -> Bool:
   within.go(xs, ys, True{})
 
+# xs and ys hold the same lists of words, in any order and with any repeats
+def same_set(+xs: List<&2, List<&2, U32>>, +ys: List<&2, List<&2, U32>>) -> Bool:
+  within.go(xs, ys, within(ys, xs))
+
 # the lists of xs that are not in seen, each once, in the order of xs
 def dedupe.go(
   xs: List<&2, List<&2, U32>>,

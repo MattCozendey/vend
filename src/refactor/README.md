@@ -151,16 +151,16 @@ module never imports a sibling, so each module sits one layer above everything i
 
 ```
 src/refactor/                       Vend (top level)
-  shared/                           owner_groups
-    shared/                         slot_consensus, record_sync
-      shared/                       signed_records, monotone_queries
-        shared/                     patricia_map, exact_word_encoding, signatures, part_store
-          shared/                   sha256, association_list, word_list_sets
-            shared/                 shared.bend, word_list_order, list_append
+  shared/                           node
+    shared/                         owner_groups, record_views
+      shared/                       slot_consensus, record_sync
+        shared/                     signed_records, monotone_queries
+          shared/                   patricia_map, exact_word_encoding, signatures, part_store
+            shared/                 sha256, association_list, word_list_sets
+              shared/               shared.bend, word_list_order, list_append
 ```
 
-No layer is created before a module needs it. When a module is written above `owner_groups`
-(node), the tree below it moves down one layer; imports are relative, so they do
+No layer is created before a module needs it. When a generic module is written above `node`, the tree below it moves down one layer; imports are relative, so they do
 not change.
 
 | Module | What it states | Status |
