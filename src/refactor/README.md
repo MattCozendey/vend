@@ -156,7 +156,7 @@ src/refactor/                       Vend (top level)
       shared/                       slot_consensus, record_sync
         shared/                     signed_records, monotone_queries
           shared/                   patricia_map, exact_word_encoding, signatures, part_store
-            shared/                 sha256, association_list, word_list_sets
+            shared/                 sha256, association_list, word_list_sets, item_merge
               shared/               shared.bend, word_list_order, list_append
 ```
 
@@ -168,6 +168,7 @@ not change.
 | `list_append` | Joining lists (Base's `List.append`) is associative, and joining an empty list changes nothing. | Laws stated |
 | `word_list_order` | Comparing lists of words: equal only when the same, flips when swapped, "below" is transitive; the split key of two lists lies above the first and at or below the second. | Laws stated |
 | `word_list_sets` | Lists of words as sets: equal, contains, and dedupe, which keeps each list once (1 law). | Laws stated |
+| `item_merge` | Three-way merge of lists of items (lines, functions, blocks): a diff is an edit script over the base. Laws: a diff applies; a diff keeps a longest common list of items; changes that are apart are both applied; changes that touch and differ clash. So a merge never loses a change made on only one side. | Laws stated |
 | `shared.bend` | Helpers with no laws: combining comparisons, optional values, fixed-length lists. | Stated |
 | `association_list` | Lists of key-value pairs, which the `patricia_map` laws compare a map with. No laws. | Stated |
 | `sha256` | SHA-256 of words. No law: a test against the standard's examples checks it. | Stated; test written |
