@@ -110,8 +110,10 @@ a group are the names reached through it that are not groups. The voters of a ro
 nodes of the root's owner group after all earlier root slots. The voters of a slot of any other
 line are the nodes of that line's owner group in the configuration of the slot's era: at first the
 configuration right after the root slot that gave the line an owner, then the era that the line's
-previous decided choice names, never lower than the one before. So a change of a group reaches each
-line at its next slot that names a later era.
+previous decided choice names, never lower than the one before. An honest voter accepts a choice
+only when the era it names is one whose configuration it already knows, and an honest leader names
+the latest such era. So no line waits on an era that the root never reaches, and a change of a
+group reaches each line at the first slot decided from a proposal made after the change was known.
 
 ### Time
 
@@ -164,8 +166,8 @@ not change.
 | `signatures` | A signer (never copied, so never signs twice from one state): every signature it makes checks with its public key, which never changes; it makes at least 2^20. | Laws stated |
 | `signed_records` | A signed record (author, words, signature); its key reads back as it and as nothing else; it checks exactly when its signature does; a record set's summaries are Merkle hashes. That a node holds only records that check is a law of the node, where records are added. | Laws stated |
 | `monotone_queries` | A monotone answer (Unknown, Known, or Contradicted with proof) and when one knows more; number ranges that only narrow; a monotone query (it knows more on a grown state); "q1, then q2" of monotone queries is monotone (1 law); a hook's incremental state matches its plain query. | Laws stated |
-| `slot_consensus` | Paxos with chained ballots, with the voters as a parameter. Deciding: the rule (definitions) and 2 laws: a decision only knows more with more ballots, and a judged ballot keeps its judgment. Casting: what an honest voter signs next (a vote, a lead, a catch-up join of a round that at least half of the voters reached, a first join of round 0, or on a Tick a join of the round after its own), with 2 laws: it never contradicts its own ballots, and its leads and votes are judged sound. Progress: a good phase (honest voters in sync, an honest next leader) decides the slot within one Tick and two exchanges, whatever the other voters send. | Laws stated |
-| `owner_groups` | The voters of each step: a root line whose decided choices set group members and line owners (read by a decode hook); groups of groups; eras that never go back. Laws: the nodes of a group are exactly the names reached through it that are not groups; the voters of a step only become known; eras grow. | Laws stated |
+| `slot_consensus` | Paxos with chained ballots, with the voters as a parameter. Deciding: the rule (definitions) and 2 laws: a decision only knows more with more ballots, and a judged ballot keeps its judgment. Casting: what an honest voter signs next, voting only for choices that a validity hook accepts (a vote, a lead, a catch-up join of a round that at least half of the voters reached, a first join of round 0, or on a Tick a join of the round after its own), with 3 laws: it never contradicts its own ballots, it leads and votes only for its proposal or accepted choices, and its leads and votes are judged sound. Progress: a good phase (honest voters in sync, an honest next leader) decides the slot within one Tick and two exchanges, whatever the other voters send. | Laws stated |
+| `owner_groups` | The voters of each step: a root line whose decided choices set group members and line owners (read by a decode hook); groups of groups; eras that never go back; what an honest voter accepts (a choice naming an era it already knows) and the era an honest leader names (the latest known). Laws: nodes are exactly the names reached through a group; voters only become known; eras grow; acceptance lasts; after a decided accepted slot the next slot's voters are known; an honest proposal is accepted and names every known era. | Laws stated |
 | Keeping and forgetting | Claims to keep a part, dropping a part, checkpoints. | Not started |
 | Node | A node: its records, its hooks, and its deeds (Sync, Tick, a request, stop). | Not started |
 | Vend | The versioning hooks, at the top level of `src/refactor/`. | Not started |
