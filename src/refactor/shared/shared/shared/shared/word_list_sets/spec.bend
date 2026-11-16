@@ -39,6 +39,22 @@ def contains.go(xs: List<&2, List<&2, U32>>, +a: List<&2, U32>, hit: Bool) -> Bo
 def contains(xs: List<&2, List<&2, U32>>, a: List<&2, U32>) -> Bool:
   contains.go(xs, a, False{})
 
+# ok, and every list of words of xs is one of ys
+def within.go(xs: List<&2, List<&2, U32>>, +ys: List<&2, List<&2, U32>>, ok: Bool) -> Bool:
+  match xs:
+    case Nil{}:
+      ok
+    case Con{x, rest}:
+      match ok:
+        case False{}:
+          False{}
+        case True{}:
+          within.go(rest, ys, contains(ys, x))
+
+# every list of words of xs is one of ys
+def within(xs: List<&2, List<&2, U32>>, ys: List<&2, List<&2, U32>>) -> Bool:
+  within.go(xs, ys, True{})
+
 # the lists of xs that are not in seen, each once, in the order of xs
 def dedupe.go(
   xs: List<&2, List<&2, U32>>,

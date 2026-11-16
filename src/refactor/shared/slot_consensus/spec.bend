@@ -788,22 +788,6 @@ def Nat.max_some(a: Maybe<&2, Nat>, b: Maybe<&2, Nat>) -> Maybe<&2, Nat>:
     case Some{x} Some{y}:
       Some{Nat.max(x, y)}
 
-# one more than m, if m is there
-def Nat.succ_some(m: Maybe<&2, Nat>) -> Maybe<&2, Nat>:
-  match m:
-    case None{}:
-      None{}
-    case Some{x}:
-      Some{1n+x}
-
-# the position of the voter v in vs, if v is one of them
-def position(vs: List<&2, List<&2, U32>>, +v: List<&2, U32>) -> Maybe<&2, Nat>:
-  match vs:
-    case Nil{}:
-      None{}
-    case Con{w, rest}:
-      Bool.pick(Maybe<&2, Nat>, WordListSets.same(w, v), Some{0n}, Nat.succ_some(position(rest, v)))
-
 # the index after the highest index of the ballots of me for the step s in bs;
 # 0 when there is none
 def Ballots.next_index(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: List<&2, U32>) -> Nat:
@@ -865,28 +849,6 @@ def Ballots.led(bs: List<&2, Ballot>, +me: List<&2, U32>, +s: List<&2, U32>, +r:
           Bool.and(Nat.is_eq(q, r), BallotAction.is_lead(a))
         ),
         Ballots.led(rest, me, s, r)
-      )
-
-# the highest round for the step s in which the round's leader among the n
-# voters vs cast a ballot: the highest round that is alive, if any
-def Ballots.top_alive(
-  bs: List<&2, Ballot>,
-  +vs: List<&2, List<&2, U32>>,
-  +n: Nat,
-  +s: List<&2, U32>
-) -> Maybe<&2, Nat>:
-  match bs:
-    case Nil{}:
-      None{}
-    case Con{Ballot{k, w, st, i, +q, a}, rest}:
-      Nat.max_some(
-        Bool.pick(
-          Maybe<&2, Nat>,
-          Bool.and(WordListSets.same(st, s), leads_round(vs, n, q, w)),
-          Some{q},
-          None{}
-        ),
-        Ballots.top_alive(rest, vs, n, s)
       )
 
 # the round and choice of the highest sound lead among js, if any
@@ -1039,9 +1001,75 @@ def NextBallot.lead(
         None{}
       )
 
-# a join of the highest alive round, when it is above every round of me
-def NextBallot.join(alive: Maybe<&2, Nat>, mine: Maybe<&2, Nat>, i: Nat) -> Maybe<&2, BallotToSign>:
-  match alive mine:
+# 1 when the highest round m of a voter is r or above, else 0
+def Ballots.count_reached.of(m: Maybe<&2, Nat>, r: Nat) -> Nat:
+  match m:
+    case None{}:
+      0n
+    case Some{q}:
+      Bool.pick(Nat, Nat.is_le(r, q), 1n, 0n)
+
+# how many voters of vs have, for the step s, a ballot in round r or above
+def Ballots.count_reached(
+  vs: List<&2, List<&2, U32>>,
+  +all: List<&2, Ballot>,
+  +s: List<&2, U32>,
+  +r: Nat
+) -> Nat:
+  match vs:
+    case Nil{}:
+      0n
+    case Con{v, rest}:
+      Nat.add(
+        Ballots.count_reached.of(Ballots.top_round_of(all, v, s), r),
+        Ballots.count_reached(rest, all, s, r)
+      )
+
+# the highest round m of a voter, when at least need voters of vs reached it
+def Ballots.catch_up.of(
+  m: Maybe<&2, Nat>,
+  vs: List<&2, List<&2, U32>>,
+  all: List<&2, Ballot>,
+  s: List<&2, U32>,
+  need: Nat
+) -> Maybe<&2, Nat>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+r}:
+      Bool.pick(
+        Maybe<&2, Nat>,
+        Nat.is_le(need, Ballots.count_reached(vs, all, s, r)),
+        Some{r},
+        None{}
+      )
+
+# the highest round that at least need voters of vs reached for the step s,
+# among the highest rounds of the voters us; such a round is reached by a voter
+# that is not a stranger whenever need is at least half of the voters
+def Ballots.catch_up(
+  us: List<&2, List<&2, U32>>,
+  +vs: List<&2, List<&2, U32>>,
+  +all: List<&2, Ballot>,
+  +s: List<&2, U32>,
+  +need: Nat
+) -> Maybe<&2, Nat>:
+  match us:
+    case Nil{}:
+      None{}
+    case Con{u, rest}:
+      Nat.max_some(
+        Ballots.catch_up.of(Ballots.top_round_of(all, u, s), vs, all, s, need),
+        Ballots.catch_up(rest, vs, all, s, need)
+      )
+
+# a join of the round target, when it is above every round of me
+def NextBallot.join(
+  target: Maybe<&2, Nat>,
+  mine: Maybe<&2, Nat>,
+  i: Nat
+) -> Maybe<&2, BallotToSign>:
+  match target mine:
     case None{} m:
       None{}
     case Some{r} None{}:
@@ -1054,22 +1082,19 @@ def NextBallot.join(alive: Maybe<&2, Nat>, mine: Maybe<&2, Nat>, i: Nat) -> Mayb
         None{}
       )
 
-# the lowest round above t whose leader is at position q among n voters
-def NextBallot.round_after(+q: Nat, +n: Nat, +t: Nat) -> Nat:
-  Bool.pick(Nat, Nat.is_lt(t, q), q, Nat.add(q, Nat.mul(n, 1n+Nat.div(Nat.sub(t, q), n))))
+# a join of round 0, when me has no ballot for the step yet
+def NextBallot.start(mine: Maybe<&2, Nat>, i: Nat) -> Maybe<&2, BallotToSign>:
+  match mine:
+    case None{}:
+      Some{BallotToSign{i, 0n, JoinRound{}}}
+    case Some{r}:
+      None{}
 
-# on a tick, a join of the lowest round above t that the voter at position p
-# among n voters leads
-def NextBallot.call(
-  ticked: Bool,
-  p: Maybe<&2, Nat>,
-  n: Nat,
-  t: Nat,
-  i: Nat
-) -> Maybe<&2, BallotToSign>:
-  match ticked p:
-    case True{} Some{q}:
-      Some{BallotToSign{i, NextBallot.round_after(q, n, t), JoinRound{}}}
+# on a tick, a join of the round after the highest round mine of me
+def NextBallot.tick(ticked: Bool, mine: Maybe<&2, Nat>, i: Nat) -> Maybe<&2, BallotToSign>:
+  match ticked mine:
+    case True{} Some{r}:
+      Some{BallotToSign{i, 1n+r, JoinRound{}}}
     case _ _:
       None{}
 
@@ -1086,8 +1111,9 @@ def is_unknown(a: MonotoneQueries.MonotoneAnswer<List<&2, U32>>) -> Bool:
 # out (ticked). Nothing once the step is decided or contradicted, when me is
 # not a voter, or while a ballot of its own chain is missing. Else the first of:
 # a vote for the highest sound lead that it may still vote for; a lead of its
-# round; a join of the highest alive round; on a tick, a join of the next round
-# that it leads.
+# round; a join of the highest round that at least half of the voters reached,
+# when it is above its own; a join of round 0 when it has no ballot yet; on a
+# tick, a join of the round after its own.
 def SlotConsensus.next_ballot(
   +voters: List<&2, List<&2, U32>>,
   +s: List<&2, U32>,
@@ -1118,13 +1144,177 @@ def SlotConsensus.next_ballot(
         Maybe.or(
           &2,
           BallotToSign,
-          NextBallot.join(Ballots.top_alive(all, vs, n, s), mine, i),
-          NextBallot.call(ticked, position(vs, me), n, Ballots.top_round(all, s), i)
+          NextBallot.join(Ballots.catch_up(vs, vs, all, s, Nat.div(1n+n, 2n)), mine, i),
+          Maybe.or(&2, BallotToSign, NextBallot.start(mine, i), NextBallot.tick(ticked, mine, i))
         )
       )
     ),
     None{}
   )
+
+# Runs
+# ----
+# A good phase: every honest voter holds the same ballots, every ballot that an
+# honest voter casts reaches every honest voter before the next exchange, and
+# the other voters add whatever ballots they like at each exchange. The
+# network makes good phases happen; the laws below say what one does.
+
+# the ballot that the voter h is about to sign, m, signed for the step s
+def Run.signed(m: Maybe<&2, BallotToSign>, h: List<&2, U32>, s: List<&2, U32>) -> List<&2, Ballot>:
+  match m:
+    case None{}:
+      []
+    case Some{c}:
+      [BallotToSign.signed(c, [], h, s)]
+
+# the ballots that the voters hs sign next for the step s from the ballots all
+def Run.casts(
+  hs: List<&2, List<&2, U32>>,
+  +voters: List<&2, List<&2, U32>>,
+  +s: List<&2, U32>,
+  +all: List<&2, Ballot>,
+  +p: List<&2, U32>,
+  +ticked: Bool
+) -> List<&2, Ballot>:
+  match hs:
+    case Nil{}:
+      []
+    case Con{+h, rest}:
+      List.append(
+        &2,
+        Ballot,
+        Run.signed(SlotConsensus.next_ballot(voters, s, all, h, p, ticked), h, s),
+        Run.casts(rest, voters, s, all, p, ticked)
+      )
+
+# one exchange: the ballots all, with what the honest voters hs sign next from
+# them, and the ballots extra of the other voters
+def Run.exchange(
+  +all: List<&2, Ballot>,
+  hs: List<&2, List<&2, U32>>,
+  voters: List<&2, List<&2, U32>>,
+  s: List<&2, U32>,
+  p: List<&2, U32>,
+  ticked: Bool,
+  extra: List<&2, Ballot>
+) -> List<&2, Ballot>:
+  List.append(
+    &2,
+    Ballot,
+    all,
+    List.append(&2, Ballot, Run.casts(hs, voters, s, all, p, ticked), extra)
+  )
+
+# a good phase from the ballots all: an exchange in which every honest voter
+# of hs ticks, then two exchanges without a tick; x0, x1 and x2 are what the
+# other voters add at each
+def Run.good_phase(
+  +voters: List<&2, List<&2, U32>>,
+  +s: List<&2, U32>,
+  all: List<&2, Ballot>,
+  +hs: List<&2, List<&2, U32>>,
+  +p: List<&2, U32>,
+  x0: List<&2, Ballot>,
+  x1: List<&2, Ballot>,
+  x2: List<&2, Ballot>
+) -> List<&2, Ballot>:
+  a1 = Run.exchange(all, hs, voters, s, p, True{}, x0)
+  a2 = Run.exchange(a1, hs, voters, s, p, False{}, x1)
+  Run.exchange(a2, hs, voters, s, p, False{}, x2)
+
+# no ballot of xs is by a voter of hs
+def Run.none_by(xs: List<&2, Ballot>, +hs: List<&2, List<&2, U32>>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{Ballot{k, v, st, i, r, a}, rest}:
+      Bool.and(Bool.not(WordListSets.contains(hs, v)), Run.none_by(rest, hs))
+
+# every voter of hs signs nothing next for the step s without a tick
+def Run.quiet(
+  hs: List<&2, List<&2, U32>>,
+  +voters: List<&2, List<&2, U32>>,
+  +s: List<&2, U32>,
+  +all: List<&2, Ballot>,
+  +p: List<&2, U32>
+) -> Bool:
+  match hs:
+    case Nil{}:
+      True{}
+    case Con{h, rest}:
+      Bool.and(
+        Maybe.is_none(&2, BallotToSign, SlotConsensus.next_ballot(voters, s, all, h, p, False{})),
+        Run.quiet(rest, voters, s, all, p)
+      )
+
+# the highest round m is t
+def Run.is_round(m: Maybe<&2, Nat>, t: Nat) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{r}:
+      Nat.is_eq(r, t)
+
+# every voter of hs has, for the step s, its highest ballot in round t, and
+# every ballot of its chain below its next index
+def Run.level(
+  hs: List<&2, List<&2, U32>>,
+  +all: List<&2, Ballot>,
+  +s: List<&2, U32>,
+  +t: Nat
+) -> Bool:
+  match hs:
+    case Nil{}:
+      True{}
+    case Con{+h, rest}:
+      Bool.and(
+        Bool.and(
+          Run.is_round(Ballots.top_round_of(all, h, s), t),
+          Ballots.chain_below(Ballots.next_index(all, h, s), all, h, s)
+        ),
+        Run.level(rest, all, s, t)
+      )
+
+# the lead or vote b, if it is by a voter of hs for the step s, is judged
+# among the ballots all
+def Run.judged.one(
+  b: Ballot,
+  hs: List<&2, List<&2, U32>>,
+  voters: List<&2, List<&2, U32>>,
+  +s: List<&2, U32>,
+  all: List<&2, Ballot>
+) -> Bool:
+  match b:
+    case Ballot{k, v, st, i, r, JoinRound{}}:
+      True{}
+    case Ballot{+k, +v, +st, +i, +r, +a}:
+      Bool.or(
+        Bool.not(Bool.and(WordListSets.contains(hs, v), WordListSets.same(st, s))),
+        Maybe.is_some(&2, Bool, SlotConsensus.judgment(voters, s, all, Ballot{k, v, st, i, r, a}))
+      )
+
+# every lead and vote of bs by a voter of hs for the step s is judged among the
+# ballots all
+def Run.judged(
+  bs: List<&2, Ballot>,
+  +hs: List<&2, List<&2, U32>>,
+  +voters: List<&2, List<&2, U32>>,
+  +s: List<&2, U32>,
+  +all: List<&2, Ballot>
+) -> Bool:
+  match bs:
+    case Nil{}:
+      True{}
+    case Con{b, rest}:
+      Bool.and(Run.judged.one(b, hs, voters, s, all), Run.judged(rest, hs, voters, s, all))
+
+# the voter m, if there, is one of hs
+def Run.names_one_of(m: Maybe<&2, List<&2, U32>>, hs: List<&2, List<&2, U32>>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{v}:
+      WordListSets.contains(hs, v)
 
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
@@ -1267,3 +1457,63 @@ law SlotConsensus.judgment_never_changes:
     }
     -> {SlotConsensus.judgment(voters, s, a, x) == Some{j}: Maybe<&2, Bool>}
     -> {SlotConsensus.judgment(voters, s, b, x) == Some{j}: Maybe<&2, Bool>}
+
+# Means: from ballots that every honest voter holds, where the honest voters
+# are more than half of the voters, all have their highest ballot in one round,
+# have whole chains, have every lead and vote judged, and have nothing more to
+# sign without a tick, and where the leader of the next round is honest: after
+# one exchange in which each honest voter ticks and two more exchanges, the
+# step is decided or Contradicted, whatever the other voters add.
+# For free: a slot is decided within one good phase whose leader is honest;
+# among any number of consecutive rounds equal to the number of voters, one
+# has an honest leader, so as many good phases decide every slot; nothing that
+# strangers or faulty voters send can stop a good phase.
+# For the goal: a slot gets decided once the network lets honest voters hear
+# one another in time (Trust 4, progress), and a request stays pending only
+# while it does not.
+# Example: three honest voters of five, all at round 6, tick; the leader of
+# round 7 is honest; two exchanges later slot 5 is decided.
+law SlotConsensus.good_phase_decides:
+  for voters: List<&2, List<&2, U32>>
+  for s: List<&2, U32>
+  for all: List<&2, Ballot>
+  for hs: List<&2, List<&2, U32>>
+  for p: List<&2, U32>
+  for t: Nat
+  for x0: List<&2, Ballot>
+  for x1: List<&2, Ballot>
+  for x2: List<&2, Ballot>
+  {WordListSets.within(hs, WordListSets.dedupe(voters)) == True{}: Bool}
+    -> {
+      is_more_than_half(
+        List.length(&2, List<&2, U32>, WordListSets.dedupe(hs)),
+        List.length(&2, List<&2, U32>, WordListSets.dedupe(voters))
+      )
+        == True{}: Bool
+    }
+    -> {Run.level(hs, all, s, t) == True{}: Bool}
+    -> {Run.judged(all, hs, voters, s, all) == True{}: Bool}
+    -> {Run.quiet(hs, voters, s, all, p) == True{}: Bool}
+    -> {
+      Run.names_one_of(
+        voter_at(
+          WordListSets.dedupe(voters),
+          Nat.mod(1n+t, List.length(&2, List<&2, U32>, WordListSets.dedupe(voters)))
+        ),
+        hs
+      )
+        == True{}: Bool
+    }
+    -> {
+      Bool.and(
+        Run.none_by(x0, hs),
+        Bool.and(Run.none_by(x1, hs), Run.none_by(x2, hs))
+      )
+        == True{}: Bool
+    }
+    -> {
+      is_unknown(
+        SlotConsensus.decision(voters, s, Run.good_phase(voters, s, all, hs, p, x0, x1, x2))
+      )
+        == False{}: Bool
+    }
