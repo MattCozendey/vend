@@ -75,6 +75,39 @@ law Words.below_transitive:
   for c: List<&2, U32>
   {Words.cmp(a, b) == LT{}: Cmp} -> {Words.cmp(b, c) == LT{}: Cmp} -> {Words.cmp(a, c) == LT{}: Cmp}
 
+# the highest bit that is set in d, alone; 0 when d is 0
+def Word.top(+d: U32) -> U32:
+  +a = U32.or(d, U32.shrn(d, 1n))
+  +b = U32.or(a, U32.shrn(a, 2n))
+  +c = U32.or(b, U32.shrn(b, 4n))
+  +e = U32.or(c, U32.shrn(c, 8n))
+  +f = U32.or(e, U32.shrn(e, 16n))
+  U32.sub(f, U32.shrn(f, 1n))
+
+# bend-lint: expect-begin bend-lint-rules/performance/eager_branch@information -- the call that Bool.pick does not need walks the rest of two keys once, and a key is a few words
+# Seen as bits, a list of words is, for each word, a 1 and then the 32 bits of
+# the word, highest first, and then a 0. These bits are ordered as Words.cmp
+# orders the lists. For two lists a below b, the split key is the smallest list
+# whose bits agree with a and b before the first bit where a and b differ, and
+# whose bit there is 1: the lists from a to the split key, below it, have a 0
+# there, and those from the split key to b have a 1.
+def Words.split_key(a: List<&2, U32>, b: List<&2, U32>) -> List<&2, U32>:
+  match a b:
+    case Nil{} Nil{}:
+      []
+    case Nil{} Con{y, ys}:
+      [0]
+    case Con{x, xs} Nil{}:
+      []
+    case Con{+x, xs} Con{+y, ys}:
+      Bool.pick(
+        List<&2, U32>,
+        U32.is_eq(x, y),
+        x <> Words.split_key(xs, ys),
+        [U32.and(y, U32.not(U32.sub(Word.top(U32.xor(x, y)), 1)))]
+      )
+# bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
+
 # Optional values
 # ---------------
 
@@ -143,24 +176,27 @@ def Pairs.ascend(~V: Data, xs: List<&2, +Sigma<List<&2, U32>, _ => V>>) -> Bool:
       Bool.and(Pairs.ascend.next(~V, k, rest), Pairs.ascend(~V, rest))
 # bend-lint: expect-end bend-lint-rules/performance/eager_branch@information
 
-# m combined with s, if any
-def Pairs.fold.join(~M: Data, ~combine: M -> M -> M, m: M, s: Maybe<&2, M>) -> M:
-  match s:
-    case None{}:
-      m
-    case Some{x}:
-      combine(m, x)
-
-# the measures of the pairs of xs, combined in order; nothing if xs is empty
-def Pairs.fold(
+# the key of the last pair of xs, or k when xs is empty
+def Pairs.last_key(
   ~V: Data,
-  ~M: Data,
-  ~of: List<&2, U32> -> V -> M,
-  ~combine: M -> M -> M,
-  xs: List<&2, +Sigma<List<&2, U32>, _ => V>>
-) -> Maybe<&2, M>:
+  xs: List<&2, +Sigma<List<&2, U32>, _ => V>>,
+  k: List<&2, U32>
+) -> List<&2, U32>:
   match xs:
     case Nil{}:
-      None{}
-    case Con{(k, v), rest}:
-      Some{Pairs.fold.join(~M, ~combine, of(k, v), Pairs.fold(~V, ~M, ~of, ~combine, rest))}
+      k
+    case Con{(j, w), rest}:
+      Pairs.last_key(~V, rest, j)
+
+# Rows
+# ----
+
+# bend-lint: expect-begin bend-lint-rules/performance/unused_result@information -- Row is a type: it is used only in types and erased arguments, so no code that runs builds or frees its binder
+# n values of A in a row
+def Row(-A: Data, n: Nat) -> Data:
+  match n:
+    case 0n:
+      Unit
+    case 1n+m:
+      +Sigma<A, _ => Row(A, m)>
+# bend-lint: expect-end bend-lint-rules/performance/unused_result@information

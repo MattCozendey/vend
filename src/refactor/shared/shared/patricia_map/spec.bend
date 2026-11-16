@@ -1,5 +1,5 @@
 import Base
-import ../shared.bend as Shared
+import ../shared/shared.bend as Shared
 
 # A map from keys to values that keeps, for each of its parts, a summary of the
 # entries in it. A key is a list of words, ordered as Shared.Words.cmp orders
@@ -266,40 +266,116 @@ law PatriciaMap.list_ascends:
       }
     )
 
-# Means: when combining summaries is associative, the summary of a map is the
-# measures of its entries combined in list order, and the summary of an empty
-# map is nothing.
-# For free: the summary of a part is the two halves' summaries combined; any
-# count, total or hash of the entries, chosen by the user, kept ready at every
-# part.
-# For the goal: two nodes find where their maps differ by comparing summaries
-# of parts, so a Sync costs what differs, not what the nodes hold; a summary
-# that never changes cannot pass this law.
+# Means: the summary of an empty map is nothing; of a map with one entry, the
+# measure of that entry; of a map with more entries, the summaries of its two
+# halves combined, where the halves are split at the first bit where the keys of
+# its first and last entries differ (Shared.Words.split_key).
+# For free: the summary of every part under a key prefix is ready, and it is
+# the same on every map that has the same entries in that part; with a combine
+# that is associative (a count, a sum), the summary is the measures combined in
+# list order; with "hash of the two summaries" as the combine, the summary is a
+# Merkle hash, so two different parts share a summary only when SHA-256 has a
+# collision.
+# For the goal: a Sync compares two maps part by part, from the top, and sends
+# only the parts whose summaries differ, so it costs what differs, and it
+# trusts nothing but SHA-256 (Trust 1).
 # Example: with the measure "1" and the combine "add", the summary of a map of
 # 3 entries is 3.
-law PatriciaMap.summary_folds:
+law PatriciaMap.summary_splits:
   for ~V: Data
   for ~M: Data
   for ~of: List<&2, U32> -> V -> M
   for ~combine: M -> M -> M
   for m: PatriciaMap(~V, ~M, ~of, ~combine)
-  (@a: M -> @b: M -> @c: M -> {combine(combine(a, b), c) == combine(a, combine(b, c)): M})
-    -> {
-      PatriciaMap.summary(
-        ~V,
-        ~M,
-        ~of,
-        ~combine,
-        m
-      )
-        == Shared.Pairs.fold(
+  (
+    {
+      PatriciaMap.list(~V, ~M, ~of, ~combine, m) == []: List<&2, +Sigma<List<&2, U32>, _ => V>>
+    } -> {PatriciaMap.summary(~V, ~M, ~of, ~combine, m) == None{}: Maybe<&2, M>}
+  )
+    & (
+      @k: List<
+        &2,
+        U32> -> @v: V -> {
+        PatriciaMap.list(
           ~V,
           ~M,
           ~of,
           ~combine,
-          PatriciaMap.list(~V, ~M, ~of, ~combine, m)
-        ): Maybe<&2, M>
-    }
+          m
+        )
+          == [(k, v)]: List<&2, +Sigma<List<&2, U32>, _ => V>>
+      } -> {PatriciaMap.summary(~V, ~M, ~of, ~combine, m) == Some{of(k, v)}: Maybe<&2, M>}
+    )
+    & (
+      @k: List<
+        &2,
+        U32> -> @v: V -> @j: List<
+        &2,
+        U32> -> @w: V -> @more: List<
+        &2,
+        +Sigma<
+          List<&2, U32>,
+          _ => V>> -> {
+        PatriciaMap.list(
+          ~V,
+          ~M,
+          ~of,
+          ~combine,
+          m
+        )
+          == (k, v)
+          <> (j, w)
+          <> more: List<&2, +Sigma<List<&2, U32>, _ => V>>
+      } -> {
+        PatriciaMap.summary(
+          ~V,
+          ~M,
+          ~of,
+          ~combine,
+          m
+        )
+          == Shared.Maybe.merge(
+            ~M,
+            ~combine,
+            PatriciaMap.summary(
+              ~V,
+              ~M,
+              ~of,
+              ~combine,
+              Pair.fst(
+                PatriciaMap(~V, ~M, ~of, ~combine),
+                PatriciaMap(~V, ~M, ~of, ~combine),
+                PatriciaMap.split(
+                  ~V,
+                  ~M,
+                  ~of,
+                  ~combine,
+                  m,
+                  Shared.Words.split_key(k, Shared.Pairs.last_key(~V, more, j))
+                )
+              )
+            ),
+            PatriciaMap.summary(
+              ~V,
+              ~M,
+              ~of,
+              ~combine,
+              Pair.snd(
+                PatriciaMap(~V, ~M, ~of, ~combine),
+                PatriciaMap(~V, ~M, ~of, ~combine),
+                PatriciaMap.split(
+                  ~V,
+                  ~M,
+                  ~of,
+                  ~combine,
+                  m,
+                  Shared.Words.split_key(k, Shared.Pairs.last_key(~V, more, j))
+                )
+              )
+            )
+          ): Maybe<&2, M>
+      }
+    )
 
 # Means: two maps that hold the same value at every key are the same map.
 # For free: every function of a map gives the same result for two maps with the
