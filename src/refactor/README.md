@@ -131,13 +131,18 @@ leader) decides a slot, and the network and the clock make good phases happen.
 
 ### Keeping data
 
-A node may drop a part only when the set holds signed records from enough trusted nodes saying that
-they keep it. How many is enough is a parameter of the hook.
+Content lives in a part store: each part under its SHA-256, so a part from any node is right or
+absent, never wrong. A node keeps the parts it needs and the parts it signed a claim to keep; it may
+drop any other part only once enough trusted keepers, other than itself, signed claims to keep it.
+A node that lacks a part asks a peer for it by hash. How many copies are enough, and who the
+trusted keepers are, are parameters.
 
-### Forgetting
+### Records are never forgotten
 
-The set only grows. A checkpoint is a decided record that lets nodes drop the records under it. Its
-rule is stated and proven on its own.
+Records are the history: ballots prove each version, and requests say what it did. They cost a
+constant amount per version, and the time of each operation does not grow with them. Forgetting
+them would also lose proof: a lie about a forgotten slot could no longer show as Contradicted. So
+only parts (the bulk of the data) are ever dropped, and no checkpoint is needed.
 
 ## Modules
 
@@ -149,13 +154,13 @@ src/refactor/                       Vend (top level)
   shared/                           owner_groups
     shared/                         slot_consensus, record_sync
       shared/                       signed_records, monotone_queries
-        shared/                     patricia_map, exact_word_encoding, signatures
+        shared/                     patricia_map, exact_word_encoding, signatures, part_store
           shared/                   sha256, association_list, word_list_sets
             shared/                 shared.bend, word_list_order, list_append
 ```
 
 No layer is created before a module needs it. When a module is written above `owner_groups`
-(keeping, node), the tree below it moves down one layer; imports are relative, so they do
+(node), the tree below it moves down one layer; imports are relative, so they do
 not change.
 
 | Module | What it states | Status |
@@ -174,7 +179,7 @@ not change.
 | `slot_consensus` | Paxos with chained ballots, with the voters as a parameter. Deciding: the rule (definitions) and 2 laws: a decision only knows more with more ballots, and a judged ballot keeps its judgment. Casting: what an honest voter signs next, voting only for choices that a validity hook accepts (a vote, a lead, a catch-up join of a round that at least half of the voters reached, a first join of round 0, or on a Tick a join of the round after its own), with 3 laws: it never contradicts its own ballots, it leads and votes only for its proposal or accepted choices, and its leads and votes are judged sound. Progress: a good phase (honest voters in sync, an honest next leader) decides the slot within one Tick and two exchanges, whatever the other voters send. | Laws stated |
 | `owner_groups` | The voters of each step: a root line whose decided choices set group members and line owners (read by a decode hook); groups of groups; eras that never go back; what an honest voter accepts (a choice naming an era it already knows) and the era an honest leader names (the latest known). Laws: nodes are exactly the names reached through a group; voters only become known; eras grow; acceptance lasts; after a decided accepted slot the next slot's voters are known; an honest proposal is accepted and names every known era. | Laws stated |
 | `record_sync` | Two nodes exchange messages until one has nothing more to say. Laws: taking in a message never loses a record and adds only records that check; every sync ends; a sync between nodes that follow it, with no SHA-256 collision on their parts, ends with both holding the records of both. What the messages say is the implementation's choice; that a sync costs what differs is measured. | Laws stated |
-| Keeping and forgetting | Claims to keep a part, dropping a part, checkpoints. | Not started |
+| `part_store` | Parts of content under their SHA-256; keep claims; dropping; fetching from a peer. Laws: a part is the words of its hash; the empty store holds nothing; put adds a part under its hash and changes nothing else; the hashes are exactly those held, once; a drop keeps what the node needs or claimed and drops a part only once enough other trusted keepers claimed it; a fetch gives every asked part that the peer holds; taking in any message loses no part. | Laws stated |
 | Node | A node: its records, its hooks, and its deeds (Sync, Tick, a request, stop). | Not started |
 | Vend | The versioning hooks, at the top level of `src/refactor/`. | Not started |
 
@@ -196,7 +201,7 @@ from slots that slot consensus decided before. So the two do not depend on each 
 | Behavior 2 | Monotone queries answer Unknown or a range until they know. |
 | Behavior 3 | Keeping data. See Limits. |
 | Behavior 4 | A request is one record, and slot consensus puts it in at most one slot. A writer's view is a live query. |
-| Cost 1 | Content is split into parts by hash inside the hooks; Sync compares the summaries of parts; checkpoints. |
+| Cost 1 | Content is split into parts by hash, stored once; Sync compares the summaries of parts; the time of each operation does not grow with the history. |
 | Cost 2 | Known answers never change, so caches never need invalidation. Live queries are not cached. |
 | Cost 3 | Agreement, validity and groups are proven once, for every hook. |
 | Cost 4 | Formats, languages, mounts and submodules are hooks. |
