@@ -131,7 +131,7 @@ tree than they do, because a module never imports a sibling.
 | --- | --- | --- |
 | Shared helpers | Comparing lists of words (equal only when the same, flips when swapped, "below" is transitive), optional values, lists of pairs. | Laws stated |
 | `patricia_map` | A map from keys (lists of words) to values, with a summary of each part: made from a list, merge, keep, split, list, summary, and "same entries, same map". | Laws stated |
-| Codes | The words of a value, and reading them back. | Not started |
+| `codes` | Exact codes (each value has one code, read back with the words after it) for a word, a number, a pair, n values in a row, and a conversion; every other type's code comes from these. | Laws stated |
 | Hashes and signatures | A hash of words; a signature made with a secret checks with its key. Copied from `src/shared` or written new. | Not started |
 | Facts | Signed facts, their keys, the checked-fact type, the fact set, and Sync. | Not started |
 | Answers | Unknown, values, ranges and Broken; final and live queries; how final queries combine; a hook's own state. | Not started |
